@@ -12,6 +12,7 @@ class Vcpu {
  public:
   Vcpu(const Machine* machine);
   ~Vcpu();
+  void Start();
 
  private:
   void Process();

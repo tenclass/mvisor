@@ -1,21 +1,34 @@
-CCFLAGS = -I. -Wall -Wextra -Werror -fno-exceptions -O2
+CCFLAGS = -I. -Wall -Wextra -Werror -fno-exceptions -O2 -g
+LIBS = stdc++ pthread
+BUILD_DIR = ./build
 
-OBJECTS := main.o
-OBJECTS += $(patsubst %.cc,%.o, $(wildcard mvisor/*.cc))
+EXECUTABLE = build/mvisor
+MV_SOURCE := $(wildcard mvisor/*.cc)
+MV_OBJECTS := $(MV_SOURCE:mvisor/%.cc=$(BUILD_DIR)/%.o)
 
-.PHONY: run
-run: build/mvisor
+.PHONY: run all clean
+run: all
 	./build/mvisor
 
-build/mvisor: $(OBJECTS) payload.o
-	$(CC) $^ -lstdc++ -lpthread -o $@
+all: $(EXECUTABLE)
 
-payload.o: payload.ld guest16.o
-	$(LD) -T $< -o $@
+$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/payload.o $(BUILD_DIR)/main.o
+	$(CC) -o $@ $^ $(addprefix -l, $(LIBS))
 
-.PHONY: clean
+$(BUILD_DIR)/payload.o: payload.ld $(BUILD_DIR)/guest16.o
+	$(LD) -o $@ -T $<
+
+$(BUILD_DIR)/guest16.o: guest16.s
+	$(AS) -o $@ $<
+
+$(BUILD_DIR)/main.o: main.cc
+	$(CC) $(CCFLAGS) -c -o $@ $<
+
 clean:
-	$(RM) build/mvisor payload.o guest16.o $(OBJECTS)
+	$(RM) build/*
+
+$(MV_OBJECTS): $(BUILD_DIR)/%.o: mvisor/%.cc
+	$(CC) $(CCFLAGS) -c -o $@ $<
 
 .cc.o:
 	$(CC) $(CCFLAGS) -c -o $@ $<

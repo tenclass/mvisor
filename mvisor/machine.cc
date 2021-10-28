@@ -67,6 +67,9 @@ void Machine::CreateVcpu() {
 
 int Machine::Run() {
   MV_LOG("ok");
+  for (auto vcpu: vcpus_) {
+    vcpu->Start();
+  }
 
   for (auto vcpu: vcpus_) {
     delete vcpu;

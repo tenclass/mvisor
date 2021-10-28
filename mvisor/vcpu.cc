@@ -19,8 +19,6 @@ Vcpu::Vcpu(const Machine* machine) : machine_(machine) {
   MV_ASSERT(kvm_run_ != MAP_FAILED);
 
   TestRealMode();
-
-  thread_ = std::thread(&Vcpu::Process, this);
 }
 
 Vcpu::~Vcpu() {
@@ -29,6 +27,10 @@ Vcpu::~Vcpu() {
   }
   if (fd_ > 0)
     close(fd_);
+}
+
+void Vcpu::Start() {
+  thread_ = std::thread(&Vcpu::Process, this);
 }
 
 void Vcpu::TestRealMode() {
