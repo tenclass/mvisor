@@ -61,8 +61,11 @@ void Machine::CreateVm() {
 }
 
 void Machine::CreateVcpu() {
-  Vcpu* vcpu = new Vcpu(this);
-  vcpus_.push_back(vcpu);
+  int num_vcpus = 4;
+  for (int i = 0; i < num_vcpus; ++i) {
+    Vcpu* vcpu = new Vcpu(this, i);
+    vcpus_.push_back(vcpu);
+  }
 }
 
 int Machine::Run() {

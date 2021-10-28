@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/prctl.h>
 #include <sys/mman.h>
 #include <cstring>
 #include "mvisor/machine.h"
@@ -10,8 +11,9 @@
 namespace mvisor
 {
 
-Vcpu::Vcpu(const Machine* machine) : machine_(machine) {
-  fd_ = ioctl(machine_->vm_fd_, KVM_CREATE_VCPU, 0);
+Vcpu::Vcpu(const Machine* machine, int vcpu_id)
+    : machine_(machine), vcpu_id_(vcpu_id) {
+  fd_ = ioctl(machine_->vm_fd_, KVM_CREATE_VCPU, vcpu_id_);
   MV_ASSERT(fd_ > 0);
 
   kvm_run_ = (struct kvm_run*)mmap(nullptr, machine_->kvm_vcpu_mmap_size_,
@@ -55,6 +57,10 @@ void Vcpu::TestRealMode() {
 }
 
 void Vcpu::Process() {
+  sprintf(thread_name_, "vcpu-%d", vcpu_id_);
+  prctl(PR_SET_NAME, thread_name_);
+  MV_LOG("%s started", thread_name_);
+
   for (;;) {
     if (ioctl(fd_, KVM_RUN, 0) < 0) {
       MV_PANIC("KVM_RUN");
