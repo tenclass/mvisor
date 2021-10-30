@@ -6,8 +6,6 @@
 #include <cerrno>
 #include <cstdlib>
 
-namespace mvisor
-{
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...)
 {
@@ -35,5 +33,3 @@ void Log(LogType type, const char* file, int line, const char* function, const c
     exit(1);
   }
 }
-
-} // namespace mvisor

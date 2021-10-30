@@ -4,8 +4,6 @@
 #include <linux/kvm.h>
 #include <thread>
 
-namespace mvisor {
-
 class Machine;
 
 class Vcpu {
@@ -16,16 +14,16 @@ class Vcpu {
 
  private:
   void Process();
-  void TestRealMode();
+  void PrintRegisters();
+  void EnableSingleStep();
 
   const Machine* machine_;
   int vcpu_id_ = -1;
   int fd_ = -1;
   char thread_name_[16];
   struct kvm_run *kvm_run_;
+  struct kvm_coalesced_mmio_ring *mmio_ring_;
   std::thread thread_;
 };
-
-} // namespace mvisor
 
 #endif // _MVISOR_VCPU_H

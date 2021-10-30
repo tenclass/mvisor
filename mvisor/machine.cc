@@ -1,22 +1,22 @@
-#include "mvisor/machine.h"
+#include "machine.h"
 #include <linux/kvm.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
 
-#include "mvisor/logger.h"
-
-extern const unsigned char guest16[], guest16_end[];
-
-namespace mvisor {
+#include "logger.h"
 
 Machine::Machine() {
   InitializeKvm();
   CreateVm();
   CreateVcpu();
+
+  memory_manager_ = new MemoryManager(this);
+  LoadBiosFile("./assets/bios-debug.bin");
 }
 
 Machine::~Machine() {
@@ -24,6 +24,8 @@ Machine::~Machine() {
     close(vm_fd_);
   if (kvm_fd_ > 0)
     close(kvm_fd_);
+  if (bios_data_)
+    free(bios_data_);
 }
 
 void Machine::InitializeKvm() {
@@ -39,29 +41,43 @@ void Machine::InitializeKvm() {
   MV_ASSERT(kvm_vcpu_mmap_size_ > 0);
 }
 
+void Machine::LoadBiosFile(const char* path) {
+  int fd = open(path, O_RDONLY);
+  MV_ASSERT(fd > 0);
+  struct stat st;
+  fstat(fd, &st);
+
+  bios_size_ = st.st_size;
+  bios_data_ = static_cast<uint8_t*>(valloc(bios_size_));
+  MV_ASSERT(bios_data_);
+  read(fd, bios_data_, bios_size_);
+  close(fd);
+
+  // Map BIOS file to memory
+  memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam);
+  memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam);
+}
+
 void Machine::CreateVm() {
   vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
   MV_ASSERT(vm_fd_ > 0);
 
-  size_t vm_memory_size = 0x200000;
-  vm_memory_ = mmap(nullptr, vm_memory_size, PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-  MV_ASSERT(vm_memory_ != MAP_FAILED);
-  memcpy(vm_memory_, guest16, guest16_end - guest16);
-
-  struct kvm_userspace_memory_region memreg;
-  memreg.slot = 0;
-  memreg.flags = 0;
-  memreg.guest_phys_addr = 0;
-  memreg.memory_size = vm_memory_size;
-  memreg.userspace_addr = (uint64_t)vm_memory_; 
-  if (ioctl(vm_fd_, KVM_SET_USER_MEMORY_REGION, &memreg) < 0) {
-    MV_PANIC("failed to set user memory region");
+  // Fix Intel x86 bugs
+  if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, 0xFFFBC000) < 0) {
+    MV_PANIC("failed to set tss");
+  }
+  // Use Kvm kernel irqchip
+  if (ioctl(vm_fd_, KVM_CREATE_IRQCHIP) < 0) {
+    MV_PANIC("failed to create irqchip");
+  }
+  // PIT Clock
+  if (ioctl(vm_fd_, KVM_CREATE_PIT) < 0) {
+    MV_PANIC("failed to create pit");
   }
 }
 
 void Machine::CreateVcpu() {
-  int num_vcpus = 4;
+  int num_vcpus = 2;
   for (int i = 0; i < num_vcpus; ++i) {
     Vcpu* vcpu = new Vcpu(this, i);
     vcpus_.push_back(vcpu);
@@ -69,6 +85,8 @@ void Machine::CreateVcpu() {
 }
 
 int Machine::Run() {
+  // Apply all memory slots to kvm
+  memory_manager_->Commit();
   MV_LOG("ok");
   for (auto vcpu: vcpus_) {
     vcpu->Start();
@@ -79,5 +97,3 @@ int Machine::Run() {
   }
   return 0;
 }
-
-} // namespace mvisor

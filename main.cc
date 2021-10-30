@@ -7,6 +7,6 @@ using namespace std;
 
 int main()
 {
-  mvisor::Machine machine;
+  Machine machine;
   return machine.Run();
 }

@@ -1,5 +1,8 @@
-CCFLAGS = -I. -Wall -Wextra -Werror -fno-exceptions -O2 -g
-LIBS = stdc++ pthread
+INCLUDE_DIRS := .
+LIBS := stdc++
+LIBS += pthread
+
+CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -O2 -g
 BUILD_DIR = ./build
 
 EXECUTABLE = build/mvisor
@@ -12,14 +15,8 @@ run: all
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/payload.o $(BUILD_DIR)/main.o
+$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/main.o
 	$(CC) -o $@ $^ $(addprefix -l, $(LIBS))
-
-$(BUILD_DIR)/payload.o: payload.ld $(BUILD_DIR)/guest16.o
-	$(LD) -o $@ -T $<
-
-$(BUILD_DIR)/guest16.o: guest16.s
-	$(AS) -o $@ $<
 
 $(BUILD_DIR)/main.o: main.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<

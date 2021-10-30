@@ -1,9 +1,6 @@
 #ifndef MVISOR_LOGGER_H
 #define MVISOR_LOGGER_H
 
-namespace mvisor
-{
-
 enum LogType {
   kLogTypeDebug,
   kLogTypeError,
@@ -17,8 +14,5 @@ enum LogType {
   ((condition) ? (void)0 : MV_PANIC("Assertion failed, "#condition))
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...);
-
-} // namespace mvisor
-
 
 #endif // MVISOR_LOGGER_H
