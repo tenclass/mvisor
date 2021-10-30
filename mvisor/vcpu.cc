@@ -12,7 +12,7 @@ extern "C" {
 #include "logger.h"
 
 
-Vcpu::Vcpu(const Machine* machine, int vcpu_id)
+Vcpu::Vcpu(Machine* machine, int vcpu_id)
     : machine_(machine), vcpu_id_(vcpu_id) {
   fd_ = ioctl(machine_->vm_fd_, KVM_CREATE_VCPU, vcpu_id_);
   MV_ASSERT(fd_ > 0);
@@ -23,7 +23,7 @@ Vcpu::Vcpu(const Machine* machine, int vcpu_id)
 
 	int coalesced_offset = ioctl(fd_, KVM_CHECK_EXTENSION, KVM_CAP_COALESCED_MMIO);
 	if (coalesced_offset)
-		mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((char*)kvm_run_ + coalesced_offset * 4096);
+		mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((char*)kvm_run_ + coalesced_offset * PAGE_SIZE);
   
 	struct local_apic lapic;
 	if (ioctl(fd_, KVM_GET_LAPIC, &lapic) < 0) {
@@ -62,6 +62,8 @@ void Vcpu::Process() {
   prctl(PR_SET_NAME, thread_name_);
   MV_LOG("%s started", thread_name_);
 
+  DeviceManager* device_manager = machine_->device_manager();
+
   for (;;) {
     if (ioctl(fd_, KVM_RUN, 0) < 0) {
       MV_PANIC("KVM_RUN");
@@ -78,45 +80,22 @@ void Vcpu::Process() {
     case KVM_EXIT_IO: {
       auto *io = &kvm_run_->io;
       uint8_t* data = reinterpret_cast<uint8_t*>(kvm_run_) + kvm_run_->io.data_offset;
-      if (io->port == 0x01 && io->direction == KVM_EXIT_IO_OUT) {
-        putchar(*data);
-        fflush(stdout);
-      } else {
-        if (io->port == 0x64) {
-          // Keyboard
-          break;
-        } else if (io->port == 0x70 || io->port == 0x71) {
-          // RTC
-          break;
-        } else if (io->port == 0x92) {
-          // A20
-          if (io->direction == KVM_EXIT_IO_IN) {
-            *data = 0x02;
-          }
-        } else if (io->port == 0x402) {
-          // SeaBIOS debug
-          if (io->direction == KVM_EXIT_IO_OUT) {
-            putchar(*data);
-            fflush(stdout);
-          } else {
-            *data = getchar();
-          }
-        } else if (io->port == 0xcf8 || io->port == 0xcfc) {
-          // PCI
-        } else {
-          MV_LOG("unhandled io %s port: 0x%x size: %d data: %016lx count: %d",
-          io->direction == KVM_EXIT_IO_OUT ? "out" : "in",
-          io->port, io->size, *(uint64_t*)data, io->count);
-          // PrintRegisters();
-          // getchar();
-        }
-      }
+      device_manager->HandleIo(io->port, data, io->size, io->direction, io->count);
       break;
     }
     case KVM_EXIT_MMIO: {
+      if (mmio_ring_) {
+        const int max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
+	        sizeof(struct kvm_coalesced_mmio));
+        while (mmio_ring_->first != mmio_ring_->last) {
+          struct kvm_coalesced_mmio *m;
+          m = &mmio_ring_->coalesced_mmio[mmio_ring_->first];
+          device_manager->HandleMmio(m->phys_addr, m->data, m->len, 1);
+          mmio_ring_->first = (mmio_ring_->first + 1) % max_entries;
+        }
+      }
       auto *mmio = &kvm_run_->mmio;
-      MV_LOG("mmio %s gpa: %016lx size: %d data: %016lx", mmio->is_write ? "write" : "read",
-        mmio->phys_addr, mmio->len, *(uint64_t*)mmio->data);
+      device_manager->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
       break;
     }
     default:

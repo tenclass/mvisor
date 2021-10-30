@@ -46,6 +46,8 @@
         "chrono": "cpp",
         "cstring": "cpp",
         "ctime": "cpp",
-        "ratio": "cpp"
+        "ratio": "cpp",
+        "unordered_set": "cpp",
+        "map": "cpp"
     }
 }

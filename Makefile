@@ -1,12 +1,15 @@
-INCLUDE_DIRS := .
+INCLUDE_DIRS := ./mvisor
 LIBS := stdc++
 LIBS += pthread
+MKDIR_P = mkdir -p
 
 CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -O2 -g
 BUILD_DIR = ./build
+$(shell mkdir -p $(BUILD_DIR)/devices)
 
 EXECUTABLE = build/mvisor
 MV_SOURCE := $(wildcard mvisor/*.cc)
+MV_SOURCE += $(wildcard mvisor/devices/*.cc)
 MV_OBJECTS := $(MV_SOURCE:mvisor/%.cc=$(BUILD_DIR)/%.o)
 
 .PHONY: run all clean

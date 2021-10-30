@@ -85,10 +85,10 @@ void MemoryManager::Commit() {
     to_add.insert(slot);
     
     // Find the lower bound and iterates
-    auto it = kvm_slots_.lower_bound(slot->begin);
+    auto it = kvm_slots_.upper_bound(slot->begin);
     // Make sure it->second->gpa < begin
     if (it != kvm_slots_.begin()) {
-      it = std::prev(it);
+      --it;
     }
 
     while (it != kvm_slots_.end() && it->second->begin < slot->end) {

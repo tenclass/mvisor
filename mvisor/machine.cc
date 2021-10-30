@@ -10,16 +10,20 @@
 
 #include "logger.h"
 
-Machine::Machine() {
+Machine::Machine(uint64_t ram_size) : ram_size_(ram_size) {
   InitializeKvm();
   CreateVm();
   CreateVcpu();
 
   memory_manager_ = new MemoryManager(this);
+  device_manager_ = new DeviceManager(this);
   LoadBiosFile("./assets/bios-debug.bin");
 }
 
 Machine::~Machine() {
+  delete memory_manager_;
+  delete device_manager_;
+
   if (vm_fd_ > 0)
     close(vm_fd_);
   if (kvm_fd_ > 0)
@@ -63,7 +67,7 @@ void Machine::CreateVm() {
   MV_ASSERT(vm_fd_ > 0);
 
   // Fix Intel x86 bugs
-  if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, 0xFFFBC000) < 0) {
+  if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, 0xFFFBD000) < 0) {
     MV_PANIC("failed to set tss");
   }
   // Use Kvm kernel irqchip
@@ -84,6 +88,18 @@ void Machine::CreateVcpu() {
   }
 }
 
+void Machine::Interrupt(uint32_t irq, uint32_t level) {
+	struct kvm_irq_level irq_level;
+	irq_level	= (struct kvm_irq_level) {
+		{
+			.irq		= irq,
+		},
+		.level		= level,
+	};
+	if (ioctl(vm_fd_, KVM_IRQ_LINE, &irq_level) < 0)
+		MV_PANIC("KVM_IRQ_LINE failed");
+}
+
 int Machine::Run() {
   // Apply all memory slots to kvm
   memory_manager_->Commit();
@@ -96,4 +112,15 @@ int Machine::Run() {
     delete vcpu;
   }
   return 0;
+}
+
+Vcpu* Machine::current_vcpu() {
+  std::thread::id current_id = std::this_thread::get_id();
+  for (auto vcpu: vcpus_) {
+    if (vcpu->thread().get_id() == current_id) {
+      return vcpu;
+    }
+  }
+  MV_PANIC("failed to get current vcpu");
+  return nullptr;
 }

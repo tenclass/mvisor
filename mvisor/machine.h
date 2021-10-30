@@ -1,16 +1,25 @@
 #ifndef MVISOR_MACHINE_H
 #define MVISOR_MACHINE_H
 
+#define PAGE_SIZE 4096
+
+#include <thread>
 #include <vector>
 #include "vcpu.h"
 #include "memory_manager.h"
+#include "device_manager.h"
 
 class Machine {
  public:
-  Machine();
+  Machine(uint64_t ram_size);
   ~Machine();
 
   int Run();
+  void Interrupt(uint32_t irq, uint32_t level);
+
+  DeviceManager* device_manager() { return device_manager_; }
+  MemoryManager* memory_manager() { return memory_manager_; }
+  Vcpu* current_vcpu();
  private:
   friend class Vcpu;
   friend class MemoryManager;
@@ -25,6 +34,7 @@ class Machine {
   
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
+  DeviceManager* device_manager_;
   // Allocate 8GB RAM
   uint64_t ram_size_ = 8LL * (1 << 30);
   uint8_t* bios_data_ = nullptr;

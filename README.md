@@ -6,11 +6,11 @@
 2. Load SeaBIOS (Done)
 
 3. Memory Region Management (Half)
-4. IOPort Management
-5. Devices Management
-6. RTC(CMOS)
-7. PS/2
-8. PCI
+4. IOPort Management (Done)
+5. Devices Management (Done)
+6. RTC(CMOS) (Done)
+7. PS/2 (Done)
+8. PCI (Working)
 9. QEMU CFG
 10. DMA
 11. IDE
