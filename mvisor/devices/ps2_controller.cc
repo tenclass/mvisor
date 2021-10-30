@@ -279,6 +279,7 @@ void Ps2ControllerDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
 		*data = 0x20;
 		break;
   case I8042_A20_GATE:
+		// Always returns enabled
     *data = 2;
 	default:
 		return;

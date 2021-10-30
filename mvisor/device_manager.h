@@ -4,6 +4,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include "pci_device.h"
 #include "device.h"
 
 struct IoHandler {
@@ -20,6 +21,7 @@ class DeviceManager {
   void UnregisterDevice(Device* device);
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);
+  PciDevice* LookupPciDevice(uint32_t device_number, uint32_t function_number);
 
   void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count);
   void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write);

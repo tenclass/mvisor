@@ -25,16 +25,14 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
 }
 
 void DeviceManager::IntializeQ35() {
+  PciHostBridgeDevice* pci_host_bridge = new PciHostBridgeDevice(this);
+  RegisterDevice(pci_host_bridge);
+  SeaBiosDevice* seabios = new SeaBiosDevice(this);
+  RegisterDevice(seabios);
   RtcDevice* rtc = new RtcDevice(this);
   RegisterDevice(rtc);
   Ps2ControllerDevice* ps2 = new Ps2ControllerDevice(this);
   RegisterDevice(ps2);
-  SeaBiosDevice* seabios = new SeaBiosDevice(this);
-  RegisterDevice(seabios);
-  PciHostBridgeDevice* pci_host_bridge = new PciHostBridgeDevice(this);
-  RegisterDevice(pci_host_bridge);
-
-  PrintDevices();
 }
 
 void DeviceManager::PrintDevices() {
@@ -50,20 +48,42 @@ void DeviceManager::PrintDevices() {
   }
 }
 
+PciDevice* DeviceManager::LookupPciDevice(uint32_t device_number, uint32_t function_number) {
+  for (auto device : devices_) {
+    PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
+    if (pci_device &&
+        pci_device->device_number_ == device_number && 
+        pci_device->function_number_ == function_number) {
+      return pci_device;
+    }
+  }
+  return nullptr;
+}
+
+
 void DeviceManager::RegisterDevice(Device* device) {
   devices_.push_back(device);
+  MV_LOG("device: %s", device->name().c_str());
 
   for (auto &io_resource : device->io_resources()) {
     if (io_resource.type == kIoResourceTypePio) {
+      if (pio_handlers_.find(io_resource.base) != pio_handlers_.end()) {
+        MV_PANIC("overlapped pio resource 0x%lx", io_resource.base);
+      }
       pio_handlers_[io_resource.base] = IoHandler {
         .io_resource = io_resource,
         .device = device
       };
+      MV_LOG("\tio port 0x%lx-0x%lx", io_resource.base, io_resource.base + io_resource.length - 1);
     } else {
+      if (mmio_handlers_.find(io_resource.base) != mmio_handlers_.end()) {
+        MV_PANIC("overlapped mmio resource 0x%016lx", io_resource.base);
+      }
       mmio_handlers_[io_resource.base] = IoHandler {
         .io_resource = io_resource,
         .device = device
       };
+      MV_LOG("\tmmio address 0x%016lx-0x016%lx", io_resource.base, io_resource.base + io_resource.length);
     }
   }
 }

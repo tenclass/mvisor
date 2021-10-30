@@ -8,6 +8,9 @@ class PciHostBridgeDevice : public PciDevice {
   PciHostBridgeDevice(DeviceManager* manager);
   void OnRead(uint64_t base, uint8_t* data, uint32_t size);
   void OnWrite(uint64_t base, uint8_t* data, uint32_t size);
+
+private:
+  PciConfigAddress pci_config_address_;
 };
 
 #endif // _MVISOR_DEVICES_PCIHOSTBRIDGE_H

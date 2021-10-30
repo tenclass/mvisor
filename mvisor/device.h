@@ -22,8 +22,8 @@ class Device {
   Device(DeviceManager* manager);
   virtual ~Device();
 
-  virtual void OnRead(uint64_t base, uint8_t* data, uint32_t size) = 0;
-  virtual void OnWrite(uint64_t base, uint8_t* data, uint32_t size) = 0;
+  virtual void OnRead(uint64_t base, uint8_t* data, uint32_t size);
+  virtual void OnWrite(uint64_t base, uint8_t* data, uint32_t size);
 
   const std::vector<IoResource>& io_resources() const { return io_resources_; }
   const std::string& name() const { return name_; }

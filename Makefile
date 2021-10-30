@@ -25,7 +25,7 @@ $(BUILD_DIR)/main.o: main.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<
 
 clean:
-	$(RM) build/*
+	$(RM) -rf build/*
 
 $(MV_OBJECTS): $(BUILD_DIR)/%.o: mvisor/%.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<

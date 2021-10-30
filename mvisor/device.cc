@@ -1,5 +1,5 @@
 #include "device.h"
-
+#include "logger.h"
 
 Device::Device(DeviceManager* manager)
   : manager_(manager) {
@@ -17,6 +17,15 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length) 
     .length = length
   });
 }
+
+void Device::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
+  MV_PANIC("not implemented OnRead for %s base=0x%lx size=%d", name_.c_str(), base, size);
+}
+
+void Device::OnWrite(uint64_t base, uint8_t* data, uint32_t size) {
+  MV_PANIC("not implemented OnWrite for %s base=0x%lx size=%d", name_.c_str(), base, size);
+}
+
 
 /*
 
