@@ -18,7 +18,7 @@ Machine::Machine(int vcpus, uint64_t ram_size)
 
   memory_manager_ = new MemoryManager(this);
   device_manager_ = new DeviceManager(this);
-  LoadBiosFile("./assets/bios-debug.bin");
+  LoadBiosFile("../assets/bios-debug.bin");
 }
 
 Machine::~Machine() {

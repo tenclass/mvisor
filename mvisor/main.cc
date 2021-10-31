@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <string>
 
-#include "mvisor/machine.h"
+#include "machine.h"
 
 using namespace std;
 
