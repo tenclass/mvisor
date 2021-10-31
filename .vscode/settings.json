@@ -48,6 +48,8 @@
         "ctime": "cpp",
         "ratio": "cpp",
         "unordered_set": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "set": "cpp",
+        "list": "cpp"
     }
 }

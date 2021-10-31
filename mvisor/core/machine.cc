@@ -21,7 +21,7 @@ Machine::Machine(int vcpus, uint64_t ram_size)
 
   device_manager_->IntializeQ35();
   
-  LoadBiosFile("../assets/bios-debug.bin");
+  LoadBiosFile(BIOS_PATH);
 }
 
 Machine::~Machine() {

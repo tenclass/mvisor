@@ -1,5 +1,6 @@
 #include "device_manager.h"
 #include <cstring>
+#include <algorithm>
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
@@ -9,6 +10,7 @@
 #include "devices/pci_host_bridge.h"
 #include "devices/firmware_config.h"
 #include "devices/dummy.h"
+#include "devices/serial_port.h"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -29,18 +31,13 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
 }
 
 void DeviceManager::IntializeQ35() {
-  PciHostBridgeDevice* pci_host_bridge = new PciHostBridgeDevice(this);
-  RegisterDevice(pci_host_bridge);
-  DebugConsoleDevice* debug_console = new DebugConsoleDevice(this);
-  RegisterDevice(debug_console);
-  RtcDevice* rtc = new RtcDevice(this);
-  RegisterDevice(rtc);
-  Ps2ControllerDevice* ps2 = new Ps2ControllerDevice(this);
-  RegisterDevice(ps2);
-  FirmwareConfigDevice* firmware_config = new FirmwareConfigDevice(this);
-  RegisterDevice(firmware_config);
-  DummyDevice* dummy = new DummyDevice(this);
-  RegisterDevice(dummy);
+  new PciHostBridgeDevice(this);
+  new DebugConsoleDevice(this);
+  new RtcDevice(this);
+  new Ps2ControllerDevice(this);
+  new FirmwareConfigDevice(this);
+  new DummyDevice(this);
+  new SerialPortDevice(this);
 }
 
 void DeviceManager::PrintDevices() {
@@ -56,12 +53,10 @@ void DeviceManager::PrintDevices() {
   }
 }
 
-PciDevice* DeviceManager::LookupPciDevice(uint32_t device_number, uint32_t function_number) {
+PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
   for (auto device : devices_) {
     PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
-    if (pci_device &&
-        pci_device->device_number_ == device_number && 
-        pci_device->function_number_ == function_number) {
+    if (pci_device && pci_device->devfn_ == devfn) {
       return pci_device;
     }
   }
@@ -70,32 +65,36 @@ PciDevice* DeviceManager::LookupPciDevice(uint32_t device_number, uint32_t funct
 
 
 void DeviceManager::RegisterDevice(Device* device) {
-  devices_.push_back(device);
-  MV_LOG("device: %s", device->name().c_str());
+  devices_.insert(device);
+}
 
-  for (auto &io_resource : device->io_resources()) {
-    if (io_resource.type == kIoResourceTypePio) {
-      if (pio_handlers_.find(io_resource.base) != pio_handlers_.end()) {
-        MV_PANIC("overlapped pio resource 0x%lx", io_resource.base);
-      }
-      pio_handlers_[io_resource.base] = IoHandler {
-        .io_resource = io_resource,
-        .device = device
-      };
-      MV_LOG("\tio port 0x%lx-0x%lx", io_resource.base, io_resource.base + io_resource.length - 1);
-    } else {
-      if (mmio_handlers_.find(io_resource.base) != mmio_handlers_.end()) {
-        MV_PANIC("overlapped mmio resource 0x%016lx", io_resource.base);
-      }
-      mmio_handlers_[io_resource.base] = IoHandler {
-        .io_resource = io_resource,
-        .device = device
-      };
-      MV_LOG("\tmmio address 0x%016lx-0x016%lx", io_resource.base, io_resource.base + io_resource.length);
+void DeviceManager::UnregisterDevice(Device* device) {
+  devices_.erase(device);
+}
+
+void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resource) {
+  if (io_resource.type == kIoResourceTypePio) {
+    if (pio_handlers_.find(io_resource.base) != pio_handlers_.end()) {
+      MV_PANIC("overlapped pio resource 0x%lx", io_resource.base);
     }
+    pio_handlers_[io_resource.base] = IoHandler {
+      .io_resource = io_resource,
+      .device = device
+    };
+  } else {
+    if (mmio_handlers_.find(io_resource.base) != mmio_handlers_.end()) {
+      MV_PANIC("overlapped mmio resource 0x%016lx", io_resource.base);
+    }
+    mmio_handlers_[io_resource.base] = IoHandler {
+      .io_resource = io_resource,
+      .device = device
+    };
   }
 }
 
+void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
+  MV_PANIC("not implemented");
+}
 
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
   auto it = pio_handlers_.upper_bound(port);
@@ -107,9 +106,9 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       Device* device = it->second.device;
       while (count--) {
         if (is_write) {
-          device->OnWrite(port, data, size);
+          device->Write(resource, port - resource.base, data, size);
         } else {
-          device->OnRead(port, data, size);
+          device->Read(resource, port - resource.base, data, size);
         }
         data += size;
       }
@@ -121,17 +120,17 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
 }
 
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
-  auto it = pio_handlers_.upper_bound(base);
-  if (it != pio_handlers_.begin())
+  auto it = mmio_handlers_.upper_bound(base);
+  if (it != mmio_handlers_.begin())
     --it;
-  if (it != pio_handlers_.end()) {
+  if (it != mmio_handlers_.end()) {
     auto &resource = it->second.io_resource;
     if (base >= resource.base && base < resource.base + resource.length) {
       Device* device = it->second.device;
       if (is_write) {
-        device->OnWrite(base, data, size);
+        device->Write(resource, base - resource.base, data, size);
       } else {
-        device->OnRead(base, data, size);
+        device->Read(resource, base - resource.base, data, size);
       }
       data += size;
       return;

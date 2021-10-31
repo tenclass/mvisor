@@ -66,23 +66,12 @@ struct pci_cap_hdr {
 
 union PciConfigAddress {
 	struct {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-		unsigned	reg_offset	: 2;		/* 1  .. 0  */
-		unsigned	register_number	: 6;		/* 7  .. 2  */
-		unsigned	function_number	: 3;		/* 10 .. 8  */
-		unsigned	device_number	: 5;		/* 15 .. 11 */
-		unsigned	bus_number	: 8;		/* 23 .. 16 */
-		unsigned	reserved	: 7;		/* 30 .. 24 */
-		unsigned	enable_bit	: 1;		/* 31       */
-#else
-		unsigned	enable_bit	: 1;		/* 31       */
-		unsigned	reserved	: 7;		/* 30 .. 24 */
-		unsigned	bus_number	: 8;		/* 23 .. 16 */
-		unsigned	device_number	: 5;		/* 15 .. 11 */
-		unsigned	function_number	: 3;		/* 10 .. 8  */
-		unsigned	register_number	: 6;		/* 7  .. 2  */
-		unsigned	reg_offset	: 2;		/* 1  .. 0  */
-#endif
+		unsigned	reg_offset		: 2;		/* 1  .. 0  */
+		unsigned	reg_number		: 6;		/* 7  .. 2  */
+		unsigned 	devfn 				: 8;
+		unsigned	bus						: 8;		/* 23 .. 16 */
+		unsigned	reserved			: 7;		/* 30 .. 24 */
+		unsigned	enabled				: 1;		/* 31       */
 	};
 	uint32_t data;
 };
@@ -124,17 +113,33 @@ struct PciConfigHeader {
 	};
 };
 
+/* Get last byte of a range from offset + length.
+ * Undefined for ranges that wrap around 0. */
+static inline uint64_t range_get_last(uint64_t offset, uint64_t len)
+{
+    return offset + len - 1;
+}
+
+/* Check whether 2 given ranges overlap.
+ * Undefined if ranges that wrap around 0. */
+static inline int ranges_overlap(uint64_t first1, uint64_t len1,
+                                 uint64_t first2, uint64_t len2)
+{
+    uint64_t last1 = range_get_last(first1, len1);
+    uint64_t last2 = range_get_last(first2, len2);
+
+    return !(last2 < first1 || last1 < first2);
+}
 
 class PciDevice : public Device {
  public:
   PciDevice(DeviceManager* manager) : Device(manager) {}
 
-  uint8_t bus_number() { return 0; }
-  uint8_t device_number() { return device_number_; }
-  uint8_t funciton_number() { return function_number_; }
+  uint8_t bus() { return 0; }
+  uint8_t devfn() { return devfn_; }
 
-  void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
-  void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
+  virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
+  virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   void WritePciCommand(uint16_t command);
   void WritePciBar(uint8_t index, uint32_t value);
  protected:
@@ -145,8 +150,7 @@ class PciDevice : public Device {
   PciConfigHeader header_ = { 0 };
   uint32_t bar_size_[6] = { 0 };
   bool bar_active_[6] = { 0 };
-  uint8_t device_number_ = 0;
-  uint8_t function_number_ = 0;
+  uint8_t devfn_ = 0;
 };
 
 #endif // _MVISOR_PCI_DEVICE_H

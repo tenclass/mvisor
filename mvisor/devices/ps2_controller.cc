@@ -266,9 +266,9 @@ Ps2ControllerDevice::Ps2ControllerDevice(DeviceManager* manager)
   AddIoResource(kIoResourceTypePio, I8042_COMMAND_REG, 2);
 }
 
-void Ps2ControllerDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
+void Ps2ControllerDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
 
-	switch (base) {
+	switch (ir.base + offset) {
 	case I8042_COMMAND_REG:
 		*data = kbd_read_status();
 		break;
@@ -286,10 +286,10 @@ void Ps2ControllerDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
 	}
 }
 
-void Ps2ControllerDevice::OnWrite(uint64_t base, uint8_t* data, uint32_t size) {
+void Ps2ControllerDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint8_t value = *data;
 
-	switch (base) {
+	switch (ir.base + offset) {
 	case I8042_COMMAND_REG:
 		kbd_write_command(value);
 		break;

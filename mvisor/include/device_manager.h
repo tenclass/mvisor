@@ -1,7 +1,7 @@
 #ifndef _MVISOR_DEVICE_MANAGER_H
 #define _MVISOR_DEVICE_MANAGER_H
 
-#include <vector>
+#include <set>
 #include <map>
 #include <string>
 #include "pci_device.h"
@@ -21,9 +21,11 @@ class DeviceManager {
 
   void RegisterDevice(Device* device);
   void UnregisterDevice(Device* device);
+  void RegisterIoHandler(Device* device, const IoResource& io_resource);
+  void UnregisterIoHandler(Device* device, const IoResource& io_resource);
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);
-  PciDevice* LookupPciDevice(uint32_t device_number, uint32_t function_number);
+  PciDevice* LookupPciDevice(uint16_t bus, uint8_t devfn);
 
   void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count);
   void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write);
@@ -35,7 +37,7 @@ class DeviceManager {
   Machine* machine() { return machine_; }
  private:
   Machine* machine_;
-  std::vector<Device*> devices_;
+  std::set<Device*> devices_;
   std::map<uint64_t, IoHandler> mmio_handlers_;
   std::map<uint64_t, IoHandler> pio_handlers_;
 };

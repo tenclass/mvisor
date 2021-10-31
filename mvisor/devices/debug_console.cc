@@ -7,10 +7,10 @@ DebugConsoleDevice::DebugConsoleDevice(DeviceManager* manager)
   AddIoResource(kIoResourceTypePio, 0x402, 1);
 }
 
-void DebugConsoleDevice::OnWrite(uint64_t base, uint8_t* data, uint32_t size) {
+void DebugConsoleDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   putchar(*data);
 }
 
-void DebugConsoleDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
+void DebugConsoleDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   *data = 0xe9;
 }

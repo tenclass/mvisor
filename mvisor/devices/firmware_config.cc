@@ -123,25 +123,25 @@ struct e820_entry {
 
 FirmwareConfigDevice::FirmwareConfigDevice(DeviceManager* manager)
   : Device(manager) {
-  name_ = "fw_cfg_io";
+  name_ = "firmware-config";
 
   InitializeConfig();
 
-  AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2);
-  AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8);
+  AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2, "cfg_io");
+  AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "cfg_dma");
 }
 
-void FirmwareConfigDevice::OnWrite(uint64_t base, uint8_t* data, uint32_t size) {
-  if (base == FW_CFG_IO_BASE && size == 2) {
+void FirmwareConfigDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (ir.base == FW_CFG_IO_BASE && size == 2) {
     current_index_ = *(uint16_t*)data;
     current_offset_ = 0;
     MV_LOG("select entry %d", current_index_);
-  } else if (base >= FW_CFG_DMA_IO_BASE) {
+  } else if (ir.base == FW_CFG_DMA_IO_BASE) {
     if (size == 4) {
-      if (base == FW_CFG_DMA_IO_BASE) { // High 32bit address
+      if (offset == 0) { // High 32bit address
         dma_address_ = be32toh(*(uint32_t*)data);
         dma_address_ <<= 32;
-      } else if (base == FW_CFG_DMA_IO_BASE + 4) { // Low 32bit address
+      } else if (offset == 4) { // Low 32bit address
         dma_address_ |= be32toh(*(uint32_t*)data);
         DmaTransfer();
       }
@@ -150,12 +150,13 @@ void FirmwareConfigDevice::OnWrite(uint64_t base, uint8_t* data, uint32_t size) 
       DmaTransfer();
     }
   } else {
-    MV_PANIC("not implemented OnWrite for %s base=0x%lx size=%d", name_.c_str(), base, size);
+    MV_PANIC("not implemented Write for %s base=0x%lx offset=0x%lx size=%d",
+      name_.c_str(), ir.base, offset, size);
   }
 }
 
-void FirmwareConfigDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
-  if (base == FW_CFG_IO_BASE + 1) {
+void FirmwareConfigDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (ir.base == FW_CFG_IO_BASE && offset == 1) {
     auto it = config_.find(current_index_);
     if (it == config_.end()) {
       MV_PANIC("config entry %d not found", current_index_);
@@ -168,7 +169,7 @@ void FirmwareConfigDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
       }
     }
   } else {
-    MV_PANIC("not implemented OnRead for %s base=0x%lx size=%d", name_.c_str(), base, size);
+    MV_PANIC("not implemented Read for %s offset=0x%lx size=%d", name_.c_str(), offset, size);
   }
 }
 
@@ -236,6 +237,11 @@ void FirmwareConfigDevice::InitializeConfig() {
   SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
   SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
   SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
+  SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
+
+  AddConfigFile("bios-geometry", nullptr, 0);
+  AddConfigFile("bootorder", nullptr, 0);
+  AddConfigFile("etc/tpm/log", nullptr, 0);
 
   InitializeE820Table();
   InitializeFileDir();

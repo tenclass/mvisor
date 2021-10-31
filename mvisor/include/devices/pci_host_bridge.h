@@ -6,10 +6,12 @@
 class PciHostBridgeDevice : public PciDevice {
  public:
   PciHostBridgeDevice(DeviceManager* manager);
-  void OnRead(uint64_t base, uint8_t* data, uint32_t size);
-  void OnWrite(uint64_t base, uint8_t* data, uint32_t size);
-
+  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
 private:
+  void MchUpdatePcieXBar();
+
   PciConfigAddress pci_config_address_;
 };
 

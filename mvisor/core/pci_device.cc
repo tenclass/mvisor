@@ -50,13 +50,14 @@ void PciDevice::WritePciBar(uint8_t bar, uint32_t value) {
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   uint8_t* base = (uint8_t*)&header_;
 	uint32_t value = 0;
+	MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
+		name_.c_str(), offset, *(uint32_t*)data, length);
 	/*
 	 * legacy hack: ignore writes to uninitialized regions (e.g. ROM BAR).
 	 * Not very nice but has been working so far.
+	 * if (*(uint32_t *)(base + offset) == 0)
+	 *   return;
 	 */
-	if (*(uint32_t *)(base + offset) == 0)
-		return;
-
 	if (offset == PCI_COMMAND) {
 		memcpy(&value, data, length);
     WritePciCommand(value);

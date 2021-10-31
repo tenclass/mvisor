@@ -10,6 +10,7 @@
 #include "device_manager.h"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
+#define BIOS_PATH "../assets/bios-debug.bin"
 
 class Machine {
  public:

@@ -23,8 +23,8 @@ struct FirmwareConfigEntry {
 class FirmwareConfigDevice : public Device {
  public:
   FirmwareConfigDevice(DeviceManager* manager);
-  void OnWrite(uint64_t base, uint8_t* data, uint32_t size);
-  void OnRead(uint64_t base, uint8_t* data, uint32_t size);
+  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 
  private:
   void DmaTransfer();

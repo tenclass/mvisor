@@ -3,14 +3,7 @@
 #include "logger.h"
 #include "device_manager.h"
 
-#if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-#define RTC_BUS_TYPE		DEVICE_BUS_MMIO
-#define RTC_BASE_ADDRESS	ARM_RTC_MMIO_BASE
-#else
-/* PORT 0070-007F - CMOS RAM/RTC (REAL TIME CLOCK) */
-#define RTC_BUS_TYPE		DEVICE_BUS_IOPORT
 #define RTC_BASE_ADDRESS	0x70
-#endif
 
 /*
  * MC146818 RTC registers
@@ -56,8 +49,8 @@ RtcDevice::RtcDevice(DeviceManager* manager)
   AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2);
 }
 
-void RtcDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
-  if (base == RTC_BASE_ADDRESS)
+void RtcDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (offset == 0)
     return;
   
   time_t timestamp;
@@ -105,8 +98,8 @@ void RtcDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
 	}
 }
 
-void RtcDevice::OnWrite(uint64_t base, uint8_t* data, uint32_t size) {
-  if (base == RTC_BASE_ADDRESS) {	/* index register */
+void RtcDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (offset == 0) {	/* index register */
     uint8_t value = *data;
     rtc.cmos_idx		= value & ~(1UL << 7);
     // bool nmi_disabled	= value & (1UL << 7);
