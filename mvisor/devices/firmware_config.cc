@@ -2,6 +2,7 @@
 #include <cstring>
 #include "logger.h"
 #include "device_manager.h"
+#include "memory_manager.h"
 #include "machine.h"
 
 #define FW_CFG_ACPI_DEVICE_ID	"QEMU0002"
@@ -52,9 +53,6 @@
 /* width in bytes of fw_cfg control register */
 #define FW_CFG_CTL_SIZE		0x02
 
-/* fw_cfg "file name" is up to 56 characters (including terminating nul) */
-#define FW_CFG_MAX_FILE_PATH	56
-
 /* size in bytes of fw_cfg signature */
 #define FW_CFG_SIG_SIZE 4
 
@@ -62,12 +60,22 @@
 #define FW_CFG_VERSION		0x01
 #define FW_CFG_VERSION_DMA	0x02
 
+/* fw_cfg "file name" is up to 56 characters (including terminating nul) */
+#define FW_CFG_MAX_FILE_PATH	56
+
 /* fw_cfg file directory entry type */
 struct fw_cfg_file {
 	uint32_t size;
 	uint16_t select;
 	uint16_t reserved;
 	char name[FW_CFG_MAX_FILE_PATH];
+};
+
+#define FW_CFG_MAX_FILES 256
+
+struct fw_cfg_files {
+    uint32_t  count;
+    fw_cfg_file files[FW_CFG_MAX_FILES];
 };
 
 /* FW_CFG_DMA_CONTROL bits */
@@ -99,6 +107,16 @@ struct fw_cfg_vmcoreinfo {
 	uint32_t size;
 	uint64_t paddr;
 };
+
+/* e820 types */
+#define E820_RAM        1
+#define E820_RESERVED   2
+
+struct e820_entry {
+    uint64_t address;
+    uint64_t length;
+    uint32_t type;
+} __attribute((packed));
 
 #define FW_CFG_IO_BASE     0x510
 #define FW_CFG_DMA_IO_BASE    0x514
@@ -167,7 +185,8 @@ void FirmwareConfigDevice::DmaTransfer() {
     current_offset_ = 0;
   }
 
-  MV_LOG("control=%08x address=%016lx len=%x", dma->control, dma->address, dma->length);
+  // MV_LOG("control=%08x address=%016lx len=0x%x index=0x%x offset=0x%x",
+  //  dma->control, dma->address, dma->length, current_index_, current_offset_);
   auto it = config_.find(current_index_);
   if (it == config_.end()) {
     dma->control = be32toh(FW_CFG_DMA_CTL_ERROR);
@@ -188,6 +207,22 @@ void FirmwareConfigDevice::DmaTransfer() {
   dma->control = 0;
 }
 
+void FirmwareConfigDevice::SetConfigBytes(uint16_t index, std::string bytes) {
+  config_[index] = bytes;
+}
+
+void FirmwareConfigDevice::SetConfigUInt32(uint16_t index, uint32_t value) {
+  config_[index] = std::string((const char*)&value, sizeof(value));
+}
+
+void FirmwareConfigDevice::SetConfigUInt16(uint16_t index, uint16_t value) {
+  config_[index] = std::string((const char*)&value, sizeof(value));
+}
+
+void FirmwareConfigDevice::AddConfigFile(std::string path, void* data, size_t size) {
+  files_[path] = std::string((const char*)data, size);
+}
+
 void FirmwareConfigDevice::InitializeConfig() {
   SetConfigBytes(FW_CFG_SIGNATURE, "QEMU");
   uint32_t version = FW_CFG_VERSION | FW_CFG_VERSION_DMA;
@@ -201,16 +236,45 @@ void FirmwareConfigDevice::InitializeConfig() {
   SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
   SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
   SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
+
+  InitializeE820Table();
+  InitializeFileDir();
 }
 
-void FirmwareConfigDevice::SetConfigBytes(uint16_t index, std::string bytes) {
-  config_[index] = bytes;
+void FirmwareConfigDevice::InitializeFileDir() {
+  fw_cfg_files dir;
+  int index = 0;
+  for (auto item : files_) {
+    auto cfg_file = &dir.files[index];
+    strncpy(cfg_file->name, item.first.c_str(), item.first.size());
+    cfg_file->size = htobe32(item.second.size());
+    cfg_file->select = htobe16(FW_CFG_FILE_FIRST + index);
+    cfg_file->reserved = 0;
+    SetConfigBytes(FW_CFG_FILE_FIRST + index, item.second);
+
+    if (++index >= FW_CFG_MAX_FILES) {
+      break;
+    }
+  }
+  dir.count = htobe32(index);
+
+  std::string data((const char*)&dir, sizeof(dir.count) + index * sizeof(dir.files[0]));
+  SetConfigBytes(FW_CFG_FILE_DIR, std::move(data));
 }
 
-void FirmwareConfigDevice::SetConfigUInt32(uint16_t index, uint32_t value) {
-  config_[index] = std::string((const char*)&value, sizeof(value));
-}
-
-void FirmwareConfigDevice::SetConfigUInt16(uint16_t index, uint16_t value) {
-  config_[index] = std::string((const char*)&value, sizeof(value));
+void FirmwareConfigDevice::InitializeE820Table() {
+  MemoryManager* memory = manager_->machine()->memory_manager();
+  std::vector<e820_entry> entries;
+  for (auto region : memory->regions()) {
+    e820_entry entry;
+    entry.address = region->gpa;
+    entry.length = region->size;
+    if (region->type == kMemoryTypeRam) {
+      entry.type = E820_RAM;
+    } else {
+      entry.type = E820_RESERVED;
+    }
+    entries.emplace_back(std::move(entry));
+  }
+  AddConfigFile("etc/e820", entries.data(), sizeof(e820_entry) * entries.size());
 }

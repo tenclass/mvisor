@@ -13,11 +13,14 @@
 Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {
   InitializeKvm();
+  memory_manager_ = new MemoryManager(this);
+  device_manager_ = new DeviceManager(this);
+
   CreateVm();
   CreateVcpu();
 
-  memory_manager_ = new MemoryManager(this);
-  device_manager_ = new DeviceManager(this);
+  device_manager_->IntializeQ35();
+  
   LoadBiosFile("../assets/bios-debug.bin");
 }
 
@@ -67,10 +70,27 @@ void Machine::CreateVm() {
   vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
   MV_ASSERT(vm_fd_ > 0);
 
-  // Fix Intel x86 bugs
-  if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, 0xFFFBD000) < 0) {
+  /*
+    * On older Intel CPUs, KVM uses vm86 mode to emulate 16-bit code directly.
+    * In order to use vm86 mode, an EPT identity map and a TSS  are needed.
+    * Since these must be part of guest physical memory, we need to allocate
+    * them, both by setting their start addresses in the kernel and by
+    * creating a corresponding e820 entry. We need 4 pages before the BIOS.
+    *
+    * Older KVM versions may not support setting the identity map base. In
+    * that case we need to stick with the default, i.e. a 256K maximum BIOS
+    * size.
+    */
+  /* Allows up to 16M BIOSes. */
+  uint64_t identity_base = X86_EPT_IDENTITY_BASE;
+  if (ioctl(vm_fd_, KVM_SET_IDENTITY_MAP_ADDR, &identity_base) < 0) {
     MV_PANIC("failed to set tss");
   }
+  if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, identity_base + 0x1000) < 0) {
+    MV_PANIC("failed to set tss");
+  }
+  memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved);
+
   // Use Kvm kernel irqchip
   if (ioctl(vm_fd_, KVM_CREATE_IRQCHIP) < 0) {
     MV_PANIC("failed to create irqchip");

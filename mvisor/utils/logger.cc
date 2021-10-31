@@ -5,7 +5,7 @@
 #include <ctime>
 #include <cerrno>
 #include <cstdlib>
-
+#include <cstdint>
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...)
 {
@@ -31,5 +31,27 @@ void Log(LogType type, const char* file, int line, const char* function, const c
       fprintf(stderr, "errno=%d, %s\n", errno, strerror(errno));
     }
     exit(1);
+  }
+}
+
+void Save(const char* path, void* data, size_t size) {
+  FILE* fp = fopen(path, "wb");
+  fwrite(data, size, 1, fp);
+  fclose(fp);
+}
+
+void DumpHex(void* data, size_t size) {
+  uint8_t* ptr = (uint8_t*)data;
+  printf("%08x  ", 0);
+  for (int i = 0; i < (int)size;) {
+    printf("%02x ", ptr[i++]);
+    if (i % 16 == 0) {
+      printf("\n%08x  ", i);
+    } else if (i % 8 == 0) {
+      printf(" ");
+    }
+  }
+  if (size % 16 != 0) {
+    printf("\n");
   }
 }

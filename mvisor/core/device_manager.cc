@@ -11,7 +11,6 @@
 #include "devices/dummy.h"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
-  IntializeQ35();
 }
 
 DeviceManager::~DeviceManager() {
@@ -145,7 +144,6 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
 void* DeviceManager::TranslateGuestMemory(uint64_t gpa) {
   auto memory_manger = machine_->memory_manager();
   void* host = memory_manger->GuestToHostAddress(gpa);
-  MV_LOG("gpa: 0x%016lx host: %p", gpa, host);
   return host;
 }
 

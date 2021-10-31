@@ -9,6 +9,8 @@
 #include "memory_manager.h"
 #include "device_manager.h"
 
+#define X86_EPT_IDENTITY_BASE 0xfeffc000
+
 class Machine {
  public:
   Machine(int vcpus, uint64_t ram_size);

@@ -13,27 +13,27 @@ MemoryManager::MemoryManager(const Machine* machine)
 }
 
 MemoryManager::~MemoryManager() {
-  munmap(reserved_ram_, machine_->ram_size_);
+  munmap(ram_host_, machine_->ram_size_);
 }
 
 void MemoryManager::InitializeSystemRam() {
   // Add reserved memory region
   MV_LOG("ram size: %lu MB", machine_->ram_size_ >> 20);
-  reserved_ram_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
+  ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-  MV_ASSERT(reserved_ram_ != MAP_FAILED);
+  MV_ASSERT(ram_host_ != MAP_FAILED);
 
   // Don't map MMIO region
-  const uint64_t high_memory_start = 1LL << 32;
-  const uint64_t mmio_size = 768 << 20;
-  const uint64_t mmio_start = high_memory_start - mmio_size;
-  if (machine_->ram_size_ < mmio_start) {
-    Map(0, machine_->ram_size_, reserved_ram_, kMemoryTypeReserved);
+  const uint64_t low_ram_upper_bound = 2 * (1LL << 30);
+  const uint64_t high_ram_lower_bound = 1LL << 32;
+  if (machine_->ram_size_ < low_ram_upper_bound) {
+    Map(0, machine_->ram_size_, ram_host_, kMemoryTypeRam);
   } else {
-    Map(0, mmio_start, reserved_ram_, kMemoryTypeReserved);
-    // Skip the gap and map the rest
-    Map(high_memory_start, machine_->ram_size_ - mmio_start,
-      (uint8_t*)reserved_ram_ + mmio_start, kMemoryTypeReserved);
+    // Split the ram to two segments leaving a hole in the GPA
+    Map(0, low_ram_upper_bound, ram_host_, kMemoryTypeRam);
+    // Skip the hole and map the rest
+    Map(high_ram_lower_bound, machine_->ram_size_ - low_ram_upper_bound,
+      (uint8_t*)ram_host_ + low_ram_upper_bound, kMemoryTypeRam);
   }
 }
 
@@ -44,7 +44,8 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   region->size = size;
   region->type = type;
   region->flags = 0;
-  cached_regions_.push_back(region);
+  
+  AddMemoryRegion(region);
   return region;
 }
 
@@ -52,6 +53,10 @@ void MemoryManager::Unmap(const MemoryRegion* region) {
   MV_PANIC("not implemented");
 }
 
+static uint32_t _new_slot_id = 0;
+static inline uint32_t get_new_slot_id() {
+  return _new_slot_id++;
+}
 static void kvm_set_user_memory_region(int vm_fd, uint32_t slot, uint64_t gpa,
     uint64_t size, uint64_t hva, uint32_t flags) {
   struct kvm_userspace_memory_region memreg;
@@ -67,83 +72,74 @@ static void kvm_set_user_memory_region(int vm_fd, uint32_t slot, uint64_t gpa,
   // MV_LOG("set mem slot %d %016lx-%016lx to %p", slot, gpa, gpa + size, hva);
 }
 
-static uint32_t _new_slot_id = 0;
-static inline uint32_t get_new_slot_id() {
-  return _new_slot_id++;
+void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
+  KvmSlot* slot = new KvmSlot;
+  slot->slot = get_new_slot_id();
+  slot->region = region;
+  slot->begin = region->gpa;
+  slot->end = region->gpa + region->size;
+  slot->hva = reinterpret_cast<uint64_t>(region->host);
+  pending_slots_.insert(slot);
+  
+  // Find the lower bound and iterates
+  auto it = kvm_slots_.upper_bound(slot->begin);
+  // Make sure it->second->gpa < begin
+  if (it != kvm_slots_.begin()) {
+    --it;
+  }
+
+  while (it != kvm_slots_.end() && it->second->begin < slot->end) {
+    if (it->second->begin < slot->end && slot->begin < it->second->end) {
+      KvmSlot *hit = it->second;
+      KvmSlot *left = nullptr, *right = nullptr;
+  
+      // Collision found, split the slot
+      if (hit->begin < slot->begin) {
+        // Left collision
+        left = new KvmSlot(*hit);
+        left->end = slot->begin;
+        left->slot = get_new_slot_id();
+      }
+      if (slot->end < hit->end) {
+        // Right collision
+        right = new KvmSlot(*hit);
+        right->begin = slot->end;
+        right->hva = reinterpret_cast<uint64_t>(right->region->host) + (right->begin - right->region->gpa);
+        right->slot = get_new_slot_id();
+      }
+      // Move the iterator before we change kvm_slots
+      ++it;
+      // Replace the hit slot with left and right
+      if (left) {
+        pending_slots_.insert(left);
+        kvm_slots_[left->begin] = left;
+      }
+      if (right) {
+        pending_slots_.insert(right);
+        kvm_slots_[right->begin] = right;
+      }
+      
+      if (pending_slots_.find(hit) != pending_slots_.end()) {
+        pending_slots_.erase(hit);
+      } else {
+        kvm_set_user_memory_region(machine_->vm_fd_, hit->slot, hit->begin,
+          0, hit->hva, hit->region->flags);
+      }
+      delete hit;
+    } else {
+      ++it;
+    }
+  }
+  kvm_slots_[slot->begin] = slot;
+  regions_.push_back(region);
 }
 
 void MemoryManager::Commit() {
-  std::unordered_set<KvmSlot*> to_add, to_remove;
-
-  for (auto region : cached_regions_) {
-    KvmSlot* slot = new KvmSlot;
-    slot->slot = get_new_slot_id();
-    slot->region = region;
-    slot->begin = region->gpa;
-    slot->end = region->gpa + region->size;
-    slot->hva = reinterpret_cast<uint64_t>(region->host);
-    to_add.insert(slot);
-    
-    // Find the lower bound and iterates
-    auto it = kvm_slots_.upper_bound(slot->begin);
-    // Make sure it->second->gpa < begin
-    if (it != kvm_slots_.begin()) {
-      --it;
-    }
-
-    while (it != kvm_slots_.end() && it->second->begin < slot->end) {
-      if (it->second->begin < slot->end && slot->begin < it->second->end) {
-        KvmSlot *hit = it->second;
-        KvmSlot *left = nullptr, *right = nullptr;
-        MV_ASSERT(hit->region->type == kMemoryTypeReserved);
-        // Collision found, split the slot
-        if (hit->begin < slot->begin) {
-          // Left collision
-          left = new KvmSlot(*hit);
-          left->end = slot->begin;
-          left->slot = get_new_slot_id();
-        }
-        if (slot->end < hit->end) {
-          // Right collision
-          right = new KvmSlot(*hit);
-          right->begin = slot->end;
-          right->hva = reinterpret_cast<uint64_t>(right->region->host) + (right->begin - right->region->gpa);
-          right->slot = get_new_slot_id();
-        }
-        ++it;
-        if (left) {
-          to_add.insert(left);
-          kvm_slots_[left->begin] = left;
-        }
-        if (right) {
-          to_add.insert(right);
-          kvm_slots_[right->begin] = right;
-        }
-        to_remove.insert(hit);
-      } else {
-        ++it;
-      }
-    }
-    kvm_slots_[slot->begin] = slot;
-    committed_regions_.push_back(region);
+  for (auto slot : pending_slots_) {
+    kvm_set_user_memory_region(machine_->vm_fd_, slot->slot, slot->begin,
+      slot->end - slot->begin, slot->hva, slot->region->flags);
   }
-
-  for (auto slot : to_remove) {
-    if (to_add.find(slot) == to_add.end()) {
-      kvm_set_user_memory_region(machine_->vm_fd_, slot->slot, slot->begin,
-        0, slot->hva, slot->region->flags);
-    }
-    delete slot;
-  }
-
-  for (auto slot : to_add) {
-    if (to_remove.find(slot) == to_remove.end()) {
-      kvm_set_user_memory_region(machine_->vm_fd_, slot->slot, slot->begin,
-        slot->end - slot->begin, slot->hva, slot->region->flags);
-    }
-  }
-
-  cached_regions_.clear();
+  pending_slots_.clear();
   PrintMemoryScope();
 }
 

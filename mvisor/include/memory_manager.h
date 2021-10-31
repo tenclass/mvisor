@@ -3,6 +3,7 @@
 
 #include <map>
 #include <vector>
+#include <unordered_set>
 
 enum MemoryType {
   kMemoryTypeReserved = 0,
@@ -32,21 +33,24 @@ class MemoryManager {
   MemoryManager(const Machine* machine);
   ~MemoryManager();
   // Add to and remove from regions_
+  void AddMemoryRegion(MemoryRegion* region);
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type);
   void Unmap(const MemoryRegion* region);
-  // Commit regions to kvm_slots_
   void Commit();
+
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
   uint64_t HostToGuestAddress(void* host);
 
+  const std::vector<MemoryRegion*>& regions() const { return regions_; }
  private:
   void InitializeSystemRam();
   const Machine* machine_;
-  std::vector<MemoryRegion*> cached_regions_;
-  std::vector<MemoryRegion*> committed_regions_;
+  std::vector<MemoryRegion*> regions_;
+
+  std::unordered_set<KvmSlot*> pending_slots_;
   std::map<uint64_t, KvmSlot*> kvm_slots_;
-  void* reserved_ram_;
+  void* ram_host_;
 };
 
 #endif // _MVISOR_MM_H

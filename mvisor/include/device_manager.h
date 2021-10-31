@@ -17,6 +17,8 @@ class DeviceManager {
  public:
   DeviceManager(Machine* machine);
   ~DeviceManager();
+  void IntializeQ35();
+
   void RegisterDevice(Device* device);
   void UnregisterDevice(Device* device);
   void PrintDevices();
@@ -32,7 +34,6 @@ class DeviceManager {
 
   Machine* machine() { return machine_; }
  private:
-  void IntializeQ35();
   Machine* machine_;
   std::vector<Device*> devices_;
   std::map<uint64_t, IoHandler> mmio_handlers_;
