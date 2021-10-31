@@ -108,9 +108,9 @@ void RtcDevice::OnRead(uint64_t base, uint8_t* data, uint32_t size) {
 void RtcDevice::OnWrite(uint64_t base, uint8_t* data, uint32_t size) {
   if (base == RTC_BASE_ADDRESS) {	/* index register */
     uint8_t value = *data;
-    bool nmi_disabled	= value & (1UL << 7);
     rtc.cmos_idx		= value & ~(1UL << 7);
-    MV_LOG("nmi_disabled: %d", nmi_disabled);
+    // bool nmi_disabled	= value & (1UL << 7);
+    // MV_LOG("nmi_disabled: %d", nmi_disabled);
     return;
   }
 

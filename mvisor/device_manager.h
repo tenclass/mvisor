@@ -26,6 +26,10 @@ class DeviceManager {
   void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count);
   void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write);
 
+  void ReadGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size);
+  void WriteGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size);
+  void* TranslateGuestMemory(uint64_t gpa);
+
   Machine* machine() { return machine_; }
  private:
   void IntializeQ35();

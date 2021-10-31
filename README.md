@@ -2,7 +2,7 @@
 
 ## Current Status
 
-1. Multi VCPU (Tested)
+1. Multi VCPU (Done)
 2. Load SeaBIOS (Done)
 
 3. Memory Region Management (Half)
@@ -11,7 +11,7 @@
 6. RTC(CMOS) (Done)
 7. PS/2 (Done)
 8. PCI ISA ICH9-LPC (Working)
-9. QEMU CFG
+9. QEMU CFG (Working) // Needs ACPI Tables
 10. DMA
 11. IDE 
 12. Parallel Port

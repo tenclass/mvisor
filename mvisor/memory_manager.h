@@ -37,6 +37,8 @@ class MemoryManager {
   // Commit regions to kvm_slots_
   void Commit();
   void PrintMemoryScope();
+  void* GuestToHostAddress(uint64_t gpa);
+  uint64_t HostToGuestAddress(void* host);
 
  private:
   void InitializeSystemRam();

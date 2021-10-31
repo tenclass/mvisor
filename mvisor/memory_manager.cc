@@ -156,3 +156,25 @@ void MemoryManager::PrintMemoryScope() {
       slot->slot, slot->begin, slot->end, slot->hva, type_strings[slot->region->type]);
   }
 }
+
+void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
+  // Find the lower bound and iterates
+  auto it = kvm_slots_.upper_bound(gpa);
+  if (it != kvm_slots_.begin()) {
+    --it;
+  }
+  MV_ASSERT(it != kvm_slots_.end());
+
+  KvmSlot* slot = it->second;
+  if (gpa >= slot->begin && gpa < slot->end) {
+    uint64_t address = slot->hva + gpa - slot->begin;
+    return reinterpret_cast<void*>(address);
+  }
+  MV_PANIC("failed to translate guest physical address 0x%016lx", gpa);
+  return nullptr;
+}
+
+uint64_t MemoryManager::HostToGuestAddress(void* host) {
+  MV_PANIC("not implemented");
+  return 0;
+}

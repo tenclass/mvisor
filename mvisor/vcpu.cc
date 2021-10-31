@@ -10,7 +10,7 @@ extern "C" {
 #include <cstring>
 #include "machine.h"
 #include "logger.h"
-
+#include "cpuid.h"
 
 Vcpu::Vcpu(Machine* machine, int vcpu_id)
     : machine_(machine), vcpu_id_(vcpu_id) {
@@ -64,13 +64,18 @@ void Vcpu::Process() {
 
   DeviceManager* device_manager = machine_->device_manager();
 
+	kvm_cpu_setup_cpuid(machine_->kvm_fd_, fd_);
+
   for (;;) {
-    if (ioctl(fd_, KVM_RUN, 0) < 0) {
-      MV_PANIC("KVM_RUN");
+		int ret = ioctl(fd_, KVM_RUN, 0);
+    if (ret < 0) {
+      MV_LOG("KVM_RUN failed vcpu=%d ret=%d", vcpu_id_, ret);
     }
 
     switch (kvm_run_->exit_reason)
     {
+		case KVM_EXIT_UNKNOWN:
+			break;
     case KVM_EXIT_HLT:
       goto check;
     case KVM_EXIT_DEBUG:

@@ -11,7 +11,7 @@
 
 class Machine {
  public:
-  Machine(uint64_t ram_size);
+  Machine(int vcpus, uint64_t ram_size);
   ~Machine();
 
   int Run();
@@ -20,6 +20,7 @@ class Machine {
   DeviceManager* device_manager() { return device_manager_; }
   MemoryManager* memory_manager() { return memory_manager_; }
   Vcpu* current_vcpu();
+  int num_vcpus() { return num_vcpus_; }
  private:
   friend class Vcpu;
   friend class MemoryManager;
@@ -32,6 +33,7 @@ class Machine {
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;
   
+  int num_vcpus_ = 0;
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;

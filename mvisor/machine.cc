@@ -10,7 +10,8 @@
 
 #include "logger.h"
 
-Machine::Machine(uint64_t ram_size) : ram_size_(ram_size) {
+Machine::Machine(int vcpus, uint64_t ram_size)
+    : num_vcpus_(vcpus), ram_size_(ram_size) {
   InitializeKvm();
   CreateVm();
   CreateVcpu();
@@ -81,8 +82,7 @@ void Machine::CreateVm() {
 }
 
 void Machine::CreateVcpu() {
-  int num_vcpus = 2;
-  for (int i = 0; i < num_vcpus; ++i) {
+  for (int i = 0; i < num_vcpus_; ++i) {
     Vcpu* vcpu = new Vcpu(this, i);
     vcpus_.push_back(vcpu);
   }

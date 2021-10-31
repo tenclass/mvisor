@@ -1,9 +1,14 @@
 #include "device_manager.h"
+#include <cstring>
 #include "logger.h"
+#include "memory_manager.h"
+#include "machine.h"
 #include "devices/rtc.h"
 #include "devices/ps2_controller.h"
-#include "devices/seabios.h"
+#include "devices/debug_console.h"
 #include "devices/pci_host_bridge.h"
+#include "devices/firmware_config.h"
+#include "devices/dummy.h"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
   IntializeQ35();
@@ -27,12 +32,16 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
 void DeviceManager::IntializeQ35() {
   PciHostBridgeDevice* pci_host_bridge = new PciHostBridgeDevice(this);
   RegisterDevice(pci_host_bridge);
-  SeaBiosDevice* seabios = new SeaBiosDevice(this);
-  RegisterDevice(seabios);
+  DebugConsoleDevice* debug_console = new DebugConsoleDevice(this);
+  RegisterDevice(debug_console);
   RtcDevice* rtc = new RtcDevice(this);
   RegisterDevice(rtc);
   Ps2ControllerDevice* ps2 = new Ps2ControllerDevice(this);
   RegisterDevice(ps2);
+  FirmwareConfigDevice* firmware_config = new FirmwareConfigDevice(this);
+  RegisterDevice(firmware_config);
+  DummyDevice* dummy = new DummyDevice(this);
+  RegisterDevice(dummy);
 }
 
 void DeviceManager::PrintDevices() {
@@ -131,4 +140,26 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
   }
   MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
     is_write ? "write" : "read", base, size, *(uint64_t*)data);
+}
+
+void* DeviceManager::TranslateGuestMemory(uint64_t gpa) {
+  auto memory_manger = machine_->memory_manager();
+  void* host = memory_manger->GuestToHostAddress(gpa);
+  MV_LOG("gpa: 0x%016lx host: %p", gpa, host);
+  return host;
+}
+
+void DeviceManager::ReadGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size) {
+  void* host = TranslateGuestMemory(gpa);
+  if (host) {
+    memcpy(data, host, size);
+  }
+}
+
+void DeviceManager::WriteGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size) {
+  auto memory_manger = machine_->memory_manager();
+  void* host = memory_manger->GuestToHostAddress(gpa);
+  if (host) {
+    memcpy(host, data, size);
+  }
 }
