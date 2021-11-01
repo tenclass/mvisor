@@ -109,15 +109,15 @@ void Machine::CreateVcpu() {
 }
 
 void Machine::Interrupt(uint32_t irq, uint32_t level) {
-	struct kvm_irq_level irq_level;
-	irq_level	= (struct kvm_irq_level) {
-		{
-			.irq		= irq,
-		},
-		.level		= level,
-	};
-	if (ioctl(vm_fd_, KVM_IRQ_LINE, &irq_level) < 0)
-		MV_PANIC("KVM_IRQ_LINE failed");
+  struct kvm_irq_level irq_level = (struct kvm_irq_level) {
+    {
+      .irq = irq,
+    },
+    .level = level,
+  };
+  if (ioctl(vm_fd_, KVM_IRQ_LINE, &irq_level) < 0) {
+    MV_PANIC("KVM_IRQ_LINE failed");
+  }
 }
 
 int Machine::Run() {

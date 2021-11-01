@@ -34,7 +34,7 @@ void Log(LogType type, const char* file, int line, const char* function, const c
   }
 }
 
-void Save(const char* path, void* data, size_t size) {
+void SaveToFile(const char* path, void* data, size_t size) {
   FILE* fp = fopen(path, "wb");
   fwrite(data, size, 1, fp);
   fclose(fp);

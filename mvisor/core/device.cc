@@ -49,37 +49,3 @@ void Device::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_
   MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d",
     name_.c_str(), ir.base, offset, size);
 }
-
-
-/*
-
-      if (io->port == 0x64) {
-        // Keyboard
-        break;
-      } else if (io->port == 0x70 || io->port == 0x71) {
-        // RTC
-        break;
-      } else if (io->port == 0x92) {
-        // A20
-        if (io->direction == KVM_EXIT_IO_IN) {
-          *data = 0x02;
-        }
-      } else if (io->port == 0x402) {
-        // SeaBIOS debug
-        if (io->direction == KVM_EXIT_IO_OUT) {
-          putchar(*data);
-          fflush(stdout);
-        } else {
-          *data = getchar();
-        }
-      } else if (io->port == 0xcf8 || io->port == 0xcfc) {
-        // PCI
-      } else {
-        MV_LOG("unhandled io %s port: 0x%x size: %d data: %016lx count: %d",
-          io->direction == KVM_EXIT_IO_OUT ? "out" : "in",
-          io->port, io->size, *(uint64_t*)data, io->count);
-        // PrintRegisters();
-        // getchar();
-      }
-      break;
-  */

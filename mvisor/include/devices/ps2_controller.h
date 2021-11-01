@@ -3,31 +3,31 @@
 
 #include "device.h"
 
-#define QUEUE_SIZE		128
+#define QUEUE_SIZE  128
 /*
  * This represents the current state of the PS/2 keyboard system,
  * including the AUX device (the mouse)
  */
 struct kbd_state {
-	uint8_t			kq[QUEUE_SIZE];	/* Keyboard queue */
-	int			kread, kwrite;	/* Indexes into the queue */
-	int			kcount;		/* number of elements in queue */
+  uint8_t   kq[QUEUE_SIZE]; /* Keyboard queue */
+  int       kread, kwrite; /* Indexes into the queue */
+  int       kcount;  /* number of elements in queue */
 
-	uint8_t			mq[QUEUE_SIZE];
-	int			mread, mwrite;
-	int			mcount;
+  uint8_t   mq[QUEUE_SIZE];
+  int       mread, mwrite;
+  int       mcount;
 
-	uint8_t			mstatus;	/* Mouse status byte */
-	uint8_t			mres;		/* Current mouse resolution */
-	uint8_t			msample;	/* Current mouse samples/second */
+  uint8_t   mstatus; /* Mouse status byte */
+  uint8_t   mres;  /* Current mouse resolution */
+  uint8_t   msample; /* Current mouse samples/second */
 
-	uint8_t			mode;		/* i8042 mode register */
-	uint8_t			status;		/* i8042 status register */
-	/*
-	 * Some commands (on port 0x64) have arguments;
-	 * we store the command here while we wait for the argument
-	 */
-	uint8_t			write_cmd;
+  uint8_t   mode;  /* i8042 mode register */
+  uint8_t   status;  /* i8042 status register */
+  /*
+   * Some commands (on port 0x64) have arguments;
+   * we store the command here while we wait for the argument
+   */
+  uint8_t   write_cmd;
 };
 
 class Machine;

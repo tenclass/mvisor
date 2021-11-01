@@ -38,12 +38,12 @@ PciHostBridgeDevice::PciHostBridgeDevice(DeviceManager* manager)
   : PciDevice(manager) {
   name_ = "pci-host-bridge";
   
-  header_.vendor_id	= 0x8086;
-  header_.device_id	= 0x29c0;
-  header_.class_code[2]	= 0x06;
-  header_.header_type	= PCI_HEADER_TYPE_NORMAL;
+  header_.vendor_id = 0x8086;
+  header_.device_id = 0x29c0;
+  header_.class_code[2] = 0x06;
+  header_.header_type = PCI_HEADER_TYPE_NORMAL;
   header_.subsys_vendor_id = 0x1af4;
-  header_.subsys_id	= 0x1100;
+  header_.subsys_id = 0x1100;
 
   AddIoResource(kIoResourceTypePio, MCH_CONFIG_ADDR, 4);
   AddIoResource(kIoResourceTypePio, MCH_CONFIG_DATA, 4);
