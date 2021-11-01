@@ -1,25 +1,39 @@
-# A mini x86 hypervisor
+# MVisor: A mini x86 hypervisor
 
-## Current Status
+## Roadmap And Current Status
 
-1. Multi VCPU (Done)
-2. Load SeaBIOS (Done)
+Milestone 1: Boot OS
+Nov 2021
 
-3. Memory Region Management (Half)
-4. IOPort Management (Done)
-5. Devices Management (Done)
-6. RTC(CMOS) (Done)
-7. PS/2 (Done)
+1. Multi VCPU ✅
+2. Load SeaBIOS ✅
+3. Memory Region Management ✅
+4. IOPort Management ✅
+5. Devices Management ✅
+6. RTC(CMOS) ✅
+7. PS/2 ✅
 8. PCI ISA ICH9-LPC (Working)
 9. QEMU CFG (Working) // Needs ACPI Tables
-10. DMA (No)
-11. IDE 
-12. Parallel Port (No)
-13. Serial Port (No)
-14. VGA
-15. Option Roms / ACPI Table
-16. Boot OS (Windows 7 or 10) 
+10. DMA ❌
+11. IDE / ATA / VirtIO
+12. Parallel Port ❌
+13. Serial Port ❌
+14. VGA / QXL
+15. Option Roms / SMBIOS / ACPI Table
+16. Boot DOS
+17. Boot OS (Windows 7 or 10) 
 
+Milestone 2: Multimedia & Networking
+Dec 2021
+...
+
+Milestone 3: Migration
+Jan 2022
+...
+
+Milestone 4: Virtualization Management
+Feb 2022
+...
 
 ## Install
 
