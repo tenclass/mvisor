@@ -46,6 +46,8 @@ class Ps2ControllerDevice : public Device {
   uint8_t kbd_read_status(void);
   void kbd_write_data(uint8_t val);
   void kbd_reset(void);
+  void aux_command(uint8_t val);
+  void ps2_command(uint8_t val);
 
   Machine* machine_;
   struct kbd_state state_;

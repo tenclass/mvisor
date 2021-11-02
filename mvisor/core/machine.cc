@@ -44,12 +44,13 @@ void Machine::InitializeKvm() {
   if (api_version != KVM_API_VERSION) {
     MV_PANIC("kvm api verison %d, expected: %d", api_version, KVM_API_VERSION);
   }
-
+  // Get the vcpu information block size that share with kernel
   kvm_vcpu_mmap_size_ = ioctl(kvm_fd_, KVM_GET_VCPU_MMAP_SIZE, 0);
   MV_ASSERT(kvm_vcpu_mmap_size_ > 0);
 }
 
 void Machine::LoadBiosFile(const char* path) {
+  // Read BIOS data from path to bios_data
   int fd = open(path, O_RDONLY);
   MV_ASSERT(fd > 0);
   struct stat st;
@@ -84,7 +85,7 @@ void Machine::CreateVm() {
   /* Allows up to 16M BIOSes. */
   uint64_t identity_base = X86_EPT_IDENTITY_BASE;
   if (ioctl(vm_fd_, KVM_SET_IDENTITY_MAP_ADDR, &identity_base) < 0) {
-    MV_PANIC("failed to set tss");
+    MV_PANIC("failed to set identity map address");
   }
   if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, identity_base + 0x1000) < 0) {
     MV_PANIC("failed to set tss");
@@ -95,7 +96,7 @@ void Machine::CreateVm() {
   if (ioctl(vm_fd_, KVM_CREATE_IRQCHIP) < 0) {
     MV_PANIC("failed to create irqchip");
   }
-  // PIT Clock
+  // Use Kvm kernel PIT Clock
   if (ioctl(vm_fd_, KVM_CREATE_PIT) < 0) {
     MV_PANIC("failed to create pit");
   }
@@ -128,6 +129,7 @@ int Machine::Run() {
     vcpu->Start();
   }
 
+  // Join all vcpu threads and free resources
   for (auto vcpu: vcpus_) {
     delete vcpu;
   }
@@ -135,6 +137,7 @@ int Machine::Run() {
 }
 
 Vcpu* Machine::current_vcpu() {
+  // Enumerate all vcpus and find the one the current thread is using
   std::thread::id current_id = std::this_thread::get_id();
   for (auto vcpu: vcpus_) {
     if (vcpu->thread().get_id() == current_id) {

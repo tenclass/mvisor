@@ -11,13 +11,13 @@ class Vcpu {
   Vcpu(Machine* machine, int vcpu_id);
   ~Vcpu();
   void Start();
+  void EnableSingleStep();
+  void PrintRegisters();
 
   int vcpu_id() { return vcpu_id_; }
   std::thread& thread() { return thread_; }
  private:
   void Process();
-  void PrintRegisters();
-  void EnableSingleStep();
 
   Machine* machine_;
   int vcpu_id_ = -1;

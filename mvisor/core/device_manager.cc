@@ -11,6 +11,8 @@
 #include "devices/firmware_config.h"
 #include "devices/dummy.h"
 #include "devices/serial_port.h"
+#include "devices/floppy.h"
+#include "devices/ich9_lpc.h"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -32,12 +34,15 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
 
 void DeviceManager::IntializeQ35() {
   new PciHostBridgeDevice(this);
+  new Ich9LpcDevice(this);
+
   new DebugConsoleDevice(this);
   new RtcDevice(this);
   new Ps2ControllerDevice(this);
   new FirmwareConfigDevice(this);
   new DummyDevice(this);
   new SerialPortDevice(this);
+  new FloppyDevice(this);
 }
 
 void DeviceManager::PrintDevices() {

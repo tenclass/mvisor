@@ -25,21 +25,23 @@
 #define RTC_REG_C   0x0C
 #define RTC_REG_D   0x0D
 
+#define CMOS_FLOPPY_TYPE  0x10
+
 /*
  * Register D Bits
  */
 #define RTC_REG_D_VRT (1 << 7)
 
 struct rtc_device {
- uint8_t   cmos_idx;
- uint8_t   cmos_data[128];
+  uint8_t   cmos_idx;
+  uint8_t   cmos_data[128];
 };
 
 static struct rtc_device rtc;
 
 static inline unsigned char bin2bcd(unsigned val)
 {
- return ((val / 10) << 4) + val % 10;
+  return ((val / 10) << 4) + val % 10;
 }
 
 RtcDevice::RtcDevice(DeviceManager* manager)
@@ -52,50 +54,51 @@ RtcDevice::RtcDevice(DeviceManager* manager)
 void RtcDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   if (offset == 0)
     return;
-  
+
   time_t timestamp;
   time(&timestamp);
   struct tm* tm = gmtime(&timestamp);
-  
- switch (rtc.cmos_idx) {
- case RTC_SECONDS:
-  *data = bin2bcd(tm->tm_sec);
-  break;
- case RTC_MINUTES:
-  *data = bin2bcd(tm->tm_min);
-  break;
- case RTC_HOURS:
-  *data = bin2bcd(tm->tm_hour);
-  break;
- case RTC_DAY_OF_WEEK:
-  *data = bin2bcd(tm->tm_wday + 1);
-  break;
- case RTC_DAY_OF_MONTH:
-  *data = bin2bcd(tm->tm_mday);
-  break;
- case RTC_MONTH:
-  *data = bin2bcd(tm->tm_mon + 1);
-  break;
- case RTC_YEAR: {
-  int year;
 
-  year = tm->tm_year + 1900;
-
-  *data = bin2bcd(year % 100);
-  break;
- }
- case RTC_CENTURY: {
-  int year;
-
-  year = tm->tm_year + 1900;
-  *data = bin2bcd(year / 100);
-
-  break;
- }
- default:
-  *data = rtc.cmos_data[rtc.cmos_idx];
-  break;
- }
+  switch (rtc.cmos_idx) {
+  case RTC_SECONDS:
+    *data = bin2bcd(tm->tm_sec);
+    break;
+  case RTC_MINUTES:
+    *data = bin2bcd(tm->tm_min);
+    break;
+  case RTC_HOURS:
+    *data = bin2bcd(tm->tm_hour);
+    break;
+  case RTC_DAY_OF_WEEK:
+    *data = bin2bcd(tm->tm_wday + 1);
+    break;
+  case RTC_DAY_OF_MONTH:
+    *data = bin2bcd(tm->tm_mday);
+    break;
+  case RTC_MONTH:
+    *data = bin2bcd(tm->tm_mon + 1);
+    break;
+  case RTC_YEAR: {
+    int year;
+    year = tm->tm_year + 1900;
+    *data = bin2bcd(year % 100);
+    break;
+  }
+  case RTC_CENTURY: {
+    int year;
+    year = tm->tm_year + 1900;
+    *data = bin2bcd(year / 100);
+    break;
+  }
+  case CMOS_FLOPPY_TYPE: {
+    if (manager_->LookupDeviceByName("floppy")) {
+      *data = 0xf0;
+    }
+  }
+  default:
+    *data = rtc.cmos_data[rtc.cmos_idx];
+    break;
+  }
 }
 
 void RtcDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

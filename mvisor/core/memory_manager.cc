@@ -81,13 +81,14 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   slot->hva = reinterpret_cast<uint64_t>(region->host);
   pending_slots_.insert(slot);
   
-  // Find the lower bound and iterates
+  // Find the first one whose gpa is smaller than slot->gpa
   auto it = kvm_slots_.upper_bound(slot->begin);
   // Make sure it->second->gpa < begin
   if (it != kvm_slots_.begin()) {
     --it;
   }
-
+  // Find all overlapped slots, split them delete the old ones
+  // Maybe later we should support priorities
   while (it != kvm_slots_.end() && it->second->begin < slot->end) {
     if (it->second->begin < slot->end && slot->begin < it->second->end) {
       KvmSlot *hit = it->second;
@@ -130,6 +131,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
       ++it;
     }
   }
+  // Finally add the new slot
   kvm_slots_[slot->begin] = slot;
   regions_.push_back(region);
 }
@@ -154,7 +156,7 @@ void MemoryManager::PrintMemoryScope() {
 }
 
 void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
-  // Find the lower bound and iterates
+  // Find the first slot whose begin is smaller than gpa
   auto it = kvm_slots_.upper_bound(gpa);
   if (it != kvm_slots_.begin()) {
     --it;

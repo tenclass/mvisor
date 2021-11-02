@@ -3,14 +3,11 @@
 #include "logger.h"
 #include "device_manager.h"
 
-#define Q35_MASK(bit, ms_bit, ls_bit) \
-((uint##bit##_t)(((1ULL << ((ms_bit) + 1)) - 1) & ~((1ULL << ls_bit) - 1)))
-
 #define MCH_CONFIG_ADDR            0xcf8
 #define MCH_CONFIG_DATA            0xcfc
 
 #define MCH_PCIEXBAR 0x60
-#define MCH_PCIEXBAR_SIZE 0x08
+#define MCH_PCIEXBAR_SIZE 0x04
 
 /*
  * PCI express ECAM (Enhanced Configuration Address Mapping) format.
@@ -40,7 +37,7 @@ PciHostBridgeDevice::PciHostBridgeDevice(DeviceManager* manager)
   
   header_.vendor_id = 0x8086;
   header_.device_id = 0x29c0;
-  header_.class_code[2] = 0x06;
+  header_.class_code = 0x060000;
   header_.header_type = PCI_HEADER_TYPE_NORMAL;
   header_.subsys_vendor_id = 0x1af4;
   header_.subsys_id = 0x1100;
@@ -69,7 +66,7 @@ void PciHostBridgeDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* 
     PciDevice* pci_device = manager_->LookupPciDevice(0, devfn);
     uint64_t addr = PCIE_MMCFG_CONFOFFSET(ir.base + offset);
     if (pci_device) {
-      pci_device->ReadPciConfigSpace(addr, data, size);
+      pci_device->WritePciConfigSpace(addr, data, size);
     } else {
       memset(data, 0xff, size);
       MV_LOG("failed to lookup pci devfn 0x%02x", devfn);
@@ -120,10 +117,9 @@ void PciHostBridgeDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, ui
 }
 
 void PciHostBridgeDevice::MchUpdatePcieXBar() {
-  uint64_t pciexbar;
-  ReadPciConfigSpace(MCH_PCIEXBAR, (uint8_t*)&pciexbar, MCH_PCIEXBAR_SIZE);
+  uint32_t pciexbar = *(uint32_t*)(header_.data + MCH_PCIEXBAR);
   int enable = pciexbar & 1;
-  uint64_t addr = pciexbar & Q35_MASK(64, 35, 28);
+  uint32_t addr = pciexbar & Q35_MASK(64, 35, 28);
   uint64_t length = (1LL << 20) * 256;
   RemoveIoResource(kIoResourceTypeMmio, "pciexbar");
   if (enable) {

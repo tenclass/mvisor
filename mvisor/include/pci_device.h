@@ -16,6 +16,8 @@
 #define PCI_IOPORT_START   0x6200
 #define PCI_CONFIG_SIZE (1ULL << 24)
 
+#define PCI_MULTI_FUNCTION 0x80
+
 struct msi_msg {
   uint32_t address_lo; /* low 32 bits of msi message address */
   uint32_t address_hi; /* high 32 bits of msi message address */
@@ -68,17 +70,23 @@ union PciConfigAddress {
   struct {
     unsigned reg_offset  : 2;  /* 1  .. 0  */
     unsigned reg_number  : 6;  /* 7  .. 2  */
-    unsigned devfn     : 8;
-    unsigned bus      : 8;  /* 23 .. 16 */
-    unsigned reserved   : 7;  /* 30 .. 24 */
-    unsigned enabled    : 1;  /* 31       */
+    unsigned devfn       : 8;
+    unsigned bus         : 8;  /* 23 .. 16 */
+    unsigned reserved    : 7;  /* 30 .. 24 */
+    unsigned enabled     : 1;  /* 31       */
   };
   uint32_t data;
 };
 
+#define PCI_MAKE_DEVFN(device, function) ((device << 3) | function)
+
 #define PCI_BAR_OFFSET(b) (offsetof(struct PciConfigHeader, bar[b]))
 #define PCI_DEVICE_CONFIG_SIZE 256
 #define PCI_DEVICE_CONFIG_MASK (PCI_DEVICE_CONFIG_SIZE - 1)
+#define PCI_BAR_NUMS 6
+
+#define Q35_MASK(bit, ms_bit, ls_bit) \
+((uint##bit##_t)(((1ULL << ((ms_bit) + 1)) - 1) & ~((1ULL << ls_bit) - 1)))
 
 struct PciConfigHeader {
   /* Configuration space, as seen by the guest */
@@ -88,8 +96,8 @@ struct PciConfigHeader {
       uint16_t   device_id;
       uint16_t   command;
       uint16_t   status;
-      uint8_t    revision_id;
-      uint8_t    class_code[3];
+      unsigned   revision_id  : 8;
+      unsigned   class_code   : 24;
       uint8_t    cacheline_size;
       uint8_t    latency_timer;
       uint8_t    header_type;
@@ -109,7 +117,7 @@ struct PciConfigHeader {
       struct msix_cap msix;
     } __attribute__((packed));
     /* Pad to PCI config space size */
-    uint8_t __pad[PCI_DEVICE_CONFIG_SIZE];
+    uint8_t data[PCI_DEVICE_CONFIG_SIZE];
   };
 };
 
@@ -131,6 +139,13 @@ static inline int ranges_overlap(uint64_t first1, uint64_t len1,
     return !(last2 < first1 || last1 < first2);
 }
 
+static inline uint32_t pci_bar_address(uint32_t bar)
+{
+	if (bar & PCI_BASE_ADDRESS_SPACE_IO)
+		return bar & PCI_BASE_ADDRESS_IO_MASK;
+	return bar & PCI_BASE_ADDRESS_MEM_MASK;
+}
+
 class PciDevice : public Device {
  public:
   PciDevice(DeviceManager* manager) : Device(manager) {}
@@ -144,12 +159,14 @@ class PciDevice : public Device {
   void WritePciBar(uint8_t index, uint32_t value);
  protected:
   friend class DeviceManager;
-  void ActivatePciBar(uint8_t index);
-  void DeactivatePciBar(uint8_t index);
+  bool ActivatePciBar(uint8_t index);
+  bool DeactivatePciBar(uint8_t index);
+  bool ActivatePciBarsWithinRegion(uint32_t base, uint32_t size);
+  bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
 
   PciConfigHeader header_ = { 0 };
-  uint32_t bar_size_[6] = { 0 };
-  bool bar_active_[6] = { 0 };
+  uint32_t bar_size_[PCI_BAR_NUMS] = { 0 };
+  bool bar_active_[PCI_BAR_NUMS] = { 0 };
   uint8_t devfn_ = 0;
 };
 

@@ -57,8 +57,8 @@
 #define FW_CFG_SIG_SIZE 4
 
 /* FW_CFG_ID bits */
-#define FW_CFG_VERSION  0x01
-#define FW_CFG_VERSION_DMA 0x02
+#define FW_CFG_VERSION      0x01
+#define FW_CFG_VERSION_DMA  0x02
 
 /* fw_cfg "file name" is up to 56 characters (including terminating nul) */
 #define FW_CFG_MAX_FILE_PATH 56
@@ -79,11 +79,11 @@ struct fw_cfg_files {
 };
 
 /* FW_CFG_DMA_CONTROL bits */
-#define FW_CFG_DMA_CTL_ERROR 0x01
-#define FW_CFG_DMA_CTL_READ 0x02
-#define FW_CFG_DMA_CTL_SKIP 0x04
+#define FW_CFG_DMA_CTL_ERROR  0x01
+#define FW_CFG_DMA_CTL_READ   0x02
+#define FW_CFG_DMA_CTL_SKIP   0x04
 #define FW_CFG_DMA_CTL_SELECT 0x08
-#define FW_CFG_DMA_CTL_WRITE 0x10
+#define FW_CFG_DMA_CTL_WRITE  0x10
 
 #define FW_CFG_DMA_SIGNATURE    0x51454d5520434647ULL /* "QEMU CFG" */
 
@@ -99,7 +99,7 @@ struct fw_cfg_dma_access {
 #define FW_CFG_VMCOREINFO_FILENAME "etc/vmcoreinfo"
 
 #define FW_CFG_VMCOREINFO_FORMAT_NONE 0x0
-#define FW_CFG_VMCOREINFO_FORMAT_ELF 0x1
+#define FW_CFG_VMCOREINFO_FORMAT_ELF  0x1
 
 struct fw_cfg_vmcoreinfo {
   uint16_t host_format;
@@ -118,7 +118,7 @@ struct e820_entry {
     uint32_t type;
 } __attribute((packed));
 
-#define FW_CFG_IO_BASE     0x510
+#define FW_CFG_IO_BASE        0x510
 #define FW_CFG_DMA_IO_BASE    0x514
 
 FirmwareConfigDevice::FirmwareConfigDevice(DeviceManager* manager)
@@ -236,7 +236,7 @@ void FirmwareConfigDevice::InitializeConfig() {
   uint64_t numa_cfg[num_vcpus + 1] = { 0 };
   SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
   SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
-  SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
+  SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 0);
   SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
 
   AddConfigFile("bios-geometry", nullptr, 0);

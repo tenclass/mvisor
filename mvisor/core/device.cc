@@ -46,6 +46,6 @@ void Device::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t
 }
 
 void Device::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d",
-    name_.c_str(), ir.base, offset, size);
+  MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
+    name_.c_str(), ir.base, offset, size, *(uint64_t*)data);
 }

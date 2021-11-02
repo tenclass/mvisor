@@ -129,7 +129,22 @@ void Ps2ControllerDevice::kbd_write_command(uint8_t val)
   case I8042_CMD_SYSTEM_RESET:
     MV_PANIC("I8042_CMD_SYSTEM_RESET");
     break;
+  case 0xaa:
+    /* controller self test */
+    kbd_queue(0x55);
+    break;
+  case 0xab:
+    /* controller keyboard test */
+    kbd_queue(0x00);
+    break;
+  case 0xad:
+    /* controller kdb disabled */
+    break;
+  case 0xae:
+    /* controller kdb enabled */
+    break;
   default:
+    MV_LOG("unhandled cmd 0x%x", val);
     break;
   }
 }
@@ -171,6 +186,77 @@ uint8_t Ps2ControllerDevice::kbd_read_status(void)
   return state_.status;
 }
 
+void Ps2ControllerDevice::aux_command(uint8_t val) {
+  /* The OS wants to send a command to the mouse */
+  mouse_queue(RESPONSE_ACK);
+  switch (val) {
+  case 0xe6:
+    /* set scaling = 1:1 */
+    state_.mstatus &= ~AUX_SCALING_FLAG;
+    break;
+  case 0xe8:
+    /* set resolution */
+    state_.mres = val;
+    break;
+  case 0xe9:
+    /* Report mouse status/config */
+    mouse_queue(state_.mstatus);
+    mouse_queue(state_.mres);
+    mouse_queue(state_.msample);
+    break;
+  case 0xf2:
+    /* send ID */
+    mouse_queue(0); /* normal mouse */
+    break;
+  case 0xf3:
+    /* set sample rate */
+    state_.msample = val;
+    break;
+  case 0xf4:
+    /* enable reporting */
+    state_.mstatus |= AUX_ENABLE_REPORTING;
+    break;
+  case 0xf5:
+    state_.mstatus &= ~AUX_ENABLE_REPORTING;
+    break;
+  case 0xf6:
+    /* set defaults, just fall through to reset */
+  case 0xff:
+    /* reset */
+    state_.mstatus = 0x0;
+    state_.mres = AUX_DEFAULT_RESOLUTION;
+    state_.msample = AUX_DEFAULT_SAMPLE;
+    break;
+  default:
+    break;
+  }
+}
+
+void Ps2ControllerDevice::ps2_command(uint8_t val) {
+  switch (val)
+  {
+  case 0xff:
+    kbd_queue(RESPONSE_ACK);
+    kbd_queue(0xaa);
+    break;
+  case 0xf5:  // Disable mouse
+    kbd_queue(RESPONSE_ACK);
+    break;
+  case 0xf4:  // Enable mouse
+    kbd_queue(RESPONSE_ACK);
+    break;
+  case 0xf0:  // SSCANSET
+    kbd_queue(RESPONSE_ACK);
+    break;
+  case 0x02:  //
+    kbd_queue(RESPONSE_ACK);
+    break;
+  default:
+    MV_LOG("unknown command 0x%x", val);
+    break;
+  }
+}
+
 /*
  * Called when the OS writes to port 0x60 (data port)
  * Things written here are generally arguments to commands previously
@@ -188,59 +274,14 @@ void Ps2ControllerDevice::kbd_write_data(uint8_t val)
     mouse_queue(RESPONSE_ACK);
     break;
   case I8042_CMD_AUX_SEND:
-    /* The OS wants to send a command to the mouse */
-    mouse_queue(RESPONSE_ACK);
-    switch (val) {
-    case 0xe6:
-      /* set scaling = 1:1 */
-      state_.mstatus &= ~AUX_SCALING_FLAG;
-      break;
-    case 0xe8:
-      /* set resolution */
-      state_.mres = val;
-      break;
-    case 0xe9:
-      /* Report mouse status/config */
-      mouse_queue(state_.mstatus);
-      mouse_queue(state_.mres);
-      mouse_queue(state_.msample);
-      break;
-    case 0xf2:
-      /* send ID */
-      mouse_queue(0); /* normal mouse */
-      break;
-    case 0xf3:
-      /* set sample rate */
-      state_.msample = val;
-      break;
-    case 0xf4:
-      /* enable reporting */
-      state_.mstatus |= AUX_ENABLE_REPORTING;
-      break;
-    case 0xf5:
-      state_.mstatus &= ~AUX_ENABLE_REPORTING;
-      break;
-    case 0xf6:
-      /* set defaults, just fall through to reset */
-    case 0xff:
-      /* reset */
-      state_.mstatus = 0x0;
-      state_.mres = AUX_DEFAULT_RESOLUTION;
-      state_.msample = AUX_DEFAULT_SAMPLE;
-      break;
-    default:
-      break;
-    }
+    aux_command(val);
     break;
   case 0:
-    /* Just send the ID */
-    kbd_queue(RESPONSE_ACK);
-    kbd_queue(0xab);
-    kbd_queue(0x41);
-    kbd_update_irq();
+    ps2_command(val);
     break;
   default:
     /* Yeah whatever */
+    MV_LOG("unknown write_cmd 0x%x", state_.write_cmd);
     break;
   }
   state_.write_cmd = 0;

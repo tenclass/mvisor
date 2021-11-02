@@ -21,9 +21,10 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
     PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
   MV_ASSERT(kvm_run_ != MAP_FAILED);
 
-  int coalesced_offset = ioctl(fd_, KVM_CHECK_EXTENSION, KVM_CAP_COALESCED_MMIO);
-  if (coalesced_offset)
-    mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((char*)kvm_run_ + coalesced_offset * PAGE_SIZE);
+  int coalesced_offset = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_COALESCED_MMIO);
+  if (coalesced_offset) {
+    mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
+  }
   
   struct local_apic lapic;
   if (ioctl(fd_, KVM_GET_LAPIC, &lapic) < 0) {
@@ -93,8 +94,7 @@ void Vcpu::Process() {
         const int max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
           sizeof(struct kvm_coalesced_mmio));
         while (mmio_ring_->first != mmio_ring_->last) {
-          struct kvm_coalesced_mmio *m;
-          m = &mmio_ring_->coalesced_mmio[mmio_ring_->first];
+          struct kvm_coalesced_mmio *m = &mmio_ring_->coalesced_mmio[mmio_ring_->first];
           device_manager->HandleMmio(m->phys_addr, m->data, m->len, 1);
           mmio_ring_->first = (mmio_ring_->first + 1) % max_entries;
         }
