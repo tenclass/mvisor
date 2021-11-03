@@ -141,9 +141,9 @@ static inline int ranges_overlap(uint64_t first1, uint64_t len1,
 
 static inline uint32_t pci_bar_address(uint32_t bar)
 {
-	if (bar & PCI_BASE_ADDRESS_SPACE_IO)
-		return bar & PCI_BASE_ADDRESS_IO_MASK;
-	return bar & PCI_BASE_ADDRESS_MEM_MASK;
+  if (bar & PCI_BASE_ADDRESS_SPACE_IO)
+    return bar & PCI_BASE_ADDRESS_IO_MASK;
+  return bar & PCI_BASE_ADDRESS_MEM_MASK;
 }
 
 class PciDevice : public Device {

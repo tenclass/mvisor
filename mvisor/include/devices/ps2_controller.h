@@ -30,7 +30,6 @@ struct kbd_state {
   uint8_t   write_cmd;
 };
 
-class Machine;
 class Ps2ControllerDevice : public Device {
  public:
   Ps2ControllerDevice(DeviceManager* manager);
@@ -49,7 +48,6 @@ class Ps2ControllerDevice : public Device {
   void aux_command(uint8_t val);
   void ps2_command(uint8_t val);
 
-  Machine* machine_;
   struct kbd_state state_;
 };
 

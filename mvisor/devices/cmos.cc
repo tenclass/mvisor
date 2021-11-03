@@ -1,4 +1,4 @@
-#include "devices/rtc.h"
+#include "devices/cmos.h"
 #include <ctime>
 #include "logger.h"
 #include "device_manager.h"
@@ -28,7 +28,7 @@
 #define CMOS_FLOPPY_TYPE  0x10
 
 /*
- * Register D Bits
+ * Register D Bits1
  */
 #define RTC_REG_D_VRT (1 << 7)
 
@@ -44,14 +44,14 @@ static inline unsigned char bin2bcd(unsigned val)
   return ((val / 10) << 4) + val % 10;
 }
 
-RtcDevice::RtcDevice(DeviceManager* manager)
+CmosDevice::CmosDevice(DeviceManager* manager)
   : Device(manager) {
   name_ = "rtc";
   
   AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2);
 }
 
-void RtcDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void CmosDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   if (offset == 0)
     return;
 
@@ -90,18 +90,19 @@ void RtcDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
     *data = bin2bcd(year / 100);
     break;
   }
-  case CMOS_FLOPPY_TYPE: {
+  case CMOS_FLOPPY_TYPE:
     if (manager_->LookupDeviceByName("floppy")) {
-      *data = 0xf0;
+      // 4 - 1.44MB, 3.5" - 2 heads, 80 tracks, 18 sectors
+      *data = 0x40;
     }
-  }
+    break;
   default:
     *data = rtc.cmos_data[rtc.cmos_idx];
     break;
   }
 }
 
-void RtcDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void CmosDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   if (offset == 0) { /* index register */
     uint8_t value = *data;
     rtc.cmos_idx  = value & ~(1UL << 7);

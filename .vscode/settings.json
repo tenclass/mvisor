@@ -50,6 +50,7 @@
         "unordered_set": "cpp",
         "map": "cpp",
         "set": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "cinttypes": "cpp"
     }
 }

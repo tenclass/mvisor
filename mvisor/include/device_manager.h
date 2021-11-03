@@ -33,6 +33,7 @@ class DeviceManager {
   void ReadGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size);
   void WriteGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size);
   void* TranslateGuestMemory(uint64_t gpa);
+  void SetIrq(uint32_t irq, uint32_t level);
 
   Machine* machine() { return machine_; }
  private:

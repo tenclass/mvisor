@@ -1,6 +1,5 @@
 #include "devices/ps2_controller.h"
 #include "logger.h"
-#include "machine.h"
 #include "device_manager.h"
 
 
@@ -73,8 +72,8 @@ void Ps2ControllerDevice::kbd_update_irq(void)
     mlevel = 1;
   }
 
-  machine_->Interrupt(KBD_IRQ, klevel);
-  machine_->Interrupt(AUX_IRQ, mlevel);
+  manager_->SetIrq(KBD_IRQ, klevel);
+  manager_->SetIrq(AUX_IRQ, mlevel);
 }
 
 /*
@@ -161,13 +160,13 @@ uint8_t Ps2ControllerDevice::kbd_read_data(void)
     /* Keyboard data gets read first */
     ret = state_.kq[state_.kread++ % QUEUE_SIZE];
     state_.kcount--;
-    machine_->Interrupt(KBD_IRQ, 0);
+    manager_->SetIrq(KBD_IRQ, 0);
     kbd_update_irq();
   } else if (state_.mcount > 0) {
     /* Followed by the mouse */
     ret = state_.mq[state_.mread++ % QUEUE_SIZE];
     state_.mcount--;
-    machine_->Interrupt(AUX_IRQ, 0);
+    manager_->SetIrq(AUX_IRQ, 0);
     kbd_update_irq();
   } else {
     i = state_.kread - 1;
@@ -300,7 +299,6 @@ void Ps2ControllerDevice::kbd_reset(void)
 Ps2ControllerDevice::Ps2ControllerDevice(DeviceManager* manager)
   : Device(manager) {
   name_ = "ps2";
-  machine_ = manager_->machine();
 
   AddIoResource(kIoResourceTypePio, I8042_A20_GATE, 1);
   AddIoResource(kIoResourceTypePio, I8042_DATA_REG, 2);

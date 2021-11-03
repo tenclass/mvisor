@@ -56,6 +56,7 @@ void Vcpu::EnableSingleStep() {
 
   if (ioctl(fd_, KVM_SET_GUEST_DEBUG, &debug) < 0)
     MV_PANIC("KVM_SET_GUEST_DEBUG");
+  debug_ = true;
 }
 
 void Vcpu::Process() {
@@ -68,6 +69,9 @@ void Vcpu::Process() {
   kvm_cpu_setup_cpuid(machine_->kvm_fd_, fd_);
 
   for (;;) {
+    if (debug_) {
+      EnableSingleStep();
+    }
     int ret = ioctl(fd_, KVM_RUN, 0);
     if (ret < 0) {
       MV_LOG("KVM_RUN failed vcpu=%d ret=%d", vcpu_id_, ret);
@@ -76,13 +80,20 @@ void Vcpu::Process() {
     switch (kvm_run_->exit_reason)
     {
     case KVM_EXIT_UNKNOWN:
+      MV_LOG("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
       break;
     case KVM_EXIT_HLT:
       goto check;
-    case KVM_EXIT_DEBUG:
-      PrintRegisters();
-      getchar();
+    case KVM_EXIT_DEBUG: {
+      struct kvm_regs regs;
+      if (ioctl(fd_, KVM_GET_REGS, &regs) < 0)
+        MV_PANIC("KVM_GET_REGS failed");
+      if (regs.rip == 0x7c00) {
+        PrintRegisters();
+        getchar();
+      }
       break;
+    }
     case KVM_EXIT_IO: {
       auto *io = &kvm_run_->io;
       uint8_t* data = reinterpret_cast<uint8_t*>(kvm_run_) + kvm_run_->io.data_offset;

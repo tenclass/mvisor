@@ -7,9 +7,6 @@ DummyDevice::DummyDevice(DeviceManager* manager)
   name_ = "dummy";
   
   /* Legacy ioport setup */
-  /* 0000 - 001F - DMA1 controller */
-  AddIoResource(kIoResourceTypePio, 0x0000, 32, "DMA1");
-
   /* 0x0020 - 0x003F - 8259A PIC 1 */
   AddIoResource(kIoResourceTypePio, 0x0020, 2, "PIC1");
 
@@ -18,9 +15,6 @@ DummyDevice::DummyDevice(DeviceManager* manager)
 
   /* 0x00A0 - 0x00AF - 8259A PIC 2 */
   AddIoResource(kIoResourceTypePio, 0x00A0, 2, "PIC2");
-
-  /* 00C0 - 001F - DMA2 controller */
-  AddIoResource(kIoResourceTypePio, 0x00C0, 32, "DMA2");
 
   /* PORT 00ED - DUMMY PORT FOR DELAY??? */
   AddIoResource(kIoResourceTypePio, 0x00ed, 1, "??");

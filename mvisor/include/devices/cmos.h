@@ -1,13 +1,13 @@
-#ifndef _MVISOR_DEVICES_RTC_H
-#define _MVISOR_DEVICES_RTC_H
+#ifndef _MVISOR_DEVICES_CMOS_H
+#define _MVISOR_DEVICES_CMOS_H
 
 #include "device.h"
 
-class RtcDevice : public Device {
+class CmosDevice : public Device {
  public:
-  RtcDevice(DeviceManager* manager);
+  CmosDevice(DeviceManager* manager);
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 };
 
-#endif // _MVISOR_DEVICES_RTC_H
+#endif // _MVISOR_DEVICES_CMOS_H

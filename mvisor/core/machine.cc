@@ -116,7 +116,7 @@ void Machine::Interrupt(uint32_t irq, uint32_t level) {
     },
     .level = level,
   };
-  if (ioctl(vm_fd_, KVM_IRQ_LINE, &irq_level) < 0) {
+  if (ioctl(vm_fd_, KVM_IRQ_LINE, &irq_level) != 0) {
     MV_PANIC("KVM_IRQ_LINE failed");
   }
 }

@@ -4,7 +4,7 @@
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
-#include "devices/rtc.h"
+#include "devices/cmos.h"
 #include "devices/ps2_controller.h"
 #include "devices/debug_console.h"
 #include "devices/pci_host_bridge.h"
@@ -13,6 +13,7 @@
 #include "devices/serial_port.h"
 #include "devices/floppy.h"
 #include "devices/ich9_lpc.h"
+#include "devices/isa_dma.h"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -37,12 +38,13 @@ void DeviceManager::IntializeQ35() {
   new Ich9LpcDevice(this);
 
   new DebugConsoleDevice(this);
-  new RtcDevice(this);
+  new CmosDevice(this);
   new Ps2ControllerDevice(this);
   new FirmwareConfigDevice(this);
   new DummyDevice(this);
   new SerialPortDevice(this);
   new FloppyDevice(this);
+  new IsaDmaDevice(this);
 }
 
 void DeviceManager::PrintDevices() {
@@ -164,4 +166,8 @@ void DeviceManager::WriteGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size)
   if (host) {
     memcpy(host, data, size);
   }
+}
+
+void DeviceManager::SetIrq(uint32_t irq, uint32_t level) {
+  machine_->Interrupt(irq, level);
 }

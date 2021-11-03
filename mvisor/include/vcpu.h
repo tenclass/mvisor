@@ -26,6 +26,7 @@ class Vcpu {
   struct kvm_run *kvm_run_;
   struct kvm_coalesced_mmio_ring *mmio_ring_;
   std::thread thread_;
+  bool debug_ = false;
 };
 
 #endif // _MVISOR_VCPU_H
