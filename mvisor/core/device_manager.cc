@@ -14,6 +14,7 @@
 #include "devices/floppy.h"
 #include "devices/ich9_lpc.h"
 #include "devices/isa_dma.h"
+#include "devices/vga.h"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -45,6 +46,7 @@ void DeviceManager::IntializeQ35() {
   new SerialPortDevice(this);
   new FloppyDevice(this);
   new IsaDmaDevice(this);
+  new VgaDevice(this);
 }
 
 void DeviceManager::PrintDevices() {

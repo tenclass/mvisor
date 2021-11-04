@@ -35,7 +35,7 @@ IsaDmaDevice::IsaDmaDevice(DeviceManager* manager)
 
 void IsaDmaDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint8_t value = *data;
-  MV_LOG("%s write offset=0x%lx size=%d data=%x", name_.c_str(), ir.base + offset, size, value);
+  // MV_LOG("%s write offset=0x%lx size=%d data=%x", name_.c_str(), ir.base + offset, size, value);
   if (ir.base == 0x0080) { // Page registers
     page_registers_[offset] = value;
     return;
@@ -93,7 +93,7 @@ void IsaDmaDevice::TransferChannelData(uint8_t channel, void* data, size_t size,
   ++count;
   MV_ASSERT(count <= size);
   
-  MV_LOG("gpa=0x%lx count=0x%lx size=0x%lx", gpa, count, size);
+  // MV_LOG("gpa=0x%lx count=0x%lx size=0x%lx", gpa, count, size);
   void* host = manager_->TranslateGuestMemory(gpa);
 
   memcpy(host, data, count);

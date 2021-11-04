@@ -106,7 +106,7 @@ struct PciConfigHeader {
       uint32_t   card_bus;
       uint16_t   subsys_vendor_id;
       uint16_t   subsys_id;
-      uint32_t   exp_rom_bar;
+      uint32_t   rom_bar;
       uint8_t    capabilities;
       uint8_t    reserved1[3];
       uint32_t   reserved2;
@@ -146,9 +146,11 @@ static inline uint32_t pci_bar_address(uint32_t bar)
   return bar & PCI_BASE_ADDRESS_MEM_MASK;
 }
 
+class MemoryRegion;
 class PciDevice : public Device {
  public:
   PciDevice(DeviceManager* manager) : Device(manager) {}
+  ~PciDevice();
 
   uint8_t bus() { return 0; }
   uint8_t devfn() { return devfn_; }
@@ -163,11 +165,16 @@ class PciDevice : public Device {
   bool DeactivatePciBar(uint8_t index);
   bool ActivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
+  void UpdateRomMapAddress(uint32_t address);
+  void LoadRomFile(const char* path);
 
   PciConfigHeader header_ = { 0 };
   uint32_t bar_size_[PCI_BAR_NUMS] = { 0 };
   bool bar_active_[PCI_BAR_NUMS] = { 0 };
+  uint32_t rom_bar_size_ = 0;
   uint8_t devfn_ = 0;
+  const MemoryRegion* rom_bar_memory_region_ = nullptr;
+  void* rom_data_ = nullptr;
 };
 
 #endif // _MVISOR_PCI_DEVICE_H

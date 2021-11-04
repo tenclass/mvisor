@@ -134,6 +134,10 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   // Finally add the new slot
   kvm_slots_[slot->begin] = slot;
   regions_.push_back(region);
+
+  if (!map_transaction_enabled_) {
+    Commit();
+  }
 }
 
 void MemoryManager::Commit() {
@@ -175,4 +179,14 @@ void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
 uint64_t MemoryManager::HostToGuestAddress(void* host) {
   MV_PANIC("not implemented");
   return 0;
+}
+
+
+void MemoryManager::BeginMapTransaction() {
+  map_transaction_enabled_ = true;
+}
+
+void MemoryManager::EndMapTransaction() {
+  Commit();
+  map_transaction_enabled_ = false;
 }

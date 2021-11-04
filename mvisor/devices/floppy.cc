@@ -52,7 +52,6 @@ FloppyDevice::~FloppyDevice() {
 }
 
 void FloppyDevice::Reset() {
-  MV_LOG("ok");
   memset(st_, 0, sizeof(st_));
   dor_ = ccr_ = dsr_ = 0;
   fifo_index_ = fifo_length_ = 0;
@@ -160,7 +159,6 @@ void FloppyDevice::ReadData() {
   fifo_[5] = sector_;
   fifo_[6] = 2; // 512 bytes sector
   manager_->SetIrq(6, 1);
-  MV_LOG("set irq 6");
   manager_->machine()->current_vcpu()->EnableSingleStep();
 }
 
@@ -204,11 +202,10 @@ void FloppyDevice::WriteFifo(uint8_t value) {
 void FloppyDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint64_t port = ir.base + offset;
   uint8_t value = *data;
-  MV_LOG("%s write port=0x%lx size=%d data=%x", name_.c_str(), port, size, value);
+  // MV_LOG("%s write port=0x%lx size=%d data=%x", name_.c_str(), port, size, value);
   switch (port)
   {
   case REG_DIGITAL_OUTPUT:
-    MV_LOG("write dor %x", value);
     if (value & DOR_RESET) {
       Reset();
       manager_->SetIrq(6, 0);

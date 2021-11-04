@@ -1,7 +1,6 @@
 #include "devices/ich9_lpc.h"
 #include "logger.h"
 #include "device_manager.h"
-#include "machine.h"
 
 #define ICH9_LPC_PMBASE                         0x40
 #define ICH9_LPC_PMBASE_BASE_ADDRESS_MASK       Q35_MASK(32, 15, 7)
@@ -52,7 +51,7 @@ Ich9LpcDevice::Ich9LpcDevice(DeviceManager* manager)
   header_.device_id = 0x2918;
   header_.class_code = 0x060100;
   header_.revision_id = 2;
-  header_.header_type = PCI_MULTI_FUNCTION;
+  header_.header_type = PCI_HEADER_TYPE_NORMAL;
   header_.subsys_vendor_id = 0x1af4;
   header_.subsys_id = 0x1100;
 

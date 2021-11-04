@@ -28,7 +28,7 @@ class Machine {
   friend class Vcpu;
   friend class MemoryManager;
   void InitializeKvm();
-  void CreateVm();
+  void CreateArchRelated();
   void CreateVcpu();
   void LoadBiosFile(const char* path);
 

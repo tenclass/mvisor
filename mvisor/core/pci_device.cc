@@ -1,6 +1,28 @@
 #include "pci_device.h"
 #include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include "logger.h"
+#include "machine.h"
+
+void PciDevice::LoadRomFile(const char* path) {
+  /* Load rom file */
+  int fd = open(path, O_RDONLY);
+  MV_ASSERT(fd >= 0);
+  struct stat st;
+  fstat(fd, &st);
+  rom_bar_size_ = (st.st_size / PAGE_SIZE + 1) * PAGE_SIZE;
+  rom_data_ = valloc(rom_bar_size_);
+  read(fd, rom_data_, st.st_size);
+  close(fd);
+}
+
+PciDevice::~PciDevice() {
+  if (rom_data_) {
+    free(rom_data_);
+  }
+}
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   memcpy(data, header_.data + offset, length);
@@ -12,12 +34,6 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   uint32_t value = 0;
   MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
     name_.c_str(), offset, *(uint32_t*)data, length);
-  /*
-   * legacy hack: ignore writes to uninitialized regions (e.g. ROM BAR).
-   * Not very nice but has been working so far.
-   */
-  if (offset < 0x40 && *(uint32_t *)(header_.data + offset) == 0)
-     return;
 
   if (offset == PCI_COMMAND) {
     memcpy(&value, data, length);
@@ -26,16 +42,39 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   }
 
   uint8_t bar = (offset - PCI_BAR_OFFSET(0)) / sizeof(uint32_t);
-  if (bar < PCI_BAR_NUMS) {
-    MV_ASSERT(length == sizeof(uint32_t));
+  if (bar >= 0 && bar < PCI_BAR_NUMS) {
     memcpy(&value, data, length);
     WritePciBar(bar, value);
     return;
+  } else if (bar == 8) {
+    /* rom bar */
+    memcpy(&value, data, length);
+    if (value == 0xfffff800 || value == 0xfffffffe) {
+      uint32_t mask = value;
+      value = ~(rom_bar_size_ - 1);
+      /* Preserve the special bits. */
+      value = (value & mask) | (header_.rom_bar & ~mask);
+      header_.rom_bar = value;
+      return;
+    } else if (value > 0) {
+      UpdateRomMapAddress(value & 0xfffff800);
+    }
   }
 
   memcpy(header_.data + offset, data, length);
 }
 
+void PciDevice::UpdateRomMapAddress(uint32_t address) {
+  auto mm = manager_->machine()->memory_manager();
+  if (rom_bar_memory_region_) {
+    if (rom_bar_memory_region_->gpa == address) {
+      /* unchanged */
+      return;
+    }
+    mm->Unmap((const MemoryRegion*)rom_bar_memory_region_);
+  }
+  rom_bar_memory_region_ = mm->Map(address, rom_bar_size_, rom_data_, kMemoryTypeRam);
+}
 
 void PciDevice::WritePciCommand(uint16_t new_command) {
   int i;
@@ -66,19 +105,13 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
 }
 
 bool PciDevice::ActivatePciBar(uint8_t bar) {
-  MV_PANIC("not implemented bar=%d", bar);
-  if (bar_active_[bar])
-    return true;
-  
+  MV_LOG("bar=%d", bar);
   bar_active_[bar] = true;
   return true;
 }
 
 bool PciDevice::DeactivatePciBar(uint8_t bar) {
-  MV_PANIC("not implemented bar=%d", bar);
-  if (!bar_active_[bar])
-    return true;
-  
+  MV_LOG("bar=%d", bar);
   bar_active_[bar] = false;
   return true;
 }
@@ -94,7 +127,6 @@ bool PciDevice::DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size) {
 }
 
 void PciDevice::WritePciBar(uint8_t bar, uint32_t value) {
-  uint32_t old_addr, new_addr, bar_size;
   uint32_t mask;
   int bar_is_io = header_.bar[bar] & PCI_BASE_ADDRESS_SPACE_IO;
   if (bar_is_io)
@@ -144,8 +176,7 @@ void PciDevice::WritePciBar(uint8_t bar, uint32_t value) {
     header_.bar[bar] = value;
     return;
   }
-
-  MV_PANIC("here");
+  
 
   /*
    * BAR reassignment can be done while device access is enabled and
@@ -158,27 +189,32 @@ void PciDevice::WritePciBar(uint8_t bar, uint32_t value) {
    * enable emulation for all device regions that were overlapping with
    * the old value.
    */
-  old_addr = pci_bar_address(header_.bar[bar]);
-  new_addr = pci_bar_address(value);
-  bar_size = bar_size_[bar];
+  uint32_t old_addr = pci_bar_address(header_.bar[bar]);
+  uint32_t new_addr = pci_bar_address(value);
+  uint32_t bar_size = bar_size_[bar];
 
-  if (!DeactivatePciBar(bar))
-    return;
+  if (bar_active_[bar]) {
+    if (!DeactivatePciBar(bar))
+      return;
 
-  if (!DeactivatePciBarsWithinRegion(new_addr, bar_size)) {
-    /*
-     * We cannot update the BAR because of an overlapping region
-     * that failed to deactivate emulation, so keep the old BAR
-     * value and re-activate emulation for it.
-     */
-    ActivatePciBar(bar);
-    return;
+    if (!DeactivatePciBarsWithinRegion(new_addr, bar_size)) {
+      /*
+      * We cannot update the BAR because of an overlapping region
+      * that failed to deactivate emulation, so keep the old BAR
+      * value and re-activate emulation for it.
+      */
+      ActivatePciBar(bar);
+      return;
+    }
   }
 
   header_.bar[bar] = value;
-  if (!ActivatePciBar(bar)) {
-    ActivatePciBarsWithinRegion(new_addr, bar_size);
-    return;
+
+  if (!bar_active_[bar]) {
+    if (!ActivatePciBar(bar)) {
+      ActivatePciBarsWithinRegion(new_addr, bar_size);
+      return;
+    }
+    ActivatePciBarsWithinRegion(old_addr, bar_size);
   }
-  ActivatePciBarsWithinRegion(old_addr, bar_size);
 }

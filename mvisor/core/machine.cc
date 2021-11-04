@@ -14,11 +14,11 @@ Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {
   InitializeKvm();
   memory_manager_ = new MemoryManager(this);
-  device_manager_ = new DeviceManager(this);
 
-  CreateVm();
+  CreateArchRelated();
   CreateVcpu();
 
+  device_manager_ = new DeviceManager(this);
   device_manager_->IntializeQ35();
   
   LoadBiosFile(BIOS_PATH);
@@ -47,6 +47,10 @@ void Machine::InitializeKvm() {
   // Get the vcpu information block size that share with kernel
   kvm_vcpu_mmap_size_ = ioctl(kvm_fd_, KVM_GET_VCPU_MMAP_SIZE, 0);
   MV_ASSERT(kvm_vcpu_mmap_size_ > 0);
+  // Create vm so that we can map userspace memory
+  vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
+  MV_ASSERT(vm_fd_ > 0);
+
 }
 
 void Machine::LoadBiosFile(const char* path) {
@@ -63,14 +67,13 @@ void Machine::LoadBiosFile(const char* path) {
   close(fd);
 
   // Map BIOS file to memory
+  memory_manager_->BeginMapTransaction();
   memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam);
   memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam);
+  memory_manager_->EndMapTransaction();
 }
 
-void Machine::CreateVm() {
-  vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
-  MV_ASSERT(vm_fd_ > 0);
-
+void Machine::CreateArchRelated() {
   /*
     * On older Intel CPUs, KVM uses vm86 mode to emulate 16-bit code directly.
     * In order to use vm86 mode, an EPT identity map and a TSS  are needed.
@@ -122,8 +125,6 @@ void Machine::Interrupt(uint32_t irq, uint32_t level) {
 }
 
 int Machine::Run() {
-  // Apply all memory slots to kvm
-  memory_manager_->Commit();
   MV_LOG("ok");
   for (auto vcpu: vcpus_) {
     vcpu->Start();

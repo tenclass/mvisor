@@ -27,9 +27,6 @@ DummyDevice::DummyDevice(DeviceManager* manager)
 
   /* PORT 0378-037A - PARALLEL PRINTER PORT (usually LPT2, sometimes LPT3) */
   AddIoResource(kIoResourceTypePio, 0x0378, 3, "Parallel LPT2");
-
-  /* PORT 03D4-03D5 - COLOR VIDEO - CRT CONTROL REGISTERS */
-  AddIoResource(kIoResourceTypePio, 0x03d4, 2, "Crt");
   
   /* PORT AE0C-AE20 */
   AddIoResource(kIoResourceTypePio, 0xae0c, 20, "Pci Hotplug");
