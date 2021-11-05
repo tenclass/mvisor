@@ -102,7 +102,15 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
 }
 
 void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
-  MV_PANIC("not implemented");
+  if (io_resource.type == kIoResourceTypePio) {
+    auto it = pio_handlers_.find(io_resource.base);
+    if (it != mmio_handlers_.end())
+      pio_handlers_.erase(it);
+  } else {
+    auto it = mmio_handlers_.find(io_resource.base);
+    if (it != mmio_handlers_.end())
+      mmio_handlers_.erase(it);
+  }
 }
 
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
@@ -124,7 +132,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       return;
     }
   }
-  MV_PANIC("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
+  MV_LOG("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
     is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
 }
 

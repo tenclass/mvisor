@@ -46,7 +46,11 @@ class VgaDevice : public PciDevice {
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
+  bool IsTextMode();
+  uint64_t GetVRamAddress();
+  void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
 
+  const uint8_t* pallete() const { return pallete_; }
  private:
   void ResetRegisters();
   void VbeIoReadData(uint16_t* data);
@@ -55,11 +59,16 @@ class VgaDevice : public PciDevice {
 
   uint8_t misc_ouput_reg_ = 0;
   uint8_t sequence_index_ = 0;
+  uint8_t sequence_registers_[256] = { 0 };
+  uint8_t gfx_index_ = 0;
+  uint8_t gfx_registers_[256] = { 0 };
   uint8_t attribute_index_ = 0;
-  uint16_t pallete_write_address_ = 0;
+  uint8_t attribute_registers_[0x15] = { 0 };
+  uint16_t pallete_read_index_ = 0;
+  uint16_t pallete_write_index_ = 0;
   uint8_t pallete_[256 * 3];
-  int graphics_control_address_ = 0;
   uint8_t crtc_index_ = 0;
+  uint8_t crtc_registers_[0x19] = { 0 };
 
   uint32_t vbe_size_ = 0;
   uint16_t vbe_index_ = 0;

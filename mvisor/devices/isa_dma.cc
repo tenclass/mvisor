@@ -12,11 +12,13 @@
 #define WR_START_ADDR_37   0x6
 #define WR_COUNT_37        0x7
 
-#define R_COMMAND          0x8
+#define REG_COMMAND        0x8
+#define REG_STATUS         0x9
 #define WR_SINGLE_MASK_BIT 0xA
 #define WR_MODE_REG        0xB
 #define W_FLIPFLOP_RESET   0xC
 #define WR_MASTER_CLEAR    0xD
+#define WR_MASK_CLEAR      0xE
 #define WR_ALL_MASK_BITS   0xF
 
 
@@ -35,7 +37,6 @@ IsaDmaDevice::IsaDmaDevice(DeviceManager* manager)
 
 void IsaDmaDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint8_t value = *data;
-  // MV_LOG("%s write offset=0x%lx size=%d data=%x", name_.c_str(), ir.base + offset, size, value);
   if (ir.base == 0x0080) { // Page registers
     page_registers_[offset] = value;
     return;
@@ -49,34 +50,65 @@ void IsaDmaDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, u
   auto controller = &controllers_[controller_index];
   switch (offset)
   {
-  case WR_MASTER_CLEAR:
-    bzero(controller, sizeof(*controller));
+  case 0 ... ISA_DMA_REGISTER_NUM - 1:
+    controller->registers[offset][controller->flipflop[offset]++ & 1] = value;
     break;
-  case WR_MODE_REG:
-    controller->mode = value;
+  case REG_COMMAND:
+    controller->command = *data;
+    break;
+  case REG_STATUS:
+    MV_PANIC("not implemented");
     break;
   case WR_SINGLE_MASK_BIT:
     controller->mask = 0xF | (value & 0xF);
     break;
+  case WR_MODE_REG:
+    controller->mode = value;
+    break;
   case W_FLIPFLOP_RESET:
     if (value > 0) {
-      MV_ASSERT(value == 0xff);
       bzero(controller->flipflop, sizeof(controller->flipflop));
     }
     break;
+  case WR_MASTER_CLEAR:
+    bzero(controller, sizeof(*controller));
+    break;
   default:
-    if (offset < ISA_DMA_REGISTER_NUM) {
-      controller->registers[offset][controller->flipflop[offset]++ & 1] = value;
-    } else {
-      MV_PANIC("%s ignore base=0x%lx offset=0x%lx size=%d data=%x",
-        name_.c_str(), ir.base, offset, size, *data);
-    }
+    MV_PANIC("%s unhandled base=0x%lx offset=0x%lx size=%d data=%x",
+      name_.c_str(), ir.base, offset, size, *data);
   }
 }
 
 void IsaDmaDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("%s ignore base=0x%lx offset=0x%lx size=%d",
-    name_.c_str(), ir.base, offset, size);
+  if (ir.base == 0x0080) { // Page registers
+    *data = page_registers_[offset];
+    return;
+  }
+
+  int controller_index = 0;
+  if (ir.base == 0x00C0) {
+    controller_index = 1;
+    offset >>= 1;
+  }
+  auto controller = &controllers_[controller_index];
+  switch (offset)
+  {
+  case 0 ... ISA_DMA_REGISTER_NUM - 1:
+    *data = controller->registers[offset][controller->flipflop[offset]++ & 1];
+    break;
+  case WR_MODE_REG:
+    *data = controller->mode;
+    break;
+  case WR_SINGLE_MASK_BIT:
+    *data = controller->mask;
+    break;
+  case REG_COMMAND:
+    *data = controller->command;
+    break;
+  default:
+    MV_PANIC("%s unhandled base=0x%lx offset=0x%lx size=%d data=%x",
+      name_.c_str(), ir.base, offset, size, *data);
+  }
 }
 
 void IsaDmaDevice::TransferChannelData(uint8_t channel, void* data, size_t size, size_t* transferred) {
@@ -93,9 +125,7 @@ void IsaDmaDevice::TransferChannelData(uint8_t channel, void* data, size_t size,
   ++count;
   MV_ASSERT(count <= size);
   
-  // MV_LOG("gpa=0x%lx count=0x%lx size=0x%lx", gpa, count, size);
   void* host = manager_->TranslateGuestMemory(gpa);
-
   memcpy(host, data, count);
   *transferred = count;
 }

@@ -5,12 +5,13 @@ extern "C" {
 }
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include <sys/prctl.h>
 #include <sys/mman.h>
 #include <cstring>
 #include "machine.h"
 #include "logger.h"
-#include "cpuid.h"
+#include "arch/cpuid.h"
+
+__thread Vcpu* Vcpu::current_vcpu_ = nullptr;
 
 Vcpu::Vcpu(Machine* machine, int vcpu_id)
     : machine_(machine), vcpu_id_(vcpu_id) {
@@ -59,19 +60,49 @@ void Vcpu::EnableSingleStep() {
   debug_ = true;
 }
 
+void Vcpu::ProcessMmio() {
+  if (mmio_ring_) {
+    const int max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
+      sizeof(struct kvm_coalesced_mmio));
+    while (mmio_ring_->first != mmio_ring_->last) {
+      struct kvm_coalesced_mmio *m = &mmio_ring_->coalesced_mmio[mmio_ring_->first];
+      device_manager_->HandleMmio(m->phys_addr, m->data, m->len, 1);
+      mmio_ring_->first = (mmio_ring_->first + 1) % max_entries;
+    }
+  }
+  auto *mmio = &kvm_run_->mmio;
+  device_manager_->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
+}
+
+void Vcpu::ProcessIo() {
+  auto *io = &kvm_run_->io;
+  uint8_t* data = reinterpret_cast<uint8_t*>(kvm_run_) + kvm_run_->io.data_offset;
+  device_manager_->HandleIo(io->port, data, io->size, io->direction, io->count);
+}
+
+void Vcpu::vcpu_thread_handler(int signum) {
+  // Do nothing now ...
+}
+
+void Vcpu::SetupSingalHandlers() {
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
+
+  signal(SIG_USER_INTERRUPT, Vcpu::vcpu_thread_handler);
+}
+
 void Vcpu::Process() {
+  current_vcpu_ = this;
   sprintf(thread_name_, "vcpu-%d", vcpu_id_);
-  prctl(PR_SET_NAME, thread_name_);
+  SetThreadName(thread_name_);
+  SetupSingalHandlers();
   MV_LOG("%s started", thread_name_);
 
-  DeviceManager* device_manager = machine_->device_manager();
-
+  device_manager_ = machine_->device_manager();
   kvm_cpu_setup_cpuid(machine_->kvm_fd_, fd_);
 
-  for (;;) {
-    if (debug_) {
-      EnableSingleStep();
-    }
+  for (; machine_->valid_;) {
     int ret = ioctl(fd_, KVM_RUN, 0);
     if (ret < 0) {
       MV_LOG("KVM_RUN failed vcpu=%d ret=%d", vcpu_id_, ret);
@@ -82,38 +113,19 @@ void Vcpu::Process() {
     case KVM_EXIT_UNKNOWN:
       MV_LOG("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
       break;
+    case KVM_EXIT_SHUTDOWN:
     case KVM_EXIT_HLT:
       goto check;
-    case KVM_EXIT_DEBUG: {
-      struct kvm_regs regs;
-      if (ioctl(fd_, KVM_GET_REGS, &regs) < 0)
-        MV_PANIC("KVM_GET_REGS failed");
-      if (regs.rip == 0x7c00) {
-        PrintRegisters();
-        getchar();
-      }
+    case KVM_EXIT_DEBUG:
+      PrintRegisters();
+      getchar();
       break;
-    }
-    case KVM_EXIT_IO: {
-      auto *io = &kvm_run_->io;
-      uint8_t* data = reinterpret_cast<uint8_t*>(kvm_run_) + kvm_run_->io.data_offset;
-      device_manager->HandleIo(io->port, data, io->size, io->direction, io->count);
+    case KVM_EXIT_IO:
+      ProcessIo();
       break;
-    }
-    case KVM_EXIT_MMIO: {
-      if (mmio_ring_) {
-        const int max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
-          sizeof(struct kvm_coalesced_mmio));
-        while (mmio_ring_->first != mmio_ring_->last) {
-          struct kvm_coalesced_mmio *m = &mmio_ring_->coalesced_mmio[mmio_ring_->first];
-          device_manager->HandleMmio(m->phys_addr, m->data, m->len, 1);
-          mmio_ring_->first = (mmio_ring_->first + 1) % max_entries;
-        }
-      }
-      auto *mmio = &kvm_run_->mmio;
-      device_manager->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
+    case KVM_EXIT_MMIO:
+      ProcessMmio();
       break;
-    }
     default:
       MV_PANIC("exit reason %d, expected KVM_EXIT_HLT(%d)\n",
         kvm_run_->exit_reason, KVM_EXIT_HLT);
@@ -124,87 +136,12 @@ check:
   MV_LOG("%s ended", thread_name_);
 }
 
-
-static inline void print_dtable(FILE* fp, const char *name, struct kvm_dtable *dtable)
-{
-  fprintf(fp, " %s                 %016lx  %08hx\n",
-    name, (uint64_t) dtable->base, (uint16_t) dtable->limit);
-}
-
-static inline void print_segment(FILE* fp, const char *name, struct kvm_segment *seg)
-{
-  fprintf(fp, " %s       %04hx      %016lx  %08x  %02hhx    %x %x   %x  %x %x %x %x\n",
-    name, (uint16_t) seg->selector, (uint64_t) seg->base, (uint32_t) seg->limit,
-    (uint8_t) seg->type, seg->present, seg->dpl, seg->db, seg->s, seg->l, seg->g, seg->avl);
-}
-
 void Vcpu::PrintRegisters() {
-  unsigned long cr0, cr2, cr3;
-  unsigned long cr4, cr8;
-  unsigned long rax, rbx, rcx;
-  unsigned long rdx, rsi, rdi;
-  unsigned long rbp,  r8,  r9;
-  unsigned long r10, r11, r12;
-  unsigned long r13, r14, r15;
-  unsigned long rip, rsp;
-  struct kvm_sregs sregs;
-  unsigned long rflags;
   struct kvm_regs regs;
-  int i;
-
+  struct kvm_sregs sregs;
   if (ioctl(fd_, KVM_GET_REGS, &regs) < 0)
     MV_PANIC("KVM_GET_REGS failed");
-
-  rflags = regs.rflags;
-
-  rip = regs.rip; rsp = regs.rsp;
-  rax = regs.rax; rbx = regs.rbx; rcx = regs.rcx;
-  rdx = regs.rdx; rsi = regs.rsi; rdi = regs.rdi;
-  rbp = regs.rbp; r8  = regs.r8;  r9  = regs.r9;
-  r10 = regs.r10; r11 = regs.r11; r12 = regs.r12;
-  r13 = regs.r13; r14 = regs.r14; r15 = regs.r15;
-
-  FILE* output = stdout;
-  fprintf(output, "\n Registers:\n");
-  fprintf(output,   " ----------\n");
-  fprintf(output, " rip: %016lx   rsp: %016lx flags: %016lx\n", rip, rsp, rflags);
-  fprintf(output, " rax: %016lx   rbx: %016lx   rcx: %016lx\n", rax, rbx, rcx);
-  fprintf(output, " rdx: %016lx   rsi: %016lx   rdi: %016lx\n", rdx, rsi, rdi);
-  fprintf(output, " rbp: %016lx    r8: %016lx    r9: %016lx\n", rbp, r8,  r9);
-  fprintf(output, " r10: %016lx   r11: %016lx   r12: %016lx\n", r10, r11, r12);
-  fprintf(output, " r13: %016lx   r14: %016lx   r15: %016lx\n", r13, r14, r15);
-
   if (ioctl(fd_, KVM_GET_SREGS, &sregs) < 0)
     MV_PANIC("KVM_GET_REGS failed");
-
-  cr0 = sregs.cr0; cr2 = sregs.cr2; cr3 = sregs.cr3;
-  cr4 = sregs.cr4; cr8 = sregs.cr8;
-
-  fprintf(output, " cr0: %016lx   cr2: %016lx   cr3: %016lx\n", cr0, cr2, cr3);
-  fprintf(output, " cr4: %016lx   cr8: %016lx\n", cr4, cr8);
-  fprintf(output, "\n Segment registers:\n");
-  fprintf(output,   " ------------------\n");
-  fprintf(output, " register  selector  base              limit     type  p dpl db s l g avl\n");
-  print_segment(output, "cs ", &sregs.cs);
-  print_segment(output, "ss ", &sregs.ss);
-  print_segment(output, "ds ", &sregs.ds);
-  print_segment(output, "es ", &sregs.es);
-  print_segment(output, "fs ", &sregs.fs);
-  print_segment(output, "gs ", &sregs.gs);
-  print_segment(output, "tr ", &sregs.tr);
-  print_segment(output, "ldt", &sregs.ldt);
-  print_dtable(output, "gdt", &sregs.gdt);
-  print_dtable(output, "idt", &sregs.idt);
-
-  fprintf(output, "\n APIC:\n");
-  fprintf(output,   " -----\n");
-  fprintf(output, " efer: %016lx  apic base: %016lx  nmi: %s\n",
-    (uint64_t) sregs.efer, (uint64_t) sregs.apic_base,
-    (true ? "disabled" : "enabled"));
-
-  fprintf(output, "\n Interrupt bitmap:\n");
-  fprintf(output,   " -----------------\n");
-  for (i = 0; i < (KVM_NR_INTERRUPTS + 63) / 64; i++)
-    fprintf(output, " %016lx", (uint64_t) sregs.interrupt_bitmap[i]);
-  fprintf(output, "\n");
+  ::PrintRegisters(regs, sregs);
 }

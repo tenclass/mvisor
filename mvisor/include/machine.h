@@ -5,12 +5,10 @@
 
 #include <thread>
 #include <vector>
+#include <signal.h>
 #include "vcpu.h"
 #include "memory_manager.h"
 #include "device_manager.h"
-
-#define X86_EPT_IDENTITY_BASE 0xfeffc000
-#define BIOS_PATH "../assets/bios-debug.bin"
 
 class Machine {
  public:
@@ -18,11 +16,12 @@ class Machine {
   ~Machine();
 
   int Run();
+  void Quit();
+  bool IsValid() { return valid_; }
   void Interrupt(uint32_t irq, uint32_t level);
 
   DeviceManager* device_manager() { return device_manager_; }
   MemoryManager* memory_manager() { return memory_manager_; }
-  Vcpu* current_vcpu();
   int num_vcpus() { return num_vcpus_; }
  private:
   friend class Vcpu;
@@ -32,6 +31,7 @@ class Machine {
   void CreateVcpu();
   void LoadBiosFile(const char* path);
 
+  bool valid_ = true;
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;

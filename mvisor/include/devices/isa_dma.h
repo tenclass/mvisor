@@ -9,6 +9,8 @@ struct IsaDmaController {
   uint8_t registers[ISA_DMA_REGISTER_NUM][2];
   int flipflop[ISA_DMA_REGISTER_NUM];
   uint8_t mode;
+  uint8_t command;
+  uint8_t status;
   uint8_t mask;
 };
 

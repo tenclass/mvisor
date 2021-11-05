@@ -36,6 +36,8 @@ class Ps2ControllerDevice : public Device {
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 
+  void QueueMouseEvent(uint8_t c);
+  void QueueKeyboardEvent(uint8_t scancode);
  private:
   void kbd_update_irq(void);
   void mouse_queue(uint8_t c);

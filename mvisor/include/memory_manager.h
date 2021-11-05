@@ -17,6 +17,7 @@ struct MemoryRegion {
   uint64_t size;
   uint32_t flags;
   MemoryType type;
+  char name[20];
 };
 
 struct KvmSlot {
@@ -35,7 +36,7 @@ class MemoryManager {
   void InitializeSystemRam();
 
   // Add to and remove from regions_
-  const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type);
+  const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   void Unmap(const MemoryRegion* region);
   void BeginMapTransaction();
   void EndMapTransaction();

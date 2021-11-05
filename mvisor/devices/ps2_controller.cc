@@ -250,8 +250,12 @@ void Ps2ControllerDevice::ps2_command(uint8_t val) {
   case 0x02:  //
     kbd_queue(RESPONSE_ACK);
     break;
+  case 0xED:  // Set Leds
+    kbd_queue(RESPONSE_ACK);
+    break;
   default:
     MV_LOG("unknown command 0x%x", val);
+    kbd_queue(RESPONSE_ACK);
     break;
   }
 }
@@ -338,4 +342,12 @@ void Ps2ControllerDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* 
   default:
     return;
   }
+}
+
+void Ps2ControllerDevice::QueueMouseEvent(uint8_t c) {
+  MV_PANIC("not implemented");
+}
+
+void Ps2ControllerDevice::QueueKeyboardEvent(uint8_t scancode) {
+  kbd_queue(scancode);
 }

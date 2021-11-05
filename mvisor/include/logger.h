@@ -18,5 +18,7 @@ enum LogType {
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...);
 void SaveToFile(const char* path, void* data, size_t size);
 void DumpHex(void* data, size_t size);
+void PrintRegisters(struct kvm_regs& regs, struct kvm_sregs& sregs);
+void SetThreadName(const char* name);
 
 #endif // MVISOR_LOGGER_H

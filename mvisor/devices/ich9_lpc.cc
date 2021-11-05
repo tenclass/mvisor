@@ -72,7 +72,6 @@ void Ich9LpcDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t
   if (ranges_overlap(offset, length, ICH9_LPC_RCBA, 4)) {
     /* set root complex register block BAR */
     UpdateRootComplexRegisterBLock();
-    MV_LOG("ich9_lpc_rcba_update(lpc, rcba_old);");
   }
   if (ranges_overlap(offset, length, ICH9_LPC_PIRQA_ROUT, 4)) {
     /* activate irq remapping in LPC A-D */
@@ -99,7 +98,6 @@ void Ich9LpcDevice::UpdatePmBaseSci() {
 void Ich9LpcDevice::UpdateRootComplexRegisterBLock() {
   uint32_t rcrb = *(uint32_t*)(header_.data + ICH9_LPC_RCBA);
   if (rcrb & ICH9_LPC_RCBA_EN) {
-    // MV_PANIC("map %lx", rcrb & ICH9_LPC_RCBA_BA_MASK);
     AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "rcba");
   } else {
     RemoveIoResource(kIoResourceTypeMmio, "rcba");

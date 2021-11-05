@@ -3,7 +3,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "logger.h"
-#include "machine.h"
 #include "device_manager.h"
 #include "devices/isa_dma.h"
 
@@ -123,9 +122,9 @@ static unsigned int chs_to_lba(int cyl,int head,int sector) {
 
 static void lba_to_chs(unsigned int lba, uint8_t* cyl, uint8_t* head, uint8_t* sector)
 {
-    *cyl    = lba / (2 * 18);
-    *head   = ((lba % (2 * 512)) / 512);
-    *sector = ((lba % (2 * 512)) % 512 + 1);
+  *cyl    = lba / (2 * 18);
+  *head   = ((lba % (2 * 512)) / 512);
+  *sector = ((lba % (2 * 512)) % 512 + 1);
 }
 
 void FloppyDevice::ReadData() {
@@ -143,7 +142,7 @@ void FloppyDevice::ReadData() {
   MV_ASSERT(dma_device_);
   size_t ntransferred;
   dma_device_->TransferChannelData(2, data, nbytes, &ntransferred);
-  MV_LOG("read disk at offset=0x%lx bytes=0x%lx return=0x%lx", offset, nbytes, ntransferred);
+  // MV_LOG("read disk at offset=0x%lx bytes=0x%lx return=0x%lx", offset, nbytes, ntransferred);
 
   lba += ntransferred;
   lba_to_chs(lba, &cylinder_, &head_, &sector_);
@@ -159,7 +158,6 @@ void FloppyDevice::ReadData() {
   fifo_[5] = sector_;
   fifo_[6] = 2; // 512 bytes sector
   manager_->SetIrq(6, 1);
-  manager_->machine()->current_vcpu()->EnableSingleStep();
 }
 
 void FloppyDevice::Specify() {

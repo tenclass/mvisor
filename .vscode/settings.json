@@ -51,6 +51,7 @@
         "map": "cpp",
         "set": "cpp",
         "list": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "*.inc": "cpp"
     }
 }

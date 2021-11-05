@@ -27,23 +27,24 @@ void MemoryManager::InitializeSystemRam() {
   const uint64_t low_ram_upper_bound = 2 * (1LL << 30);
   const uint64_t high_ram_lower_bound = 1LL << 32;
   if (machine_->ram_size_ < low_ram_upper_bound) {
-    Map(0, machine_->ram_size_, ram_host_, kMemoryTypeRam);
+    Map(0, machine_->ram_size_, ram_host_, kMemoryTypeRam, "free");
   } else {
     // Split the ram to two segments leaving a hole in the GPA
-    Map(0, low_ram_upper_bound, ram_host_, kMemoryTypeRam);
+    Map(0, low_ram_upper_bound, ram_host_, kMemoryTypeRam, "free");
     // Skip the hole and map the rest
     Map(high_ram_lower_bound, machine_->ram_size_ - low_ram_upper_bound,
-      (uint8_t*)ram_host_ + low_ram_upper_bound, kMemoryTypeRam);
+      (uint8_t*)ram_host_ + low_ram_upper_bound, kMemoryTypeRam, "free");
   }
 }
 
-const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type) {
+const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name) {
   MemoryRegion* region = new MemoryRegion;
   region->gpa = gpa;
   region->host = host;
   region->size = size;
   region->type = type;
   region->flags = 0;
+  strncpy(region->name, name, 20 - 1);
   
   AddMemoryRegion(region);
   return region;
@@ -146,7 +147,6 @@ void MemoryManager::Commit() {
       slot->end - slot->begin, slot->hva, slot->region->flags);
   }
   pending_slots_.clear();
-  PrintMemoryScope();
 }
 
 void MemoryManager::PrintMemoryScope() {
@@ -154,8 +154,9 @@ void MemoryManager::PrintMemoryScope() {
   MV_LOG("%lu memory slots", kvm_slots_.size());
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
     KvmSlot* slot = it->second;
-    MV_LOG("memory slot=%d %016lx-%016lx hva=%016lx %s",
-      slot->slot, slot->begin, slot->end, slot->hva, type_strings[slot->region->type]);
+    MV_LOG("memory slot=%d %016lx-%016lx hva=%016lx %10s %10s",
+      slot->slot, slot->begin, slot->end, slot->hva, type_strings[slot->region->type],
+      slot->region->name);
   }
 }
 

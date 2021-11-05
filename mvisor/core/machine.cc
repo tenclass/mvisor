@@ -7,8 +7,12 @@
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
+#include <bits/sigthread.h>
 
 #include "logger.h"
+
+#define X86_EPT_IDENTITY_BASE 0xfeffc000
+#define BIOS_PATH "../assets/bios-256k.bin"
 
 Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {
@@ -25,8 +29,15 @@ Machine::Machine(int vcpus, uint64_t ram_size)
 }
 
 Machine::~Machine() {
-  delete memory_manager_;
+  valid_ = false;
+
+  // Join all vcpu threads and free resources
+  for (auto vcpu: vcpus_) {
+    delete vcpu;
+  }
+
   delete device_manager_;
+  delete memory_manager_;
 
   if (vm_fd_ > 0)
     close(vm_fd_);
@@ -68,8 +79,8 @@ void Machine::LoadBiosFile(const char* path) {
 
   // Map BIOS file to memory
   memory_manager_->BeginMapTransaction();
-  memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam);
-  memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam);
+  memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
+  memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
   memory_manager_->EndMapTransaction();
 }
 
@@ -93,7 +104,7 @@ void Machine::CreateArchRelated() {
   if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, identity_base + 0x1000) < 0) {
     MV_PANIC("failed to set tss");
   }
-  memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved);
+  memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved, "ept+tss");
 
   // Use Kvm kernel irqchip
   if (ioctl(vm_fd_, KVM_CREATE_IRQCHIP) < 0) {
@@ -130,21 +141,15 @@ int Machine::Run() {
     vcpu->Start();
   }
 
-  // Join all vcpu threads and free resources
-  for (auto vcpu: vcpus_) {
-    delete vcpu;
-  }
   return 0;
 }
 
-Vcpu* Machine::current_vcpu() {
-  // Enumerate all vcpus and find the one the current thread is using
-  std::thread::id current_id = std::this_thread::get_id();
+void Machine::Quit() {
+  if (!valid_)
+    return;
+  valid_ = false;
+
   for (auto vcpu: vcpus_) {
-    if (vcpu->thread().get_id() == current_id) {
-      return vcpu;
-    }
+    pthread_kill(vcpu->thread().native_handle(), SIG_USER_INTERRUPT);
   }
-  MV_PANIC("failed to get current vcpu");
-  return nullptr;
 }

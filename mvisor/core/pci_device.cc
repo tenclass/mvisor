@@ -26,14 +26,14 @@ PciDevice::~PciDevice() {
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   memcpy(data, header_.data + offset, length);
-  MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
-    name_.c_str(), offset, *(uint32_t*)data, length);
+  // MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
+  //  name_.c_str(), offset, *(uint32_t*)data, length);
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   uint32_t value = 0;
-  MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
-    name_.c_str(), offset, *(uint32_t*)data, length);
+  // MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
+  //  name_.c_str(), offset, *(uint32_t*)data, length);
 
   if (offset == PCI_COMMAND) {
     memcpy(&value, data, length);
@@ -56,7 +56,7 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
       value = (value & mask) | (header_.rom_bar & ~mask);
       header_.rom_bar = value;
       return;
-    } else if (value > 0) {
+    } else if (value) {
       UpdateRomMapAddress(value & 0xfffff800);
     }
   }
@@ -73,7 +73,8 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
     }
     mm->Unmap((const MemoryRegion*)rom_bar_memory_region_);
   }
-  rom_bar_memory_region_ = mm->Map(address, rom_bar_size_, rom_data_, kMemoryTypeRam);
+  rom_bar_memory_region_ = mm->Map(address, rom_bar_size_, rom_data_,
+    kMemoryTypeRam, (name_ + "-rom").c_str());
 }
 
 void PciDevice::WritePciCommand(uint16_t new_command) {
@@ -210,7 +211,7 @@ void PciDevice::WritePciBar(uint8_t bar, uint32_t value) {
 
   header_.bar[bar] = value;
 
-  if (!bar_active_[bar]) {
+  if ((value & mask) && !bar_active_[bar]) {
     if (!ActivatePciBar(bar)) {
       ActivatePciBarsWithinRegion(new_addr, bar_size);
       return;
