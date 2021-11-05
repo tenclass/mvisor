@@ -127,13 +127,17 @@ void Vcpu::Process() {
       ProcessMmio();
       break;
     default:
-      MV_PANIC("exit reason %d, expected KVM_EXIT_HLT(%d)\n",
+      MV_PANIC("exit reason %d, expected KVM_EXIT_HLT(%d)",
         kvm_run_->exit_reason, KVM_EXIT_HLT);
     }
   }
 
 check:
   MV_LOG("%s ended", thread_name_);
+  // FIXME: should I call Quit()?
+  if (machine_->valid_) {
+    machine_->valid_ = false;
+  }
 }
 
 void Vcpu::PrintRegisters() {

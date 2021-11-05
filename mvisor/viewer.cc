@@ -110,23 +110,15 @@ int Viewer::MainLoop() {
     SDL_Flip(screen_surface_);
 
     while (SDL_PollEvent(&event)) {
-      uint8_t keycode[10] = { 0 };
+      uint8_t transcoded[10] = { 0 };
       switch (event.type)
       {
       case SDL_KEYDOWN:
-        if (event.key.keysym.sym == SDLK_BACKQUOTE) {
-          ;
-        }
-        if (TranslateScancode(event.key.keysym.scancode, true, keycode)) {
-          for (int i = 0; keycode[i]; i++) {
-            ps2_device->QueueKeyboardEvent(keycode[i]);
-          }
-        }
-        break;
       case SDL_KEYUP:
-        if (TranslateScancode(event.key.keysym.scancode, false, keycode)) {
-          for (int i = 0; keycode[i]; i++)
-            ps2_device->QueueKeyboardEvent(keycode[i]);
+        if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
+          for (int i = 0; transcoded[i]; i++) {
+            ps2_device->QueueKeyboardEvent(transcoded[i]);
+          }
         }
         break;
       case SDL_QUIT:

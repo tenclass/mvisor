@@ -6,7 +6,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-int TranslateScancode(uint8_t scancode, int pressed, uint8_t input[10]);
+int TranslateScancode(uint8_t scancode, int pressed, uint8_t transcoded_size[10]);
 #ifdef __cplusplus
 }
 #endif

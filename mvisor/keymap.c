@@ -762,7 +762,7 @@ const uint16_t qemu_input_map_qcode_to_atset1[Q_KEY_CODE__MAX] = {
 };
 const uint64_t qemu_input_map_qcode_to_atset1_len = sizeof(qemu_input_map_qcode_to_atset1)/sizeof(qemu_input_map_qcode_to_atset1[0]);
 
-int TranslateScancode(uint8_t scancode, int pressed, uint8_t input[10]) {
+int TranslateScancode(uint8_t scancode, int pressed, uint8_t transcoded[10]) {
 	if (scancode >= qemu_input_map_xorgevdev_to_qcode_len) {
 		return 0;
 	}
@@ -770,16 +770,16 @@ int TranslateScancode(uint8_t scancode, int pressed, uint8_t input[10]) {
 	if (qcode >= qemu_input_map_qcode_to_atset1_len) {
 		return 0;
 	}
-  int output_size = 0;
+  int transcoded_size = 0;
 	uint16_t keycode = qemu_input_map_qcode_to_atset1[qcode];
 	if (keycode & 0xff00) {
-		input[output_size++] = keycode >> 8;
+		transcoded[transcoded_size++] = keycode >> 8;
 	}
 	if (!pressed) {
 		keycode |= 0x80;
 	}
   if (keycode & 0xff) {
-	  input[output_size++] = keycode;
+	  transcoded[transcoded_size++] = keycode;
   }
-  return output_size;
+  return transcoded_size;
 }

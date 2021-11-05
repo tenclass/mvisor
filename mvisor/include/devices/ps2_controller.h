@@ -40,8 +40,8 @@ class Ps2ControllerDevice : public Device {
   void QueueKeyboardEvent(uint8_t scancode);
  private:
   void kbd_update_irq(void);
-  void mouse_queue(uint8_t c);
-  void kbd_queue(uint8_t c);
+  void mouse_queue(uint8_t c, bool update_irq = false);
+  void kbd_queue(uint8_t c, bool update_irq = false);
   void kbd_write_command(uint8_t val);
   uint8_t kbd_read_data(void);
   uint8_t kbd_read_status(void);
