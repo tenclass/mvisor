@@ -52,35 +52,50 @@
 #define KBD_MODE_SYS        0x02
 
 /*
- * If there are packets to be read, set the appropriate IRQs high
+ * If there are packets to be read, setup the status
  */
-void Ps2ControllerDevice::kbd_update_irq(void)
+void Ps2ControllerDevice::kbd_update_status(void)
 {
-  uint8_t klevel = 0;
-  uint8_t mlevel = 0;
-
   /* First, clear the kbd and aux output buffer full bits */
   state_.status &= ~(I8042_STR_OBF | I8042_STR_AUXDATA);
 
   if (state_.kcount > 0) {
     state_.status |= I8042_STR_OBF;
-    klevel = 1;
   }
 
   /* Keyboard has higher priority than mouse */
-  if (klevel == 0 && state_.mcount != 0) {
+  if (!(state_.status & I8042_STR_OBF) && state_.mcount > 0) {
     state_.status |= I8042_STR_OBF | I8042_STR_AUXDATA;
-    mlevel = 1;
+  }
+}
+
+/*
+ * If there are packets to be read, set the appropriate IRQs high
+ */
+void Ps2ControllerDevice::kbd_update_irq(void)
+{
+  kbd_update_status();
+
+  state_.klevel = 0;
+  state_.mlevel = 0;
+
+  if (state_.kcount > 0) {
+    state_.klevel = 1;
   }
 
-  manager_->SetIrq(KBD_IRQ, klevel);
-  manager_->SetIrq(AUX_IRQ, mlevel);
+  /* Keyboard has higher priority than mouse */
+  if (state_.klevel == 0 && state_.mcount > 0) {
+    state_.mlevel = 1;
+  }
+
+  manager_->SetIrq(KBD_IRQ, state_.klevel);
+  manager_->SetIrq(AUX_IRQ, state_.mlevel);
 }
 
 /*
  * Add a byte to the mouse queue, then set IRQs
  */
-void Ps2ControllerDevice::mouse_queue(uint8_t c, bool update_irq)
+void Ps2ControllerDevice::mouse_queue(uint8_t c)
 {
   if (state_.mcount >= QUEUE_SIZE)
     return;
@@ -88,14 +103,12 @@ void Ps2ControllerDevice::mouse_queue(uint8_t c, bool update_irq)
   state_.mq[state_.mwrite++ % QUEUE_SIZE] = c;
 
   state_.mcount++;
-  if (update_irq)
-    kbd_update_irq();
 }
 
 /*
  * Add a byte to the keyboard queue, then set IRQs
  */
-void Ps2ControllerDevice::kbd_queue(uint8_t c, bool update_irq)
+void Ps2ControllerDevice::kbd_queue(uint8_t c)
 {
   if (state_.kcount >= QUEUE_SIZE)
     return;
@@ -103,15 +116,14 @@ void Ps2ControllerDevice::kbd_queue(uint8_t c, bool update_irq)
   state_.kq[state_.kwrite++ % QUEUE_SIZE] = c;
 
   state_.kcount++;
-  if (update_irq)
-    kbd_update_irq();
 }
 
 void Ps2ControllerDevice::kbd_write_command(uint8_t val)
 {
   switch (val) {
   case I8042_CMD_CTL_RCTR:
-    kbd_queue(state_.mode, true);
+    kbd_queue(state_.mode);
+    kbd_update_irq();
     break;
   case I8042_CMD_CTL_WCTR:
   case I8042_CMD_AUX_SEND:
@@ -120,7 +132,8 @@ void Ps2ControllerDevice::kbd_write_command(uint8_t val)
     break;
   case I8042_CMD_AUX_TEST:
     /* 0 means we're a normal PS/2 mouse */
-    mouse_queue(0, true);
+    mouse_queue(0);
+    kbd_update_irq();
     break;
   case I8042_CMD_AUX_DISABLE:
     state_.mode |= MODE_DISABLE_AUX;
@@ -133,11 +146,13 @@ void Ps2ControllerDevice::kbd_write_command(uint8_t val)
     break;
   case 0xaa:
     /* controller self test */
-    kbd_queue(0x55, true);
+    kbd_queue(0x55);
+    kbd_update_irq();
     break;
   case 0xab:
     /* controller keyboard test */
-    kbd_queue(0x00, true);
+    kbd_queue(0x00);
+    kbd_update_irq();
     break;
   case 0xad:
     /* controller kdb disabled */
@@ -147,7 +162,6 @@ void Ps2ControllerDevice::kbd_write_command(uint8_t val)
     break;
   default:
     MV_LOG("unhandled cmd 0x%x", val);
-    break;
   }
 }
 
@@ -204,11 +218,11 @@ void Ps2ControllerDevice::aux_command(uint8_t val) {
     /* Report mouse status/config */
     mouse_queue(state_.mstatus);
     mouse_queue(state_.mres);
-    mouse_queue(state_.msample, true);
+    mouse_queue(state_.msample);
     break;
   case 0xf2:
     /* send ID */
-    mouse_queue(0, true); /* normal mouse */
+    mouse_queue(0); /* normal mouse */
     break;
   case 0xf3:
     /* set sample rate */
@@ -232,40 +246,33 @@ void Ps2ControllerDevice::aux_command(uint8_t val) {
     state_.mcount = state_.mwrite = state_.mread = 0;
     mouse_queue(RESPONSE_ACK);
     mouse_queue(0xaa);
-    mouse_queue(0x00, true);
+    mouse_queue(0);
     break;
   default:
     break;
   }
+  kbd_update_status();
 }
 
 void Ps2ControllerDevice::ps2_command(uint8_t val) {
+  kbd_queue(RESPONSE_ACK);
   switch (val)
   {
   case 0xff:
-    kbd_queue(RESPONSE_ACK);
-    kbd_queue(0xaa, true);
+    kbd_queue(0xaa);
     break;
   case 0xf5:  // Disable mouse
-    kbd_queue(RESPONSE_ACK, true);
     break;
   case 0xf4:  // Enable mouse
-    kbd_queue(RESPONSE_ACK, true);
     break;
   case 0xf0:  // SSCANSET
-    kbd_queue(RESPONSE_ACK, true);
-    break;
-  case 0x02:  //
-    kbd_queue(RESPONSE_ACK, true);
     break;
   case 0xED:  // Set Leds
-    kbd_queue(RESPONSE_ACK, true);
     break;
   default:
     MV_LOG("unknown command 0x%x", val);
-    kbd_queue(RESPONSE_ACK, true);
-    break;
   }
+  kbd_update_status();
 }
 
 /*
@@ -282,7 +289,8 @@ void Ps2ControllerDevice::kbd_write_data(uint8_t val)
     break;
   case I8042_CMD_AUX_LOOP:
     mouse_queue(val);
-    mouse_queue(RESPONSE_ACK, true);
+    mouse_queue(RESPONSE_ACK);
+    kbd_update_status();
     break;
   case I8042_CMD_AUX_SEND:
     aux_command(val);
@@ -291,9 +299,7 @@ void Ps2ControllerDevice::kbd_write_data(uint8_t val)
     ps2_command(val);
     break;
   default:
-    /* Yeah whatever */
     MV_LOG("unknown write_cmd 0x%x", state_.write_cmd);
-    break;
   }
   state_.write_cmd = 0;
 }
@@ -340,6 +346,7 @@ void Ps2ControllerDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* d
 
 void Ps2ControllerDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint8_t value = *data;
+  // MV_LOG("write port 0x%x data:0x%x size=%d", ir.base + offset, value, size);
 
   switch (ir.base + offset) {
   case I8042_COMMAND_REG:
@@ -358,5 +365,6 @@ void Ps2ControllerDevice::QueueMouseEvent(uint8_t c) {
 }
 
 void Ps2ControllerDevice::QueueKeyboardEvent(uint8_t scancode) {
-  kbd_queue(scancode, true);
+  kbd_queue(scancode);
+  kbd_update_irq();
 }

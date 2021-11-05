@@ -12,10 +12,12 @@ struct kbd_state {
   uint8_t   kq[QUEUE_SIZE]; /* Keyboard queue */
   int       kread, kwrite; /* Indexes into the queue */
   int       kcount;  /* number of elements in queue */
+  int       klevel;
 
   uint8_t   mq[QUEUE_SIZE];
   int       mread, mwrite;
   int       mcount;
+  int       mlevel;
 
   uint8_t   mstatus; /* Mouse status byte */
   uint8_t   mres;  /* Current mouse resolution */
@@ -39,9 +41,10 @@ class Ps2ControllerDevice : public Device {
   void QueueMouseEvent(uint8_t c);
   void QueueKeyboardEvent(uint8_t scancode);
  private:
+  void kbd_update_status(void);
   void kbd_update_irq(void);
-  void mouse_queue(uint8_t c, bool update_irq = false);
-  void kbd_queue(uint8_t c, bool update_irq = false);
+  void mouse_queue(uint8_t c);
+  void kbd_queue(uint8_t c);
   void kbd_write_command(uint8_t val);
   uint8_t kbd_read_data(void);
   uint8_t kbd_read_status(void);
