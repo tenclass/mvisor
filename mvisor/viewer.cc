@@ -1,7 +1,7 @@
 #include "viewer.h"
 #include <unistd.h>
 #include "logger.h"
-#include "devices/ps2_controller.h"
+#include "devices/ps2.h"
 #include "viewer_font.inc"
 #include "keymap.h"
 

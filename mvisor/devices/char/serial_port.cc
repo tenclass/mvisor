@@ -1,8 +1,7 @@
 #include "devices/serial_port.h"
 #include "logger.h"
 
-SerialPortDevice::SerialPortDevice(DeviceManager* manager)
-  : Device(manager) {
+SerialPortDevice::SerialPortDevice() {
   name_ = "serial-port";
   
   AddIoResource(kIoResourceTypePio, 0x3F8, 8); // COM1

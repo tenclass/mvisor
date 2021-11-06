@@ -22,8 +22,7 @@
 #define WR_ALL_MASK_BITS   0xF
 
 
-IsaDmaDevice::IsaDmaDevice(DeviceManager* manager)
-  : Device(manager) {
+IsaDmaDevice::IsaDmaDevice() {
   name_ = "isa-dma";
 
   bzero(controllers_, sizeof(controllers_));

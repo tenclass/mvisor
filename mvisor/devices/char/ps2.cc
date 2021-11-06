@@ -1,4 +1,4 @@
-#include "devices/ps2_controller.h"
+#include "devices/ps2.h"
 #include <cstring>
 #include "logger.h"
 #include "device_manager.h"
@@ -314,8 +314,7 @@ void Ps2ControllerDevice::kbd_reset(void)
   };
 }
 
-Ps2ControllerDevice::Ps2ControllerDevice(DeviceManager* manager)
-  : Device(manager) {
+Ps2ControllerDevice::Ps2ControllerDevice() {
   name_ = "ps2";
   bzero(&state_, sizeof(state_));
 

@@ -44,8 +44,7 @@ static inline unsigned char bin2bcd(unsigned val)
   return ((val / 10) << 4) + val % 10;
 }
 
-CmosDevice::CmosDevice(DeviceManager* manager)
-  : Device(manager) {
+CmosDevice::CmosDevice() {
   name_ = "rtc";
   
   AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2);

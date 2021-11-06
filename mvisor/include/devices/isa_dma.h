@@ -1,7 +1,7 @@
 #ifndef _MVISOR_DEVICES_ISA_DMA_H
 #define _MVISOR_DEVICES_ISA_DMA_H
 
-#include "device.h"
+#include "devices/device.h"
 
 #define ISA_DMA_REGISTER_NUM 8
 
@@ -16,7 +16,8 @@ struct IsaDmaController {
 
 class IsaDmaDevice : public Device {
  public:
-  IsaDmaDevice(DeviceManager* manager);
+  IsaDmaDevice();
+
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void TransferChannelData(uint8_t channel, void* data, size_t size, size_t* transferred);

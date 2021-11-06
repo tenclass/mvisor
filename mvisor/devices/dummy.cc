@@ -2,8 +2,7 @@
 #include <cstring>
 #include "logger.h"
 
-DummyDevice::DummyDevice(DeviceManager* manager)
-  : Device(manager) {
+DummyDevice::DummyDevice() {
   name_ = "dummy";
   
   /* Legacy ioport setup */
@@ -31,12 +30,13 @@ DummyDevice::DummyDevice(DeviceManager* manager)
   /* PORT 0278-027A - PARALLEL PRINTER PORT (usually LPT1, sometimes LPT2) */
   AddIoResource(kIoResourceTypePio, 0x0278, 3, "Parallel LPT1");
 
+  /* PORT 02F2 DOS access this port */
   AddIoResource(kIoResourceTypePio, 0x02F2, 6, "PMC for Susi");
 
   /* PORT 0378-037A - PARALLEL PRINTER PORT (usually LPT2, sometimes LPT3) */
   AddIoResource(kIoResourceTypePio, 0x0378, 3, "Parallel LPT2");
 
-  /* PORT 06F2 */
+  /* PORT 06F2 DOS access this port */
   AddIoResource(kIoResourceTypePio, 0x06F2, 8, "Unknown");
   
   /* PORT A20-A24 IBM Token Ring */

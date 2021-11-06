@@ -1,14 +1,47 @@
-#include "device.h"
+#include "devices/device.h"
 #include <cstring>
 #include "logger.h"
 #include "device_manager.h"
 
-Device::Device(DeviceManager* manager)
-  : manager_(manager) {
-  manager_->RegisterDevice(this);
+Device::Device() {
+  name_ = "unknown";
 }
 
 Device::~Device() {
+  if (connected_) {
+    Disconnect();
+  }
+}
+
+void Device::AddChild(Device* device) {
+  device->parent_ = this;
+  children_.push_back(device);
+}
+
+void Device::Connect() {
+  MV_ASSERT(manager_);
+
+  for (auto child : children_) {
+    child->manager_ = manager_;
+    child->Connect();
+  }
+
+  connected_ = true;
+  manager_->RegisterDevice(this);
+  for (auto ir : io_resources_) {
+    manager_->RegisterIoHandler(this, ir);
+  }
+  if (parent_) {
+    MV_LOG("%s <= %s", parent_->name_.c_str(), name_.c_str());
+  }
+}
+
+void Device::Disconnect() {
+  connected_ = false;
+  for (auto child : children_) {
+    child->Disconnect();
+  }
+
   for (auto &io_resource : io_resources_) {
     manager_->UnregisterIoHandler(this, io_resource);
   }
@@ -23,7 +56,9 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
     .name = name
   };
   io_resources_.push_back(std::move(io_resource));
-  manager_->RegisterIoHandler(this, io_resource);
+  if (connected_) {
+    manager_->RegisterIoHandler(this, io_resource);
+  }
 }
 
 void Device::RemoveIoResource(IoResourceType type, const char* name) {
@@ -33,7 +68,21 @@ void Device::RemoveIoResource(IoResourceType type, const char* name) {
           (name && it->name && strcmp(it->name, name) == 0)
         )
       ) {
-      manager_->UnregisterIoHandler(this, *it);
+      if (connected_) {
+        manager_->UnregisterIoHandler(this, *it);
+      }
+      io_resources_.erase(it);
+      break;
+    }
+  }
+}
+
+void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
+  for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
+    if (it->type == type && it->base == base) {
+      if (connected_) {
+        manager_->UnregisterIoHandler(this, *it);
+      }
       io_resources_.erase(it);
       break;
     }
@@ -48,4 +97,7 @@ void Device::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t
 void Device::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
     name_.c_str(), ir.base, offset, size, *(uint64_t*)data);
+}
+
+StorageDevice::StorageDevice(DiskImage* image) : image_(image) {
 }

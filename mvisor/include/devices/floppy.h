@@ -1,13 +1,15 @@
 #ifndef _MVISOR_DEVICES_FLOPPY_H
 #define _MVISOR_DEVICES_FLOPPY_H
 
-#include "device.h"
+#include "devices/device.h"
 
 class IsaDmaDevice;
-class FloppyDevice : public Device {
+class FloppyStorageDevice : public StorageDevice {
  public:
-  FloppyDevice(DeviceManager* manager);
-  ~FloppyDevice();
+  FloppyStorageDevice(DiskImage* image);
+  ~FloppyStorageDevice();
+
+  void Connect();
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 
@@ -38,8 +40,6 @@ class FloppyDevice : public Device {
   uint8_t st_[3] = { 0 };
   // position
   uint8_t cylinder_, head_, sector_;
-  // disk fd
-  int disk_fd_ = -1;
   
   IsaDmaDevice* dma_device_ = nullptr;
 };

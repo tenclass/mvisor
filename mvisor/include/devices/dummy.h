@@ -1,11 +1,11 @@
 #ifndef _MVISOR_DEVICES_DUMMY_H
 #define _MVISOR_DEVICES_DUMMY_H
 
-#include "device.h"
+#include "devices/device.h"
 
 class DummyDevice : public Device {
  public:
-  DummyDevice(DeviceManager* manager);
+  DummyDevice();
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 };

@@ -4,12 +4,21 @@
 #include <set>
 #include <map>
 #include <string>
-#include "pci_device.h"
-#include "device.h"
+#include "devices/pci_device.h"
+#include "devices/device.h"
 
 struct IoHandler {
   IoResource io_resource;
   Device* device;
+};
+
+class DeviceManager;
+class SystemRootDevice : public Device {
+ public:
+  SystemRootDevice(DeviceManager* manager) {
+    manager_ = manager;
+    name_ = "root";
+  }
 };
 
 class Machine;
@@ -38,7 +47,8 @@ class DeviceManager {
   Machine* machine() { return machine_; }
  private:
   Machine* machine_;
-  std::set<Device*> devices_;
+  SystemRootDevice* root_;
+  std::set<Device*> registered_devices_;
   std::map<uint64_t, IoHandler> mmio_handlers_;
   std::map<uint64_t, IoHandler> pio_handlers_;
 };

@@ -1,7 +1,7 @@
 #ifndef _MVISOR_DEVICES_I8042_H
 #define _MVISOR_DEVICES_I8042_H
 
-#include "device.h"
+#include "devices/device.h"
 
 #define QUEUE_SIZE  128
 /*
@@ -34,7 +34,7 @@ struct kbd_state {
 
 class Ps2ControllerDevice : public Device {
  public:
-  Ps2ControllerDevice(DeviceManager* manager);
+  Ps2ControllerDevice();
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 

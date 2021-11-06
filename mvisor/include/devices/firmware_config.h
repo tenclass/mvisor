@@ -1,7 +1,7 @@
 #ifndef _MVISOR_FIRMWARE_CONFIG_H
 #define _MVISOR_FIRMWARE_CONFIG_H
 
-#include "device.h"
+#include "devices/device.h"
 #include <string>
 #include <map>
 
@@ -22,7 +22,8 @@ struct FirmwareConfigEntry {
 
 class FirmwareConfigDevice : public Device {
  public:
-  FirmwareConfigDevice(DeviceManager* manager);
+  FirmwareConfigDevice();
+  void Connect();
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 

@@ -121,14 +121,17 @@ struct e820_entry {
 #define FW_CFG_IO_BASE        0x510
 #define FW_CFG_DMA_IO_BASE    0x514
 
-FirmwareConfigDevice::FirmwareConfigDevice(DeviceManager* manager)
-  : Device(manager) {
+FirmwareConfigDevice::FirmwareConfigDevice() {
   name_ = "firmware-config";
-
-  InitializeConfig();
 
   AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2, "cfg_io");
   AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "cfg_dma");
+}
+
+void FirmwareConfigDevice::Connect() {
+  InitializeConfig();
+
+  Device::Connect();
 }
 
 void FirmwareConfigDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

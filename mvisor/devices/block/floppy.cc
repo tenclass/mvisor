@@ -5,9 +5,10 @@
 #include "logger.h"
 #include "device_manager.h"
 #include "devices/isa_dma.h"
+#include "images/image.h"
 
-#define REG_msr_A        0x3F0
-#define REG_msr_B        0x3F1
+#define REG_STATUS_A        0x3F0
+#define REG_STATUS_B        0x3F1
 #define REG_DIGITAL_OUTPUT  0x3F2
 #define REG_TAPE_DRIVE      0x3F3
 #define REG_MAIN_STATUS     0x3F4
@@ -32,25 +33,24 @@
 #define CMD_READ_ID         0xA
 #define CMD_SEEK            0xF
 
-#define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
 
-FloppyDevice::FloppyDevice(DeviceManager* manager)
-  : Device(manager) {
+FloppyStorageDevice::FloppyStorageDevice(DiskImage* image)
+  : StorageDevice(image) {
   name_ = "floppy";
-  disk_fd_ = open(FLOPPY_DISK_IMAGE, O_RDONLY);
 
   AddIoResource(kIoResourceTypePio, 0x3F0, 6); // 3F0-3F5
   AddIoResource(kIoResourceTypePio, 0x3F7, 1); // 3F7
+}
+
+FloppyStorageDevice::~FloppyStorageDevice() {
+}
+
+void FloppyStorageDevice::Connect() {
   Reset();
+  StorageDevice::Connect();
 }
 
-FloppyDevice::~FloppyDevice() {
-  if (disk_fd_ >= 0) {
-    close(disk_fd_);
-  }
-}
-
-void FloppyDevice::Reset() {
+void FloppyStorageDevice::Reset() {
   memset(st_, 0, sizeof(st_));
   dor_ = ccr_ = dsr_ = 0;
   fifo_index_ = fifo_length_ = 0;
@@ -65,13 +65,13 @@ void FloppyDevice::Reset() {
   }
 }
 
-void FloppyDevice::Seek(uint8_t cylinder, uint8_t head, uint8_t sector) {
+void FloppyStorageDevice::Seek(uint8_t cylinder, uint8_t head, uint8_t sector) {
   cylinder_ = cylinder;
   head_ = head;
   sector_ = sector;
 }
 
-void FloppyDevice::SenseInterrupt() {
+void FloppyStorageDevice::SenseInterrupt() {
   msr_ = MSR_READY | MSR_DIO;
   fifo_length_ = 2;
   fifo_index_ = 0;
@@ -80,7 +80,7 @@ void FloppyDevice::SenseInterrupt() {
   manager_->SetIrq(6, 0);
 }
 
-void FloppyDevice::Recalibrate() {
+void FloppyStorageDevice::Recalibrate() {
   Seek(0, 0, 1);
   msr_ = MSR_READY;
   fifo_index_ = 0;
@@ -88,7 +88,7 @@ void FloppyDevice::Recalibrate() {
   manager_->SetIrq(6, 1);
 }
 
-void FloppyDevice::ReadId() {
+void FloppyStorageDevice::ReadId() {
   msr_ = MSR_READY | MSR_DIO;
   fifo_length_ = 7;
   fifo_index_ = 0;
@@ -102,7 +102,7 @@ void FloppyDevice::ReadId() {
   manager_->SetIrq(6, 1);
 }
 
-void FloppyDevice::Seek() {
+void FloppyStorageDevice::Seek() {
   // lower 2 bits is drive number
   head_ = fifo_[1] >> 2;
   cylinder_ = fifo_[2];
@@ -127,17 +127,18 @@ static void lba_to_chs(unsigned int lba, uint8_t* cyl, uint8_t* head, uint8_t* s
   *sector = ((lba % (2 * 512)) % 512 + 1);
 }
 
-void FloppyDevice::ReadData() {
+void FloppyStorageDevice::ReadData() {
   // MT mode should be on
   MV_ASSERT(fifo_[0] & 0x80);
   // Should I need to do this?
   Seek(fifo_[2], fifo_[3], fifo_[4]);
   unsigned int lba = chs_to_lba(fifo_[2], fifo_[3], fifo_[4]);
-  off_t offset = lba * 512;
-  size_t nbytes = fifo_[6] * 512;
+  int count = fifo_[6];
+  size_t nbytes = count * 512;
   void* data = valloc(nbytes);
   MV_ASSERT(data);
-  pread(disk_fd_, data, nbytes, offset);
+
+  image_->Read(data, lba, count);
 
   MV_ASSERT(dma_device_);
   size_t ntransferred;
@@ -160,11 +161,11 @@ void FloppyDevice::ReadData() {
   manager_->SetIrq(6, 1);
 }
 
-void FloppyDevice::Specify() {
+void FloppyStorageDevice::Specify() {
   /* Step rate time, Head load time, Head unload time */
 }
 
-void FloppyDevice::WriteFifo(uint8_t value) {
+void FloppyStorageDevice::WriteFifo(uint8_t value) {
   msr_ |= MSR_COMMAND_BUSY;
   fifo_[fifo_index_++] = value;
   switch(fifo_[0] & 0xf) {
@@ -197,7 +198,7 @@ void FloppyDevice::WriteFifo(uint8_t value) {
   }
 }
 
-void FloppyDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void FloppyStorageDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint64_t port = ir.base + offset;
   uint8_t value = *data;
   // MV_LOG("%s write port=0x%lx size=%d data=%x", name_.c_str(), port, size, value);
@@ -224,7 +225,7 @@ void FloppyDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, u
   }
 }
 
-void FloppyDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void FloppyStorageDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   uint64_t port = ir.base + offset;
   switch (port)
   {

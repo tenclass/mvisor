@@ -2,7 +2,7 @@
 #define _MVISOR_PCI_DEVICE_H
 
 #include <linux/pci_regs.h>
-#include "device.h"
+#include "devices/device.h"
 
 /*
  * PCI Configuration Mechanism #1 I/O ports. See Section 3.7.4.1.
@@ -107,7 +107,7 @@ struct PciConfigHeader {
       uint16_t   subsys_vendor_id;
       uint16_t   subsys_id;
       uint32_t   rom_bar;
-      uint8_t    capabilities;
+      uint8_t    capability;
       uint8_t    reserved1[3];
       uint32_t   reserved2;
       uint8_t    irq_line;
@@ -133,24 +133,16 @@ static inline uint64_t range_get_last(uint64_t offset, uint64_t len)
 static inline int ranges_overlap(uint64_t first1, uint64_t len1,
                                  uint64_t first2, uint64_t len2)
 {
-    uint64_t last1 = range_get_last(first1, len1);
-    uint64_t last2 = range_get_last(first2, len2);
+  uint64_t last1 = range_get_last(first1, len1);
+  uint64_t last2 = range_get_last(first2, len2);
 
-    return !(last2 < first1 || last1 < first2);
-}
-
-static inline uint32_t pci_bar_address(uint32_t bar)
-{
-  if (bar & PCI_BASE_ADDRESS_SPACE_IO)
-    return bar & PCI_BASE_ADDRESS_IO_MASK;
-  return bar & PCI_BASE_ADDRESS_MEM_MASK;
+  return !(last2 < first1 || last1 < first2);
 }
 
 class MemoryRegion;
 class PciDevice : public Device {
  public:
-  PciDevice(DeviceManager* manager) : Device(manager) {}
-  ~PciDevice();
+  virtual ~PciDevice();
 
   uint8_t bus() { return 0; }
   uint8_t devfn() { return devfn_; }
@@ -163,6 +155,15 @@ class PciDevice : public Device {
   friend class DeviceManager;
   bool ActivatePciBar(uint8_t index);
   bool DeactivatePciBar(uint8_t index);
+  inline bool IsPciBarTypeIo(uint8_t index) {
+    return header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
+  }
+  inline uint32_t GetPciBarAddress(uint8_t index) {
+    if(IsPciBarTypeIo(index))
+      return header_.bar[index] & PCI_BASE_ADDRESS_IO_MASK;
+    else 
+      return header_.bar[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  }
   bool ActivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   void UpdateRomMapAddress(uint32_t address);

@@ -30,6 +30,7 @@ Nov 2021
 15. Option Roms / SMBIOS / ACPI Table
 16. Boot DOS ✅
 17. Boot OS (Windows 7 or 10) 
+18. QCOW2
 
 Milestone 2: Multimedia & Networking
 Dec 2021

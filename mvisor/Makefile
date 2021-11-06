@@ -5,18 +5,14 @@ MKDIR_P = mkdir -p
 
 CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -O2 -g
 BUILD_DIR = ../build
-$(shell mkdir -p $(BUILD_DIR)/devices)
-$(shell mkdir -p $(BUILD_DIR)/core)
-$(shell mkdir -p $(BUILD_DIR)/arch)
-$(shell mkdir -p $(BUILD_DIR)/utils)
 
 EXECUTABLE = $(BUILD_DIR)/mvisor
-MV_SOURCE := main.cc viewer.cc
-MV_SOURCE += $(wildcard core/*.cc)
-MV_SOURCE += $(wildcard arch/*.cc)
-MV_SOURCE += $(wildcard devices/*.cc)
-MV_SOURCE += $(wildcard utils/*.cc)
+MV_SOURCE := $(wildcard *.cc)
+MV_SOURCE += $(wildcard */*.cc)
+MV_SOURCE += $(wildcard devices/*/*.cc)
 MV_OBJECTS := $(MV_SOURCE:%.cc=$(BUILD_DIR)/%.o)
+
+$(shell mkdir -p $(dir $(MV_OBJECTS)))
 
 .PHONY: run all clean
 run: all
@@ -38,3 +34,4 @@ $(BUILD_DIR)/keymap.o: $(BUILD_DIR)/%.o: %.c
 
 .cc.o:
 	$(CC) $(CCFLAGS) -c -o $@ $<
+

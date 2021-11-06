@@ -5,9 +5,9 @@
 #include "memory_manager.h"
 #include "machine.h"
 #include "devices/cmos.h"
-#include "devices/ps2_controller.h"
+#include "devices/ps2.h"
 #include "devices/debug_console.h"
-#include "devices/pci_host_bridge.h"
+#include "devices/pci_host.h"
 #include "devices/firmware_config.h"
 #include "devices/dummy.h"
 #include "devices/serial_port.h"
@@ -15,18 +15,24 @@
 #include "devices/ich9_lpc.h"
 #include "devices/isa_dma.h"
 #include "devices/vga.h"
+#include "devices/ahci_host.h"
+#include "devices/ahci_storage.h"
+#include "images/raw.h"
+
+#define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
+#define HARD_DISK_IMAGE     "../assets/hd.img"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
 
 DeviceManager::~DeviceManager() {
-  for (auto device: devices_) {
+  for (auto device: registered_devices_) {
     delete device;
   }
 }
 
 Device* DeviceManager::LookupDeviceByName(const std::string name) {
-  for (auto device : devices_) {
+  for (auto device : registered_devices_) {
     if (device->name() == name) {
       return device;
     }
@@ -35,22 +41,34 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
 }
 
 void DeviceManager::IntializeQ35() {
-  new PciHostBridgeDevice(this);
-  new Ich9LpcDevice(this);
+  auto lpc = new Ich9LpcDevice();
+  lpc->AddChild(new DebugConsoleDevice());
+  lpc->AddChild(new CmosDevice());
+  lpc->AddChild(new Ps2ControllerDevice());
+  lpc->AddChild(new DummyDevice());
+  lpc->AddChild(new SerialPortDevice());
+  lpc->AddChild(new IsaDmaDevice());
+  lpc->AddChild(new FloppyStorageDevice(new RawDiskImage(FLOPPY_DISK_IMAGE)));
 
-  new DebugConsoleDevice(this);
-  new CmosDevice(this);
-  new Ps2ControllerDevice(this);
-  new FirmwareConfigDevice(this);
-  new DummyDevice(this);
-  new SerialPortDevice(this);
-  new FloppyDevice(this);
-  new IsaDmaDevice(this);
-  new VgaDevice(this);
+  // auto ahci_host = new AhciHostDevice();
+  // auto hd = new AhciHarddiskStorageDevice(new RawDiskImage(HARD_DISK_IMAGE));
+  // ahci_host->AddChild(hd);
+
+  auto pci_host = new PciHostDevice();
+  pci_host->AddChild(lpc);
+  pci_host->AddChild(new VgaDevice());
+  // pci_host->AddChild(ahci_host);
+
+  root_ = new SystemRootDevice(this);
+  root_->AddChild(new FirmwareConfigDevice());
+  root_->AddChild(pci_host);
+
+  /* Call Connect() on all devices */
+  root_->Connect();
 }
 
 void DeviceManager::PrintDevices() {
-  for (auto device : devices_) {
+  for (auto device : registered_devices_) {
     MV_LOG("device: %s", device->name().c_str());
     for (auto &io_resource : device->io_resources()) {
       if (io_resource.type == kIoResourceTypePio) {
@@ -63,7 +81,7 @@ void DeviceManager::PrintDevices() {
 }
 
 PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
-  for (auto device : devices_) {
+  for (auto device : registered_devices_) {
     PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
     if (pci_device && pci_device->devfn_ == devfn) {
       return pci_device;
@@ -74,11 +92,11 @@ PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
 
 
 void DeviceManager::RegisterDevice(Device* device) {
-  devices_.insert(device);
+  registered_devices_.insert(device);
 }
 
 void DeviceManager::UnregisterDevice(Device* device) {
-  devices_.erase(device);
+  registered_devices_.erase(device);
 }
 
 void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resource) {

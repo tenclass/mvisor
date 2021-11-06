@@ -1,7 +1,6 @@
 #include "devices/debug_console.h"
 
-DebugConsoleDevice::DebugConsoleDevice(DeviceManager* manager)
-  : Device(manager) {
+DebugConsoleDevice::DebugConsoleDevice() {
   name_ = "debugcon";
   
   AddIoResource(kIoResourceTypePio, 0x402, 1);

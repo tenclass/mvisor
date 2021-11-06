@@ -43,22 +43,18 @@
 
 #define ICH9_PMIO_SIZE                          128
 
-Ich9LpcDevice::Ich9LpcDevice(DeviceManager* manager)
-  : PciDevice(manager) {
+Ich9LpcDevice::Ich9LpcDevice() {
   name_ = "ich9-lpc";
   
   header_.vendor_id = 0x8086;
   header_.device_id = 0x2918;
   header_.class_code = 0x060100;
   header_.revision_id = 2;
-  header_.header_type = PCI_HEADER_TYPE_NORMAL;
+  header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
   header_.subsys_vendor_id = 0x1af4;
   header_.subsys_id = 0x1100;
 
   devfn_ = PCI_MAKE_DEVFN(0x1f, 0);
-}
-
-Ich9LpcDevice::~Ich9LpcDevice() {
 }
 
 void Ich9LpcDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {

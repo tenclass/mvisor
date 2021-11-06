@@ -88,8 +88,8 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   if (it != kvm_slots_.begin()) {
     --it;
   }
-  // Find all overlapped slots, split them delete the old ones
-  // Maybe later we should support priorities
+  // Find all overlapped slots, split them delete the old ones (resizing is not supported by KVM)
+  // Maybe later we should support region priorities
   while (it != kvm_slots_.end() && it->second->begin < slot->end) {
     if (it->second->begin < slot->end && slot->begin < it->second->end) {
       KvmSlot *hit = it->second;

@@ -1,4 +1,4 @@
-#include "devices/pci_host_bridge.h"
+#include "devices/pci_host.h"
 #include <cstring>
 #include "logger.h"
 #include "device_manager.h"
@@ -31,8 +31,7 @@
 #define PCIE_MMCFG_CONFOFFSET(addr)     ((addr) & PCIE_MMCFG_CONFOFFSET_MASK)
 
 
-PciHostBridgeDevice::PciHostBridgeDevice(DeviceManager* manager)
-  : PciDevice(manager) {
+PciHostDevice::PciHostDevice() {
   name_ = "pci-host-bridge";
   
   header_.vendor_id = 0x8086;
@@ -47,7 +46,7 @@ PciHostBridgeDevice::PciHostBridgeDevice(DeviceManager* manager)
 }
 
 
-void PciHostBridgeDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void PciHostDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   if (ir.base == MCH_CONFIG_ADDR) {
     uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
     memcpy(pointer, data, size);
@@ -77,7 +76,7 @@ void PciHostBridgeDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* 
   }
 }
 
-void PciHostBridgeDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void PciHostDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   if (ir.base == MCH_CONFIG_ADDR) {
     uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
     memcpy(data, pointer, size);
@@ -109,14 +108,14 @@ void PciHostBridgeDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* d
   }
 }
 
-void PciHostBridgeDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
+void PciHostDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   PciDevice::WritePciConfigSpace(offset, data, length);
   if (ranges_overlap(offset, length, MCH_PCIEXBAR, MCH_PCIEXBAR_SIZE)) {
     MchUpdatePcieXBar();
   }
 }
 
-void PciHostBridgeDevice::MchUpdatePcieXBar() {
+void PciHostDevice::MchUpdatePcieXBar() {
   uint32_t pciexbar = *(uint32_t*)(header_.data + MCH_PCIEXBAR);
   int enable = pciexbar & 1;
   uint32_t addr = pciexbar & Q35_MASK(64, 35, 28);

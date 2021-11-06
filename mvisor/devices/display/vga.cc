@@ -14,8 +14,7 @@
 #define VBE_PIO_BASE    0x1CE
 #define VBE_PIO_SIZE    2
 
-VgaDevice::VgaDevice(DeviceManager* manager)
-  : PciDevice(manager) {
+VgaDevice::VgaDevice() {
   name_ = "vga";
   
   /* PCI config */
@@ -27,7 +26,7 @@ VgaDevice::VgaDevice(DeviceManager* manager)
   header_.subsys_vendor_id = 0x1af4;
   header_.subsys_id = 0x1100;
   header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
-  devfn_ = PCI_MAKE_DEVFN(2, 0);
+  header_.irq_pin = 1;
 
   /* Initialize rom data and rom bar size */
   LoadRomFile(VGA_ROM_PATH);
@@ -50,6 +49,12 @@ VgaDevice::VgaDevice(DeviceManager* manager)
 }
 
 VgaDevice::~VgaDevice() {
+}
+
+void VgaDevice::Connect() {
+  devfn_ = PCI_MAKE_DEVFN(2, 0);
+
+  PciDevice::Connect();
 }
 
 void VgaDevice::ResetRegisters() {
