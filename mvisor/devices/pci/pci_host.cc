@@ -33,13 +33,15 @@
 
 PciHostDevice::PciHostDevice() {
   name_ = "pci-host-bridge";
+
+  devfn_ = PCI_MAKE_DEVFN(0, 0);
   
-  header_.vendor_id = 0x8086;
-  header_.device_id = 0x29c0;
-  header_.class_code = 0x060000;
-  header_.header_type = PCI_HEADER_TYPE_NORMAL;
-  header_.subsys_vendor_id = 0x1af4;
-  header_.subsys_id = 0x1100;
+  pci_header_.vendor_id = 0x8086;
+  pci_header_.device_id = 0x29c0;
+  pci_header_.class_code = 0x060000;
+  pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
+  pci_header_.subsys_vendor_id = 0x1af4;
+  pci_header_.subsys_id = 0x1100;
 
   AddIoResource(kIoResourceTypePio, MCH_CONFIG_ADDR, 4);
   AddIoResource(kIoResourceTypePio, MCH_CONFIG_DATA, 4);
@@ -116,7 +118,7 @@ void PciHostDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t
 }
 
 void PciHostDevice::MchUpdatePcieXBar() {
-  uint32_t pciexbar = *(uint32_t*)(header_.data + MCH_PCIEXBAR);
+  uint32_t pciexbar = *(uint32_t*)(pci_header_.data + MCH_PCIEXBAR);
   int enable = pciexbar & 1;
   uint32_t addr = pciexbar & Q35_MASK(64, 35, 28);
   uint64_t length = (1LL << 20) * 256;

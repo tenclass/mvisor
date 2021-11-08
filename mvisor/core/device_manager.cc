@@ -15,12 +15,11 @@
 #include "devices/ich9_lpc.h"
 #include "devices/isa_dma.h"
 #include "devices/vga.h"
-#include "devices/ahci_host.h"
-#include "devices/ahci_storage.h"
+#include "devices/ide.h"
 #include "images/raw.h"
 
 #define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
-#define HARD_DISK_IMAGE     "../assets/hd.img"
+#define CDROM_IMAGE         "/mnt/iso/win7_home_sp1.iso"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -50,14 +49,14 @@ void DeviceManager::IntializeQ35() {
   lpc->AddChild(new IsaDmaDevice());
   lpc->AddChild(new FloppyStorageDevice(new RawDiskImage(FLOPPY_DISK_IMAGE)));
 
-  // auto ahci_host = new AhciHostDevice();
-  // auto hd = new AhciHarddiskStorageDevice(new RawDiskImage(HARD_DISK_IMAGE));
-  // ahci_host->AddChild(hd);
+  auto ide_controller = new IdeControllerDevice();
+  auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
+  ide_controller->AddChild(cd);
 
   auto pci_host = new PciHostDevice();
   pci_host->AddChild(lpc);
+  // pci_host->AddChild(ide_controller);
   pci_host->AddChild(new VgaDevice());
-  // pci_host->AddChild(ahci_host);
 
   root_ = new SystemRootDevice(this);
   root_->AddChild(new FirmwareConfigDevice());
@@ -69,7 +68,6 @@ void DeviceManager::IntializeQ35() {
 
 void DeviceManager::PrintDevices() {
   for (auto device : registered_devices_) {
-    MV_LOG("device: %s", device->name().c_str());
     for (auto &io_resource : device->io_resources()) {
       if (io_resource.type == kIoResourceTypePio) {
         MV_LOG("\tio port 0x%lx-0x%lx", io_resource.base, io_resource.base + io_resource.length - 1);
@@ -92,6 +90,15 @@ PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
 
 
 void DeviceManager::RegisterDevice(Device* device) {
+  // Check devfn conflicts or reassign it
+  PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
+  if (pci_device) {
+    if (LookupPciDevice(pci_device->bus(), pci_device->devfn())) {
+      MV_PANIC("devfn_ %x conflicts", pci_device->devfn());
+      return;
+    }
+  }
+
   registered_devices_.insert(device);
 }
 
@@ -117,6 +124,9 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
       .device = device
     };
   }
+  MV_LOG("%s register %s 0x%08lx-0x%08lx", device->name().c_str(),
+    io_resource.type == kIoResourceTypeMmio ? "mmio" : "pio",
+    io_resource.base, io_resource.base + io_resource.length - 1);
 }
 
 void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
@@ -132,29 +142,37 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
 }
 
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
-  auto it = pio_handlers_.upper_bound(port);
-  if (it != pio_handlers_.begin())
-    --it;
-  if (it != pio_handlers_.end()) {
+  int found = 0;
+  for (auto it = pio_handlers_.begin(); it != pio_handlers_.end(); it++) {
     auto &resource = it->second.io_resource;
     if (port >= resource.base && port < resource.base + resource.length) {
       Device* device = it->second.device;
-      while (count--) {
+      uint8_t* ptr = data;
+      for (uint32_t i = 0; i < count; i++) {
         if (is_write) {
-          device->Write(resource, port - resource.base, data, size);
+          device->Write(resource, port - resource.base, ptr, size);
         } else {
-          device->Read(resource, port - resource.base, data, size);
+          device->Read(resource, port - resource.base, ptr, size);
         }
-        data += size;
+        ptr += size;
       }
-      return;
+      ++found;
+    }
+    if (resource.base > port) {
+      /* Search ended */
+      break;
     }
   }
-  MV_LOG("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
-    is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
+
+  if (!found) {
+    MV_LOG("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
+      is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
+    memset(data, 0xFF, size);
+  }
 }
 
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
+  /* FIXME: this wont handle overlaps */
   auto it = mmio_handlers_.upper_bound(base);
   if (it != mmio_handlers_.begin())
     --it;

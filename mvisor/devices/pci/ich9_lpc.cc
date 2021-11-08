@@ -45,16 +45,16 @@
 
 Ich9LpcDevice::Ich9LpcDevice() {
   name_ = "ich9-lpc";
-  
-  header_.vendor_id = 0x8086;
-  header_.device_id = 0x2918;
-  header_.class_code = 0x060100;
-  header_.revision_id = 2;
-  header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
-  header_.subsys_vendor_id = 0x1af4;
-  header_.subsys_id = 0x1100;
 
   devfn_ = PCI_MAKE_DEVFN(0x1f, 0);
+  
+  pci_header_.vendor_id = 0x8086;
+  pci_header_.device_id = 0x2918;
+  pci_header_.class_code = 0x060100;
+  pci_header_.revision_id = 2;
+  pci_header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
+  pci_header_.subsys_vendor_id = 0x1af4;
+  pci_header_.subsys_id = 0x1100;
 }
 
 void Ich9LpcDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
@@ -81,8 +81,8 @@ void Ich9LpcDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t
 }
 
 void Ich9LpcDevice::UpdatePmBaseSci() {
-  uint32_t pm_io_base = *(uint32_t*)(header_.data + ICH9_LPC_PMBASE);
-  uint8_t acpi_control = *(uint8_t*)(header_.data + ICH9_LPC_ACPI_CTRL);
+  uint32_t pm_io_base = *(uint32_t*)(pci_header_.data + ICH9_LPC_PMBASE);
+  uint8_t acpi_control = *(uint8_t*)(pci_header_.data + ICH9_LPC_ACPI_CTRL);
   if (acpi_control & ICH9_LPC_ACPI_CTRL_ACPI_EN) {
     pm_io_base &= ICH9_LPC_PMBASE_BASE_ADDRESS_MASK;
     AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "pm-io");
@@ -92,7 +92,7 @@ void Ich9LpcDevice::UpdatePmBaseSci() {
 }
 
 void Ich9LpcDevice::UpdateRootComplexRegisterBLock() {
-  uint32_t rcrb = *(uint32_t*)(header_.data + ICH9_LPC_RCBA);
+  uint32_t rcrb = *(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA);
   if (rcrb & ICH9_LPC_RCBA_EN) {
     AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "rcba");
   } else {

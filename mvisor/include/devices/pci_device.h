@@ -151,25 +151,27 @@ class PciDevice : public Device {
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   void WritePciCommand(uint16_t command);
   void WritePciBar(uint8_t index, uint32_t value);
+  virtual void Connect();
+
  protected:
   friend class DeviceManager;
   bool ActivatePciBar(uint8_t index);
   bool DeactivatePciBar(uint8_t index);
   inline bool IsPciBarTypeIo(uint8_t index) {
-    return header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
+    return pci_header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
   }
   inline uint32_t GetPciBarAddress(uint8_t index) {
     if(IsPciBarTypeIo(index))
-      return header_.bar[index] & PCI_BASE_ADDRESS_IO_MASK;
+      return pci_header_.bar[index] & PCI_BASE_ADDRESS_IO_MASK;
     else 
-      return header_.bar[index] & PCI_BASE_ADDRESS_MEM_MASK;
+      return pci_header_.bar[index] & PCI_BASE_ADDRESS_MEM_MASK;
   }
   bool ActivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   void UpdateRomMapAddress(uint32_t address);
   void LoadRomFile(const char* path);
 
-  PciConfigHeader header_ = { 0 };
+  PciConfigHeader pci_header_ = { 0 };
   uint32_t bar_size_[PCI_BAR_NUMS] = { 0 };
   bool bar_active_[PCI_BAR_NUMS] = { 0 };
   uint32_t rom_bar_size_ = 0;

@@ -22,8 +22,8 @@ DummyDevice::DummyDevice() {
   AddIoResource(kIoResourceTypePio, 0x00F0, 2, "Math Processor");
 
   /* PORT 01F0-01F7 */
-  AddIoResource(kIoResourceTypePio, 0x01F0, 8, "IDE Primary");
-  AddIoResource(kIoResourceTypePio, 0x0170, 8, "IDE Secondary");
+  // AddIoResource(kIoResourceTypePio, 0x01F0, 8, "IDE Primary");
+  // AddIoResource(kIoResourceTypePio, 0x0170, 8, "IDE Secondary");
   AddIoResource(kIoResourceTypePio, 0x01E8, 8, "IDE Tertiary");
   AddIoResource(kIoResourceTypePio, 0x0168, 8, "IDE Quaternary");
 
@@ -63,5 +63,5 @@ void DummyDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uin
     ir.type == kIoResourceTypeMmio ? "mmio" : "pio",
     ir.name, ir.base, offset, size);
   */
-  memset(data, 0, size);
+  memset(data, 0xFF, size);
 }

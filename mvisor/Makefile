@@ -10,6 +10,7 @@ EXECUTABLE = $(BUILD_DIR)/mvisor
 MV_SOURCE := $(wildcard *.cc)
 MV_SOURCE += $(wildcard */*.cc)
 MV_SOURCE += $(wildcard devices/*/*.cc)
+MV_SOURCE += $(wildcard devices/block/*/*.cc)
 MV_OBJECTS := $(MV_SOURCE:%.cc=$(BUILD_DIR)/%.o)
 
 $(shell mkdir -p $(dir $(MV_OBJECTS)))

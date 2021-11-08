@@ -16,17 +16,18 @@
 
 VgaDevice::VgaDevice() {
   name_ = "vga";
+  devfn_ = PCI_MAKE_DEVFN(2, 0);
   
   /* PCI config */
-  header_.vendor_id = 0x1b36;
-  header_.device_id = 0x0100;
-  header_.class_code = 0x030000;
-  header_.revision_id = 5;
-  header_.header_type = PCI_HEADER_TYPE_NORMAL;
-  header_.subsys_vendor_id = 0x1af4;
-  header_.subsys_id = 0x1100;
-  header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
-  header_.irq_pin = 1;
+  pci_header_.vendor_id = 0x1b36;
+  pci_header_.device_id = 0x0100;
+  pci_header_.class_code = 0x030000;
+  pci_header_.revision_id = 5;
+  pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
+  pci_header_.subsys_vendor_id = 0x1af4;
+  pci_header_.subsys_id = 0x1100;
+  pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
+  pci_header_.irq_pin = 1;
 
   /* Initialize rom data and rom bar size */
   LoadRomFile(VGA_ROM_PATH);
@@ -40,7 +41,7 @@ VgaDevice::VgaDevice() {
   bar_size_[2] = 0x00002000;
   /* MMIO */
   bar_size_[3] = 0x20;
-  header_.bar[3] = 1;
+  pci_header_.bar[3] = 1;
 
   AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "vga-io");
   AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "vbe-io");
@@ -52,8 +53,6 @@ VgaDevice::~VgaDevice() {
 }
 
 void VgaDevice::Connect() {
-  devfn_ = PCI_MAKE_DEVFN(2, 0);
-
   PciDevice::Connect();
 }
 

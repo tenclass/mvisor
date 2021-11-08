@@ -25,7 +25,7 @@ PciDevice::~PciDevice() {
 }
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  memcpy(data, header_.data + offset, length);
+  memcpy(data, pci_header_.data + offset, length);
   // MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
   //  name_.c_str(), offset, *(uint32_t*)data, length);
 }
@@ -43,6 +43,7 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
 
   uint8_t bar = (offset - PCI_BAR_OFFSET(0)) / sizeof(uint32_t);
   if (bar >= 0 && bar < PCI_BAR_NUMS) {
+    MV_ASSERT(length == 4);
     memcpy(&value, data, length);
     WritePciBar(bar, value);
     return;
@@ -53,15 +54,15 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
       uint32_t mask = value;
       value = ~(rom_bar_size_ - 1);
       /* Preserve the special bits. */
-      value = (value & mask) | (header_.rom_bar & ~mask);
-      header_.rom_bar = value;
+      value = (value & mask) | (pci_header_.rom_bar & ~mask);
+      pci_header_.rom_bar = value;
       return;
     } else if (value) {
       UpdateRomMapAddress(value & 0xfffff800);
     }
   }
 
-  memcpy(header_.data + offset, data, length);
+  memcpy(pci_header_.data + offset, data, length);
 }
 
 void PciDevice::UpdateRomMapAddress(uint32_t address) {
@@ -81,14 +82,14 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
   int i;
   bool toggle_io, toggle_mem;
 
-  toggle_io = (header_.command ^ new_command) & PCI_COMMAND_IO;
-  toggle_mem = (header_.command ^ new_command) & PCI_COMMAND_MEMORY;
+  toggle_io = (pci_header_.command ^ new_command) & PCI_COMMAND_IO;
+  toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
 
   for (i = 0; i < PCI_BAR_NUMS; i++) {
-    if (!header_.bar[i])
+    if (!pci_header_.bar[i])
       continue;
 
-    bool bar_is_io = header_.bar[i] & PCI_BASE_ADDRESS_SPACE_IO;
+    bool bar_is_io = pci_header_.bar[i] & PCI_BASE_ADDRESS_SPACE_IO;
     if (toggle_io && bar_is_io) {
       if (new_command & PCI_COMMAND_IO)
         ActivatePciBar(i);
@@ -103,6 +104,10 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
         DeactivatePciBar(i);
     }
   }
+}
+
+void PciDevice::Connect() {
+  Device::Connect();
 }
 
 bool PciDevice::ActivatePciBar(uint8_t index) {
@@ -137,7 +142,7 @@ bool PciDevice::DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size) {
 
 void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
   uint32_t mask;
-  int bar_is_io = header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
+  int bar_is_io = pci_header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
   if (bar_is_io)
     mask = (uint32_t)PCI_BASE_ADDRESS_IO_MASK;
   else
@@ -168,24 +173,23 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
   if (value == 0xffffffff) {
     value = ~(bar_size_[index] - 1);
     /* Preserve the special bits. */
-    value = (value & mask) | (header_.bar[index] & ~mask);
-    header_.bar[index] = value;
+    value = (value & mask) | (pci_header_.bar[index] & ~mask);
+    pci_header_.bar[index] = value;
     return;
   }
 
-  value = (value & mask) | (header_.bar[index] & ~mask);
+  value = (value & mask) | (pci_header_.bar[index] & ~mask);
 
-  /* Don't toggle emulation when region type access is disbled. */
-  if (bar_is_io && !(header_.command & PCI_COMMAND_IO)) {
-    header_.bar[index] = value;
+  /* Don't toggle emulation when region type access is disabled. */
+  if (bar_is_io && !(pci_header_.command & PCI_COMMAND_IO)) {
+    pci_header_.bar[index] = value;
     return;
   }
 
-  if (!bar_is_io && !(header_.command & PCI_COMMAND_MEMORY)) {
-    header_.bar[index] = value;
+  if (!bar_is_io && !(pci_header_.command & PCI_COMMAND_MEMORY)) {
+    pci_header_.bar[index] = value;
     return;
   }
-  
 
   /*
    * BAR reassignment can be done while device access is enabled and
@@ -198,7 +202,7 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
    * enable emulation for all device regions that were overlapping with
    * the old value.
    */
-  uint32_t old_addr = header_.bar[index] & mask;
+  uint32_t old_addr = pci_header_.bar[index] & mask;
   uint32_t new_addr = value & mask;
   uint32_t bar_size = bar_size_[index];
 
@@ -217,7 +221,7 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
     }
   }
 
-  header_.bar[index] = value;
+  pci_header_.bar[index] = value;
 
   if ((value & mask) && !bar_active_[index]) {
     if (!ActivatePciBar(index)) {
