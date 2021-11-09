@@ -146,6 +146,7 @@ class PciDevice : public Device {
 
   uint8_t bus() { return 0; }
   uint8_t devfn() { return devfn_; }
+  const PciConfigHeader& pci_header() { return pci_header_; }
 
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);

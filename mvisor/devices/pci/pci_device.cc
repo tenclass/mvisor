@@ -32,8 +32,8 @@ void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t leng
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   uint32_t value = 0;
-  // MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
-  //  name_.c_str(), offset, *(uint32_t*)data, length);
+  MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
+    name_.c_str(), offset, *(uint32_t*)data, length);
 
   if (offset == PCI_COMMAND) {
     memcpy(&value, data, length);

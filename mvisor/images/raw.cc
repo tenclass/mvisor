@@ -11,6 +11,7 @@ RawDiskImage::RawDiskImage(const std::string path, bool readonly)
 ssize_t RawDiskImage::Read(void *buffer, uint64_t sector, int count) {
   off_t offset = sector * sector_size_;
   off_t nbytes = count * sector_size_;
+  MV_LOG("read at sector=0x%x(0x%x) count=0x%x", sector, offset, count);
   return pread(fd_, buffer, nbytes, offset);
 }
 

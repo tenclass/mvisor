@@ -12,7 +12,7 @@
 #include "logger.h"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
-#define BIOS_PATH "../assets/bios-256k.bin"
+#define BIOS_PATH "../assets/bios-debug.bin"
 
 Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {

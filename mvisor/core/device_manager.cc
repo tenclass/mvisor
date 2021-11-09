@@ -15,11 +15,13 @@
 #include "devices/ich9_lpc.h"
 #include "devices/isa_dma.h"
 #include "devices/vga.h"
-#include "devices/ide.h"
+#include "devices/ide/ide_storage.h"
+#include "devices/ide/ide_controller.h"
+#include "devices/ahci/ahci_host.h"
 #include "images/raw.h"
 
 #define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
-#define CDROM_IMAGE         "/mnt/iso/win7_home_sp1.iso"
+#define CDROM_IMAGE         "/mnt/iso/guest-tools.iso"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -49,14 +51,21 @@ void DeviceManager::IntializeQ35() {
   lpc->AddChild(new IsaDmaDevice());
   lpc->AddChild(new FloppyStorageDevice(new RawDiskImage(FLOPPY_DISK_IMAGE)));
 
-  auto ide_controller = new IdeControllerDevice();
-  auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
-  ide_controller->AddChild(cd);
-
   auto pci_host = new PciHostDevice();
   pci_host->AddChild(lpc);
-  // pci_host->AddChild(ide_controller);
   pci_host->AddChild(new VgaDevice());
+
+  if (true) {
+    auto ide_controller = new IdeControllerDevice();
+    auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
+    ide_controller->AddChild(cd);
+    pci_host->AddChild(ide_controller);
+  } else {
+    auto ahci_host = new AhciHostDevice();
+    auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
+    ahci_host->AddChild(cd);
+    pci_host->AddChild(ahci_host);
+  }
 
   root_ = new SystemRootDevice(this);
   root_->AddChild(new FirmwareConfigDevice());
@@ -167,6 +176,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
   if (!found) {
     MV_LOG("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
       is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
+    /* Accessing invalid port always returns error */
     memset(data, 0xFF, size);
   }
 }

@@ -239,6 +239,15 @@ struct AHCI_SG {
 } __attribute__((packed));
 
 
+struct SDBFIS {
+  uint8_t type;
+  uint8_t flags;
+  uint8_t status;
+  uint8_t error;
+  uint32_t payload;
+} __attribute__((packed));
+
+
 /**
  * NCQFrame is the same as a Register H2D FIS (described in SATA 3.2),
  * but some fields have been re-mapped and re-purposed, as seen in
@@ -272,14 +281,6 @@ struct NCQFrame {
   uint8_t aux1;
   uint8_t aux2;
   uint8_t aux3;
-} __attribute__((packed));
-
-struct SDBFIS {
-  uint8_t type;
-  uint8_t flags;
-  uint8_t status;
-  uint8_t error;
-  uint32_t payload;
 } __attribute__((packed));
 
 #endif // _MVISOR_DEVICES_AHCI_INTERNAL_H
