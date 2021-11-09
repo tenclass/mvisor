@@ -45,13 +45,11 @@ void IdeStorageDevice::AbortCommand() {
   auto regs = port_->registers();
   regs->status = ATA_SR_DRDY | ATA_SR_ERR;
   regs->error = ATA_CB_ER_ABRT;
-  MV_LOG("AbortCommand");
 }
 
 void IdeStorageDevice::EndCommand() {
   auto regs = port_->registers();
   regs->status = ATA_SR_DRDY;
-  MV_LOG("EndCommand");
   port_->RaiseIrq();
 }
 

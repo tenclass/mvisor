@@ -4,5 +4,5 @@
 #include "images/image.h"
 
 void IdeHarddiskStorageDevice::GetIdentityData() {
-  MV_LOG("not impl");
+  MV_LOG("not implemented");
 }

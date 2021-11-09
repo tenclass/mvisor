@@ -101,7 +101,7 @@ void IdeCdromStorageDevice::EndTransfer(IdeTransferType type) {
       MV_LOG("write data to dev end, do nothing");
     }
   } else {
-    MV_LOG("check if data ends");
+    /* Device to Host, such as Read() */
     EndCommand();
   }
 }
@@ -141,7 +141,6 @@ void IdeCdromStorageDevice::ParseCommandPacket() {
   auto io = port_->io();
   uint8_t* buf = io->buffer;
   MV_LOG("#############PACKET command=0x%x", buf[0]);
-  DumpHex(buf, 12);
 
   switch (buf[0])
   {
@@ -156,13 +155,51 @@ void IdeCdromStorageDevice::ParseCommandPacket() {
   case GPCMD_INQUIRY: {
     Atapi_Inquiry();
     break;
+  case GPCMD_MODE_SENSE_10:
+    Atapi_ModeSense();
+    break;
+  case GPCMD_SEEK:
+    io->nbytes = 0;
+    EndCommand();
+    MV_LOG("ignore seek");
+    break;
   }
   case GPCMD_READ_TOC_PMA_ATIP:
     regs->status |= ATA_SR_DSC;
     Atapi_TableOfContent();
     break;
   default:
-    MV_PANIC("unhandled packet 0x%x", buf[0]);
+    MV_PANIC("unhandled packet 0x%x, dump hex:", buf[0]);
+    DumpHex(buf, 12);
+    break;
+  }
+}
+
+void IdeCdromStorageDevice::Atapi_ModeSense() {
+  auto io = port_->io();
+  uint8_t* buf = io->buffer;
+  int max_size = be16toh(*(uint16_t*)&buf[6]);
+  MV_LOG("max_size = %d", max_size);
+  switch (buf[2])
+  {
+  case 0x2A: // Capabilities
+    io->nbytes = 28;
+    bzero(buf, 28);
+    *(uint16_t*)&buf[0] = htobe16(34);
+    buf[2] = 0x70;
+    buf[8] = 0x2A;
+    buf[9] = 0x12;
+    buf[12] = 0x70;
+    buf[13] = 0x60;
+    buf[14] = 41;
+    *(uint16_t*)&buf[16] = htobe16(706);
+    *(uint16_t*)&buf[18] = htobe16(2);
+    *(uint16_t*)&buf[20] = htobe16(512);
+    *(uint16_t*)&buf[22] = htobe16(706);
+    StartTransfer(kIdeTransferToHost);
+    break;
+  default:
+    MV_PANIC("not implemented cmd=0x%x", buf[2]);
     break;
   }
 }
@@ -193,7 +230,6 @@ void IdeCdromStorageDevice::Atapi_TableOfContent() {
     MV_PANIC("invalid TOC command %x", format);
     break;
   }
-  DumpHex(io->buffer, io->nbytes);
   StartTransfer(kIdeTransferToHost);
 }
 

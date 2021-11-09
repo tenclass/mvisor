@@ -18,6 +18,8 @@ class DiskImage {
   bool readonly_ = true;
   size_t sector_size_ = 512;
   int fd_ = -1;
+  size_t bytes_read = 0;
+  size_t bytes_writen = 0;
 };
 
 

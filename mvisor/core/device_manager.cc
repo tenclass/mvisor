@@ -21,7 +21,7 @@
 #include "images/raw.h"
 
 #define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
-#define CDROM_IMAGE         "/mnt/iso/guest-tools.iso"
+#define CDROM_IMAGE         "../assets/dostools.iso"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -49,7 +49,7 @@ void DeviceManager::IntializeQ35() {
   lpc->AddChild(new DummyDevice());
   lpc->AddChild(new SerialPortDevice());
   lpc->AddChild(new IsaDmaDevice());
-  lpc->AddChild(new FloppyStorageDevice(new RawDiskImage(FLOPPY_DISK_IMAGE)));
+  // lpc->AddChild(new FloppyStorageDevice(new RawDiskImage(FLOPPY_DISK_IMAGE)));
 
   auto pci_host = new PciHostDevice();
   pci_host->AddChild(lpc);

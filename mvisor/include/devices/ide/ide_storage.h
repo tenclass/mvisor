@@ -90,6 +90,7 @@ class IdeCdromStorageDevice : public IdeStorageDevice {
   void Atapi_Inquiry();
   void Atapi_Read();
   void Atapi_TableOfContent();
+  void Atapi_ModeSense();
   void SetError(int sense_key, int asc);
 
   uint8_t identify_data_[512];

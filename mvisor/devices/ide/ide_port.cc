@@ -55,7 +55,6 @@ void IdePort::ReadControlPort(uint64_t offset, uint8_t* data, uint32_t size) {
    */
   if (offset == ATA_CB_ASTAT) { /* alternative status */
     *data = registers_.status;
-    MV_LOG("alt status=0x%x", *data);
   }
 }
 
@@ -78,7 +77,7 @@ void IdePort::ReadPort(uint64_t offset, uint8_t* data, uint32_t size) {
   {
   case ATA_REG_STATUS:
     *data = registers_.status;
-    MV_LOG("read port %d STATUS data:0x%x size:0x%x", index_, *data, size);
+    // MV_LOG("read port %d STATUS data:0x%x size:0x%x", index_, *data, size);
     LowerIrq();
     break;
   case ATA_REG_ERROR:
@@ -90,7 +89,7 @@ void IdePort::ReadPort(uint64_t offset, uint8_t* data, uint32_t size) {
   default:
     /* Other registers provided by values */
     *data = registers_.values[offset];
-    MV_LOG("read port %s(0x%x) data:0x%x size:0x%x", __get_register_name(offset), offset, *data, size);
+    // MV_LOG("read port %s(0x%x) data:0x%x size:0x%x", __get_register_name(offset), offset, *data, size);
     break;
   }
 }
@@ -108,7 +107,7 @@ void IdePort::WritePort(uint64_t offset, uint8_t* data, uint32_t size) {
     } else {
       drive_ = nullptr;
     }
-    MV_LOG("port %d select drive %x:%s", index_, *data, drive_ ? drive_->name().c_str() : "null");
+    // MV_LOG("port %d select drive %x:%s", index_, *data, drive_ ? drive_->name().c_str() : "null");
     break;
   }
   case ATA_REG_COMMAND:
