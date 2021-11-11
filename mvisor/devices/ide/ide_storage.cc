@@ -8,13 +8,14 @@
 
 IdeStorageDevice::IdeStorageDevice(DiskImage* image) : StorageDevice(image) {
   name_ = "ide-storage";
+  bzero(&drive_info_, sizeof(drive_info_));
 }
 
 
 void IdeStorageDevice::StartCommand() {
   auto regs = port_->registers();
 
-  MV_LOG("command = 0x%x", regs->command);
+  MV_LOG("ata command = 0x%x", regs->command);
   switch (regs->command)
   {
   case ATA_CMD_DEVICE_RESET: {

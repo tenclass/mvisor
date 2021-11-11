@@ -6,32 +6,35 @@
 
 #define IDE_MAX_REGISTERS 18
 
-union IdeRegisters
+struct IdeRegisters
 {
-  struct {
-    uint8_t data;
-    uint8_t features;
+  union {
+    struct {
+      uint8_t data;
+      uint8_t features;
+      
+      uint8_t sectors0;
+      uint8_t lba0;
+      uint8_t lba1;
+      uint8_t lba2;
     
-    uint8_t sectors0;
-    uint8_t lba0;
-    uint8_t lba1;
-    uint8_t lba2;
-  
-    uint8_t devsel;
-    uint8_t command;
-  
-    uint8_t sectors1;
-    uint8_t lba3;
-    uint8_t lba4;
-    uint8_t lba5;
-  
-    uint8_t control;
-    uint8_t alternative_status;
+      uint8_t devsel;
+      uint8_t command;
+    
+      uint8_t sectors1;
+      uint8_t lba3;
+      uint8_t lba4;
+      uint8_t lba5;
+    
+      uint8_t control;
+      uint8_t alternative_status;
+    } __attribute__((packed));
+    uint8_t values[IDE_MAX_REGISTERS];
   } __attribute__((packed));
-  uint8_t values[IDE_MAX_REGISTERS];
 
   uint8_t error;
   uint8_t status;
+  bool    use_lba;
 } __attribute__((packed));
 
 struct IdeIo {
@@ -39,6 +42,13 @@ struct IdeIo {
   uint8_t* buffer;
   ssize_t position;
   ssize_t nbytes;
+};
+
+struct IdeDriveInfo {
+  char serial[21];
+  char model[41];
+  char version[41];
+  uint64_t world_wide_name;
 };
 
 enum IdeStorageType {
@@ -72,8 +82,8 @@ class IdeStorageDevice : public StorageDevice {
   IdeStorageType type_;
   /* port_ will be set if the drive is selected */
   IdePort* port_;
-  IdeRegisters* registers_;
-  IdeIo *io_;
+
+  IdeDriveInfo drive_info_;
 };
 
 
@@ -93,26 +103,30 @@ class IdeCdromStorageDevice : public IdeStorageDevice {
   void Atapi_ModeSense();
   void SetError(int sense_key, int asc);
 
-  uint8_t identify_data_[512];
-  int drive_serial_;
-  char drive_serial_string_[21];
-  char drive_model_string_[41];
-  char version_string_[41];
-  uint64_t world_wide_name_;
   int sense_key_;
   int asc_;
 };
 
 
+struct DiskGemometry {
+  size_t sector_size;
+  size_t total_sectors;
+  size_t sectors_per_cylinder;
+  size_t cylinders_per_heads;
+  size_t heads;
+};
+
 class IdeHarddiskStorageDevice : public IdeStorageDevice {
  public:
-  IdeHarddiskStorageDevice(DiskImage* image) : IdeStorageDevice(image) {
-    type_ = kIdeStorageTypeHarddisk;
-    name_ = "ide-harddisk";
-  }
-  virtual void GetIdentityData();
+  IdeHarddiskStorageDevice(DiskImage* image);
+  void StartCommand();
  private:
-  uint8_t identify_data_[512];
+  void InitializeGemometry();
+  void Ata_Identitfy();
+  void Ata_ReadSectors();
+
+  DiskGemometry gemometry_;
+  int multiple_sectors_;
 };
 
 #endif // _MVISOR_DEVICES_IDE_STORAGE_H

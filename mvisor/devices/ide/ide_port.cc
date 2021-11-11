@@ -104,10 +104,11 @@ void IdePort::WritePort(uint64_t offset, uint8_t* data, uint32_t size) {
       drive_ = attached_devices_[devsel];
       drive_->BindPort(this);
       registers_.devsel = *data;
+      registers_.use_lba = (*data) & ATA_CB_DH_LBA;
     } else {
       drive_ = nullptr;
     }
-    // MV_LOG("port %d select drive %x:%s", index_, *data, drive_ ? drive_->name().c_str() : "null");
+    MV_LOG("port %d select drive %x:%s", index_, *data, drive_ ? drive_->name().c_str() : "null");
     break;
   }
   case ATA_REG_COMMAND:
