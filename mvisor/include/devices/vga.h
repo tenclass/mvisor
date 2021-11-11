@@ -49,6 +49,7 @@ class VgaDevice : public PciDevice {
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   bool IsTextMode();
+  bool IsVbeEnabled();
   uint8_t* GetVRamHostAddress() { return vram_map_select_; }
   void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
 
@@ -64,7 +65,7 @@ class VgaDevice : public PciDevice {
   void VgaWritePort(uint64_t port, uint8_t* data, uint32_t size);
   void VgaReadPort(uint64_t port, uint8_t* data, uint32_t size);
 
-  uint8_t misc_ouput_reg_ = 0;
+  uint8_t misc_output_reg_ = 0;
   uint8_t sequence_index_ = 0;
   uint8_t sequence_registers_[256] = { 0 };
   uint8_t gfx_index_ = 0;

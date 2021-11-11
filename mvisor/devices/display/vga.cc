@@ -39,14 +39,12 @@ VgaDevice::VgaDevice() {
   /* Initialize rom data and rom bar size */
   LoadRomFile(VGA_ROM_PATH);
 
-  /* 384MB vgamem */
-  bar_size_[0] = 0x18000000;
-  /* 8MB vram */
-  bar_size_[1] = 0x00800000;
-  bar_size_[2] = 0x00002000;
-  /* MMIO */
-  bar_size_[3] = 0x20;
-  pci_header_.bar[3] = 1;
+  
+  AddPciBar(0, 384 << 20, kIoResourceTypeMmio);   /* 384MB vgamem */
+  AddPciBar(1, 8 << 20, kIoResourceTypeMmio);     /* 8MB vram */
+  AddPciBar(2, 8192, kIoResourceTypeMmio);        /* MMIO */
+  AddPciBar(3, 32, kIoResourceTypePio);           /* PIO */
+
   /* 64MB vram */
   vram_size_ = 0x04000000;
   vram_base_ = (uint8_t*)mmap(nullptr, vram_size_, PROT_READ | PROT_WRITE,
@@ -95,6 +93,10 @@ void VgaDevice::VbeReadPort(uint64_t port, uint16_t* data) {
   }
 }
 
+bool VgaDevice::IsVbeEnabled() {
+  return vbe_registers_[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED;
+}
+
 void VgaDevice::VbeWritePort(uint64_t port, uint16_t value) {
   if (port == 0x1CE) { // index
     if (value > VBE_DISPI_INDEX_NB) {
@@ -104,23 +106,23 @@ void VgaDevice::VbeWritePort(uint64_t port, uint16_t value) {
   } else if (port == 0x1CF) { // data
     switch (vbe_index_)
     {
-    case 0:
+    case VBE_DISPI_INDEX_ID:
       vbe_version_ = value;
       break;
-    case 1:
+    case VBE_DISPI_INDEX_XRES:
       width_ = value;
       break;
-    case 2:
+    case VBE_DISPI_INDEX_YRES:
       height_ = value;
       break;
-    case 3:
+    case VBE_DISPI_INDEX_BPP:
       bpp_ = value;
       break;
-    case 4:
+    case VBE_DISPI_INDEX_ENABLE:
       MV_LOG("set vbe enable %x to %x %dx%d bpp=%d", vbe_registers_[4], value,
         vbe_registers_[1], vbe_registers_[2], vbe_registers_[3]);
       break;
-    case 5:
+    case VBE_DISPI_INDEX_BANK:
       vram_read_select_ = vram_base_ + (value << 16);
       break;
     }
@@ -149,6 +151,8 @@ void VgaDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint
     VgaWritePort(port, data, size);
   } else if (ir.base == VBE_PIO_BASE) {
     VbeWritePort(port, *(uint16_t*)data);
+  } else {
+    memcpy(vram_read_select_ + offset, data, size);
   }
 }
 
@@ -178,7 +182,7 @@ void VgaDevice::VgaReadPort(uint64_t port, uint8_t* data, uint32_t size) {
     break;
   case 0x3CC:
     MV_ASSERT(size == 1);
-    *data = misc_ouput_reg_;
+    *data = misc_output_reg_;
     break;
   case 0x3CE:
     MV_ASSERT(size == 1);
@@ -222,7 +226,7 @@ void VgaDevice::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
     break;
   case 0x3C2:
     MV_ASSERT(size == 1);
-    misc_ouput_reg_ = value & ~0x10;
+    misc_output_reg_ = value & ~0x10;
     break;
   case 0x3C4:
     sequence_index_ = value;

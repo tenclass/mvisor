@@ -84,6 +84,10 @@ void Viewer::DrawTextMode() {
 }
 
 void Viewer::DrawGraphicMode() {
+  if (!vga_device_->IsVbeEnabled()) {
+    MV_PANIC("Graphics mode without VBE is not supported yet!");
+  }
+
   auto pallete = vga_device_->pallete();
   uint8_t* ptr = vga_device_->GetVRamHostAddress();
 
@@ -108,7 +112,7 @@ void Viewer::DrawGraphicMode() {
   case 24:
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
-        uint32_t color = (ptr[0] << 16) | (ptr[1] << 8) | (ptr[2]);
+        uint32_t color = (ptr[2] << 16) | (ptr[1] << 8) | (ptr[0]);
         buffer[y * width + x] = color;
         ptr += 3;
       }

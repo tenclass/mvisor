@@ -8,7 +8,8 @@
 
 enum IoResourceType {
   kIoResourceTypePio,
-  kIoResourceTypeMmio
+  kIoResourceTypeMmio,
+  kIoResourceTypeRam
 };
 
 struct IoResource {

@@ -6,21 +6,30 @@
 #include "logger.h"
 #include "machine.h"
 
+
+PciDevice::PciDevice() {
+  devfn_ = 0;
+  bzero(&pci_header_, sizeof(pci_header_));
+  bzero(&pci_bars_, sizeof(pci_bars_));
+  bzero(&pci_rom_, sizeof(pci_rom_));
+}
+
 void PciDevice::LoadRomFile(const char* path) {
   /* Load rom file */
   int fd = open(path, O_RDONLY);
   MV_ASSERT(fd >= 0);
   struct stat st;
   fstat(fd, &st);
-  rom_bar_size_ = (st.st_size / PAGE_SIZE + 1) * PAGE_SIZE;
-  rom_data_ = valloc(rom_bar_size_);
-  read(fd, rom_data_, st.st_size);
+
+  pci_rom_.size = (st.st_size / PAGE_SIZE + 1) * PAGE_SIZE;
+  pci_rom_.data = valloc(pci_rom_.size);
+  read(fd, pci_rom_.data, st.st_size);
   close(fd);
 }
 
 PciDevice::~PciDevice() {
-  if (rom_data_) {
-    free(rom_data_);
+  if (pci_rom_.data) {
+    free(pci_rom_.data);
   }
 }
 
@@ -48,14 +57,12 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
     WritePciBar(bar, value);
     return;
   } else if (bar == 8) {
-    /* rom bar */
+    MV_ASSERT(length == 4);
+    /* write rom bar address */
     memcpy(&value, data, length);
     if (value == 0xfffff800 || value == 0xfffffffe) {
       uint32_t mask = value;
-      value = ~(rom_bar_size_ - 1);
-      /* Preserve the special bits. */
-      value = (value & mask) | (pci_header_.rom_bar & ~mask);
-      pci_header_.rom_bar = value;
+      pci_header_.rom_bar = ~(pci_rom_.size - 1) & mask;
       return;
     } else if (value) {
       UpdateRomMapAddress(value & 0xfffff800);
@@ -67,15 +74,16 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
 
 void PciDevice::UpdateRomMapAddress(uint32_t address) {
   auto mm = manager_->machine()->memory_manager();
-  if (rom_bar_memory_region_) {
-    if (rom_bar_memory_region_->gpa == address) {
+  if (pci_rom_.mapped_region) {
+    if (pci_rom_.mapped_region->gpa == address) {
       /* unchanged */
       return;
     }
-    mm->Unmap((const MemoryRegion*)rom_bar_memory_region_);
+    mm->Unmap(pci_rom_.mapped_region);
   }
+
   MV_LOG("%s map rom address to 0x%08x", name_.c_str(), address);
-  rom_bar_memory_region_ = mm->Map(address, rom_bar_size_, rom_data_,
+  pci_rom_.mapped_region = mm->Map(address, pci_rom_.size, pci_rom_.data,
     kMemoryTypeRam, (name_ + "-rom").c_str());
 }
 
@@ -87,10 +95,10 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
   toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
 
   for (i = 0; i < PCI_BAR_NUMS; i++) {
-    if (!pci_header_.bar[i])
+    if (!pci_header_.bars[i])
       continue;
 
-    bool bar_is_io = pci_header_.bar[i] & PCI_BASE_ADDRESS_SPACE_IO;
+    bool bar_is_io = pci_header_.bars[i] & PCI_BASE_ADDRESS_SPACE_IO;
     if (toggle_io && bar_is_io) {
       if (new_command & PCI_COMMAND_IO)
         ActivatePciBar(i);
@@ -111,43 +119,46 @@ void PciDevice::Connect() {
   Device::Connect();
 }
 
-bool PciDevice::ActivatePciBar(uint8_t index) {
-  if (IsPciBarTypeIo(index)) {
-    AddIoResource(kIoResourceTypePio, GetPciBarAddress(index), bar_size_[index], "io");
+void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
+  auto &bar = pci_bars_[index];
+  MV_ASSERT(bar.size == 0 && pci_header_.bars[index] == 0);
+  bar.size = size;
+  bar.active = false;
+  bar.type = type;
+  if (type == kIoResourceTypePio) {
+    bar.address_mask = PCI_BASE_ADDRESS_IO_MASK;
+    bar.special_bits = PCI_BASE_ADDRESS_SPACE_IO;
   } else {
-    AddIoResource(kIoResourceTypeMmio, GetPciBarAddress(index), bar_size_[index], "mmio");
+    bar.address_mask = PCI_BASE_ADDRESS_MEM_MASK;
+    bar.special_bits = 0;
   }
-  bar_active_[index] = true;
+  pci_header_.bars[index] |= bar.special_bits;
+}
+
+bool PciDevice::ActivatePciBar(uint8_t index) {
+  auto &bar = pci_bars_[index];
+  if (bar.type == kIoResourceTypePio) {
+    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "io");
+  } else if (bar.type == kIoResourceTypeMmio) {
+    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "mmio");
+  }
+  bar.active = true;
   return true;
 }
 
 bool PciDevice::DeactivatePciBar(uint8_t index) {
-  if (IsPciBarTypeIo(index)) {
-    RemoveIoResource(kIoResourceTypePio, GetPciBarAddress(index));
-  } else {
-    RemoveIoResource(kIoResourceTypeMmio, GetPciBarAddress(index));
+  auto &bar = pci_bars_[index];
+  if (bar.type == kIoResourceTypePio) {
+    RemoveIoResource(kIoResourceTypePio, bar.address);
+  } else if (bar.type == kIoResourceTypeMmio) {
+    RemoveIoResource(kIoResourceTypeMmio, bar.address);
   }
-  bar_active_[index] = false;
-  return true;
-}
-
-bool PciDevice::ActivatePciBarsWithinRegion(uint32_t base, uint32_t size) {
-  // Not implemented
-  return true;
-}
-
-bool PciDevice::DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size) {
-  // Not implemented
+  bar.active = false;
   return true;
 }
 
 void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
-  uint32_t mask;
-  int bar_is_io = pci_header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
-  if (bar_is_io)
-    mask = (uint32_t)PCI_BASE_ADDRESS_IO_MASK;
-  else
-    mask = (uint32_t)PCI_BASE_ADDRESS_MEM_MASK;
+  auto &bar = pci_bars_[index];
 
   /*
    * If the kernel masks the BAR, it will expect to find the size of the
@@ -172,63 +183,33 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
    * B = ~(S - 1).
    */
   if (value == 0xffffffff) {
-    value = ~(bar_size_[index] - 1);
-    /* Preserve the special bits. */
-    value = (value & mask) | (pci_header_.bar[index] & ~mask);
-    pci_header_.bar[index] = value;
+    value = ~(bar.size - 1);
+    pci_header_.bars[index] = (value & bar.address_mask) | bar.special_bits;
     return;
   }
-
-  value = (value & mask) | (pci_header_.bar[index] & ~mask);
 
   /* Don't toggle emulation when region type access is disabled. */
-  if (bar_is_io && !(pci_header_.command & PCI_COMMAND_IO)) {
-    pci_header_.bar[index] = value;
+  if (bar.type == kIoResourceTypePio && !(pci_header_.command & PCI_COMMAND_IO)) {
+    bar.address = value & bar.address_mask;
+    pci_header_.bars[index] = bar.address | bar.special_bits;
     return;
   }
 
-  if (!bar_is_io && !(pci_header_.command & PCI_COMMAND_MEMORY)) {
-    pci_header_.bar[index] = value;
+  if (bar.type != kIoResourceTypePio && !(pci_header_.command & PCI_COMMAND_MEMORY)) {
+    bar.address = value & bar.address_mask;
+    pci_header_.bars[index] = bar.address | bar.special_bits;
     return;
   }
 
-  /*
-   * BAR reassignment can be done while device access is enabled and
-   * memory regions for different devices can overlap as long as no access
-   * is made to the overlapping memory regions. To implement BAR
-   * reasignment, we deactivate emulation for the region described by the
-   * BAR value that the guest is changing, we disable emulation for the
-   * regions that overlap with the new one (by scanning through all PCI
-   * devices), we enable emulation for the new BAR value and finally we
-   * enable emulation for all device regions that were overlapping with
-   * the old value.
-   */
-  uint32_t old_addr = pci_header_.bar[index] & mask;
-  uint32_t new_addr = value & mask;
-  uint32_t bar_size = bar_size_[index];
-
-  if (bar_active_[index]) {
+  if (bar.active) {
     if (!DeactivatePciBar(index))
       return;
-
-    if (!DeactivatePciBarsWithinRegion(new_addr, bar_size)) {
-      /*
-      * We cannot update the BAR because of an overlapping region
-      * that failed to deactivate emulation, so keep the old BAR
-      * value and re-activate emulation for it.
-      */
-      ActivatePciBar(index);
-      return;
-    }
   }
 
-  pci_header_.bar[index] = value;
+  bar.address = value & bar.address_mask;
+  pci_header_.bars[index] = bar.address | bar.special_bits;
 
-  if ((value & mask) && !bar_active_[index]) {
-    if (!ActivatePciBar(index)) {
-      ActivatePciBarsWithinRegion(new_addr, bar_size);
-      return;
-    }
-    ActivatePciBarsWithinRegion(old_addr, bar_size);
+  if (bar.address && !bar.active) {
+    ActivatePciBar(index);
   }
 }

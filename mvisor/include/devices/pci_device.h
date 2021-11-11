@@ -80,7 +80,7 @@ union PciConfigAddress {
 
 #define PCI_MAKE_DEVFN(device, function) ((device << 3) | function)
 
-#define PCI_BAR_OFFSET(b) (offsetof(struct PciConfigHeader, bar[b]))
+#define PCI_BAR_OFFSET(b) (offsetof(struct PciConfigHeader, bars[b]))
 #define PCI_DEVICE_CONFIG_SIZE 256
 #define PCI_DEVICE_CONFIG_MASK (PCI_DEVICE_CONFIG_SIZE - 1)
 #define PCI_BAR_NUMS 6
@@ -102,7 +102,7 @@ struct PciConfigHeader {
       uint8_t    latency_timer;
       uint8_t    header_type;
       uint8_t    bist;
-      uint32_t   bar[6];
+      uint32_t   bars[6];
       uint32_t   card_bus;
       uint16_t   subsys_vendor_id;
       uint16_t   subsys_id;
@@ -119,6 +119,22 @@ struct PciConfigHeader {
     /* Pad to PCI config space size */
     uint8_t data[PCI_DEVICE_CONFIG_SIZE];
   };
+};
+
+struct PciBarInfo {
+  IoResourceType type;
+  uint32_t size;
+  uint32_t address;
+  uint64_t address_mask;
+  uint32_t special_bits;
+  bool active;
+};
+
+class MemoryRegion;
+struct PciRomBarInfo {
+  uint32_t size;
+  void* data;
+  const MemoryRegion* mapped_region;
 };
 
 /* Get last byte of a range from offset + length.
@@ -139,9 +155,9 @@ static inline int ranges_overlap(uint64_t first1, uint64_t len1,
   return !(last2 < first1 || last1 < first2);
 }
 
-class MemoryRegion;
 class PciDevice : public Device {
  public:
+  PciDevice();
   virtual ~PciDevice();
 
   uint8_t bus() { return 0; }
@@ -156,29 +172,20 @@ class PciDevice : public Device {
 
  protected:
   friend class DeviceManager;
-  bool ActivatePciBar(uint8_t index);
-  bool DeactivatePciBar(uint8_t index);
-  inline bool IsPciBarTypeIo(uint8_t index) {
-    return pci_header_.bar[index] & PCI_BASE_ADDRESS_SPACE_IO;
-  }
-  inline uint32_t GetPciBarAddress(uint8_t index) {
-    if(IsPciBarTypeIo(index))
-      return pci_header_.bar[index] & PCI_BASE_ADDRESS_IO_MASK;
-    else 
-      return pci_header_.bar[index] & PCI_BASE_ADDRESS_MEM_MASK;
-  }
+  // PCI devices may override these members to handle bar regsiter events
+  virtual bool ActivatePciBar(uint8_t index);
+  virtual bool DeactivatePciBar(uint8_t index);
+
   bool ActivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   void UpdateRomMapAddress(uint32_t address);
   void LoadRomFile(const char* path);
+  void AddPciBar(uint8_t index, uint32_t size, IoResourceType type);
 
-  PciConfigHeader pci_header_ = { 0 };
-  uint32_t bar_size_[PCI_BAR_NUMS] = { 0 };
-  bool bar_active_[PCI_BAR_NUMS] = { 0 };
-  uint32_t rom_bar_size_ = 0;
-  uint8_t devfn_ = 0;
-  const MemoryRegion* rom_bar_memory_region_ = nullptr;
-  void* rom_data_ = nullptr;
+  uint8_t devfn_;
+  PciConfigHeader pci_header_;
+  PciBarInfo pci_bars_[PCI_BAR_NUMS];
+  PciRomBarInfo pci_rom_;
 };
 
 #endif // _MVISOR_PCI_DEVICE_H

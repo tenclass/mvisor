@@ -45,7 +45,7 @@ AhciHostDevice::AhciHostDevice() {
   pci_header_.capability = 0x80;
 
   /* Memory bar */
-  bar_size_[5] = 0x1000;
+  AddPciBar(5, 4096, kIoResourceTypeMmio);
 }
 
 AhciHostDevice::~AhciHostDevice() {

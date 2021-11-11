@@ -24,14 +24,10 @@ IdeControllerDevice::IdeControllerDevice() {
   pci_header_.irq_line = 14;
 
   /* IO bar, BIOS will allocate the address */
-  pci_header_.bar[0] = PCI_BASE_ADDRESS_SPACE_IO;
-  pci_header_.bar[1] = PCI_BASE_ADDRESS_SPACE_IO;
-  pci_header_.bar[2] = PCI_BASE_ADDRESS_SPACE_IO;
-  pci_header_.bar[3] = PCI_BASE_ADDRESS_SPACE_IO;
-  bar_size_[0] = 8;
-  bar_size_[1] = 4;
-  bar_size_[2] = 8;
-  bar_size_[3] = 4;
+  AddPciBar(0, 8, kIoResourceTypePio);
+  AddPciBar(1, 4, kIoResourceTypePio);
+  AddPciBar(2, 8, kIoResourceTypePio);
+  AddPciBar(3, 4, kIoResourceTypePio);
 }
 
 IdeControllerDevice::~IdeControllerDevice() {
@@ -78,25 +74,25 @@ void IdeControllerDevice::Connect() {
 }
 
 void IdeControllerDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (ir.base == (pci_header_.bar[1] & PCI_BASE_ADDRESS_IO_MASK)) {
+  if (ir.base == pci_bars_[1].address) {
     ports_[0]->WriteControlPort(offset, data, size);
-  } else if (ir.base == (pci_header_.bar[3] & PCI_BASE_ADDRESS_IO_MASK)) {
+  } else if (ir.base == pci_bars_[3].address) {
     ports_[1]->WriteControlPort(offset, data, size);
-  } else if (ir.base == (pci_header_.bar[0] & PCI_BASE_ADDRESS_IO_MASK)) {
+  } else if (ir.base == pci_bars_[0].address) {
     ports_[0]->WritePort(offset, data, size);
-  } else if (ir.base == (pci_header_.bar[2] & PCI_BASE_ADDRESS_IO_MASK)) {
+  } else if (ir.base == pci_bars_[2].address) {
     ports_[1]->WritePort(offset, data, size);
   }
 }
 
 void IdeControllerDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (ir.base == (pci_header_.bar[1] & PCI_BASE_ADDRESS_IO_MASK)) {
+  if (ir.base == pci_bars_[1].address) {
     ports_[0]->ReadControlPort(offset, data, size);
-  } else if (ir.base == (pci_header_.bar[3] & PCI_BASE_ADDRESS_IO_MASK)) {
+  } else if (ir.base == pci_bars_[3].address) {
     ports_[1]->ReadControlPort(offset, data, size);
-  } else if (ir.base == (pci_header_.bar[0] & PCI_BASE_ADDRESS_IO_MASK)) {
+  } else if (ir.base == pci_bars_[0].address) {
     ports_[0]->ReadPort(offset, data, size);
-  } else if (ir.base == (pci_header_.bar[2] & PCI_BASE_ADDRESS_IO_MASK)) {
+  } else if (ir.base == pci_bars_[2].address) {
     ports_[1]->ReadPort(offset, data, size);
   }
 }
