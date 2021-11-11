@@ -4,13 +4,13 @@
 #include "logger.h"
 
 DiskImage::DiskImage(const std::string path, bool readonly) :
-  path_(path), readonly_(readonly)
-{
+  path_(path), readonly_(readonly) {
   if (readonly) {
     fd_ = open(path.c_str(), O_RDONLY);
   } else {
     fd_ = open(path_.c_str(), O_RDWR);
   }
+  MV_ASSERT(fd_ >= 0);
 }
 
 DiskImage::~DiskImage()

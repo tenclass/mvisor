@@ -8,6 +8,7 @@
 4. VFIO (espectially vGPU) and migration
 5. Extremely stable and high performance
 
+
 ## Roadmap And Current Status
 
 Milestone 1: Boot OS
@@ -23,7 +24,7 @@ Nov 2021
 8. PCI ISA ICH9-LPC (Working)
 9. QEMU CFG (Working) // Needs ACPI Tables
 10. DMA (ISA DMA)
-11. IDE / ATA / VirtIO (Floppy)
+11. IDE / ATA / VirtIO (Floppy CDROM)
 12. Parallel Port ❌
 13. Serial Port ❌
 14. VGA / QXL (Text VGA)
@@ -47,4 +48,12 @@ Feb 2022
 ## Install
 
 Install gcc and c++, then simply type `make`.
+
+
+## Screenshot
+
+<img src="./docs/dos.jpg" width="640">
+
+
+<img src="./docs/vbe.jpg" width="640">
 

@@ -117,21 +117,20 @@ void DeviceManager::UnregisterDevice(Device* device) {
 
 void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resource) {
   if (io_resource.type == kIoResourceTypePio) {
-    if (pio_handlers_.find(io_resource.base) != pio_handlers_.end()) {
-      MV_PANIC("overlapped pio resource 0x%lx", io_resource.base);
-    }
-    pio_handlers_[io_resource.base] = IoHandler {
+    pio_handlers_.push_back(new IoHandler {
       .io_resource = io_resource,
       .device = device
-    };
+    });
   } else {
-    if (mmio_handlers_.find(io_resource.base) != mmio_handlers_.end()) {
-      MV_PANIC("overlapped mmio resource 0x%016lx", io_resource.base);
-    }
-    mmio_handlers_[io_resource.base] = IoHandler {
+    // Map the memory to type Device, access these regions will cause MMIO access fault
+    const MemoryRegion* region = machine_->memory_manager()->Map(io_resource.base, io_resource.length,
+      nullptr, kMemoryTypeDevice, io_resource.name);
+
+    mmio_handlers_.push_back(new IoHandler {
       .io_resource = io_resource,
-      .device = device
-    };
+      .device = device,
+      .memory_region = region
+    });
   }
   MV_LOG("%s register %s 0x%08lx-0x%08lx", device->name().c_str(),
     io_resource.type == kIoResourceTypeMmio ? "mmio" : "pio",
@@ -140,22 +139,31 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
 
 void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
   if (io_resource.type == kIoResourceTypePio) {
-    auto it = pio_handlers_.find(io_resource.base);
-    if (it != mmio_handlers_.end())
-      pio_handlers_.erase(it);
+    for (auto it = pio_handlers_.begin(); it != pio_handlers_.end(); it++) {
+      if ((*it)->device == device && (*it)->io_resource.base == io_resource.base) {
+        delete *it;
+        pio_handlers_.erase(it);
+        break;
+      }
+    }
   } else {
-    auto it = mmio_handlers_.find(io_resource.base);
-    if (it != mmio_handlers_.end())
-      mmio_handlers_.erase(it);
+    for (auto it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++) {
+      if ((*it)->device == device && (*it)->io_resource.base == io_resource.base) {
+        delete *it;
+        mmio_handlers_.erase(it);
+        break;
+      }
+    }
   }
 }
 
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
-  int found = 0;
-  for (auto it = pio_handlers_.begin(); it != pio_handlers_.end(); it++) {
-    auto &resource = it->second.io_resource;
+  int found = 0, it_count = 0;
+  std::deque<IoHandler*>::iterator it;
+  for (it = pio_handlers_.begin(); it != pio_handlers_.end(); it++, it_count++) {
+    auto &resource = (*it)->io_resource;
     if (port >= resource.base && port < resource.base + resource.length) {
-      Device* device = it->second.device;
+      Device* device = (*it)->device;
       uint8_t* ptr = data;
       for (uint32_t i = 0; i < count; i++) {
         if (is_write) {
@@ -166,10 +174,11 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         ptr += size;
       }
       ++found;
-    }
-    if (resource.base > port) {
-      /* Search ended */
-      break;
+      if (it_count > 2) {
+        pio_handlers_.push_front(*it);
+        pio_handlers_.erase(it);
+        --it;
+      }
     }
   }
 
@@ -182,20 +191,23 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
 }
 
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
-  /* FIXME: this wont handle overlaps */
-  auto it = mmio_handlers_.upper_bound(base);
-  if (it != mmio_handlers_.begin())
-    --it;
-  if (it != mmio_handlers_.end()) {
-    auto &resource = it->second.io_resource;
+  std::deque<IoHandler*>::iterator it;
+  int it_count = 0;
+  for (it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++, it_count++) {
+    auto &resource = (*it)->io_resource;
     if (base >= resource.base && base < resource.base + resource.length) {
-      Device* device = it->second.device;
+      Device* device = (*it)->device;
       if (is_write) {
         device->Write(resource, base - resource.base, data, size);
       } else {
         device->Read(resource, base - resource.base, data, size);
       }
       data += size;
+      if (it_count > 2) {
+        mmio_handlers_.push_front(*it);
+        mmio_handlers_.erase(it);
+        --it;
+      }
       return;
     }
   }

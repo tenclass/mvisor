@@ -2,14 +2,16 @@
 #define _MVISOR_DEVICE_MANAGER_H
 
 #include <set>
-#include <map>
 #include <string>
+#include <deque>
 #include "devices/pci_device.h"
 #include "devices/device.h"
 
+struct MemoryRegion;
 struct IoHandler {
   IoResource io_resource;
   Device* device;
+  const MemoryRegion* memory_region;
 };
 
 class DeviceManager;
@@ -49,8 +51,8 @@ class DeviceManager {
   Machine* machine_;
   SystemRootDevice* root_;
   std::set<Device*> registered_devices_;
-  std::map<uint64_t, IoHandler> mmio_handlers_;
-  std::map<uint64_t, IoHandler> pio_handlers_;
+  std::deque<IoHandler*> mmio_handlers_;
+  std::deque<IoHandler*> pio_handlers_;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

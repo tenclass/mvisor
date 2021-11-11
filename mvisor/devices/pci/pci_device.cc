@@ -74,6 +74,7 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
     }
     mm->Unmap((const MemoryRegion*)rom_bar_memory_region_);
   }
+  MV_LOG("%s map rom address to 0x%08x", name_.c_str(), address);
   rom_bar_memory_region_ = mm->Map(address, rom_bar_size_, rom_data_,
     kMemoryTypeRam, (name_ + "-rom").c_str());
 }

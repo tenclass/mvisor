@@ -12,7 +12,7 @@ Viewer::Viewer(Machine* machine) : machine_(machine) {
 Viewer::~Viewer() {
 }
 
-void Viewer::DrawCharacter(int x, int y, int character, int attribute) {
+void Viewer::DrawCharacter(int x, int y, int character, int attribute, uint8_t* font) {
   auto pallete = vga_device_->pallete();
   // Translate from color index to RGB
   uint32_t i = (attribute & 0xF) * 3;
@@ -20,15 +20,15 @@ void Viewer::DrawCharacter(int x, int y, int character, int attribute) {
   i = ((attribute >> 4) & 0xF) * 3;
   uint32_t back_color =  (pallete[i] << 18) | (pallete[i + 1] << 10) | (pallete[i + 2] << 2);
 
-  int line_pixels = screen_surface_->pitch / 4;
-  uint32_t* buffer = (uint32_t*)screen_surface_->pixels;
+  int line_pixels = draw_buffer_->pitch / 4;
+  uint32_t* buffer = (uint32_t*)draw_buffer_->pixels;
   buffer += (y * 16) * line_pixels;
   buffer += x * 8;
   
   // Draw the glyph
   for (int yy = 0; yy < 16; yy++) {
     for (int xx = 0; xx < 8; xx++) {
-      if (__font8x16[character][yy] & (0x80 >> xx)) {
+      if (font[character * 16 + yy] & (0x80 >> xx)) {
         buffer[xx] = front_color;
       } else {
         buffer[xx] = back_color;
@@ -46,8 +46,8 @@ void Viewer::DrawTextCursor() {
   uint8_t cx, cy, sl_start, sl_end;
   vga_device_->GetCursorLocation(&cx, &cy, &sl_start, &sl_end);
 
-  int line_pixels = screen_surface_->pitch / 4;
-  uint32_t* buffer = (uint32_t*)screen_surface_->pixels;
+  int line_pixels = draw_buffer_->pitch / 4;
+  uint32_t* buffer = (uint32_t*)draw_buffer_->pixels;
   uint32_t* end = buffer + line_pixels * 400;
 
   buffer += (cy * 16) * line_pixels;
@@ -65,16 +65,18 @@ void Viewer::DrawTextCursor() {
 }
 
 void Viewer::DrawTextMode() {
-  uint64_t gpa = vga_device_->GetVRamAddress();
-  uint8_t* base = (uint8_t*)device_manager_->TranslateGuestMemory(gpa);
-  MV_ASSERT(base);
+  uint8_t* ptr = vga_device_->GetVRamHostAddress();
+  
+  // consider using BIOS fonts?
+  uint8_t* font = (uint8_t*)__font8x16;
 
-  uint8_t* ptr = base;
+  UpdateScreenSize(640, 400);
+
   for (int y = 0; y < 25; y++) {
     for (int x = 0; x < 80; x++) {
       int character = *ptr++;
       int attribute = *ptr++;
-      DrawCharacter(x, y, character, attribute);
+      DrawCharacter(x, y, character, attribute, font);
     }
   }
   
@@ -82,15 +84,60 @@ void Viewer::DrawTextMode() {
 }
 
 void Viewer::DrawGraphicMode() {
-  uint64_t gpa = vga_device_->GetVRamAddress();
-  uint8_t* ptr = (uint8_t*)device_manager_->TranslateGuestMemory(gpa);
-  MV_ASSERT(ptr);
+  auto pallete = vga_device_->pallete();
+  uint8_t* ptr = vga_device_->GetVRamHostAddress();
+
+  int height = vga_device_->height();
+  int width = vga_device_->width();
+  int bpp = vga_device_->bpp();
+
+  UpdateScreenSize(width, height);
+  uint32_t* buffer = (uint32_t*)draw_buffer_->pixels;
+
+  switch (bpp)
+  {
+  case 8:
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        int i = *ptr++ * 3;
+        uint32_t color = (pallete[i] << 18) | (pallete[i + 1] << 10) | (pallete[i + 2] << 2);
+        buffer[y * width + x] = color;
+      }
+    }
+    break;
+  case 24:
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        uint32_t color = (ptr[0] << 16) | (ptr[1] << 8) | (ptr[2]);
+        buffer[y * width + x] = color;
+        ptr += 3;
+      }
+    }
+    break;
+  }
+}
+
+void Viewer::UpdateScreenSize(int w, int h) {
+  if (draw_buffer_ && draw_buffer_->w == w && draw_buffer_->h == h) {
+    return;
+  }
+  if (!w || !h) {
+    return;
+  }
+  MV_LOG("update screen size %dx%d", w, h);
+  width_ = w;
+  height_ = h;
+  if (draw_buffer_) {
+    SDL_FreeSurface(draw_buffer_);
+  }
+  auto format = screen_surface_->format;
+  draw_buffer_ = SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, 32, format->Rmask,
+    format->Gmask, format->Bmask, format->Amask);
 }
 
 int Viewer::MainLoop() {
   SDL_Event event;
-  // Fixed screen size at the moment
-  screen_surface_ = SDL_SetVideoMode(640, 400, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
+
   vga_device_ = dynamic_cast<VgaDevice*>(device_manager_->LookupDeviceByName("vga"));
   Ps2ControllerDevice* ps2_device = dynamic_cast<Ps2ControllerDevice*>(
     device_manager_->LookupDeviceByName("ps2")
@@ -98,6 +145,8 @@ int Viewer::MainLoop() {
   MV_ASSERT(vga_device_);
   MV_ASSERT(ps2_device);
 
+  // Fixed screen size at the moment
+  screen_surface_ = SDL_SetVideoMode(1024, 768, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_RESIZABLE);
   SDL_WM_SetCaption("MVisor - A mini x86 hypervisor", "MVisor");
 
   // Loop until all vcpu exits
@@ -107,6 +156,7 @@ int Viewer::MainLoop() {
     } else {
       DrawGraphicMode();
     }
+    SDL_SoftStretch(draw_buffer_, &draw_buffer_->clip_rect, screen_surface_, &screen_surface_->clip_rect);
     SDL_Flip(screen_surface_);
 
     while (SDL_PollEvent(&event)) {

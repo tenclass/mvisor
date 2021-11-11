@@ -78,10 +78,8 @@ void Machine::LoadBiosFile(const char* path) {
   close(fd);
 
   // Map BIOS file to memory
-  memory_manager_->BeginMapTransaction();
   memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
   memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
-  memory_manager_->EndMapTransaction();
 }
 
 void Machine::CreateArchRelated() {

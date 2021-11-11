@@ -16,12 +16,16 @@ class Viewer {
   void DrawTextMode();
   void DrawGraphicMode();
   void DrawTextCursor();
-  void DrawCharacter(int x, int y, int character, int attribute);
+  void DrawCharacter(int x, int y, int character, int attribute, uint8_t* font);
+  void UpdateScreenSize(int w, int h);
 
   Machine* machine_;
   DeviceManager* device_manager_;
   VgaDevice* vga_device_;
   SDL_Surface* screen_surface_ = nullptr;
+  SDL_Surface* draw_buffer_ = nullptr;
+  int width_;
+  int height_;
 };
 
 #endif // _MVISOR_VIEWER_H

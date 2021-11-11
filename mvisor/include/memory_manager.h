@@ -38,8 +38,6 @@ class MemoryManager {
   // Add to and remove from regions_
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   void Unmap(const MemoryRegion* region);
-  void BeginMapTransaction();
-  void EndMapTransaction();
 
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
@@ -47,15 +45,11 @@ class MemoryManager {
 
   const std::vector<MemoryRegion*>& regions() const { return regions_; }
  private:
-  void Commit();
   void AddMemoryRegion(MemoryRegion* region);
   const Machine* machine_;
   std::vector<MemoryRegion*> regions_;
-
-  std::unordered_set<KvmSlot*> pending_slots_;
   std::map<uint64_t, KvmSlot*> kvm_slots_;
   void* ram_host_;
-  bool map_transaction_enabled_ = false;
 };
 
 #endif // _MVISOR_MM_H
