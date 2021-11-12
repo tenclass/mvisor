@@ -5,7 +5,7 @@
 #include "memory_manager.h"
 #include "machine.h"
 #include "devices/cmos.h"
-#include "devices/ps2.h"
+#include "devices/keyboard.h"
 #include "devices/debug_console.h"
 #include "devices/pci_host.h"
 #include "devices/firmware_config.h"
@@ -22,6 +22,8 @@
 
 #define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
 #define CDROM_IMAGE         "../assets/dostools.iso"
+// #define CDROM_IMAGE         "/mnt/iso/win2016.iso"
+#define HARDDISK_IMAGE      "/data/win10.img"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
 }
@@ -45,7 +47,7 @@ void DeviceManager::IntializeQ35() {
   auto lpc = new Ich9LpcDevice();
   lpc->AddChild(new DebugConsoleDevice());
   lpc->AddChild(new CmosDevice());
-  lpc->AddChild(new Ps2ControllerDevice());
+  lpc->AddChild(new KeyboardDevice());
   lpc->AddChild(new DummyDevice());
   lpc->AddChild(new SerialPortDevice());
   lpc->AddChild(new IsaDmaDevice());
@@ -55,15 +57,19 @@ void DeviceManager::IntializeQ35() {
   pci_host->AddChild(lpc);
   pci_host->AddChild(new VgaDevice());
 
-  if (true) {
+  if (false) {
     auto ide_controller = new IdeControllerDevice();
     auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
     ide_controller->AddChild(cd);
+    auto hd = new IdeHarddiskStorageDevice(new RawDiskImage(HARDDISK_IMAGE, false));
+    ide_controller->AddChild(hd);
     pci_host->AddChild(ide_controller);
   } else {
     auto ahci_host = new AhciHostDevice();
     auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
     ahci_host->AddChild(cd);
+    // auto hd = new IdeHarddiskStorageDevice(new RawDiskImage(HARDDISK_IMAGE, false));
+    // ahci_host->AddChild(hd);
     pci_host->AddChild(ahci_host);
   }
 

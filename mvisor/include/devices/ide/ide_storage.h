@@ -37,11 +37,19 @@ struct IdeRegisters
   bool    use_lba;
 } __attribute__((packed));
 
+
+enum IdeTransferType {
+  kIdeNoTransfer,
+  kIdeTransferToDevice,
+  kIdeTransferToHost
+};
+
 struct IdeIo {
   ssize_t buffer_size;
   uint8_t* buffer;
   ssize_t position;
   ssize_t nbytes;
+  IdeTransferType transfer_type;
 };
 
 struct IdeDriveInfo {
@@ -54,11 +62,6 @@ struct IdeDriveInfo {
 enum IdeStorageType {
   kIdeStorageTypeHarddisk,
   kIdeStorageTypeCdrom
-};
-
-enum IdeTransferType {
-  kIdeTransferToDevice,
-  kIdeTransferToHost
 };
 
 class IdePort;
@@ -74,10 +77,13 @@ class IdeStorageDevice : public StorageDevice {
   virtual void AbortCommand();
   virtual void StartTransfer(IdeTransferType type);
   virtual void EndTransfer(IdeTransferType type);
-  virtual void ResetSignature();
+  virtual void Ata_ResetSignature();
 
   IdeStorageType type() { return type_; }
  protected:
+  virtual void Ata_IdentifyDevice();
+  virtual void Ata_SetFeatures();
+
   /* disk or cdrom */
   IdeStorageType type_;
   /* port_ will be set if the drive is selected */
@@ -94,6 +100,7 @@ class IdeCdromStorageDevice : public IdeStorageDevice {
   void EndCommand();
   void StartTransfer(IdeTransferType type);
   void EndTransfer(IdeTransferType type);
+
  private:
   void ParseCommandPacket();
   void Atapi_IdentifyData();
@@ -120,10 +127,13 @@ class IdeHarddiskStorageDevice : public IdeStorageDevice {
  public:
   IdeHarddiskStorageDevice(DiskImage* image);
   void StartCommand();
+  void EndTransfer(IdeTransferType type);
+
  private:
   void InitializeGemometry();
-  void Ata_Identitfy();
+  void Ata_IdentifyDevice();
   void Ata_ReadSectors();
+  void Ata_WriteSectors();
 
   DiskGemometry gemometry_;
   int multiple_sectors_;

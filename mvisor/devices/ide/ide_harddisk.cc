@@ -41,7 +41,7 @@ void IdeHarddiskStorageDevice::InitializeGemometry() {
 
 void IdeHarddiskStorageDevice::StartCommand() {
   auto regs = port_->registers();
-  // auto io = port_->io();
+  auto io = port_->io();
   MV_LOG("HD start command=0x%x", regs->command);
   regs->status = ATA_SR_DRDY;
   switch (regs->command)
@@ -49,12 +49,12 @@ void IdeHarddiskStorageDevice::StartCommand() {
   case ATA_CMD_IDENTIFY_PACKET_DEVICE:
     AbortCommand();
     break;
-  case ATA_CMD_IDENTIFY_DEVICE:
-    Ata_Identitfy();
-    break;
   case ATA_CMD_READ_SECTORS:
-    DumpHex(regs->values, IDE_MAX_REGISTERS);
     Ata_ReadSectors();
+    break;
+  case ATA_CMD_WRITE_SECTORS:
+    io->nbytes = (regs->sectors0 || 256) * gemometry_.sector_size;
+    StartTransfer(kIdeTransferToDevice);
     break;
   default:
     /* Common commands */
@@ -63,12 +63,47 @@ void IdeHarddiskStorageDevice::StartCommand() {
   }
 }
 
+void IdeHarddiskStorageDevice::EndTransfer(IdeTransferType type) {
+  IdeStorageDevice::EndTransfer(type);
+
+  auto regs = port_->registers();
+
+  if (type == kIdeTransferToDevice) {
+      switch (regs->command)
+      {
+      case ATA_CMD_WRITE_SECTORS:
+        Ata_WriteSectors();
+        break;
+      default:
+        MV_PANIC("not impl paramters cmd %x", regs->command);
+        break;
+      }
+  } else {
+    /* Device to Host, such as Read() */
+    EndCommand();
+  }
+}
+
+void IdeHarddiskStorageDevice::Ata_WriteSectors() {
+  auto regs = port_->registers();
+  auto io = port_->io();
+
+  int count = regs->sectors0 || 256;
+  uint64_t sector = regs->lba0;
+  // It's not recommended not to use LBA
+  MV_ASSERT(regs->use_lba);
+
+  sector |= (regs->lba1 << 8) | (regs->lba2 << 16) | ((regs->devsel & 0xF) << 24);
+  image_->Write(io->buffer, sector, count);
+  EndCommand();
+}
+
 
 void IdeHarddiskStorageDevice::Ata_ReadSectors() {
   auto regs = port_->registers();
   auto io = port_->io();
 
-  int count = regs->sectors0;
+  int count = regs->sectors0 || 256;
   uint64_t sector = regs->lba0;
   // It's not recommended not to use LBA
   MV_ASSERT(regs->use_lba);
@@ -79,7 +114,7 @@ void IdeHarddiskStorageDevice::Ata_ReadSectors() {
   StartTransfer(kIdeTransferToHost);
 }
 
-void IdeHarddiskStorageDevice::Ata_Identitfy() {
+void IdeHarddiskStorageDevice::Ata_IdentifyDevice() {
   auto io = port_->io();
   uint16_t* p = (uint16_t*)io->buffer;
   io->nbytes = 512;

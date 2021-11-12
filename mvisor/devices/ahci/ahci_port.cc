@@ -46,7 +46,7 @@ void AhciPort::Reset() {
     return;
   }
 
-  drive_->ResetSignature();
+  drive_->Ata_ResetSignature();
 }
 
 void AhciPort::AttachDevice(IdeStorageDevice* device) {
@@ -106,7 +106,7 @@ bool AhciPort::HandleCommand(int slot) {
   registers_.lba3 = cmd_fis[8];        /* LBA 31:24 */
   registers_.lba4 = cmd_fis[9];        /* LBA 39:32 */
   registers_.lba5 = cmd_fis[10];       /* LBA 47:40 */
-  registers_.features = cmd_fis[11];
+  registers_.control = cmd_fis[11];    /* features high */
   registers_.sectors0 = cmd_fis[12];
   registers_.sectors1 = cmd_fis[13];
   /* 14, 16, 17, 18, 19: Reserved (SATA 1.0) */
@@ -119,17 +119,20 @@ bool AhciPort::HandleCommand(int slot) {
   }
 
   registers_.error = 0;
+  io_.transfer_type = kIdeNoTransfer;
   
   current_command_->bytes = 0;
   MV_LOG("################ command = %x", registers_.command);
   drive_->StartCommand();
-  // data is ready
+
   port_control_.command_issue &= ~(1U << slot);
   UpdateRegisterD2H();
 
+  if (io_.transfer_type == kIdeTransferToDevice) {
+    drive_->EndTransfer(kIdeTransferToDevice);
+  }
 
-  drive_->EndTransfer(kIdeTransferToDevice);
-  if (io_.nbytes > 0) {
+  if (io_.transfer_type == kIdeTransferToHost) {
     AHCI_SG* sg = (AHCI_SG*)(cmd_fis + 0x80);
     void* host = manager_->TranslateGuestMemory(sg[0].addr);
     MV_ASSERT(host);

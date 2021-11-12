@@ -1,7 +1,7 @@
 #include "viewer.h"
 #include <unistd.h>
 #include "logger.h"
-#include "devices/ps2.h"
+#include "devices/keyboard.h"
 #include "viewer_font.inc"
 #include "keymap.h"
 
@@ -85,7 +85,8 @@ void Viewer::DrawTextMode() {
 
 void Viewer::DrawGraphicMode() {
   if (!vga_device_->IsVbeEnabled()) {
-    MV_PANIC("Graphics mode without VBE is not supported yet!");
+    MV_LOG("Graphics mode without VBE is not supported yet!");
+    return;
   }
 
   auto pallete = vga_device_->pallete();
@@ -143,11 +144,11 @@ int Viewer::MainLoop() {
   SDL_Event event;
 
   vga_device_ = dynamic_cast<VgaDevice*>(device_manager_->LookupDeviceByName("vga"));
-  Ps2ControllerDevice* ps2_device = dynamic_cast<Ps2ControllerDevice*>(
-    device_manager_->LookupDeviceByName("ps2")
+  KeyboardDevice* kbd = dynamic_cast<KeyboardDevice*>(
+    device_manager_->LookupDeviceByName("keyboard")
   );
   MV_ASSERT(vga_device_);
-  MV_ASSERT(ps2_device);
+  MV_ASSERT(kbd);
 
   // Fixed screen size at the moment
   screen_surface_ = SDL_SetVideoMode(1024, 768, 32, SDL_HWSURFACE | SDL_DOUBLEBUF | SDL_RESIZABLE);
@@ -171,7 +172,7 @@ int Viewer::MainLoop() {
       case SDL_KEYUP:
         if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
           for (int i = 0; transcoded[i]; i++) {
-            ps2_device->QueueKeyboardEvent(transcoded[i]);
+            kbd->QueueKeyboardEvent(transcoded[i]);
           }
         }
         break;
