@@ -136,11 +136,13 @@ void KeyboardDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, 
     *data = 2;
     break;
   }
+  // MV_LOG("read %x %x", ir.base, *data);
 }
 
 
 void KeyboardDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_ASSERT(size == 1);
+  // MV_LOG("write %x %x", ir.base, *data);
 
   if (ir.base == 0x64) { // command port
     WriteCommandPort(*data);

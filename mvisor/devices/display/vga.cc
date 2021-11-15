@@ -44,6 +44,7 @@ VgaDevice::VgaDevice() {
   AddPciBar(1, 8 << 20, kIoResourceTypeMmio);     /* 8MB vram */
   AddPciBar(2, 8192, kIoResourceTypeMmio);        /* MMIO */
   AddPciBar(3, 32, kIoResourceTypePio);           /* PIO */
+  pci_bars_[0].special_bits = 0x8;
 
   /* 64MB vram */
   vram_size_ = 0x04000000;
@@ -165,7 +166,7 @@ void VgaDevice::VgaReadPort(uint64_t port, uint8_t* data, uint32_t size) {
     break;
   case 0x3C1:
     MV_ASSERT(size == 1);
-    *data = attribute_registers_[attribute_index_];
+    *data = attribute_registers_[attribute_index_ & 0x7F];
     break;
   case 0x3C4:
     MV_ASSERT(size == 1);
@@ -215,13 +216,14 @@ void VgaDevice::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
   {
   case 0x3C0:
     MV_ASSERT(size == 1);
-    if (!(attribute_index_ & 0x80)) { // set index
-      attribute_index_ = value & 0x7F;
+    if (attribute_index_ & 0x80) { // set data
+      attribute_index_ &= ~0x80;
+      attribute_registers_[attribute_index_] = value;
+    } else { // set index
+      attribute_index_ = 0x80 | value;
       if (attribute_index_ & 0x20) {
         // renderer changed event
       }
-    } else { // set data
-      attribute_registers_[attribute_index_ & 0x7F] = value;
     }
     break;
   case 0x3C2:
@@ -232,6 +234,9 @@ void VgaDevice::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
     sequence_index_ = value;
     if (size == 2) {
       sequence_registers_[sequence_index_] = data[1];
+      if (sequence_index_ == 4) {
+        sequence_registers_[sequence_index_] &= 0b1110;
+      }
     }
     break;
   case 0x3C5:
@@ -257,14 +262,17 @@ void VgaDevice::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
     gfx_index_ = value;
     if (size == 2) {
       gfx_registers_[gfx_index_] = data[1];
-    }
-    if (gfx_index_ == 4 || gfx_index_ == 6) {
-      UpdateVRamMemoryMap();
+      if (gfx_index_ == 4 || gfx_index_ == 6) {
+        UpdateVRamMemoryMap();
+      }
     }
     break;
   case 0x3CF:
     MV_ASSERT(size == 1);
     gfx_registers_[gfx_index_] = value;
+    if (gfx_index_ == 4 || gfx_index_ == 6) {
+      UpdateVRamMemoryMap();
+    }
     break;
   case 0x3D4:
     crtc_index_ = value;
@@ -298,6 +306,7 @@ void VgaDevice::UpdateVRamMemoryMap() {
   vram_map_select_size_ = map_types[index][1];
   vram_map_select_ = vram_base_ + map_types[index][0] - VGA_MMIO_BASE;
   vram_read_select_ = vram_base_ + vram_map_select_size_ * read_index;
+  MV_LOG("map index=%d read_index=%d", index, read_index);
 }
 
 bool VgaDevice::IsTextMode() {

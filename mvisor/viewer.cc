@@ -66,6 +66,9 @@ void Viewer::DrawTextCursor() {
 
 void Viewer::DrawTextMode() {
   uint8_t* ptr = vga_device_->GetVRamHostAddress();
+  if (ptr == nullptr) {
+    return;
+  }
   
   // consider using BIOS fonts?
   uint8_t* font = (uint8_t*)__font8x16;
@@ -91,6 +94,9 @@ void Viewer::DrawGraphicMode() {
 
   auto pallete = vga_device_->pallete();
   uint8_t* ptr = vga_device_->GetVRamHostAddress();
+  if (ptr == nullptr) {
+    return;
+  }
 
   int height = vga_device_->height();
   int width = vga_device_->width();
@@ -181,7 +187,7 @@ int Viewer::MainLoop() {
         break;
       }
     }
-    SDL_Delay(1000 / 60);
+    SDL_Delay(1000 / 30);
   }
   return 0;
 }

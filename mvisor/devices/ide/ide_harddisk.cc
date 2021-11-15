@@ -39,6 +39,75 @@ void IdeHarddiskStorageDevice::InitializeGemometry() {
   gemometry_.cylinders_per_heads = gemometry_.total_sectors / (gemometry_.sectors_per_cylinder * gemometry_.heads);
 }
 
+void IdeHarddiskStorageDevice::ReadLba() {
+  auto regs = port_->registers();
+  auto io = port_->io();
+  size_t position = regs->lba0;
+  size_t count = 0;
+
+  switch (io->lba_mode)
+  {
+  case kIdeLbaMode28:
+    position |= (size_t)regs->lba1 << 8;
+    position |= (size_t)regs->lba2 << 16;
+    position |= (size_t)(regs->devsel & 0xF) << 24;
+    count = regs->sectors0 == 0 ? 0x100 : regs->sectors0;
+    break;
+  case kIdeLbaMode48:
+    position |= (size_t)regs->lba1 << 8;
+    position |= (size_t)regs->lba2 << 16;
+    position |= (size_t)regs->lba3 << 24;
+    position |= (size_t)regs->lba4 << 32;
+    position |= (size_t)regs->lba5 << 40;
+    if (regs->sectors0 == 0 && regs->sectors1 == 0) {
+      count = 0x10000;
+    } else {
+      count = (regs->sectors1 << 8) | regs->sectors0;
+    }
+    break;
+  default:
+    MV_PANIC("unsupported lba mode %x", io->lba_mode);
+    break;
+  }
+  io->lba_position = position;
+  io->lba_count = count;
+}
+
+void IdeHarddiskStorageDevice::WriteLba() {
+  auto regs = port_->registers();
+  auto io = port_->io();
+  size_t position = io->lba_position;
+  size_t count = io->lba_count;
+
+  switch (io->lba_mode)
+  {
+  case kIdeLbaMode28:
+    regs->devsel = (regs->devsel & 0xF0) | ((position >> 24) & 0xF);
+    regs->lba2 = (position >> 16) & 0xFF;
+    regs->lba1 = (position >> 8) & 0xFF;
+    regs->lba0 = (position >> 0) & 0xFF;
+    regs->sectors0 = count == 0x100 ? 0: count & 0xFF;
+    break;
+  case kIdeLbaMode48:
+    regs->lba5 = (position >> 40) & 0xFF;
+    regs->lba4 = (position >> 32) & 0xFF;
+    regs->lba3 = (position >> 24) & 0xFF;
+    regs->lba2 = (position >> 16) & 0xFF;
+    regs->lba1 = (position >> 8) & 0xFF;
+    regs->lba0 = (position >> 0) & 0xFF;
+    if (count == 0x10000) {
+      regs->sectors0 = regs->sectors1 = 0;
+    } else {
+      regs->sectors0 = count & 0xFF;
+      regs->sectors1 = (count >> 8) & 0xFF;
+    }
+    break;
+  default:
+    MV_PANIC("unsupported lba mode %x", io->lba_mode);
+    break;
+  }
+}
+
 void IdeHarddiskStorageDevice::StartCommand() {
   auto regs = port_->registers();
   auto io = port_->io();
@@ -50,10 +119,24 @@ void IdeHarddiskStorageDevice::StartCommand() {
     AbortCommand();
     break;
   case ATA_CMD_READ_SECTORS:
-    Ata_ReadSectors();
+    io->lba_mode = kIdeLbaMode28;
+    ReadLba();
+    MV_LOG("read %d sectors at 0x%lx", io->lba_count, io->lba_position);
+    MV_ASSERT(io->lba_count);
+    Ata_ReadSectors(1);
+    break;
+  case ATA_CMD_READ_DMA:
+    io->lba_mode = kIdeLbaMode28;
+    ReadLba();
+    MV_LOG("read %d sectors at 0x%lx", io->lba_count, io->lba_position);
+    MV_ASSERT(io->lba_count);
+    Ata_ReadSectors(1);
     break;
   case ATA_CMD_WRITE_SECTORS:
-    io->nbytes = (regs->sectors0 || 256) * gemometry_.sector_size;
+    io->lba_mode = kIdeLbaMode28;
+    ReadLba();
+    MV_ASSERT(io->lba_count);
+    io->nbytes = 1 * gemometry_.sector_size;
     StartTransfer(kIdeTransferToDevice);
     break;
   default:
@@ -67,51 +150,73 @@ void IdeHarddiskStorageDevice::EndTransfer(IdeTransferType type) {
   IdeStorageDevice::EndTransfer(type);
 
   auto regs = port_->registers();
+  auto io = port_->io();
 
   if (type == kIdeTransferToDevice) {
       switch (regs->command)
       {
       case ATA_CMD_WRITE_SECTORS:
-        Ata_WriteSectors();
+        Ata_WriteSectors(1);
         break;
       default:
-        MV_PANIC("not impl paramters cmd %x", regs->command);
+        MV_PANIC("not impl end transfer of cmd %x", regs->command);
         break;
       }
-  } else {
-    /* Device to Host, such as Read() */
-    EndCommand();
+  } else if (type == kIdeTransferToHost) {
+    switch (regs->command)
+    {
+    case ATA_CMD_READ_SECTORS:
+      if (io->lba_count == 0) {
+        EndCommand();
+      } else {
+        Ata_ReadSectors(1);
+      }
+      break;
+    default:
+      EndCommand();
+      break;
+    }
   }
 }
 
-void IdeHarddiskStorageDevice::Ata_WriteSectors() {
-  auto regs = port_->registers();
+void IdeHarddiskStorageDevice::Ata_WriteSectors(int chunk_count) {
   auto io = port_->io();
 
-  int count = regs->sectors0 || 256;
-  uint64_t sector = regs->lba0;
-  // It's not recommended not to use LBA
-  MV_ASSERT(regs->use_lba);
+  uint64_t write_pos = io->lba_position;
+  int write_count = io->lba_count;
+  if (write_count > chunk_count)
+    write_count = chunk_count;
 
-  sector |= (regs->lba1 << 8) | (regs->lba2 << 16) | ((regs->devsel & 0xF) << 24);
-  image_->Write(io->buffer, sector, count);
-  EndCommand();
+  image_->Write(io->buffer, write_pos, write_count);
+
+  // Move forward sector offset and count
+  io->lba_count -= write_count;
+  io->lba_position += write_count;
+  if (io->lba_count == 0) {
+    EndCommand();
+  } else {
+    io->nbytes = chunk_count * gemometry_.sector_size;
+    StartTransfer(kIdeTransferToDevice);
+  }
 }
 
 
-void IdeHarddiskStorageDevice::Ata_ReadSectors() {
-  auto regs = port_->registers();
+void IdeHarddiskStorageDevice::Ata_ReadSectors(int chunk_count) {
   auto io = port_->io();
 
-  int count = regs->sectors0 || 256;
-  uint64_t sector = regs->lba0;
-  // It's not recommended not to use LBA
-  MV_ASSERT(regs->use_lba);
+  uint64_t read_pos = io->lba_position;
+  int read_count = io->lba_count;
+  if (read_count > chunk_count)
+    read_count = chunk_count;
 
-  sector |= (regs->lba1 << 8) | (regs->lba2 << 16) | ((regs->devsel & 0xF) << 24);
-  image_->Read(io->buffer, sector, count);
-  io->nbytes = count * gemometry_.sector_size;
+  image_->Read(io->buffer, read_pos, read_count);
+  io->nbytes = read_count * gemometry_.sector_size;
   StartTransfer(kIdeTransferToHost);
+
+  // Move forward sector offset and count
+  io->lba_count -= read_count;
+  io->lba_position += read_count;
+  WriteLba();
 }
 
 void IdeHarddiskStorageDevice::Ata_IdentifyDevice() {

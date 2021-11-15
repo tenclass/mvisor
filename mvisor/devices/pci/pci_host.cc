@@ -53,8 +53,7 @@ void PciHostDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, 
     uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
     memcpy(pointer, data, size);
   } else if (ir.base == MCH_CONFIG_DATA) {
-    if (size > 4)
-      size = 4;
+    MV_ASSERT(size <= 4);
     
     PciDevice* pci_device = manager_->LookupPciDevice(0, pci_config_address_.devfn);
     if (pci_device) {

@@ -6,6 +6,12 @@
 
 #define IDE_MAX_REGISTERS 18
 
+enum IdeLbaMode {
+  kIdeLbaModeChs,
+  kIdeLbaMode28,
+  kIdeLbaMode48
+};
+
 struct IdeRegisters
 {
   union {
@@ -34,7 +40,6 @@ struct IdeRegisters
 
   uint8_t error;
   uint8_t status;
-  bool    use_lba;
 } __attribute__((packed));
 
 
@@ -50,6 +55,9 @@ struct IdeIo {
   ssize_t position;
   ssize_t nbytes;
   IdeTransferType transfer_type;
+  IdeLbaMode lba_mode;
+  size_t lba_count;
+  size_t lba_position;
 };
 
 struct IdeDriveInfo {
@@ -105,7 +113,7 @@ class IdeCdromStorageDevice : public IdeStorageDevice {
   void ParseCommandPacket();
   void Atapi_IdentifyData();
   void Atapi_Inquiry();
-  void Atapi_Read();
+  void Atapi_ReadOneSector();
   void Atapi_TableOfContent();
   void Atapi_ModeSense();
   void SetError(int sense_key, int asc);
@@ -130,10 +138,12 @@ class IdeHarddiskStorageDevice : public IdeStorageDevice {
   void EndTransfer(IdeTransferType type);
 
  private:
+  void ReadLba();
+  void WriteLba();
   void InitializeGemometry();
   void Ata_IdentifyDevice();
-  void Ata_ReadSectors();
-  void Ata_WriteSectors();
+  void Ata_ReadSectors(int chunk_count);
+  void Ata_WriteSectors(int chunk_count);
 
   DiskGemometry gemometry_;
   int multiple_sectors_;

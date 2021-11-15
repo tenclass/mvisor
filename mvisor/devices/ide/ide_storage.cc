@@ -19,6 +19,9 @@ void IdeStorageDevice::StartCommand() {
   switch (regs->command)
   {
   case ATA_CMD_DEVICE_RESET:
+    regs->error &= ~ATA_CB_ER_BBK;
+    regs->error = ATA_CB_ER_NDAM;
+    regs->status = 0; // ?
     Ata_ResetSignature();
     break;
   case ATA_CMD_IDENTIFY_DEVICE:
@@ -40,6 +43,7 @@ void IdeStorageDevice::AbortCommand() {
   auto regs = port_->registers();
   regs->status = ATA_SR_DRDY | ATA_SR_ERR;
   regs->error = ATA_CB_ER_ABRT;
+  port_->RaiseIrq();
 }
 
 void IdeStorageDevice::EndCommand() {
@@ -53,9 +57,7 @@ void IdeStorageDevice::StartTransfer(IdeTransferType type) {
   auto io = port_->io();
   io->position = 0;
   io->transfer_type = type;
-  regs->lba1 = io->nbytes;
-  regs->lba2 = io->nbytes >> 8;
-  regs->status |= ATA_SR_DRQ;
+  regs->status |= ATA_SR_DRQ | ATA_SR_DSC;
   port_->RaiseIrq();
 }
 
@@ -69,7 +71,9 @@ void IdeStorageDevice::EndTransfer(IdeTransferType type) {
 
 void IdeStorageDevice::BindPort(IdePort* port) {
   port_ = port;
+}
 
+void IdeStorageDevice::Reset() {
   auto regs = port_->registers();
   regs->status = ATA_SR_DRDY;
   Ata_ResetSignature();
@@ -105,25 +109,30 @@ void IdeStorageDevice::Ata_SetFeatures() {
   auto regs = port_->registers();
   switch (regs->features)
   {
-  case 0x03:
-    AbortCommand();
-    break;
-    switch (regs->sectors0)
+  case 0x03: { // set transfer mode
+    uint8_t value = regs->sectors0 & 0b111;
+    switch (regs->sectors0 >> 3)
     {
-    case 0 ... 15: // PIO
-      MV_PANIC("unhandled PIO mode");
+    case 0: // PIO default
+    case 1: // PIO
+      MV_PANIC("not supported DMA mode");
       break;
-    case 32 ... 39: // MDMA
-      MV_PANIC("unhandled MDMA mode 0x%x 0x%x", regs->sectors0, 16 << (regs->sectors0 & 0b111));
+    case 2: // Single world DMA
+      MV_PANIC("not supported DMA mode");
       break;
-    case 64 ... 113: // UDMA
-      MV_PANIC("unhandled UDMA mode 0x%x 0x%x", regs->sectors0, 16 << (regs->sectors0 & 0b111));
+    case 4: // MDMA
+      MV_PANIC("not supported DMA mode");
+      break;
+    case 8: // UDMA
+      MV_ASSERT(value == 5);
       break;
     default:
       MV_PANIC("unknown trasfer mode 0x%x", regs->sectors0);
       break;
     }
+    EndCommand();
     break;
+  }
   default:
     MV_LOG("unknown set features 0x%x", regs->features);
     break;

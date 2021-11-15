@@ -71,18 +71,23 @@ void IdeCdromStorageDevice::SetError(int sense_key, int asc) {
 
 void IdeCdromStorageDevice::StartTransfer(IdeTransferType type) {
   auto regs = port_->registers();
+  auto io = port_->io();
   if (type == kIdeTransferToHost) {
     regs->sectors0 |= ATA_CB_SC_P_IO;
   } else {
     regs->sectors0 &= ~ATA_CB_SC_P_IO;
   }
+  regs->lba1 = io->nbytes;
+  regs->lba2 = io->nbytes >> 8;
   IdeStorageDevice::StartTransfer(type);
 }
 
+#include <unistd.h>
 void IdeCdromStorageDevice::EndTransfer(IdeTransferType type) {
   IdeStorageDevice::EndTransfer(type);
 
   auto regs = port_->registers();
+  auto io = port_->io();
 
   if (type == kIdeTransferToDevice) {
     regs->sectors0 &= ~ATA_CB_SC_P_IO;
@@ -100,9 +105,13 @@ void IdeCdromStorageDevice::EndTransfer(IdeTransferType type) {
     } else {
       MV_LOG("write data to dev end, do nothing");
     }
-  } else {
+  } else if (type == kIdeTransferToHost) {
     /* Device to Host, such as Read() */
-    EndCommand();
+    if (io->lba_count == 0) {
+      EndCommand();
+    } else {
+      Atapi_ReadOneSector();
+    }
   }
 }
 
@@ -117,6 +126,7 @@ void IdeCdromStorageDevice::StartCommand() {
   auto io = port_->io();
   MV_LOG("CDROM start command=0x%x", regs->command);
   regs->status = ATA_SR_DRDY;
+
   switch (regs->command)
   {
   case ATA_CMD_IDENTIFY_PACKET_DEVICE:
@@ -137,7 +147,6 @@ void IdeCdromStorageDevice::StartCommand() {
 }
 
 void IdeCdromStorageDevice::ParseCommandPacket() {
-  auto regs = port_->registers();
   auto io = port_->io();
   uint8_t* buf = io->buffer;
   MV_LOG("#############PACKET command=0x%x", buf[0]);
@@ -149,9 +158,18 @@ void IdeCdromStorageDevice::ParseCommandPacket() {
     io->nbytes = 0;
     EndCommand();
     break;
-  case GPCMD_READ_10:
-    Atapi_Read();
+  case GPCMD_READ_10: {
+    CBD_RW_DATA10* p = (CBD_RW_DATA10*)buf;
+    io->lba_position = be32toh(p->lba);
+    io->lba_count = be16toh(p->count);
+    MV_LOG("read %x sectors at %x", io->lba_count, io->lba_position);
+    if (io->lba_count == 0) {
+      EndCommand();
+    } else {
+      Atapi_ReadOneSector();
+    }
     break;
+  }
   case GPCMD_INQUIRY: {
     Atapi_Inquiry();
     break;
@@ -159,18 +177,23 @@ void IdeCdromStorageDevice::ParseCommandPacket() {
     Atapi_ModeSense();
     break;
   case GPCMD_SEEK:
-    io->nbytes = 0;
     EndCommand();
     MV_LOG("ignore seek");
     break;
   }
   case GPCMD_READ_TOC_PMA_ATIP:
-    regs->status |= ATA_SR_DSC;
     Atapi_TableOfContent();
     break;
+  case GPCMD_READ_SUBCHANNEL: {
+    uint8_t size = buf[8] < 8 ? buf[8] : 8;
+    bzero(buf, size);
+    io->nbytes = size;
+    StartTransfer(kIdeTransferToHost);
+    break;
+  }
   default:
-    MV_PANIC("unhandled packet 0x%x, dump hex:", buf[0]);
     DumpHex(buf, 12);
+    MV_PANIC("unhandled packet 0x%x", buf[0]);
     break;
   }
 }
@@ -233,21 +256,26 @@ void IdeCdromStorageDevice::Atapi_TableOfContent() {
   StartTransfer(kIdeTransferToHost);
 }
 
-void IdeCdromStorageDevice::Atapi_Read() {
+void IdeCdromStorageDevice::Atapi_ReadOneSector() {
   auto io = port_->io();
   uint8_t* buf = io->buffer;
 
-  CBD_RW_DATA10* p = (CBD_RW_DATA10*)buf;
-  uint32_t lba = be32toh(p->lba);
-  uint16_t count = be16toh(p->count);
-  image_->Read(buf, lba, count);
-  io->nbytes = image_->sector_size() * count;
+  size_t read_count = 1;
+
+  image_->Read(buf, io->lba_position, read_count);
+  io->nbytes = image_->sector_size() * read_count;
   StartTransfer(kIdeTransferToHost);
+
+  io->lba_position += read_count;
+  io->lba_count -= read_count;
 }
 
 void IdeCdromStorageDevice::Atapi_Inquiry() {
   auto io = port_->io();
   uint8_t* buf = io->buffer;
+
+  uint8_t size = buf[4];
+  MV_ASSERT(size == 36);
 
   buf[0] = 0x05; /* CD-ROM */
   buf[1] = 0x80; /* removable */
@@ -260,7 +288,7 @@ void IdeCdromStorageDevice::Atapi_Inquiry() {
   padstr8(buf + 8, 8, "MVISOR");
   padstr8(buf + 16, 16, drive_info_.model);
   padstr8(buf + 32, 4, drive_info_.version);
-  io->nbytes = 36;
+  io->nbytes = size > 36 ? 36 : size;
   StartTransfer(kIdeTransferToHost);
 }
 
@@ -274,16 +302,19 @@ void IdeCdromStorageDevice::Atapi_IdentifyData() {
   p[0] = (2 << 14) | (5 << 8) | (1 << 7) | (2 << 5) | (0 << 0);
 
   padstr((char *)(p + 10), drive_info_.serial, 20); /* serial number */
+  p[20] = 3; /* buffer type */
+  p[21] = 512; /* cache size in sectors */
+  p[22] = 4; /* ecc bytes */
   padstr((char *)(p + 23), drive_info_.version, 8); /* firmware version */
   padstr((char *)(p + 27), drive_info_.model, 40); /* model */
   p[48] = 1; /* dword I/O (XXX: should not be set on CDROM) */
 
-  p[49] = 1 << 9 | 1 << 8; /* DMA and LBA supported */
+  p[49] = 1 << 9; /* LBA supported (| 1 << 8 DMA supported) */
   p[53] = 7; /* words 64-70, 54-58, 88 valid */
-  p[62] = 0;  /* 0 or 7: single word dma0-2 supported */
-  p[63] = 0;  /* 0 or 7: mdma0-2 supported */
+  p[62] = 0; /* 0 or 7: single word dma0-2 supported */
+  p[63] = 0; /* 0 or 7: mdma0-2 supported */
 
-  p[64] = 1; /* 1 or 3: pio3-4 supported */
+  p[64] = 3; /* pio3-4 supported */
   p[65] = 0xb4; /* minimum DMA multiword tx cycle time */
   p[66] = 0xb4; /* recommended DMA multiword tx cycle time */
   p[67] = 0x12c; /* minimum PIO cycle time without flow control */

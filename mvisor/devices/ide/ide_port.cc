@@ -7,15 +7,18 @@
 
 IdePort::IdePort(DeviceManager* manager, IdeControllerDevice* controller, int index)
   : manager_(manager), controller_(controller), index_(index) {
+  bzero(&registers_, sizeof(registers_));
+  bzero(&io_, sizeof(io_));
   io_.buffer_size = 512 * 256;
   io_.buffer = (uint8_t*)valloc(io_.buffer_size);
 }
 
 IdePort::IdePort(DeviceManager* manager, int index)
   : manager_(manager), index_(index) {
+  bzero(&registers_, sizeof(registers_));
+  bzero(&io_, sizeof(io_));
   io_.buffer_size = 512 * 256;
   io_.buffer = (uint8_t*)valloc(io_.buffer_size);
-  MV_ASSERT(manager_);
 }
 
 IdePort::~IdePort() {
@@ -55,6 +58,8 @@ void IdePort::ReadControlPort(uint64_t offset, uint8_t* data, uint32_t size) {
    */
   if (offset == ATA_CB_ASTAT) { /* alternative status */
     *data = registers_.status;
+  } else {
+    // memset(data, 0xFF, size);
   }
 }
 
@@ -62,7 +67,10 @@ void IdePort::WriteControlPort(uint64_t offset, uint8_t* data, uint32_t size) {
   uint8_t value = *data;
   if (offset == ATA_CB_DC) { /* control byte */
     if (value & ATA_CB_DC_SRST) {
-      Reset();
+      if (drive_) {
+        drive_->Reset();
+        registers_.error = ATA_CB_ER_NDAM;
+      }
     }
     if (value & ATA_CB_DC_NIEN) {
       LowerIrq();
@@ -75,21 +83,25 @@ void IdePort::ReadPort(uint64_t offset, uint8_t* data, uint32_t size) {
   MV_ASSERT(offset < IDE_MAX_REGISTERS);
   switch (offset)
   {
+  case ATA_REG_DATA:
+    ReadIoBuffer(data, size);
+    break;
   case ATA_REG_STATUS:
-    *data = registers_.status;
+    if (drive_) {
+      *data = registers_.status;
+      LowerIrq();
+    } else {
+      *data = 0;
+    }
     // MV_LOG("read port %d STATUS data:0x%x size:0x%x", index_, *data, size);
-    LowerIrq();
     break;
   case ATA_REG_ERROR:
     *data = registers_.error;
     break;
-  case ATA_REG_DATA:
-    ReadIoBuffer(data, size);
-    break;
   default:
     /* Other registers provided by values */
     *data = registers_.values[offset];
-    // MV_LOG("read port %s(0x%x) data:0x%x size:0x%x", __get_register_name(offset), offset, *data, size);
+    MV_LOG("read port %s(0x%x) data:0x%x size:0x%x", __get_register_name(offset), offset, *data, size);
     break;
   }
 }
@@ -98,13 +110,15 @@ void IdePort::WritePort(uint64_t offset, uint8_t* data, uint32_t size) {
   MV_ASSERT(offset < IDE_MAX_REGISTERS);
   switch (offset)
   {
+  case ATA_REG_DATA:
+    WriteIoBuffer(data, size);
+    break;
   case ATA_REG_HDDEVSEL: {
     size_t devsel = (*data >> 4) & 1;
     if (devsel < attached_devices_.size()) {
       drive_ = attached_devices_[devsel];
       drive_->BindPort(this);
       registers_.devsel = *data;
-      registers_.use_lba = (*data) & ATA_CB_DH_LBA;
     } else {
       drive_ = nullptr;
     }
@@ -118,15 +132,13 @@ void IdePort::WritePort(uint64_t offset, uint8_t* data, uint32_t size) {
       drive_->StartCommand();
     }
     break;
-  case ATA_REG_DATA:
-    WriteIoBuffer(data, size);
-    break;
   case ATA_REG_FEATURES:
     MV_ASSERT(*data == 0); /* DMA not supported yet */
     /* fall through */
   default:
     if (drive_) {
       // update registers if drive available
+      MV_LOG("write port %s(0x%x) data:0x%x size:0x%x", __get_register_name(offset), offset, *data, size);
       registers_.values[offset] = *data;
     }
   }
