@@ -1,32 +1,45 @@
-#include "devices/ahci/ahci_host.h"
+#include "ahci_port.h"
 #include <cstring>
 #include "logger.h"
 #include "device_manager.h"
-#include "devices/ahci/ahci_internal.h"
-#include "devices/ide/ide_storage.h"
+#include "ahci_host.h"
+#include "ide_storage.h"
+#include "ahci_internal.h"
 
 
 static inline int is_native_command_queueing(uint8_t ata_cmd)
 {
     /* Based on SATA 3.2 section 13.6.3.2 */
     switch (ata_cmd) {
-    case READ_FPDMA_QUEUED:
-    case WRITE_FPDMA_QUEUED:
-    case NCQ_NON_DATA:
-    case RECEIVE_FPDMA_QUEUED:
-    case SEND_FPDMA_QUEUED:
+    case 0x60: // READ_FPDMA_QUEUED
+    case 0x61: // WRITE_FPDMA_QUEUED
+    case 0x63: // NCQ_NON_DATA
+    case 0x64: // SEND_FPDMA_QUEUED
+    case 0x65: // RECEIVE_FPDMA_QUEUED
         return 1;
     default:
         return 0;
     }
 }
 
-AhciPort::AhciPort(DeviceManager* manager, AhciHostDevice* host, int index)
-  : IdePort(manager, index) {
-  host_ = host;
+AhciPort::AhciPort(DeviceManager* manager, AhciHost* host, int index)
+  : manager_(manager), host_(host), port_index_(index)
+{
+  bzero(&ide_regs_, sizeof(ide_regs_));
+  bzero(&ide_io_, sizeof(ide_io_));
+  ide_io_.buffer_size = 512 * 256 * 256;
+  ide_io_.buffer = (uint8_t*)valloc(ide_io_.buffer_size);
 }
 
 AhciPort::~AhciPort() {
+  if (ide_io_.buffer) {
+    free(ide_io_.buffer);
+  }
+}
+
+void AhciPort::AttachDevice(IdeStorageDevice* device) {
+  drive_ = device;
+  drive_->BindPort(this);
 }
 
 void AhciPort::Reset() {
@@ -40,18 +53,18 @@ void AhciPort::Reset() {
   port_control_.sata_active = 0;
   port_control_.task_flie_data = 0x7F;
   port_control_.signature = 0xFFFFFFFF;
-  register_fis_posted_ = false;
+  reg_d2h_fis_posted_ = false;
 
   if (!drive_) {
     return;
   }
 
   drive_->Ata_ResetSignature();
-}
-
-void AhciPort::AttachDevice(IdeStorageDevice* device) {
-  drive_ = device;
-  drive_->BindPort(this);
+  if (drive_->type() == kIdeStorageTypeCdrom) {
+    port_control_.signature = ATA_SIGNATURE_CDROM;
+  } else {
+    port_control_.signature = ATA_SIGNATURE_DISK;
+  }
 }
 
 bool AhciPort::HandleCommand(int slot) {
@@ -60,87 +73,97 @@ bool AhciPort::HandleCommand(int slot) {
     return false;
   }
 
-  current_command_ = &((AHCICommandHeader*)command_list_)[slot];
+  current_command_ = &((AhciCommandHeader*)command_list_)[slot];
   if (drive_ == nullptr) {
-    MV_PANIC("bad port %d", index_);
+    MV_PANIC("bad port %d", port_index_);
     return false;
   }
 
-  uint8_t* cmd_fis = (uint8_t*)manager_->TranslateGuestMemory(current_command_->command_table_base);
-  if (!cmd_fis) {
+  AhciCommandTable* command_table = (AhciCommandTable*)manager_->TranslateGuestMemory(current_command_->command_table_base);
+  if (!command_table) {
     MV_LOG("invalid fis address 0x%lx", current_command_->command_table_base);
     return false;
   }
+  AhciFisRegH2D* fis = (AhciFisRegH2D*)command_table->command_fis;
 
-  if (cmd_fis[0] != SATA_FIS_TYPE_REGISTER_H2D) {
-    MV_PANIC("unknown fis type 0x%x", cmd_fis[0]);
+  if (fis->fis_type != kAhciFisTypeRegH2D) {
+    MV_LOG("unknown fis type 0x%x", fis->fis_type);
     return false;
   }
 
-  if (!(cmd_fis[1] & SATA_FIS_REG_H2D_UPDATE_COMMAND_REGISTER)) {
-    MV_LOG("invalid fis 0x%x", cmd_fis[1]);
+  if (!fis->is_command) {
+    MV_LOG("not a command fis");
     return false;
   }
 
-  if (is_native_command_queueing(cmd_fis[2])) {
-    MV_PANIC("not supported yet %x", cmd_fis[2]);
+  if (is_native_command_queueing(fis->command)) {
+    MV_PANIC("not supported NCQ yet %x", fis->command);
   }
 
-  /* Decompose the FIS:
-    * AHCI does not interpret FIS packets, it only forwards them.
-    * SATA 1.0 describes how to decode LBA28 and CHS FIS packets.
-    * Later specifications, e.g, SATA 3.2, describe LBA48 FIS packets.
-    *
-    * ATA4 describes sector number for LBA28/CHS commands.
-    * ATA6 describes sector number for LBA48 commands.
-    * ATA8 deprecates CHS fully, describing only LBA28/48.
-    *
-    * We dutifully convert the FIS into IDE registers, and allow the
-    * core layer to interpret them as needed. */
-  registers_.command = cmd_fis[2];
-  registers_.features = cmd_fis[3];
-  registers_.lba0 = cmd_fis[4];        /* LBA 7:0 */
-  registers_.lba1 = cmd_fis[5];        /* LBA 15:8  */
-  registers_.lba2 = cmd_fis[6];        /* LBA 23:16 */
-  registers_.devsel = cmd_fis[7];      /* LBA 27:24 (LBA28) */
-  registers_.lba3 = cmd_fis[8];        /* LBA 31:24 */
-  registers_.lba4 = cmd_fis[9];        /* LBA 39:32 */
-  registers_.lba5 = cmd_fis[10];       /* LBA 47:40 */
-  registers_.control = cmd_fis[11];    /* features high */
-  registers_.sectors0 = cmd_fis[12];
-  registers_.sectors1 = cmd_fis[13];
-  /* 14, 16, 17, 18, 19: Reserved (SATA 1.0) */
-  /* 15: Only valid when UPDATE_COMMAND not set. */
+  // Copy IDE command parameters
+  ide_regs_.command = fis->command;
+  ide_regs_.feature0 = fis->feature0;
+  ide_regs_.lba0 = fis->lba0;
+  ide_regs_.lba1 = fis->lba1;
+  ide_regs_.lba2 = fis->lba2;
+  ide_regs_.device = fis->device;
+  ide_regs_.lba3 = fis->lba3;
+  ide_regs_.lba4 = fis->lba4;
+  ide_regs_.lba5 = fis->lba5;
+  ide_regs_.control = fis->feature1;
+  ide_regs_.count0 = fis->count0;
+  ide_regs_.count1 = fis->count1;
+
+  // Setup scatter gather list
 
   /* Copy the ACMD field (ATAPI packet, if any) from the AHCI command
     * table to ide_state->io_buffer */
-  if (current_command_->options & AHCI_CMD_ATAPI) {
-    memcpy(io_.buffer, &cmd_fis[AHCI_COMMAND_TABLE_ACMD], 0x10);
+  if (current_command_->is_atapi) {
+    memcpy(ide_io_.buffer, command_table->atapi_command, 0x10);
   }
 
-  registers_.error = 0;
-  io_.transfer_type = kIdeNoTransfer;
+  ide_regs_.error = 0;
+  ide_io_.transfer_type = kIdeNoTransfer;
   
-  current_command_->bytes = 0;
-  MV_LOG("################ command = %x", registers_.command);
+  current_command_->bytes_transferred = 0;
   drive_->StartCommand();
 
   port_control_.command_issue &= ~(1U << slot);
-  UpdateRegisterD2H();
 
-  if (io_.transfer_type == kIdeTransferToDevice) {
+  if (ide_io_.transfer_type == kIdeTransferToDevice) {
     drive_->EndTransfer(kIdeTransferToDevice);
   }
 
-  if (io_.transfer_type == kIdeTransferToHost) {
-    AHCI_SG* sg = (AHCI_SG*)(cmd_fis + 0x80);
-    void* host = manager_->TranslateGuestMemory(sg[0].addr);
-    MV_ASSERT(host);
-    memcpy(host, io_.buffer, io_.nbytes);
-    MV_LOG("copy bytes %ld to %p status: %lx", io_.nbytes, host, registers_.status);
-    current_command_->bytes += io_.nbytes;
-    UpdateSetupPio(io_.nbytes);
+  if (ide_io_.transfer_type == kIdeTransferToHost) {
+    if (ide_io_.dma_status) {
+      UpdateRegisterD2H();
+    } else {
+      UpdateSetupPio();
+    }
+    AhciPrdtEntry* sg = command_table->prdt_entries;
+    if (current_command_->prdt_length == 1 && sg[0].size + 1 == ide_io_.nbytes) {
+      void* host = manager_->TranslateGuestMemory(sg[0].address);
+      MV_ASSERT(host);
+      memcpy(host, ide_io_.buffer, ide_io_.nbytes);
+      current_command_->bytes_transferred += ide_io_.nbytes;
+      drive_->EndTransfer(kIdeTransferToHost);
+      return true;
+    }
+    int prdt_index = 0;
+    uint8_t* ptr = ide_io_.buffer;
+    while (ide_io_.nbytes > 0 && prdt_index < current_command_->prdt_length) {
+      void* host = manager_->TranslateGuestMemory(sg[prdt_index].address);
+      MV_ASSERT(host);
+      size_t count = ide_io_.nbytes < sg[prdt_index].size + 1 ? ide_io_.nbytes : sg[prdt_index].size + 1;
+      memcpy(host, ptr, count);
+      current_command_->bytes_transferred += count;
+      prdt_index++;
+      ptr += count;
+    }
     drive_->EndTransfer(kIdeTransferToHost);
+    return true;
+  } else {
+    UpdateRegisterD2H();
   }
   return true;
 }
@@ -156,22 +179,20 @@ void AhciPort::CheckCommand() {
 }
 
 void AhciPort::Read(uint64_t offset, uint32_t* data) {
-  AHCIPortReg reg_index = (AHCIPortReg)(offset / sizeof(uint32_t));
-  MV_ASSERT(reg_index < (AHCI_PORT_ADDR_OFFSET_LEN)/ sizeof(uint32_t));
-  if (reg_index == AHCI_PORT_REG_SCR_STAT) {
+  AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
+  MV_ASSERT(reg_index < 32);
+  if (reg_index == kAhciPortRegSataStatus) {
     if (drive_) {
-      *data = SATA_SCR_SSTATUS_DET_DEV_PRESENT_PHY_UP |
-        SATA_SCR_SSTATUS_SPD_GEN1 | SATA_SCR_SSTATUS_IPM_ACTIVE;
+      *data = ATA_SCR_SSTATUS_DET_DEV_PRESENT_PHY_UP |  // Physical communication established
+        ATA_SCR_SSTATUS_SPD_GEN1 |                      // Speed
+        ATA_SCR_SSTATUS_IPM_ACTIVE;                     // Full power
     } else {
-      *data = SATA_SCR_SSTATUS_DET_NODEV;
+      *data = ATA_SCR_SSTATUS_DET_NODEV;  // No device
     }
   } else {
     *data = *((uint32_t*)&port_control_ + reg_index);
   }
-  if (reg_index == AHCI_PORT_REG_IRQ_STAT && *data == 0) {
-    return;
-  }
-  MV_LOG("%d read reg 0x%x value %x", index_, reg_index, *data);
+  // MV_LOG("%d read reg 0x%x value %x", port_index_, reg_index, *data);
 }
 
 void AhciPort::CheckEngines() {
@@ -182,8 +203,8 @@ void AhciPort::CheckEngines() {
 
   MV_ASSERT(manager_);
   if (cmd_start && !cmd_on) {
-    command_list_ = (uint8_t*)manager_->TranslateGuestMemory(((uint64_t)port_control_.command_list_base_high << 32) |
-      port_control_.command_list_base);
+    command_list_ = (uint8_t*)manager_->TranslateGuestMemory(
+      ((uint64_t)port_control_.command_list_base1 << 32) | port_control_.command_list_base0);
     if (command_list_ != nullptr) {
       port_control_.command |= PORT_CMD_LIST_ON;
     } else {
@@ -196,9 +217,9 @@ void AhciPort::CheckEngines() {
   }
 
   if (fis_start && !fis_on) {
-    res_fis_ = (uint8_t*)manager_->TranslateGuestMemory(((uint64_t)port_control_.fis_base_high << 32) |
-      port_control_.fis_base);
-    if (res_fis_ != nullptr) {
+    rx_fis_ = (AhciRxFis*)manager_->TranslateGuestMemory
+      (((uint64_t)port_control_.fis_base1 << 32) | port_control_.fis_base0);
+    if (rx_fis_ != nullptr) {
       port_control_.command |= PORT_CMD_FIS_ON;
     } else {
       port_control_.command &= ~(PORT_CMD_FIS_RX | PORT_CMD_FIS_ON);
@@ -206,37 +227,37 @@ void AhciPort::CheckEngines() {
     }
   } else if (!fis_start && fis_on) {
     port_control_.command &= ~PORT_CMD_FIS_ON;
-    res_fis_ = nullptr;
+    rx_fis_ = nullptr;
   }
 }
 
 void AhciPort::Write(uint64_t offset, uint32_t value) {
-  AHCIPortReg reg_index = (AHCIPortReg)(offset / sizeof(uint32_t));
-  MV_ASSERT(reg_index < (AHCI_PORT_ADDR_OFFSET_LEN)/ sizeof(uint32_t));
-  MV_LOG("%d write reg 0x%x value %x irq %x", index_, reg_index, value, port_control_.irq_status);
+  AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
+  MV_ASSERT(reg_index < 32);
+  // MV_LOG("%d write reg 0x%x value %x irq %x", port_index_, reg_index, value, port_control_.irq_status);
   switch (reg_index)
   {
-  case AHCI_PORT_REG_LST_ADDR:
-    port_control_.command_list_base = value;
+  case kAhciPortRegCommandListBase0:
+    port_control_.command_list_base0 = value;
     break;
-  case AHCI_PORT_REG_LST_ADDR_HI:
-    port_control_.command_list_base_high = value;
+  case kAhciPortRegCommandListBase1:
+    port_control_.command_list_base1 = value;
     break;
-  case AHCI_PORT_REG_FIS_ADDR:
-    port_control_.fis_base = value;
+  case kAhciPortRegReceivedFisBase0:
+    port_control_.fis_base0 = value;
     break;
-  case AHCI_PORT_REG_FIS_ADDR_HI:
-    port_control_.fis_base_high = value;
+  case kAhciPortRegReceivedFisBase1:
+    port_control_.fis_base1 = value;
     break;
-  case AHCI_PORT_REG_IRQ_STAT:
+  case kAhciPortRegIrqStatus:
     port_control_.irq_status &= ~value;
     host_->CheckIrq();
     break;
-  case AHCI_PORT_REG_IRQ_MASK:
+  case kAhciPortRegIrqMask:
     port_control_.irq_mask = value & 0xfdc000ff;
     host_->CheckIrq();
     break;
-  case AHCI_PORT_REG_CMD:
+  case kAhciPortRegCommand:
     /* Block any Read-only fields from being set;
     * including LIST_ON and FIS_ON.
     * The spec requires to set ICC bits to zero after the ICC change
@@ -253,107 +274,95 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
       issuing deferred until the OS enables FIS receival.
       Instead, we only submit it once - which works in most
       cases, but is a hack. */
-    if ((port_control_.command & PORT_CMD_FIS_ON) && !register_fis_posted_) {
-      register_fis_posted_ = true;
+    if ((port_control_.command & PORT_CMD_FIS_ON) && !reg_d2h_fis_posted_) {
+      reg_d2h_fis_posted_ = true;
       UpdateRegisterD2H();
     }
     CheckCommand();
     break;
-  case AHCI_PORT_REG_TFDATA:
-  case AHCI_PORT_REG_SIG:
-  case AHCI_PORT_REG_SCR_STAT:
+  case kAhciPortRegTaskFileData:
+  case kAhciPortRegSignature:
+  case kAhciPortRegSataStatus:
     /* Read Only */
     break;
-  case AHCI_PORT_REG_SCR_CTL:
+  case kAhciPortRegSataControl:
     if (((port_control_.sata_control & AHCI_SCR_SCTL_DET) == 1) &&
         ((value & AHCI_SCR_SCTL_DET) == 0)) {
       Reset();
     }
     port_control_.sata_control = value;
     break;
-  case AHCI_PORT_REG_SCR_ERR:
+  case kAhciPortRegSataError:
     port_control_.sata_error &= ~value;
     break;
-  case AHCI_PORT_REG_SCR_ACT:
+  case kAhciPortRegSataActive:
     /* RW1 */
     port_control_.sata_active |= value;
     break;
-  case AHCI_PORT_REG_CMD_ISSUE:
+  case kAhciPortRegCommandIssue:
     port_control_.command_issue |= value;
-    MV_LOG("issure %x all:%x", value, port_control_.command_issue);
     CheckCommand();
     break;
   default:
     MV_PANIC("not implemented reg index = %x", reg_index);
   }
-  MV_LOG("%d write reg 0x%x value %x irq %x done", index_, reg_index, value, port_control_.irq_status);
 }
 
 void AhciPort::UpdateRegisterD2H() {
-  if (!res_fis_ || !(port_control_.command & PORT_CMD_FIS_RX)) {
-    return;
-  }
-  uint8_t *d2h_fis = &res_fis_[RES_FIS_RFIS];
+  MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
+  auto d2h_fis = &rx_fis_->d2h_fis;
+  bzero(d2h_fis, sizeof(*d2h_fis));
 
-  d2h_fis[0] = SATA_FIS_TYPE_REGISTER_D2H;
-  d2h_fis[1] = (1 << 6); /* interrupt bit */
-  d2h_fis[2] = registers_.status;
-  d2h_fis[3] = registers_.error;
+  d2h_fis->fis_type = kAhciFisTypeRegD2H;
+  d2h_fis->interrupt = 1;
+  d2h_fis->status = ide_regs_.status;
+  d2h_fis->error = ide_regs_.error;
 
-  d2h_fis[4] = registers_.lba0;
-  d2h_fis[5] = registers_.lba1;
-  d2h_fis[6] = registers_.lba2;
-  d2h_fis[7] = registers_.devsel;
-  d2h_fis[8] = registers_.lba3;
-  d2h_fis[9] = registers_.lba4;
-  d2h_fis[10] = registers_.lba5;
-  d2h_fis[11] = 0;
-  d2h_fis[12] = registers_.sectors0;
-  d2h_fis[13] = registers_.sectors1;
-  for (int i = 14; i < 20; i++) {
-    d2h_fis[i] = 0;
-  }
+  d2h_fis->lba0 = ide_regs_.lba0;
+  d2h_fis->lba1 = ide_regs_.lba1;
+  d2h_fis->lba2 = ide_regs_.lba2;
+  d2h_fis->device = ide_regs_.device;
+  d2h_fis->lba3 = ide_regs_.lba3;
+  d2h_fis->lba4 = ide_regs_.lba4;
+  d2h_fis->lba5 = ide_regs_.lba5;
+  d2h_fis->count0 = ide_regs_.count0;
+  d2h_fis->count1 = ide_regs_.count1;
 
-  port_control_.task_flie_data = (registers_.error << 8) | (registers_.status);
-  if (registers_.status & 1) {
-    TrigerIrq(AHCI_PORT_IRQ_BIT_TFES);
+  port_control_.task_flie_data = (ide_regs_.error << 8) | (ide_regs_.status);
+  if (ide_regs_.status & 1) {
+    TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
-  TrigerIrq(AHCI_PORT_IRQ_BIT_DHRS);
+  TrigerIrq(kAhciPortIrqBitDeviceToHostFis);
 }
 
-void AhciPort::UpdateSetupPio(uint32_t size) {
-  if (!res_fis_ || !(port_control_.command & PORT_CMD_FIS_RX)) {
-    return;
+void AhciPort::UpdateSetupPio() {
+  MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
+  auto pio_fis = &rx_fis_->pio_fis;
+  bzero(pio_fis, sizeof(*pio_fis));
+
+  pio_fis->fis_type = kAhciFisTypePioSetup;
+  pio_fis->interrupt = 1;
+  pio_fis->status = ide_regs_.status;
+  pio_fis->error = ide_regs_.error;
+
+  pio_fis->lba0 = ide_regs_.lba0;
+  pio_fis->lba1 = ide_regs_.lba1;
+  pio_fis->lba2 = ide_regs_.lba2;
+  pio_fis->device = ide_regs_.device;
+  pio_fis->lba3 = ide_regs_.lba3;
+  pio_fis->lba4 = ide_regs_.lba4;
+  pio_fis->lba5 = ide_regs_.lba5;
+  pio_fis->count0 = ide_regs_.count0;
+  pio_fis->count1 = ide_regs_.count1;
+  pio_fis->e_status = ide_regs_.status;
+  pio_fis->transfer_count = ide_io_.nbytes;
+
+  port_control_.task_flie_data = (ide_regs_.error << 8) | (ide_regs_.status);
+
+  if (ide_regs_.status & 0x1) {
+    TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
-  uint8_t *pio_fis = &res_fis_[RES_FIS_PSFIS];
-
-  pio_fis[0] = SATA_FIS_TYPE_PIO_SETUP;
-  pio_fis[1] = (1 << 6); /* interrupt bit */
-  pio_fis[2] = registers_.status;
-  pio_fis[3] = registers_.error;
-
-  pio_fis[4] = registers_.lba0;
-  pio_fis[5] = registers_.lba1;
-  pio_fis[6] = registers_.lba2;
-  pio_fis[7] = registers_.devsel;
-  pio_fis[8] = registers_.lba3;
-  pio_fis[9] = registers_.lba4;
-  pio_fis[10] = registers_.lba5;
-  pio_fis[11] = 0;
-  pio_fis[12] = registers_.sectors0;
-  pio_fis[13] = registers_.sectors1;
-  pio_fis[14] = 0;
-  pio_fis[15] = registers_.status;
-  pio_fis[16] = size & 255;
-  pio_fis[17] = size >> 8;
-
-  port_control_.task_flie_data = (registers_.error << 8) | (registers_.status);
-
-  if (registers_.status & 0x1) {
-    TrigerIrq(AHCI_PORT_IRQ_BIT_TFES);
-  }
-  TrigerIrq(AHCI_PORT_IRQ_BIT_PSS);
-  MV_LOG("UpdateSetupPio status=%x", registers_.status);
+  TrigerIrq(kAhciPortIrqBitPioSetupFis);
 }
 
 void AhciPort::TrigerIrq(int irqbit) {
@@ -365,26 +374,14 @@ void AhciPort::TrigerIrq(int irqbit) {
 }
 
 
+/* DEPRECATED: Old IDE call this */
 void AhciPort::RaiseIrq() {
-  if (registers_.control & 2) {
+  if (ide_regs_.control & 2) {
     return;
   }
-  MV_LOG("Triger IRQ status=0x%x reason=0x%x", registers_.status, registers_.sectors0);
+  // MV_LOG("Triger IRQ status=0x%x reason=0x%x", ide_regs_.status, ide_regs_.count0);
 }
 
+/* DEPRECATED: Old IDE call this */
 void AhciPort::LowerIrq() {
 }
-
-// bool AhciStorageDevice::PioTransfer(AHCICommandHeader* cmd_header, NCQFrame* frame, uint8_t* buffer, size_t nbytes) {
-//   status_ |= DRQ_STAT;
-//   AHCI_SG* sg = (AHCI_SG*)((uint64_t)frame + 0x80);
-//   void* host = manager_->TranslateGuestMemory(sg[0].addr);
-//   MV_ASSERT(host);
-//   memcpy(host, buffer, nbytes);
-//   MV_LOG("copy bytes %ld to %p status: %lx", nbytes, host, status_);
-//   cmd_header->bytes += nbytes;
- 
-//   port_->UpdateSetupPio(nbytes);
-//   return true;
-// }
-

@@ -4,25 +4,11 @@
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
-#include "devices/cmos.h"
-#include "devices/keyboard.h"
-#include "devices/debug_console.h"
-#include "devices/pci_host.h"
-#include "devices/firmware_config.h"
-#include "devices/dummy.h"
-#include "devices/serial_port.h"
-#include "devices/floppy.h"
-#include "devices/ich9_lpc.h"
-#include "devices/isa_dma.h"
-#include "devices/vga.h"
-#include "devices/ide/ide_storage.h"
-#include "devices/ide/ide_controller.h"
-#include "devices/ahci/ahci_host.h"
-#include "images/raw.h"
+#include "disk_image.h"
+#include "device_interface.h"
+#include "storage_device.h"
 
-#define FLOPPY_DISK_IMAGE   "../assets/msdos710.img"
-#define CDROM_IMAGE         "../assets/dostools.iso"
-// #define CDROM_IMAGE         "/mnt/iso/win2016.iso"
+#define CDROM_IMAGE         "/mnt/iso/win2016.iso"
 #define HARDDISK_IMAGE      "/data/win10.img"
 
 DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
@@ -34,6 +20,55 @@ DeviceManager::~DeviceManager() {
   }
 }
 
+/* Create necessary devices for a Q35 chipset machine  */
+void DeviceManager::IntializeQ35() {
+  auto ahci_host = PciDevice::Create("AhciHost");
+  MV_LOG("ahci host = %p %s", ahci_host, ahci_host->name());
+  auto cd = StorageDevice::Create("Cdrom", new RawDiskImage(CDROM_IMAGE, true));
+  ahci_host->AddChild(cd);
+  auto hd = StorageDevice::Create("Harddisk", new RawDiskImage(HARDDISK_IMAGE, false));
+  ahci_host->AddChild(hd);
+
+  auto lpc = PciDevice::Create("Ich9Lpc");
+  lpc->AddChild(Device::Create("DebugConsole"));
+  lpc->AddChild(Device::Create("Cmos"));
+  lpc->AddChild(Device::Create("Keyboard"));
+  lpc->AddChild(Device::Create("DummyDevice"));
+  lpc->AddChild(Device::Create("SmBus"));
+  lpc->AddChild(ahci_host);
+
+  auto pci_host = PciDevice::Create("PciHost");
+  pci_host->AddChild(lpc);
+  pci_host->AddChild(PciDevice::Create("Qxl"));
+
+  root_ = new SystemRoot(this);
+  root_->AddChild(Device::Create("FirmwareConfig"));
+  root_->AddChild(pci_host);
+
+  /* Call Connect() on all devices */
+  root_->Connect();
+}
+
+/* Used for debugging */
+void DeviceManager::PrintDevices() {
+  for (auto device : registered_devices_) {
+    MV_LOG("Device: %s", device->name());
+    for (auto &ir : device->io_resources()) {
+      switch (ir.type)
+      {
+      case kIoResourceTypePio:
+        MV_LOG("\tIO port 0x%lx-0x%lx", ir.base, ir.base + ir.length - 1);
+        break;
+      case kIoResourceTypeMmio:
+        MV_LOG("\tMMIO address 0x%016lx-0x016%lx", ir.base, ir.base + ir.length - 1);
+      case kIoResourceTypeRam:
+        MV_LOG("\tRAM address 0x%016lx-0x016%lx", ir.base, ir.base + ir.length - 1);
+        break;
+      }
+    }
+  }
+}
+
 Device* DeviceManager::LookupDeviceByName(const std::string name) {
   for (auto device : registered_devices_) {
     if (device->name() == name) {
@@ -41,56 +76,6 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
     }
   }
   return nullptr;
-}
-
-void DeviceManager::IntializeQ35() {
-  auto lpc = new Ich9LpcDevice();
-  lpc->AddChild(new DebugConsoleDevice());
-  lpc->AddChild(new CmosDevice());
-  lpc->AddChild(new KeyboardDevice());
-  lpc->AddChild(new DummyDevice());
-  lpc->AddChild(new SerialPortDevice());
-  lpc->AddChild(new IsaDmaDevice());
-  // lpc->AddChild(new FloppyStorageDevice(new RawDiskImage(FLOPPY_DISK_IMAGE)));
-
-  auto pci_host = new PciHostDevice();
-  pci_host->AddChild(lpc);
-  pci_host->AddChild(new VgaDevice());
-
-  if (false) {
-    auto ide_controller = new IdeControllerDevice();
-    auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
-    ide_controller->AddChild(cd);
-    auto hd = new IdeHarddiskStorageDevice(new RawDiskImage(HARDDISK_IMAGE, false));
-    ide_controller->AddChild(hd);
-    pci_host->AddChild(ide_controller);
-  } else {
-    auto ahci_host = new AhciHostDevice();
-    auto cd = new IdeCdromStorageDevice(new RawDiskImage(CDROM_IMAGE, true));
-    ahci_host->AddChild(cd);
-    // auto hd = new IdeHarddiskStorageDevice(new RawDiskImage(HARDDISK_IMAGE, false));
-    // ahci_host->AddChild(hd);
-    pci_host->AddChild(ahci_host);
-  }
-
-  root_ = new SystemRootDevice(this);
-  root_->AddChild(new FirmwareConfigDevice());
-  root_->AddChild(pci_host);
-
-  /* Call Connect() on all devices */
-  root_->Connect();
-}
-
-void DeviceManager::PrintDevices() {
-  for (auto device : registered_devices_) {
-    for (auto &io_resource : device->io_resources()) {
-      if (io_resource.type == kIoResourceTypePio) {
-        MV_LOG("\tio port 0x%lx-0x%lx", io_resource.base, io_resource.base + io_resource.length - 1);
-      } else {
-        MV_LOG("\tmmio address 0x%016lx-0x016%lx", io_resource.base, io_resource.base + io_resource.length);
-      }
-    }
-  }
 }
 
 PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
@@ -109,7 +94,7 @@ void DeviceManager::RegisterDevice(Device* device) {
   PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
   if (pci_device) {
     if (LookupPciDevice(pci_device->bus(), pci_device->devfn())) {
-      MV_PANIC("devfn_ %x conflicts", pci_device->devfn());
+      MV_PANIC("PCI device function %x conflicts", pci_device->devfn());
       return;
     }
   }
@@ -121,13 +106,14 @@ void DeviceManager::UnregisterDevice(Device* device) {
   registered_devices_.erase(device);
 }
 
+
 void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resource) {
   if (io_resource.type == kIoResourceTypePio) {
     pio_handlers_.push_back(new IoHandler {
       .io_resource = io_resource,
       .device = device
     });
-  } else {
+  } else if (io_resource.type == kIoResourceTypeMmio) {
     // Map the memory to type Device, access these regions will cause MMIO access fault
     const MemoryRegion* region = machine_->memory_manager()->Map(io_resource.base, io_resource.length,
       nullptr, kMemoryTypeDevice, io_resource.name);
@@ -138,7 +124,8 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
       .memory_region = region
     });
   }
-  MV_LOG("%s register %s 0x%08lx-0x%08lx", device->name().c_str(),
+
+  MV_LOG("%s register %s 0x%08lx-0x%08lx", device->name(),
     io_resource.type == kIoResourceTypeMmio ? "mmio" : "pio",
     io_resource.base, io_resource.base + io_resource.length - 1);
 }
@@ -152,7 +139,7 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
         break;
       }
     }
-  } else {
+  } else if (io_resource.type == kIoResourceTypeMmio) {
     for (auto it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++) {
       if ((*it)->device == device && (*it)->io_resource.base == io_resource.base) {
         delete *it;
@@ -163,6 +150,10 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
   }
 }
 
+
+/* IO ports may overlap like MMIO addresses.
+ * Use para-virtual drivers instead of IO operations to improve performance.
+ */
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
   int found = 0, it_count = 0;
   std::deque<IoHandler*>::iterator it;
@@ -185,35 +176,52 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         pio_handlers_.erase(it);
         --it;
       }
+
+      // if (port != 0x402) {
+      //   MV_LOG("%s handle io %s port: 0x%x size: %x data: %x count: %d", device->name(),
+      //     is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
+      // }
     }
   }
 
   if (!found) {
-    MV_LOG("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
-      is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
     /* Accessing invalid port always returns error */
     memset(data, 0xFF, size);
+    /* Not allowed unhandled IO for debugging */
+    MV_PANIC("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
+      is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
   }
 }
 
+
+/* Use for loop to find MMIO handlers is stupid, unless we are sure addresses not overlapped.
+ * But moving the handler to the front works great for now
+ */
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
   std::deque<IoHandler*>::iterator it;
   int it_count = 0;
+  uint8_t *ptr = data;
   for (it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++, it_count++) {
     auto &resource = (*it)->io_resource;
     if (base >= resource.base && base < resource.base + resource.length) {
       Device* device = (*it)->device;
+
       if (is_write) {
-        device->Write(resource, base - resource.base, data, size);
+        device->Write(resource, base - resource.base, ptr, size);
       } else {
-        device->Read(resource, base - resource.base, data, size);
+        device->Read(resource, base - resource.base, ptr, size);
       }
-      data += size;
+      ptr += size;
       if (it_count > 2) {
         mmio_handlers_.push_front(*it);
         mmio_handlers_.erase(it);
         --it;
       }
+
+      // if (base < 0xa0000 || base >= 0xc0000) {
+      //   MV_LOG("%s handle mmio %s addr: 0x%x size: %x data: %x", device->name(),
+      //     is_write ? "out" : "in", base, size, *(uint64_t*)data);
+      // }
       return;
     }
   }
@@ -221,27 +229,14 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
     is_write ? "write" : "read", base, size, *(uint64_t*)data);
 }
 
+/* Get the host memory address of a guest physical address */
 void* DeviceManager::TranslateGuestMemory(uint64_t gpa) {
   auto memory_manger = machine_->memory_manager();
   void* host = memory_manger->GuestToHostAddress(gpa);
   return host;
 }
 
-void DeviceManager::ReadGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size) {
-  void* host = TranslateGuestMemory(gpa);
-  if (host) {
-    memcpy(data, host, size);
-  }
-}
-
-void DeviceManager::WriteGuestMemory(uint64_t gpa, uint8_t* data, uint32_t size) {
-  auto memory_manger = machine_->memory_manager();
-  void* host = memory_manger->GuestToHostAddress(gpa);
-  if (host) {
-    memcpy(host, data, size);
-  }
-}
-
+/* Maybe we should have an IRQ manager or just let KVM do this? */
 void DeviceManager::SetIrq(uint32_t irq, uint32_t level) {
   machine_->Interrupt(irq, level);
 }

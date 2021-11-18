@@ -21,16 +21,16 @@ Nov 2021
 5. Devices Management ✅
 6. RTC(CMOS) ✅
 7. PS/2 ✅
-8. PCI ISA ICH9-LPC (Working)
-9. QEMU CFG (Working) // Needs ACPI Tables
-10. DMA (ISA DMA)
-11. IDE / ATA / VirtIO (Floppy CDROM)
+8. PCI ISA ICH9-LPC ✅
+9. QEMU CFG ✅
+10. DMA ❌
+11. IDE ❌ / AHCI ✅ / VirtIO
 12. Parallel Port ❌
 13. Serial Port ❌
-14. VGA / QXL (Text VGA)
-15. Option Roms / SMBIOS / ACPI Table
+14. VGA / QXL (Text VBE working)
+15. Option Roms / SMBIOS / ACPI Table ✅
 16. Boot DOS ✅
-17. Boot OS (Windows 7 or 10) 
+17. Boot OS (Windows 7 or 10) ✅
 18. QCOW2
 
 Milestone 2: Multimedia & Networking
@@ -52,7 +52,7 @@ Install gcc and c++, then simply type `make`.
 
 ## Screenshot
 
-<img src="./docs/dos.jpg" width="640">
+<img src="./docs/win10.jpg" width="640">
 
 
 <img src="./docs/vbe.jpg" width="640">

@@ -1,4 +1,4 @@
-#include "images/image.h"
+#include "disk_image.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include "logger.h"

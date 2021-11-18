@@ -1,7 +1,6 @@
 #include "viewer.h"
 #include <unistd.h>
 #include "logger.h"
-#include "devices/keyboard.h"
 #include "viewer_font.inc"
 #include "keymap.h"
 
@@ -13,7 +12,7 @@ Viewer::~Viewer() {
 }
 
 void Viewer::DrawCharacter(int x, int y, int character, int attribute, uint8_t* font) {
-  auto pallete = vga_device_->pallete();
+  auto pallete = display_->GetPallete();
   // Translate from color index to RGB
   uint32_t i = (attribute & 0xF) * 3;
   uint32_t front_color = (pallete[i] << 18) | (pallete[i + 1] << 10) | (pallete[i + 2] << 2);
@@ -39,12 +38,12 @@ void Viewer::DrawCharacter(int x, int y, int character, int attribute, uint8_t* 
 }
 
 void Viewer::DrawTextCursor() {
-  auto pallete = vga_device_->pallete();
+  auto pallete = display_->GetPallete();
   // Translate from color index to RGB
   uint32_t i = (0xF) * 3;
   uint32_t front_color = (pallete[i] << 18) | (pallete[i + 1] << 10) | (pallete[i + 2] << 2);
   uint8_t cx, cy, sl_start, sl_end;
-  vga_device_->GetCursorLocation(&cx, &cy, &sl_start, &sl_end);
+  display_->GetCursorLocation(&cx, &cy, &sl_start, &sl_end);
 
   int line_pixels = draw_buffer_->pitch / 4;
   uint32_t* buffer = (uint32_t*)draw_buffer_->pixels;
@@ -65,7 +64,7 @@ void Viewer::DrawTextCursor() {
 }
 
 void Viewer::DrawTextMode() {
-  uint8_t* ptr = vga_device_->GetVRamHostAddress();
+  uint8_t* ptr = display_->GetVRamHostAddress();
   if (ptr == nullptr) {
     return;
   }
@@ -87,43 +86,39 @@ void Viewer::DrawTextMode() {
 }
 
 void Viewer::DrawGraphicMode() {
-  if (!vga_device_->IsVbeEnabled()) {
-    MV_LOG("Graphics mode without VBE is not supported yet!");
-    return;
-  }
-
-  auto pallete = vga_device_->pallete();
-  uint8_t* ptr = vga_device_->GetVRamHostAddress();
+  auto pallete = display_->GetPallete();
+  uint8_t* ptr = display_->GetVRamHostAddress();
   if (ptr == nullptr) {
     return;
   }
 
-  int height = vga_device_->height();
-  int width = vga_device_->width();
-  int bpp = vga_device_->bpp();
-
-  UpdateScreenSize(width, height);
   uint32_t* buffer = (uint32_t*)draw_buffer_->pixels;
 
-  switch (bpp)
+  switch (bpp_)
   {
   case 8:
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
+    for (int y = 0; y < height_; y++) {
+      for (int x = 0; x < width_; x++) {
         int i = *ptr++ * 3;
         uint32_t color = (pallete[i] << 18) | (pallete[i + 1] << 10) | (pallete[i + 2] << 2);
-        buffer[y * width + x] = color;
+        buffer[y * width_ + x] = color;
       }
     }
     break;
   case 24:
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
+    for (int y = 0; y < height_; y++) {
+      for (int x = 0; x < width_; x++) {
         uint32_t color = (ptr[2] << 16) | (ptr[1] << 8) | (ptr[0]);
-        buffer[y * width + x] = color;
+        buffer[y * width_ + x] = color;
         ptr += 3;
       }
     }
+    break;
+  case 32:
+    memcpy(buffer, ptr, width_ * height_ * 4);
+    break;
+  default:
+    MV_PANIC("unsupported bpp=%d", bpp_);
     break;
   }
 }
@@ -136,8 +131,7 @@ void Viewer::UpdateScreenSize(int w, int h) {
     return;
   }
   MV_LOG("update screen size %dx%d", w, h);
-  width_ = w;
-  height_ = h;
+
   if (draw_buffer_) {
     SDL_FreeSurface(draw_buffer_);
   }
@@ -146,14 +140,38 @@ void Viewer::UpdateScreenSize(int w, int h) {
     format->Gmask, format->Bmask, format->Amask);
 }
 
+void Viewer::AcquireDisplayFrame() {
+  DisplayMode mode;
+  display_->GetDisplayMode(&mode, &width_, &height_, &bpp_);
+  UpdateScreenSize(width_, height_);
+
+  switch (mode)
+  {
+  case kDisplayTextMode:
+    DrawTextMode();
+    break;
+  case kDisplayVbeMode:
+    DrawGraphicMode();
+    break;
+  default:
+    MV_LOG("Graphics mode without VBE is not supported yet!");
+    break;
+  }
+
+  if (draw_buffer_) {
+    SDL_SoftStretch(draw_buffer_, &draw_buffer_->clip_rect, screen_surface_, &screen_surface_->clip_rect);
+    SDL_Flip(screen_surface_);
+  }
+}
+
 int Viewer::MainLoop() {
   SDL_Event event;
 
-  vga_device_ = dynamic_cast<VgaDevice*>(device_manager_->LookupDeviceByName("vga"));
-  KeyboardDevice* kbd = dynamic_cast<KeyboardDevice*>(
-    device_manager_->LookupDeviceByName("keyboard")
+  display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
+  KeyboardInterface* kbd = dynamic_cast<KeyboardInterface*>(
+    device_manager_->LookupDeviceByName("Keyboard")
   );
-  MV_ASSERT(vga_device_);
+  MV_ASSERT(display_);
   MV_ASSERT(kbd);
 
   // Fixed screen size at the moment
@@ -162,13 +180,7 @@ int Viewer::MainLoop() {
 
   // Loop until all vcpu exits
   while (machine_->IsValid()) {
-    if (vga_device_->IsTextMode()) {
-      DrawTextMode();
-    } else {
-      DrawGraphicMode();
-    }
-    SDL_SoftStretch(draw_buffer_, &draw_buffer_->clip_rect, screen_surface_, &screen_surface_->clip_rect);
-    SDL_Flip(screen_surface_);
+    AcquireDisplayFrame();
 
     while (SDL_PollEvent(&event)) {
       uint8_t transcoded[10] = { 0 };

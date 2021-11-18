@@ -1,4 +1,4 @@
-#include "images/raw.h"
+#include "disk_image.h"
 #include <unistd.h>
 #include <sys/stat.h>
 #include "logger.h"
@@ -19,18 +19,16 @@ ssize_t RawDiskImage::Read(void *buffer, uint64_t sector, int count) {
   off_t offset = sector * sector_size_;
   off_t nbytes = count * sector_size_;
   bytes_read_ += nbytes;
-  MV_LOG("read at sector=0x%x(0x%x) count=0x%x total_read=%ld MB",
-    sector, offset, count, bytes_read_ >> 20);
   return pread(fd_, buffer, nbytes, offset);
 }
 
 ssize_t RawDiskImage::Write(void *buffer, uint64_t sector, int count) {
-  off_t offset = sector * sector_size_;
-  off_t nbytes = count * sector_size_;
-  bytes_writen_ += nbytes;
-  MV_LOG("read at sector=0x%x(0x%x) count=0x%x total_written=%ld MB",
-    sector, offset, count, bytes_writen_ >> 20);
-  return pwrite(fd_, buffer, nbytes, offset);
+  // Disable real write for debugging
+  // off_t offset = sector * sector_size_;
+  // off_t nbytes = count * sector_size_;
+  // bytes_writen_ += nbytes;
+  // return pwrite(fd_, buffer, nbytes, offset);
+  return 0;
 }
 
 void RawDiskImage::Flush() {

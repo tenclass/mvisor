@@ -127,7 +127,7 @@ enter vga_post:
 //     and the higher 8 bits is data
 // r1 and r2 mean reading the byte(s) as above
 // useful website to know registers:
-// http://osddever.net/FreeVGA/vga/portidx.htm
+// http://osdever.net/FreeVGA/vga/portidx.htm
 // https://wiki.osdev.org/VGA_Hardware
 
 // 3cx to 3dx are VGA ports and 1ce 1cf are VBE ports

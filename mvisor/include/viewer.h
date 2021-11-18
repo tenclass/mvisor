@@ -4,7 +4,7 @@
 #include <SDL/SDL.h>
 #include "machine.h"
 #include "device_manager.h"
-#include "devices/vga.h"
+#include "device_interface.h"
 
 class Viewer {
  public:
@@ -18,14 +18,16 @@ class Viewer {
   void DrawTextCursor();
   void DrawCharacter(int x, int y, int character, int attribute, uint8_t* font);
   void UpdateScreenSize(int w, int h);
+  void AcquireDisplayFrame();
 
   Machine* machine_;
   DeviceManager* device_manager_;
-  VgaDevice* vga_device_;
+  DisplayInterface* display_;
   SDL_Surface* screen_surface_ = nullptr;
   SDL_Surface* draw_buffer_ = nullptr;
-  int width_;
-  int height_;
+  uint16_t width_;
+  uint16_t height_;
+  uint16_t bpp_;
 };
 
 #endif // _MVISOR_VIEWER_H

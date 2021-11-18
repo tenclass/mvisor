@@ -1,12 +1,11 @@
-#include "devices/ahci/ahci_host.h"
+#include "ahci_host.h"
 #include <cstring>
 #include "logger.h"
 #include "device_manager.h"
-#include "devices/ahci/ahci_internal.h"
-#include "devices/ide/ide_storage.h"
+#include "ide_storage.h"
+#include "ahci_internal.h"
 
-AhciHostDevice::AhciHostDevice() {
-  name_ = "ahci-controller";
+AhciHost::AhciHost() {
   /* FIXME: should gernerated by parent pci device */
   devfn_ = PCI_MAKE_DEVFN(0x1f, 2);
   
@@ -30,16 +29,16 @@ AhciHostDevice::AhciHostDevice() {
     0x12, 0x00, 0x10, 0x00,
     0x48, 0x00, 0x00, 0x00
   };
-  memcpy(pci_header_.data + 0xA8, sata_cap, sizeof(sata_cap));
+  memcpy(pci_header_.data + 0x80, sata_cap, sizeof(sata_cap));
 
-  /* Add MSI */
+  /* Add MSI
   const uint8_t msi_cap[] = {
     0x05, 0xA8, 0x80, 0x00,
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00,
     0x00, 0x00, 0x00, 0x00
   };
-  memcpy(pci_header_.data + 0x80, msi_cap, sizeof(msi_cap));
+  memcpy(pci_header_.data + 0x80, msi_cap, sizeof(msi_cap)); */
 
   /* Point to the above capability */
   pci_header_.capability = 0x80;
@@ -48,7 +47,7 @@ AhciHostDevice::AhciHostDevice() {
   AddPciBar(5, 4096, kIoResourceTypeMmio);
 }
 
-AhciHostDevice::~AhciHostDevice() {
+AhciHost::~AhciHost() {
   for (auto port : ports_) {
     if (port) {
       delete port;
@@ -56,7 +55,7 @@ AhciHostDevice::~AhciHostDevice() {
   }
 }
 
-void AhciHostDevice::Connect() {
+void AhciHost::Connect() {
   PciDevice::Connect();
 
   num_ports_ = children_.size();
@@ -73,12 +72,15 @@ void AhciHostDevice::Connect() {
   ResetHost();
 }
 
-void AhciHostDevice::ResetHost() {
+void AhciHost::ResetHost() {
   bzero(&host_control_, sizeof(host_control_));
-  host_control_.global_host_control = HOST_CTL_AHCI_EN;
-  host_control_.capabilities = (num_ports_ - 1) | (AHCI_NUM_COMMAND_SLOTS << 8) |
+  host_control_.global_host_control = HOST_CONTROL_AHCI_ENABLE;
+  host_control_.capabilities = (num_ports_ - 1) |
+    (AHCI_NUM_COMMAND_SLOTS << 8) |
     (AHCI_SUPPORTED_SPEED_GEN1 << AHCI_SUPPORTED_SPEED) |
-    HOST_CAP_NCQ | HOST_CAP_AHCI | HOST_CAP_64;
+    // HOST_CAP_NCQ |
+    HOST_CAP_AHCI |
+    HOST_CAP_64;
   host_control_.ports_implemented = (1 << num_ports_) - 1;
   host_control_.version = AHCI_VERSION_1_0;
   
@@ -87,7 +89,7 @@ void AhciHostDevice::ResetHost() {
   }
 }
 
-void AhciHostDevice::CheckIrq() {
+void AhciHost::CheckIrq() {
   host_control_.irq_status = 0;
   for (int i = 0; i < num_ports_; i++) {
     auto &pc = ports_[i]->port_control_;
@@ -95,55 +97,53 @@ void AhciHostDevice::CheckIrq() {
       host_control_.irq_status |= (1 << i);
     }
   }
-  if (host_control_.irq_status && (host_control_.global_host_control & HOST_CTL_IRQ_EN)) {
+  if (host_control_.irq_status && (host_control_.global_host_control & HOST_CONTROL_IRQ_ENABLE)) {
     manager_->SetIrq(pci_header_.irq_line, 1);
+    // MV_LOG("triger irq %d", pci_header_.irq_line);
+    // DumpHex(&pci_header_, 256);
   } else {
     manager_->SetIrq(pci_header_.irq_line, 0);
   }
 }
 
-void AhciHostDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* _data, uint32_t size) {
+void AhciHost::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_ASSERT(size == 4 && ir.type == kIoResourceTypeMmio);
-  uint32_t* data = (uint32_t*)_data;
 
-  if (offset >= AHCI_PORT_REGS_START_ADDR) {
-    int port = (offset - AHCI_PORT_REGS_START_ADDR) >> 7;
-    ports_[port]->Read(offset & AHCI_PORT_ADDR_OFFSET_MASK, data);
+  if (offset >= 0x100) {
+    int port = (offset - 0x100) >> 7;
+    ports_[port]->Read(offset & 0x7f, (uint32_t*)data);
   } else {
-    switch (offset / 4)
-    {
-    case AHCI_HOST_REG_CAP:
-      *data = host_control_.capabilities;
-      break;
-    case AHCI_HOST_REG_CTL:
-      *data = host_control_.global_host_control;
-      break;
-    case AHCI_HOST_REG_PORTS_IMPL:
-      *data = host_control_.ports_implemented;
-      break;
-    default:
-      MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-        name_.c_str(), ir.base, offset, size, *data);
-    }
+    memcpy(data, (uint8_t*)&host_control_ + offset, size);
   }
 }
 
-void AhciHostDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void AhciHost::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_ASSERT(size == 4 && ir.type == kIoResourceTypeMmio);
   uint32_t value = *(uint32_t*)data;
   
-  if (offset >= AHCI_PORT_REGS_START_ADDR) {
-    int port = (offset - AHCI_PORT_REGS_START_ADDR) >> 7;
-    ports_[port]->Write(offset & AHCI_PORT_ADDR_OFFSET_MASK, value);
+  if (offset >= 0x100) {
+    int port = (offset - 0x100) >> 7;
+    ports_[port]->Write(offset & 0x7f, value);
   } else {
     switch (offset / 4)
     {
-    case AHCI_HOST_REG_CTL:
-      host_control_.global_host_control = value;
+    case kAhciHostRegControl:
+      if (value & HOST_CONTROL_RESET) {
+        ResetHost();
+      } else {
+        host_control_.global_host_control = (value & 3) | HOST_CONTROL_AHCI_ENABLE;
+        // Maybe irq is enabled now, so call check
+        CheckIrq();
+      }
+      break;
+    case kAhciHostRegIrqStatus:
+      host_control_.irq_status &= ~value;
       break;
     default:
       MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-        name_.c_str(), ir.base, offset, size, value);
+        name_, ir.base, offset, size, value);
     }
   }
 }
+
+DECLARE_DEVICE(AhciHost);

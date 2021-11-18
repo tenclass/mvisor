@@ -20,12 +20,14 @@ class Machine {
   bool IsValid() { return valid_; }
   void Interrupt(uint32_t irq, uint32_t level);
 
-  DeviceManager* device_manager() { return device_manager_; }
-  MemoryManager* memory_manager() { return memory_manager_; }
+  inline DeviceManager* device_manager() { return device_manager_; }
+  inline MemoryManager* memory_manager() { return memory_manager_; }
   int num_vcpus() { return num_vcpus_; }
+
  private:
   friend class Vcpu;
   friend class MemoryManager;
+
   void InitializeKvm();
   void CreateArchRelated();
   void CreateVcpu();
@@ -40,10 +42,10 @@ class Machine {
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;
-  // Allocate 8GB RAM
-  uint64_t ram_size_ = 8LL * (1 << 30);
+
+  uint64_t ram_size_;
   uint8_t* bios_data_ = nullptr;
-  size_t bios_size_ = 0;
+  size_t bios_size_;
 };
 
 #endif // MVISOR_MACHINE_H

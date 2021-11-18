@@ -1,40 +1,33 @@
 #include "vcpu.h"
 
-extern "C" {
-#include "apicdef.h"
-}
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <cstring>
 #include "machine.h"
 #include "logger.h"
-#include "arch/cpuid.h"
 
+#define MAX_KVM_CPUID_ENTRIES 100
+
+/* Use Vcpu::current_vcpu() */
 __thread Vcpu* Vcpu::current_vcpu_ = nullptr;
+
 
 Vcpu::Vcpu(Machine* machine, int vcpu_id)
     : machine_(machine), vcpu_id_(vcpu_id) {
+
   fd_ = ioctl(machine_->vm_fd_, KVM_CREATE_VCPU, vcpu_id_);
   MV_ASSERT(fd_ > 0);
 
+  /* A one page size memory region stored some information of current vcpu */
   kvm_run_ = (struct kvm_run*)mmap(nullptr, machine_->kvm_vcpu_mmap_size_,
     PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
   MV_ASSERT(kvm_run_ != MAP_FAILED);
 
+  /* Handle multiple MMIO operations at one time */
   int coalesced_offset = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_COALESCED_MMIO);
   if (coalesced_offset) {
     mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
-  }
-  
-  struct local_apic lapic;
-  if (ioctl(fd_, KVM_GET_LAPIC, &lapic) < 0) {
-    MV_PANIC("KVM_GET_LAPIC");
-  }
-  lapic.lvt_lint0.delivery_mode = APIC_MODE_EXTINT;
-  lapic.lvt_lint1.delivery_mode = APIC_MODE_NMI;
-  if (ioctl(fd_, KVM_SET_LAPIC, &lapic) < 0) {
-    MV_PANIC("KVM_SET_LAPIC");
   }
 }
 
@@ -47,9 +40,11 @@ Vcpu::~Vcpu() {
 }
 
 void Vcpu::Start() {
+  /* Starting a vcpu is as simple as starting a thread on the host */
   thread_ = std::thread(&Vcpu::Process, this);
 }
 
+/* Used for debugging sometimes */
 void Vcpu::EnableSingleStep() {
   struct kvm_guest_debug debug = {
     .control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP,
@@ -57,50 +52,93 @@ void Vcpu::EnableSingleStep() {
 
   if (ioctl(fd_, KVM_SET_GUEST_DEBUG, &debug) < 0)
     MV_PANIC("KVM_SET_GUEST_DEBUG");
+  
   debug_ = true;
 }
 
+/* Memory trapped IO */
 void Vcpu::ProcessMmio() {
   if (mmio_ring_) {
     const int max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
       sizeof(struct kvm_coalesced_mmio));
     while (mmio_ring_->first != mmio_ring_->last) {
       struct kvm_coalesced_mmio *m = &mmio_ring_->coalesced_mmio[mmio_ring_->first];
-      device_manager_->HandleMmio(m->phys_addr, m->data, m->len, 1);
+      machine_->device_manager()->HandleMmio(m->phys_addr, m->data, m->len, 1);
       mmio_ring_->first = (mmio_ring_->first + 1) % max_entries;
     }
   }
+
   auto *mmio = &kvm_run_->mmio;
-  device_manager_->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
+  machine_->device_manager()->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
 }
 
+/* Traditional IN, OUT operations */
 void Vcpu::ProcessIo() {
   auto *io = &kvm_run_->io;
   uint8_t* data = reinterpret_cast<uint8_t*>(kvm_run_) + kvm_run_->io.data_offset;
-  device_manager_->HandleIo(io->port, data, io->size, io->direction, io->count);
+  machine_->device_manager()->HandleIo(io->port, data, io->size, io->direction, io->count);
 }
 
-void Vcpu::vcpu_thread_handler(int signum) {
+/* To wake up a vcpu thread, the easist way is to send a signal */
+void Vcpu::SignalHandler(int signum) {
   // Do nothing now ...
 }
 
-void Vcpu::SetupSingalHandlers() {
+/* Vcpu thread only response to SIG_USER at the moment */
+void Vcpu::SetupSingalHandler() {
   sigset_t sigset;
   sigemptyset(&sigset);
   pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
 
-  signal(SIG_USER_INTERRUPT, Vcpu::vcpu_thread_handler);
+  signal(SIG_USER_INTERRUPT, Vcpu::SignalHandler);
 }
 
+/* 
+ * Intel CPUID Instruction Reference
+ * https://www.intel.com/content/dam/develop/external/us/en/documents/ \
+ * architecture-instruction-set-extensions-programming-reference.pdf
+ * TODO: Win10 shows unknown processor
+ */
+void Vcpu::SetupCpuid() {
+  struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)malloc(
+    sizeof(*cpuid) + MAX_KVM_CPUID_ENTRIES * sizeof(cpuid->entries[0]));
+  
+  cpuid->nent = MAX_KVM_CPUID_ENTRIES;
+  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, cpuid) < 0)
+    MV_PANIC("KVM_GET_SUPPORTED_CPUID failed");
+  
+  for (uint32_t i = 0; i < cpuid->nent; i++) {
+    auto entry = &cpuid->entries[i];
+    switch (entry->function)
+    {
+    case 0x1: // ACPI ID & Features
+      entry->ecx &= ~(1 << 31); // disable hypervisor mode now
+      entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
+      break;
+    case 0x6: // Thermal and Power Management Leaf
+      entry->ecx = entry->ecx & ~(1 << 3); // disable peformance energy bias
+      break;
+    default:
+      break;
+    }
+  }
+
+  if (ioctl(fd_, KVM_SET_CPUID2, cpuid) < 0)
+    MV_PANIC("KVM_SET_CPUID2 failed");
+
+  free(cpuid);
+}
+
+/* Initialize and executing a vCPU thread */
 void Vcpu::Process() {
   current_vcpu_ = this;
-  sprintf(thread_name_, "vcpu-%d", vcpu_id_);
-  SetThreadName(thread_name_);
-  SetupSingalHandlers();
-  MV_LOG("%s started", thread_name_);
+  sprintf(name_, "vcpu-%d", vcpu_id_);
+  
+  SetThreadName(name_);
+  SetupSingalHandler();
+  SetupCpuid();
 
-  device_manager_ = machine_->device_manager();
-  kvm_cpu_setup_cpuid(machine_->kvm_fd_, fd_);
+  MV_LOG("%s started", name_);
 
   for (; machine_->valid_;) {
     int ret = ioctl(fd_, KVM_RUN, 0);
@@ -114,8 +152,11 @@ void Vcpu::Process() {
       MV_LOG("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
       break;
     case KVM_EXIT_SHUTDOWN:
+      MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
+      goto quit;
     case KVM_EXIT_HLT:
-      goto check;
+      MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);
+      goto quit;
     case KVM_EXIT_DEBUG:
       PrintRegisters();
       getchar();
@@ -132,14 +173,16 @@ void Vcpu::Process() {
     }
   }
 
-check:
-  MV_LOG("%s ended", thread_name_);
+quit:
+  MV_LOG("%s ended", name_);
+
   // FIXME: should I call Quit()?
-  if (machine_->valid_) {
+  if (!machine_->valid_) {
     machine_->valid_ = false;
   }
 }
 
+/* Used for debugging */
 void Vcpu::PrintRegisters() {
   struct kvm_regs regs;
   struct kvm_sregs sregs;
@@ -147,5 +190,7 @@ void Vcpu::PrintRegisters() {
     MV_PANIC("KVM_GET_REGS failed");
   if (ioctl(fd_, KVM_GET_SREGS, &sregs) < 0)
     MV_PANIC("KVM_GET_REGS failed");
+
+  // call logger.h
   ::PrintRegisters(regs, sregs);
 }

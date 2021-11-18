@@ -2,8 +2,7 @@
 #define _MVISOR_MM_H
 
 #include <map>
-#include <vector>
-#include <unordered_set>
+#include <set>
 
 enum MemoryType {
   kMemoryTypeReserved = 0,
@@ -33,21 +32,22 @@ class MemoryManager {
  public:
   MemoryManager(const Machine* machine);
   ~MemoryManager();
-  void InitializeSystemRam();
 
-  // Add to and remove from regions_
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
-  void Unmap(const MemoryRegion* region);
+  void Unmap(const MemoryRegion** region);
 
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
   uint64_t HostToGuestAddress(void* host);
 
-  const std::vector<MemoryRegion*>& regions() const { return regions_; }
+  const std::set<MemoryRegion*>& regions() const { return regions_; }
+
  private:
+  void InitializeSystemRam();
   void AddMemoryRegion(MemoryRegion* region);
+
   const Machine* machine_;
-  std::vector<MemoryRegion*> regions_;
+  std::set<MemoryRegion*> regions_;
   std::map<uint64_t, KvmSlot*> kvm_slots_;
   void* ram_host_;
 };
