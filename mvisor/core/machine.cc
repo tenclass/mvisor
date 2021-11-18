@@ -146,7 +146,6 @@ void Machine::Interrupt(uint32_t irq, uint32_t level) {
 
 /* We should do the async IO here */
 int Machine::Run() {
-  MV_LOG("ok");
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }

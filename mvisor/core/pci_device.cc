@@ -36,14 +36,9 @@ PciDevice::~PciDevice() {
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   memcpy(data, pci_header_.data + offset, length);
-  // MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
-  //  name_.c_str(), offset, *(uint32_t*)data, length);
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  // MV_LOG("%s offset=0x%lx data=0x%lx length=0x%x",
-  //   name_.c_str(), offset, *(uint32_t*)data, length);
-
   if (offset == PCI_COMMAND) {
     MV_ASSERT(length == 2);
     WritePciCommand(*(uint16_t*)data);
@@ -83,7 +78,6 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
     mm->Unmap(&pci_rom_.mapped_region);
   }
 
-  MV_LOG("%s map rom address to 0x%08x", name_, address);
   pci_rom_.mapped_region = mm->Map(address, pci_rom_.size, pci_rom_.data,
     kMemoryTypeRam, (std::string(name_) + "-rom").c_str());
 }
@@ -115,7 +109,6 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
         DeactivatePciBar(i);
     }
   }
-  MV_LOG("%s pci commmand=%x", name_, new_command);
 }
 
 /* Call this function in device constructor */

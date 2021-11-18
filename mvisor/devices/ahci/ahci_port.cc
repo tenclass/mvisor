@@ -68,11 +68,7 @@ void AhciPort::Reset() {
 }
 
 bool AhciPort::HandleCommand(int slot) {
-  if (!command_list_) {
-    MV_PANIC("command_list is null");
-    return false;
-  }
-
+  MV_ASSERT(command_list_);
   current_command_ = &((AhciCommandHeader*)command_list_)[slot];
   if (drive_ == nullptr) {
     MV_PANIC("bad port %d", port_index_);
@@ -80,27 +76,25 @@ bool AhciPort::HandleCommand(int slot) {
   }
 
   AhciCommandTable* command_table = (AhciCommandTable*)manager_->TranslateGuestMemory(current_command_->command_table_base);
-  if (!command_table) {
-    MV_LOG("invalid fis address 0x%lx", current_command_->command_table_base);
-    return false;
-  }
+  MV_ASSERT(command_table);
   AhciFisRegH2D* fis = (AhciFisRegH2D*)command_table->command_fis;
 
   if (fis->fis_type != kAhciFisTypeRegH2D) {
-    MV_LOG("unknown fis type 0x%x", fis->fis_type);
+    MV_PANIC("unknown fis type 0x%x", fis->fis_type);
     return false;
   }
 
   if (!fis->is_command) {
-    MV_LOG("not a command fis");
+    MV_PANIC("not a command fis");
     return false;
   }
 
   if (is_native_command_queueing(fis->command)) {
+    /* NCQ is not necessary, VirtIO is the best choice */
     MV_PANIC("not supported NCQ yet %x", fis->command);
   }
 
-  // Copy IDE command parameters
+  /* Copy IDE command parameters */
   ide_regs_.command = fis->command;
   ide_regs_.feature0 = fis->feature0;
   ide_regs_.lba0 = fis->lba0;
@@ -113,8 +107,6 @@ bool AhciPort::HandleCommand(int slot) {
   ide_regs_.control = fis->feature1;
   ide_regs_.count0 = fis->count0;
   ide_regs_.count1 = fis->count1;
-
-  // Setup scatter gather list
 
   /* Copy the ACMD field (ATAPI packet, if any) from the AHCI command
     * table to ide_state->io_buffer */
@@ -131,37 +123,31 @@ bool AhciPort::HandleCommand(int slot) {
   port_control_.command_issue &= ~(1U << slot);
 
   if (ide_io_.transfer_type == kIdeTransferToDevice) {
+    /* Move data from sglist to iobuffer ? */
     drive_->EndTransfer(kIdeTransferToDevice);
   }
 
   if (ide_io_.transfer_type == kIdeTransferToHost) {
-    if (ide_io_.dma_status) {
-      UpdateRegisterD2H();
-    } else {
-      UpdateSetupPio();
-    }
     AhciPrdtEntry* sg = command_table->prdt_entries;
-    if (current_command_->prdt_length == 1 && sg[0].size + 1 == ide_io_.nbytes) {
-      void* host = manager_->TranslateGuestMemory(sg[0].address);
-      MV_ASSERT(host);
-      memcpy(host, ide_io_.buffer, ide_io_.nbytes);
-      current_command_->bytes_transferred += ide_io_.nbytes;
-      drive_->EndTransfer(kIdeTransferToHost);
-      return true;
-    }
     int prdt_index = 0;
+    ssize_t remain_bytes = ide_io_.nbytes;
     uint8_t* ptr = ide_io_.buffer;
-    while (ide_io_.nbytes > 0 && prdt_index < current_command_->prdt_length) {
+    while (remain_bytes > 0 && prdt_index < current_command_->prdt_length) {
       void* host = manager_->TranslateGuestMemory(sg[prdt_index].address);
       MV_ASSERT(host);
-      size_t count = ide_io_.nbytes < sg[prdt_index].size + 1 ? ide_io_.nbytes : sg[prdt_index].size + 1;
+      size_t count = remain_bytes < sg[prdt_index].size + 1 ? remain_bytes : sg[prdt_index].size + 1;
       memcpy(host, ptr, count);
       current_command_->bytes_transferred += count;
       prdt_index++;
       ptr += count;
     }
     drive_->EndTransfer(kIdeTransferToHost);
-    return true;
+    
+    if (ide_io_.dma_status) {
+      UpdateRegisterD2H();
+    } else {
+      UpdateSetupPio();
+    }
   } else {
     UpdateRegisterD2H();
   }
@@ -234,7 +220,7 @@ void AhciPort::CheckEngines() {
 void AhciPort::Write(uint64_t offset, uint32_t value) {
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
-  // MV_LOG("%d write reg 0x%x value %x irq %x", port_index_, reg_index, value, port_control_.irq_status);
+
   switch (reg_index)
   {
   case kAhciPortRegCommandListBase0:
@@ -373,15 +359,3 @@ void AhciPort::TrigerIrq(int irqbit) {
   host_->CheckIrq();
 }
 
-
-/* DEPRECATED: Old IDE call this */
-void AhciPort::RaiseIrq() {
-  if (ide_regs_.control & 2) {
-    return;
-  }
-  // MV_LOG("Triger IRQ status=0x%x reason=0x%x", ide_regs_.status, ide_regs_.count0);
-}
-
-/* DEPRECATED: Old IDE call this */
-void AhciPort::LowerIrq() {
-}

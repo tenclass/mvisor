@@ -83,7 +83,7 @@ void Cdrom::SetError(int sense_key, int asc) {
   regs->count0 = (regs->count0 & ~7) | ATA_CB_SC_P_IO | ATA_CB_SC_P_CD;
   sense_key_ = sense_key;
   asc_ = asc;
-  port_->RaiseIrq();
+  // port_->RaiseIrq();
 }
 
 
@@ -100,7 +100,6 @@ void Cdrom::StartTransfer(IdeTransferType type) {
   IdeStorageDevice::StartTransfer(type);
 }
 
-#include <unistd.h>
 void Cdrom::EndTransfer(IdeTransferType type) {
   IdeStorageDevice::EndTransfer(type);
 
@@ -120,8 +119,6 @@ void Cdrom::EndTransfer(IdeTransferType type) {
         MV_PANIC("not impl paramters cmd %x", regs->command);
         break;
       }
-    } else {
-      MV_LOG("write data to dev end, do nothing");
     }
   } else if (type == kIdeTransferToHost) {
     /* Device to Host, such as Read() */
@@ -143,19 +140,19 @@ void Cdrom::StartCommand() {
   auto regs = port_->registers();
   auto io = port_->io();
   regs->status = ATA_SR_DRDY;
-  MV_LOG("CDROM Start command=0x%x buf[0]=0x%x", regs->command, io->buffer[0]);
+  // MV_LOG("CDROM Start command=0x%x buf[0]=0x%x", regs->command, io->buffer[0]);
 
   switch (regs->command)
   {
-  case ATA_CMD_IDENTIFY_PACKET_DEVICE:
-    Atapi_IdentifyData();
-    break;
-  case ATA_CMD_PACKET:
+  case 0xA0: // ATA_CMD_PACKET
     /* Start a command transfer from host to device */
     io->nbytes = 12; /* PACKET CMD SIZE */
     regs->status |= ATA_SR_DRQ;
     regs->count0 = ATA_CB_SC_P_CD; /* CD is on, command will be handled later */
     StartTransfer(kIdeTransferToDevice);
+    break;
+  case 0xA1: // ATA_CMD_IDENTIFY_PACKET_DEVICE
+    Atapi_IdentifyData();
     break;
   default:
     /* Common commands */
@@ -170,7 +167,7 @@ void Cdrom::ParseCommandPacket() {
 
   switch (buf[0])
   {
-  case GPCMD_TEST_UNIT_READY:
+  case 0x00: // test unit ready
     // Test ready
     io->nbytes = 0;
     EndCommand();
@@ -178,17 +175,22 @@ void Cdrom::ParseCommandPacket() {
   case 0x03: // request sense
     Atapi_RequestSense();
     break;
+  case 0x12: // GPCMD_INQUIRY
+    Atapi_Inquiry();
+    break;
+  case 0x1E: // prevent allow media removal
+    EndCommand();
+    break;
   case 0x25: // get media capacity
     io->nbytes = 8;
     *(uint32_t*)&io->buffer[0] = htobe32(image_->sectors() - 1);
     *(uint32_t*)&io->buffer[4] = htobe32(2048);
     StartTransfer(kIdeTransferToHost);
     break;
-  case GPCMD_READ_10: {
+  case 0x28: { // GPCMD_READ_10
     CBD_RW_DATA10* p = (CBD_RW_DATA10*)buf;
     io->lba_position = be32toh(p->lba);
     io->lba_count = be16toh(p->count);
-    MV_LOG("read %x sectors at %x", io->lba_count, io->lba_position);
     if (io->lba_count == 0) {
       EndCommand();
     } else {
@@ -196,35 +198,28 @@ void Cdrom::ParseCommandPacket() {
     }
     break;
   }
-  case GPCMD_INQUIRY: {
-    Atapi_Inquiry();
-    break;
-  case 0x1E: // prevent allow media removal
+  case 0x2B: // GPCMD_SEEK
     EndCommand();
     break;
-  case GPCMD_MODE_SENSE_10:
-    Atapi_ModeSense();
-    break;
-  case GPCMD_SEEK:
-    EndCommand();
-    break;
-  }
-  case GPCMD_READ_TOC_PMA_ATIP:
-    Atapi_TableOfContent();
-    break;
-  case GPCMD_READ_SUBCHANNEL: {
+  case 0x42: { // GPCMD_READ_SUBCHANNEL
     uint8_t size = buf[8] < 8 ? buf[8] : 8;
     bzero(buf, size);
     io->nbytes = size;
     StartTransfer(kIdeTransferToHost);
     break;
   }
+  case 0x43: // GPCMD_READ_TOC_PMA_ATIP
+    Atapi_TableOfContent();
+    break;
   case 0x46: // get configuration
   case 0x4A: // get event status notification
     SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
     break;
   case 0x51: // read disc information
     SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+    break;
+  case 0x5A: // GPCMD_MODE_SENSE_10
+    Atapi_ModeSense();
     break;
   default:
     DumpHex(buf, 12);
@@ -255,8 +250,8 @@ void Cdrom::Atapi_RequestSense() {
 void Cdrom::Atapi_ModeSense() {
   auto io = port_->io();
   uint8_t* buf = io->buffer;
-  int max_size = be16toh(*(uint16_t*)&buf[6]);
-  MV_LOG("max_size = %d", max_size);
+  // int max_size = be16toh(*(uint16_t*)&buf[6]);
+
   switch (buf[2])
   {
   case 0x2A: // Capabilities

@@ -44,7 +44,7 @@ void MemoryManager::InitializeSystemRam() {
   MV_LOG("RAM size: %lu MB", machine_->ram_size_ >> 20);
 
   ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   MV_ASSERT(ram_host_ != MAP_FAILED);
 
   /* Don't map MMIO region */

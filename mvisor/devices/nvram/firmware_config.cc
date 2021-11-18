@@ -29,13 +29,14 @@ class FirmwareConfig : public Device {
       current_offset_ = 0;
     }
 
-    // MV_LOG("control=%08x address=%016lx len=0x%x index=0x%x offset=0x%x",
-    //  dma->control, dma->address, dma->length, current_index_, current_offset_);
     auto it = config_.find(current_index_);
     if (it == config_.end()) {
       dma->control = be32toh(FW_CFG_DMA_CTL_ERROR);
-      MV_LOG("config entry not found 0x%x", current_index_);
-      return;
+      if (current_index_ & 0x8000) {
+        /* Skip ARCH_LOCAL entries like ACPI, SMBIOS */
+        return;
+      }
+      MV_PANIC("config entry not found 0x%x", current_index_);
     }
 
     uint8_t* data = (uint8_t*)manager_->TranslateGuestMemory(dma->address);
@@ -160,7 +161,6 @@ class FirmwareConfig : public Device {
     if (ir.base == FW_CFG_IO_BASE && size == 2) {
       current_index_ = *(uint16_t*)data;
       current_offset_ = 0;
-      MV_LOG("select entry %d", current_index_);
     } else if (ir.base == FW_CFG_DMA_IO_BASE) {
       if (size == 4) {
         if (offset == 0) { // High 32bit address

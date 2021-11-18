@@ -15,14 +15,10 @@ Device::~Device() {
 }
 
 Device* Device::Create(const char* class_name) {
-  Device* device = dynamic_cast<Device*>(realize_class(class_name));
-  MV_ASSERT(device);
-  MV_LOG("created %s", device->name());
-  return device;
+  return dynamic_cast<Device*>(realize_class(class_name));
 }
 
 void Device::AddChild(Device* device) {
-  MV_LOG("add child %s to %s", device->name_, name_);
   device->parent_ = this;
   children_.push_back(device);
 }

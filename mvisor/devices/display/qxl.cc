@@ -78,8 +78,8 @@ class Qxl : public PciDevice, public DisplayInterface {
     } else if (vbe_index_ == VBE_DISPI_INDEX_VIDEO_MEMORY_64K) {
       *data = vram_size_ >> 16;
     } else {
-      MV_LOG("read index = %d data=%x", vbe_index_, vbe_registers_[vbe_index_]);
       *data = 0;
+      MV_PANIC("invalid read index = %d", vbe_index_);
     }
   }
 

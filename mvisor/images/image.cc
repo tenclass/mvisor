@@ -32,13 +32,13 @@ DiskImage::~DiskImage()
 
 ssize_t DiskImage::Write(void *buffer, uint64_t sector, int count) {
   if (readonly_) {
-    MV_PANIC("disk is readonly");
+    MV_PANIC("disk %s is readonly", path_.c_str());
   }
   return 0;
 }
 
 void DiskImage::Flush() {
   if (readonly_) {
-    MV_PANIC("disk is readonly");
+    MV_PANIC("disk %s is readonly", path_.c_str());
   }
 }

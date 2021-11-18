@@ -114,12 +114,12 @@ void Harddisk::WriteLba() {
 void Harddisk::StartCommand() {
   auto regs = port_->registers();
   auto io = port_->io();
-  MV_LOG("HD start command=0x%x", regs->command);
+  // MV_LOG("HD start command=0x%x", regs->command);
 
   regs->status = ATA_SR_DRDY;
   switch (regs->command)
   {
-  case 0x6: // DATA SET MANAGEMENT
+  case 0x06: // DATA SET MANAGEMENT
     if (regs->feature0 == 1) { // TRIM
       io->lba_mode = kIdeLbaMode28;
       io->dma_status = 1;
@@ -131,10 +131,7 @@ void Harddisk::StartCommand() {
       MV_PANIC("unknown dsm command=0x%x", regs->feature0);
     }
     break;
-  case ATA_CMD_IDENTIFY_PACKET_DEVICE:
-    AbortCommand();
-    break;
-  case ATA_CMD_READ_SECTORS:
+  case 0x20: // ATA_CMD_READ_SECTORS
     io->lba_mode = kIdeLbaMode28;
     io->dma_status = 0;
     ReadLba();
@@ -142,15 +139,7 @@ void Harddisk::StartCommand() {
     MV_ASSERT(io->lba_count);
     Ata_ReadSectors(1);
     break;
-  case ATA_CMD_READ_DMA:
-    io->lba_mode = kIdeLbaMode28;
-    io->dma_status = 1;
-    ReadLba();
-    MV_LOG("read %d sectors at 0x%lx", io->lba_count, io->lba_position);
-    MV_ASSERT(io->lba_count);
-    Ata_ReadSectors(io->lba_count);
-    break;
-  case ATA_CMD_WRITE_SECTORS:
+  case 0x30: // ATA_CMD_WRITE_SECTORS
     io->lba_mode = kIdeLbaMode28;
     ReadLba();
     MV_LOG("write %d sectors at 0x%lx", io->lba_count, io->lba_position);
@@ -158,8 +147,19 @@ void Harddisk::StartCommand() {
     io->nbytes = 1 * gemometry_.sector_size;
     StartTransfer(kIdeTransferToDevice);
     break;
+  case 0xA1: // ATA_CMD_IDENTIFY_PACKET_DEVICE
+    AbortCommand();
+    break;
   case 0xB0: // SMART
     AbortCommand();
+    break;
+  case 0xC8: // ATA_CMD_READ_DMA
+    io->lba_mode = kIdeLbaMode28;
+    io->dma_status = 1;
+    ReadLba();
+    MV_LOG("read %d sectors at 0x%lx", io->lba_count, io->lba_position);
+    MV_ASSERT(io->lba_count);
+    Ata_ReadSectors(io->lba_count);
     break;
   case 0xCA: // ATA_CMD_WRITE_DMA
     io->lba_mode = kIdeLbaMode28;

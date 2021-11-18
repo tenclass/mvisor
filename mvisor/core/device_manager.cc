@@ -23,7 +23,6 @@ DeviceManager::~DeviceManager() {
 /* Create necessary devices for a Q35 chipset machine  */
 void DeviceManager::IntializeQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
-  MV_LOG("ahci host = %p %s", ahci_host, ahci_host->name());
   auto cd = StorageDevice::Create("Cdrom", new RawDiskImage(CDROM_IMAGE, true));
   ahci_host->AddChild(cd);
   auto hd = StorageDevice::Create("Harddisk", new RawDiskImage(HARDDISK_IMAGE, false));
@@ -124,10 +123,6 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
       .memory_region = region
     });
   }
-
-  MV_LOG("%s register %s 0x%08lx-0x%08lx", device->name(),
-    io_resource.type == kIoResourceTypeMmio ? "mmio" : "pio",
-    io_resource.base, io_resource.base + io_resource.length - 1);
 }
 
 void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
@@ -172,6 +167,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       }
       ++found;
       if (it_count > 2) {
+        // Move to the front for faster access next time
         pio_handlers_.push_front(*it);
         pio_handlers_.erase(it);
         --it;
@@ -195,7 +191,8 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
 
 
 /* Use for loop to find MMIO handlers is stupid, unless we are sure addresses not overlapped.
- * But moving the handler to the front works great for now
+ * But moving the handler to the front works great for now, 99% MMIOs are concentrated on
+ * a few devices
  */
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
   std::deque<IoHandler*>::iterator it;
@@ -213,6 +210,7 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
       }
       ptr += size;
       if (it_count > 2) {
+        // Move to the front for faster access next time
         mmio_handlers_.push_front(*it);
         mmio_handlers_.erase(it);
         --it;

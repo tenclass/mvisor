@@ -17,23 +17,25 @@ IdeStorageDevice::~IdeStorageDevice() {
 void IdeStorageDevice::StartCommand() {
   auto regs = port_->registers();
 
-  MV_LOG("ata command = 0x%x", regs->command);
   switch (regs->command)
   {
-  case ATA_CMD_DEVICE_RESET:
+  case 0x00: // NOP
+    MV_PANIC("nop");
+    break;
+  case 0x08: // ATA_CMD_DEVICE_RESET
     regs->error &= ~ATA_CB_ER_BBK;
     regs->error = ATA_CB_ER_NDAM;
     regs->status = 0; // ?
     Ata_ResetSignature();
     break;
-  case ATA_CMD_IDENTIFY_DEVICE:
+  case 0x2F: // READ LOG
+    AbortCommand();
+    break;
+  case 0xEC: // ATA_CMD_IDENTIFY_DEVICE
     Ata_IdentifyDevice();
     break;
-  case ATA_CMD_SET_FEATURES:
+  case 0xEF: // ATA_CMD_SET_FEATURES
     Ata_SetFeatures();
-    break;
-  case ATA_CMD_NOP:
-    MV_PANIC("nop");
     break;
   default:
     MV_PANIC("unknown command 0x%x", regs->command);
@@ -45,13 +47,13 @@ void IdeStorageDevice::AbortCommand() {
   auto regs = port_->registers();
   regs->status = ATA_SR_DRDY | ATA_SR_ERR;
   regs->error = ATA_CB_ER_ABRT;
-  port_->RaiseIrq();
+  // port_->RaiseIrq();
 }
 
 void IdeStorageDevice::EndCommand() {
   auto regs = port_->registers();
   regs->status = ATA_SR_DRDY;
-  port_->RaiseIrq();
+  // port_->RaiseIrq();
 }
 
 void IdeStorageDevice::StartTransfer(IdeTransferType type) {
@@ -60,7 +62,7 @@ void IdeStorageDevice::StartTransfer(IdeTransferType type) {
   io->position = 0;
   io->transfer_type = type;
   regs->status |= ATA_SR_DRQ | ATA_SR_DSC;
-  port_->RaiseIrq();
+  // port_->RaiseIrq();
 }
 
 void IdeStorageDevice::EndTransfer(IdeTransferType type) {

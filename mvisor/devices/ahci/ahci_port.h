@@ -70,8 +70,6 @@ class AhciPort {
   void Write(uint64_t offset, uint32_t value);
   void Read(uint64_t offset, uint32_t* data);
   void Reset();
-  void RaiseIrq();
-  void LowerIrq();
   void TrigerIrq(int irqbit);
   void UpdateSetupPio();
 
