@@ -52,7 +52,7 @@ Install gcc and c++, then simply type `make`.
 
 ## Screenshot
 
-<img src="./docs/win10.jpg" width="640">
+<img src="./docs/win10.png" width="640">
 
 
 <img src="./docs/vbe.jpg" width="640">
