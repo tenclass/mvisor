@@ -13,6 +13,7 @@ int main()
   Machine* machine = new Machine(vcpus, ram_size);
   Viewer* viewer = new Viewer(machine);
   machine->Run();
+
   int ret = viewer->MainLoop();
   delete viewer;
   // delete machine;
