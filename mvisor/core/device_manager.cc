@@ -4,48 +4,32 @@
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
-#include "disk_image.h"
-#include "device_interface.h"
-#include "storage_device.h"
 
-#define CDROM_IMAGE         "/mnt/iso/win2016.iso"
-#define HARDDISK_IMAGE      "/data/win10.img"
+/* SystemRoot is a motherboard that holds all the funcational devices */
+class SystemRoot : public Device {
+ public:
+  SystemRoot() {}
+ private:
+  friend class DeviceManager;
+};
+DECLARE_DEVICE(SystemRoot);
 
-DeviceManager::DeviceManager(Machine* machine) : machine_(machine) {
+
+DeviceManager::DeviceManager(Machine* machine, Device* root) :
+  machine_(machine), root_(root)
+{
+  root_->manager_ = this;
+  /* Call Connect() on all devices and do the initialization
+   * 1. reset device status
+   * 2. register IO handlers
+   */
+  root_->Connect();
 }
 
 DeviceManager::~DeviceManager() {
   for (auto device: registered_devices_) {
     delete device;
   }
-}
-
-/* Create necessary devices for a Q35 chipset machine  */
-void DeviceManager::IntializeQ35() {
-  auto ahci_host = PciDevice::Create("AhciHost");
-  auto cd = StorageDevice::Create("Cdrom", new RawDiskImage(CDROM_IMAGE, true));
-  ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", new RawDiskImage(HARDDISK_IMAGE, false));
-  ahci_host->AddChild(hd);
-
-  auto lpc = PciDevice::Create("Ich9Lpc");
-  lpc->AddChild(Device::Create("DebugConsole"));
-  lpc->AddChild(Device::Create("Cmos"));
-  lpc->AddChild(Device::Create("Keyboard"));
-  lpc->AddChild(Device::Create("DummyDevice"));
-  lpc->AddChild(Device::Create("SmBus"));
-  lpc->AddChild(ahci_host);
-
-  auto pci_host = PciDevice::Create("PciHost");
-  pci_host->AddChild(lpc);
-  pci_host->AddChild(PciDevice::Create("Qxl"));
-
-  root_ = new SystemRoot(this);
-  root_->AddChild(Device::Create("FirmwareConfig"));
-  root_->AddChild(pci_host);
-
-  /* Call Connect() on all devices */
-  root_->Connect();
 }
 
 /* Used for debugging */

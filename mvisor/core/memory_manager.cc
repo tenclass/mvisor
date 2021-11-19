@@ -107,6 +107,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
       }
       
       if (pending_slots.find(hit) != pending_slots.end()) {
+        // Second collision happened, just remove the previous created
         pending_slots.erase(hit);
       } else {
         if (hit->region->type == kMemoryTypeRam) {
@@ -123,6 +124,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   kvm_slots_[slot->begin] = slot;
   regions_.insert(region);
 
+  // Commit the pending slots to KVM
   for (auto slot : pending_slots) {
     if (slot->region->type == kMemoryTypeRam) {
       kvm_set_user_memory_region(machine_->vm_fd_, slot->slot, slot->begin,

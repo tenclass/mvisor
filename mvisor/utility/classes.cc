@@ -7,7 +7,7 @@
 
 #define MAX_LEVEL 10
 
-static std::map<std::string, ClassItem*> classes;
+static std::map<std::string, ClassItem*>* classes = nullptr;
 
 void register_class(int type, const char* name, const char* source_path, ClassCreator create) {
   ClassItem* item = new ClassItem;
@@ -16,14 +16,18 @@ void register_class(int type, const char* name, const char* source_path, ClassCr
   item->class_file = source_path;
   item->create = create;
 
-  MV_ASSERT(classes.find(name) == classes.end());
-  classes[name] = item;
+  if (!classes) {
+    classes = new std::map<std::string, ClassItem*>;
+  }
+  MV_ASSERT(classes->find(name) == classes->end());
+  (*classes)[name] = item;
+  MV_LOG("register device class %s", name);
 }
 
 
 Object* realize_class(const char* name) {
-  auto it = classes.find(name);
-  if (it == classes.end()) {
+  auto it = classes->find(name);
+  if (it == classes->end()) {
     MV_PANIC("class not found %s", name);
   }
   Object* o = it->second->create();

@@ -14,21 +14,11 @@ struct IoHandler {
   const MemoryRegion* memory_region;
 };
 
-class DeviceManager;
-class SystemRoot : public Device {
- public:
-  SystemRoot(DeviceManager* manager) {
-    manager_ = manager;
-  }
-};
-
 class Machine;
 class DeviceManager {
  public:
-  DeviceManager(Machine* machine);
+  DeviceManager(Machine* machine, Device* root);
   ~DeviceManager();
-
-  void IntializeQ35(); // called only once
 
   void RegisterDevice(Device* device);
   void UnregisterDevice(Device* device);
@@ -49,10 +39,11 @@ class DeviceManager {
   void SetIrq(uint32_t irq, uint32_t level);
 
   Machine* machine() { return machine_; }
+  Device* root() { return root_; }
 
  private:
   Machine* machine_;
-  SystemRoot* root_;
+  Device* root_;
   std::set<Device*> registered_devices_;
   std::deque<IoHandler*> mmio_handlers_;
   std::deque<IoHandler*> pio_handlers_;

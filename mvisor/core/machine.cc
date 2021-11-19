@@ -1,31 +1,37 @@
 #include "machine.h"
 #include <linux/kvm.h>
 #include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <cstdio>
 #include <cstring>
-#include <bits/sigthread.h>
-
+#include "disk_image.h"
+#include "device_interface.h"
+#include "storage_device.h"
 #include "logger.h"
+
+#define CDROM_IMAGE         "/mnt/iso/win2016.iso"
+#define HARDDISK_IMAGE      "/data/win10.img"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 #define BIOS_PATH "../assets/bios-256k.bin"
 
+/* The Machine class handles all the VM initialization and common operations
+ * such as interrupts, start, quit, pause, resume
+ */
 Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {
 
   InitializeKvm();
+
   memory_manager_ = new MemoryManager(this);
 
   CreateArchRelated();
   CreateVcpu();
 
-  device_manager_ = new DeviceManager(this);
-  device_manager_->IntializeQ35();
-  
+  /* Currently, a Q35 chipset mother board is implemented */
+  Device* root = CreateQ35();
+  device_manager_ = new DeviceManager(this, root);
   io_thread_ = new IoThread(this);
 
   LoadBiosFile(BIOS_PATH);
@@ -128,6 +134,32 @@ void Machine::CreateArchRelated() {
   }
 }
 
+/* Create necessary devices for a Q35 chipset machine  */
+Device* Machine::CreateQ35() {
+  auto ahci_host = PciDevice::Create("AhciHost");
+  auto cd = StorageDevice::Create("Cdrom", new RawDiskImage(CDROM_IMAGE, true));
+  ahci_host->AddChild(cd);
+  auto hd = StorageDevice::Create("Harddisk", new RawDiskImage(HARDDISK_IMAGE, false));
+  ahci_host->AddChild(hd);
+
+  auto lpc = PciDevice::Create("Ich9Lpc");
+  lpc->AddChild(Device::Create("DebugConsole"));
+  lpc->AddChild(Device::Create("Cmos"));
+  lpc->AddChild(Device::Create("Keyboard"));
+  lpc->AddChild(Device::Create("DummyDevice"));
+  lpc->AddChild(Device::Create("SmBus"));
+  lpc->AddChild(ahci_host);
+
+  auto pci_host = PciDevice::Create("PciHost");
+  pci_host->AddChild(lpc);
+  pci_host->AddChild(PciDevice::Create("Qxl"));
+
+  auto root = Device::Create("SystemRoot");
+  root->AddChild(Device::Create("FirmwareConfig"));
+  root->AddChild(pci_host);
+
+  return root;
+}
 
 void Machine::CreateVcpu() {
   for (int i = 0; i < num_vcpus_; ++i) {

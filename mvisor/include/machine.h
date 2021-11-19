@@ -32,6 +32,7 @@ class Machine {
   void InitializeKvm();
   void CreateArchRelated();
   void CreateVcpu();
+  Device* CreateQ35();
   void LoadBiosFile(const char* path);
 
   bool valid_ = true;
