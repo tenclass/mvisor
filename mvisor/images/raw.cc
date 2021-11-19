@@ -18,15 +18,13 @@ RawDiskImage::RawDiskImage(const std::string path, bool readonly) {
 ssize_t RawDiskImage::Read(void *buffer, uint64_t sector, int count) {
   off_t offset = sector * sector_size_;
   off_t nbytes = count * sector_size_;
-  bytes_read_ += nbytes;
   return pread(fd_, buffer, nbytes, offset);
 }
 
 ssize_t RawDiskImage::Write(void *buffer, uint64_t sector, int count) {
-  // Disable real write for debugging
+  /* Disable real write for debugging */
   // off_t offset = sector * sector_size_;
   // off_t nbytes = count * sector_size_;
-  // bytes_writen_ += nbytes;
   // return pwrite(fd_, buffer, nbytes, offset);
   return 0;
 }

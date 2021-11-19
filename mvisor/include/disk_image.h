@@ -14,20 +14,19 @@ class DiskImage {
 
   size_t disk_size() { return disk_size_; }
   size_t sector_size() { return sector_size_; }
-  size_t sectors() { return sectors_; }
+  size_t total_sectors() { return total_sectors_; }
   void set_sector_size(size_t size) {
     sector_size_ = size;
-    sectors_ = disk_size_ / sector_size_;
+    total_sectors_ = disk_size_ / sector_size_;
   }
+
  protected:
   std::string path_;
   bool readonly_ = true;
-  size_t sector_size_ = 512;
-  size_t sectors_ = 0;
   int fd_ = -1;
+  size_t sector_size_ = 512;
+  size_t total_sectors_ = 0;
   size_t disk_size_ = 0;
-  size_t bytes_read_ = 0;
-  size_t bytes_writen_ = 0;
 };
 
 class RawDiskImage : public DiskImage {

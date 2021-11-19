@@ -7,6 +7,7 @@
 #include <vector>
 #include <signal.h>
 #include "vcpu.h"
+#include "io_thread.h"
 #include "memory_manager.h"
 #include "device_manager.h"
 
@@ -42,6 +43,7 @@ class Machine {
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;
+  IoThread* io_thread_;
 
   uint64_t ram_size_;
   uint8_t* bios_data_ = nullptr;

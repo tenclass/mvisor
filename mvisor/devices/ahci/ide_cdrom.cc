@@ -183,7 +183,7 @@ void Cdrom::ParseCommandPacket() {
     break;
   case 0x25: // get media capacity
     io->nbytes = 8;
-    *(uint32_t*)&io->buffer[0] = htobe32(image_->sectors() - 1);
+    *(uint32_t*)&io->buffer[0] = htobe32(image_->total_sectors() - 1);
     *(uint32_t*)&io->buffer[4] = htobe32(2048);
     StartTransfer(kIdeTransferToHost);
     break;
@@ -289,7 +289,7 @@ void Cdrom::Atapi_TableOfContent() {
   switch (format)
   {
   case 0: // TOC Data format
-    io->nbytes = cdrom_read_toc(image_->sectors(), buf, msf, start_track);
+    io->nbytes = cdrom_read_toc(image_->total_sectors(), buf, msf, start_track);
     if (io->nbytes < 0) {
       SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
       return;
@@ -304,7 +304,7 @@ void Cdrom::Atapi_TableOfContent() {
     StartTransfer(kIdeTransferToHost);
     break;
   case 2: // Raw TOC Data
-    io->nbytes = cdrom_read_toc_raw(image_->sectors(), buf, msf, start_track);
+    io->nbytes = cdrom_read_toc_raw(image_->total_sectors(), buf, msf, start_track);
     if (io->nbytes < 0) {
       SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
       return;

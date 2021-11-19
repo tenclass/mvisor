@@ -148,6 +148,7 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
 
 /* IO ports may overlap like MMIO addresses.
  * Use para-virtual drivers instead of IO operations to improve performance.
+ * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
  */
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
   int found = 0, it_count = 0;
@@ -193,6 +194,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
 /* Use for loop to find MMIO handlers is stupid, unless we are sure addresses not overlapped.
  * But moving the handler to the front works great for now, 99% MMIOs are concentrated on
  * a few devices
+ * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
  */
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
   std::deque<IoHandler*>::iterator it;

@@ -36,7 +36,7 @@ void Harddisk::Connect() {
 
 void Harddisk::InitializeGemometry() {
   gemometry_.sector_size = image_->sector_size();
-  gemometry_.total_sectors = image_->sectors();
+  gemometry_.total_sectors = image_->total_sectors();
   gemometry_.heads = 16;
   gemometry_.sectors_per_cylinder = 63;
   gemometry_.cylinders_per_heads = gemometry_.total_sectors / (gemometry_.sectors_per_cylinder * gemometry_.heads);

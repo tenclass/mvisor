@@ -12,7 +12,13 @@ class Vcpu {
  public:
   Vcpu(Machine* machine, int vcpu_id);
   ~Vcpu();
+
+  /* Create a vCPU thread and execute in guest VM */
   void Start();
+  /* Wakeup a sleeping guest vCPU */
+  void Kick();
+
+  /* Used for debugging */
   void EnableSingleStep();
   void PrintRegisters();
 

@@ -26,6 +26,8 @@ Machine::Machine(int vcpus, uint64_t ram_size)
   device_manager_ = new DeviceManager(this);
   device_manager_->IntializeQ35();
   
+  io_thread_ = new IoThread(this);
+
   LoadBiosFile(BIOS_PATH);
 }
 
@@ -37,6 +39,7 @@ Machine::~Machine() {
   for (auto vcpu: vcpus_) {
     delete vcpu;
   }
+  delete io_thread_;
 
   delete device_manager_;
   delete memory_manager_;
@@ -144,12 +147,13 @@ void Machine::Interrupt(uint32_t irq, uint32_t level) {
   }
 }
 
-/* We should do the async IO here */
+/* Start vCPU threads and IO thread */
 int Machine::Run() {
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }
 
+  io_thread_->Start();
   return 0;
 }
 
@@ -160,7 +164,7 @@ void Machine::Quit() {
   valid_ = false;
 
   for (auto vcpu: vcpus_) {
-    pthread_kill(vcpu->thread().native_handle(), SIG_USER_INTERRUPT);
+    vcpu->Kick();
   }
 }
 

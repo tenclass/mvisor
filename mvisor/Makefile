@@ -1,6 +1,6 @@
 INCLUDE_DIRS := ./include /usr/include
 LIBS := stdc++
-LIBS += pthread SDL
+LIBS += pthread aio SDL
 MKDIR_P = mkdir -p
 
 CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -O2 -g

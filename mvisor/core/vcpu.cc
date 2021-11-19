@@ -29,6 +29,8 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
   if (coalesced_offset) {
     mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
   }
+  
+  SetupCpuid();
 }
 
 Vcpu::~Vcpu() {
@@ -42,6 +44,42 @@ Vcpu::~Vcpu() {
 void Vcpu::Start() {
   /* Starting a vcpu is as simple as starting a thread on the host */
   thread_ = std::thread(&Vcpu::Process, this);
+}
+
+/* 
+ * Intel CPUID Instruction Reference
+ * https://www.intel.com/content/dam/develop/external/us/en/documents/ \
+ * architecture-instruction-set-extensions-programming-reference.pdf
+ * TODO: Win10 shows unknown processor
+ */
+void Vcpu::SetupCpuid() {
+  struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)malloc(
+    sizeof(*cpuid) + MAX_KVM_CPUID_ENTRIES * sizeof(cpuid->entries[0]));
+  
+  cpuid->nent = MAX_KVM_CPUID_ENTRIES;
+  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, cpuid) < 0)
+    MV_PANIC("KVM_GET_SUPPORTED_CPUID failed");
+  
+  for (uint32_t i = 0; i < cpuid->nent; i++) {
+    auto entry = &cpuid->entries[i];
+    switch (entry->function)
+    {
+    case 0x1: // ACPI ID & Features
+      entry->ecx &= ~(1 << 31); // disable hypervisor mode now
+      entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
+      break;
+    case 0x6: // Thermal and Power Management Leaf
+      entry->ecx = entry->ecx & ~(1 << 3); // disable peformance energy bias
+      break;
+    default:
+      break;
+    }
+  }
+
+  if (ioctl(fd_, KVM_SET_CPUID2, cpuid) < 0)
+    MV_PANIC("KVM_SET_CPUID2 failed");
+
+  free(cpuid);
 }
 
 /* Used for debugging sometimes */
@@ -93,42 +131,6 @@ void Vcpu::SetupSingalHandler() {
   signal(SIG_USER_INTERRUPT, Vcpu::SignalHandler);
 }
 
-/* 
- * Intel CPUID Instruction Reference
- * https://www.intel.com/content/dam/develop/external/us/en/documents/ \
- * architecture-instruction-set-extensions-programming-reference.pdf
- * TODO: Win10 shows unknown processor
- */
-void Vcpu::SetupCpuid() {
-  struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)malloc(
-    sizeof(*cpuid) + MAX_KVM_CPUID_ENTRIES * sizeof(cpuid->entries[0]));
-  
-  cpuid->nent = MAX_KVM_CPUID_ENTRIES;
-  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, cpuid) < 0)
-    MV_PANIC("KVM_GET_SUPPORTED_CPUID failed");
-  
-  for (uint32_t i = 0; i < cpuid->nent; i++) {
-    auto entry = &cpuid->entries[i];
-    switch (entry->function)
-    {
-    case 0x1: // ACPI ID & Features
-      entry->ecx &= ~(1 << 31); // disable hypervisor mode now
-      entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
-      break;
-    case 0x6: // Thermal and Power Management Leaf
-      entry->ecx = entry->ecx & ~(1 << 3); // disable peformance energy bias
-      break;
-    default:
-      break;
-    }
-  }
-
-  if (ioctl(fd_, KVM_SET_CPUID2, cpuid) < 0)
-    MV_PANIC("KVM_SET_CPUID2 failed");
-
-  free(cpuid);
-}
-
 /* Initialize and executing a vCPU thread */
 void Vcpu::Process() {
   current_vcpu_ = this;
@@ -136,7 +138,6 @@ void Vcpu::Process() {
   
   SetThreadName(name_);
   SetupSingalHandler();
-  SetupCpuid();
 
   MV_LOG("%s started", name_);
 
@@ -180,6 +181,10 @@ quit:
   if (!machine_->valid_) {
     machine_->valid_ = false;
   }
+}
+
+void Vcpu::Kick() {
+  pthread_kill(thread_.native_handle(), SIG_USER_INTERRUPT);
 }
 
 /* Used for debugging */
