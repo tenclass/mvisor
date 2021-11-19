@@ -52,7 +52,7 @@ class Cmos : public Device {
 
   Cmos() {
     non_maskable_interrupt_disabled_ = false;
-    AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2);
+    AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2, "CMOS");
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

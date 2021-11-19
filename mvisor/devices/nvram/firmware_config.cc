@@ -147,8 +147,8 @@ class FirmwareConfig : public Device {
 
  public:
   FirmwareConfig() {
-    AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2, "cfg_io");
-    AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "cfg_dma");
+    AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2, "Config IO");
+    AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "Config DMA");
   }
 
   void Connect() {

@@ -42,9 +42,6 @@ class Device : public Object {
   const std::vector<Device*>& children() { return children_; }
 
  protected:
-  void AddIoResource(IoResourceType type, uint64_t base, uint64_t length) {
-    AddIoResource(type, base, length, nullptr);
-  }
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
   void RemoveIoResource(IoResourceType type, const char* name);
   void RemoveIoResource(IoResourceType type, uint64_t base);

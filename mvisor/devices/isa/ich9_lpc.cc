@@ -79,18 +79,18 @@ class Ich9Lpc : public PciDevice {
     uint8_t acpi_control = *(uint8_t*)(pci_header_.data + ICH9_LPC_ACPI_CTRL);
     if (acpi_control & ICH9_LPC_ACPI_CTRL_ACPI_EN) {
       pm_io_base &= ICH9_LPC_PMBASE_BASE_ADDRESS_MASK;
-      AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "pm-io");
+      AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "PM IO");
     } else {
-      RemoveIoResource(kIoResourceTypePio, "pm-io");
+      RemoveIoResource(kIoResourceTypePio, "PM IO");
     }
   }
 
   void UpdateRootComplexRegisterBLock() {
     uint32_t rcrb = *(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA);
     if (rcrb & ICH9_LPC_RCBA_EN) {
-      AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "rcba");
+      AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "RCBA");
     } else {
-      RemoveIoResource(kIoResourceTypeMmio, "rcba");
+      RemoveIoResource(kIoResourceTypeMmio, "RCBA");
     }
   }
 
@@ -113,7 +113,7 @@ class Ich9Lpc : public PciDevice {
     pci_header_.subsys_vendor_id = 0x1af4;
     pci_header_.subsys_id = 0x1100;
 
-    AddIoResource(kIoResourceTypePio, 0xB2, 2);
+    AddIoResource(kIoResourceTypePio, 0xB2, 2, "APM IO");
   }
 
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
@@ -140,7 +140,7 @@ class Ich9Lpc : public PciDevice {
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir.base == 0xB2) {
+    if (ir.base == 0xB2) { // APM IO
       if (offset == 0) {
         *data = apm_control_;
       } else {

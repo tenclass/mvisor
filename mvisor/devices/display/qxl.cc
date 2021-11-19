@@ -297,9 +297,9 @@ class Qxl : public PciDevice, public DisplayInterface {
     pci_bars_[0].host_memory = vram_base_;
     
 
-    AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "vga-io");
-    AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "vbe-io");
-    AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "vga-mmio");
+    AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
+    AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "VBE IO");
+    AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO");
 
     ResetRegisters();
   }

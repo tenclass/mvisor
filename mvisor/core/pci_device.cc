@@ -79,7 +79,7 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
   }
 
   pci_rom_.mapped_region = mm->Map(address, pci_rom_.size, pci_rom_.data,
-    kMemoryTypeRam, (std::string(name_) + "-rom").c_str());
+    kMemoryTypeRam, "PCI ROM");
 }
 
 /* Handle IO, MMIO ON or OFF */
@@ -134,15 +134,16 @@ void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
 /* Called when an bar is activate by guest BIOS or OS */
 bool PciDevice::ActivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
+
   if (bar.type == kIoResourceTypePio) {
-    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "io");
+    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "mmio");
+    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "PCI BAR MMIO");
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr && bar.mapped_region == nullptr);
     auto mm = manager_->machine()->memory_manager();
     bar.mapped_region = mm->Map(bar.address, bar.size, bar.host_memory,
-      kMemoryTypeRam, "vgamem");
+      kMemoryTypeRam, "PCI BAR RAM");
   }
   bar.active = true;
   return true;

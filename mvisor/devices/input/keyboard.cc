@@ -353,9 +353,9 @@ class Keyboard : public Device, public KeyboardInterface {
   Keyboard() {
     Reset();
 
-    AddIoResource(kIoResourceTypePio, 0x92, 1);
-    AddIoResource(kIoResourceTypePio, 0x60, 1);
-    AddIoResource(kIoResourceTypePio, 0x64, 1);
+    AddIoResource(kIoResourceTypePio, 0x92, 1, "A20 Gate");
+    AddIoResource(kIoResourceTypePio, 0x60, 1, "PS2 Data");
+    AddIoResource(kIoResourceTypePio, 0x64, 1, "PS2 Command");
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
