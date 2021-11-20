@@ -136,14 +136,12 @@ void Harddisk::StartCommand() {
     io->lba_mode = kIdeLbaMode28;
     io->dma_status = 0;
     ReadLba();
-    MV_LOG("read %d sectors at 0x%lx", io->lba_count, io->lba_position);
     MV_ASSERT(io->lba_count);
     Ata_ReadSectors(1);
     break;
   case 0x30: // ATA_CMD_WRITE_SECTORS
     io->lba_mode = kIdeLbaMode28;
     ReadLba();
-    MV_LOG("write %d sectors at 0x%lx", io->lba_count, io->lba_position);
     MV_ASSERT(io->lba_count);
     io->nbytes = 1 * gemometry_.sector_size;
     StartTransfer(kIdeTransferToDevice);
@@ -158,7 +156,6 @@ void Harddisk::StartCommand() {
     io->lba_mode = kIdeLbaMode28;
     io->dma_status = 1;
     ReadLba();
-    MV_LOG("read %d sectors at 0x%lx", io->lba_count, io->lba_position);
     MV_ASSERT(io->lba_count);
     Ata_ReadSectors(io->lba_count);
     break;
@@ -166,7 +163,6 @@ void Harddisk::StartCommand() {
     io->lba_mode = kIdeLbaMode28;
     io->dma_status = 1;
     ReadLba();
-    MV_LOG("write %d sectors at 0x%lx", io->lba_count, io->lba_position);
     MV_ASSERT(io->lba_count);
     io->nbytes = io->lba_count * gemometry_.sector_size;
     StartTransfer(kIdeTransferToDevice);

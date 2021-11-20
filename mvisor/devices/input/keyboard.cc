@@ -318,7 +318,6 @@ class Keyboard : public Device, public KeyboardInterface {
       break;
     case 0x60: // write to control mode
       mode_ = data;
-      MV_LOG("set mode_=%x", mode_);
       break;
     case 0xD1: // controller output gate
       /* Windows wrote 0xDF, not supported yet */

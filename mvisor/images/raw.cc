@@ -36,13 +36,13 @@ class Raw : public DiskImage {
     total_blocks_ = st.st_size / block_size_;
   }
 
-  ssize_t Read(void *buffer, off64_t block, size_t block_count) {
+  ssize_t Read(void *buffer, off_t block, size_t block_count) {
     off_t offset = block * block_size_;
     off_t nbytes = block_count * block_size_;
     return pread(fd_, buffer, nbytes, offset);
   }
 
-  ssize_t Write(void *buffer, off64_t block, size_t block_count) {
+  ssize_t Write(void *buffer, off_t block, size_t block_count) {
     /* Disable real write for debugging */
     // off_t offset = block * block_size_;
     // off_t nbytes = block_count * block_size_;

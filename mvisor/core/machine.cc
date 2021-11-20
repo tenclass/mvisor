@@ -11,7 +11,7 @@
 #include "logger.h"
 
 #define CDROM_IMAGE         "/data/win2016.iso"
-#define HARDDISK_IMAGE      "/data/win10.img"
+#define HARDDISK_IMAGE      "/data/win10.qcow2"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 #define BIOS_PATH "../assets/bios-256k.bin"
@@ -137,9 +137,9 @@ void Machine::CreateArchRelated() {
 /* Create necessary devices for a Q35 chipset machine  */
 Device* Machine::CreateQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
-  auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
-  ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Raw", HARDDISK_IMAGE, false));
+  // auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
+  // ahci_host->AddChild(cd);
+  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, false));
   ahci_host->AddChild(hd);
 
   auto lpc = PciDevice::Create("Ich9Lpc");
