@@ -1,4 +1,4 @@
-#include "utility.h"
+#include "utilities.h"
 #include "logger.h"
 #include <cstdlib>
 #include <string>
@@ -21,7 +21,7 @@ void register_class(int type, const char* name, const char* source_path, ClassCr
   }
   MV_ASSERT(classes->find(name) == classes->end());
   (*classes)[name] = item;
-  MV_LOG("register device class %s", name);
+  MV_LOG("register class %s", name);
 }
 
 

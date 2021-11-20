@@ -1,7 +1,7 @@
 #include "device.h"
 #include <cstring>
 #include "logger.h"
-#include "utility.h"
+#include "utilities.h"
 #include "device_manager.h"
 
 Device::Device() {

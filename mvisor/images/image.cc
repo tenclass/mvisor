@@ -1,44 +1,20 @@
 #include "disk_image.h"
-#include <fcntl.h>
-#include <unistd.h>
 #include "logger.h"
+#include "utilities.h"
 
+DiskImage* DiskImage::Open(const std::string format, const std::string path, bool readonly) {
+  DiskImage* image = dynamic_cast<DiskImage*>(realize_class(format.c_str()));
+  if (image == nullptr) {
+    MV_PANIC("image format %s is not supported", format.c_str());
+  }
+
+  image->Initialize(path, readonly);
+  return image;
+}
 
 DiskImage::DiskImage() {
 }
 
-bool DiskImage::Open(const std::string path, bool readonly) {
-  path_ = path;
-  readonly_ = readonly;
-
-  if (readonly) {
-    fd_ = open(path.c_str(), O_RDONLY);
-  } else {
-    fd_ = open(path_.c_str(), O_RDWR);
-  }
-  if (fd_ < 0)
-    return false;
-
-  return true;
-}
-
 DiskImage::~DiskImage()
 {
-  if (fd_ >= 0) {
-    close(fd_);
-  }
-}
-
-
-ssize_t DiskImage::Write(void *buffer, uint64_t sector, int count) {
-  if (readonly_) {
-    MV_PANIC("disk %s is readonly", path_.c_str());
-  }
-  return 0;
-}
-
-void DiskImage::Flush() {
-  if (readonly_) {
-    MV_PANIC("disk %s is readonly", path_.c_str());
-  }
 }

@@ -73,7 +73,9 @@ Cdrom::Cdrom()
 void Cdrom::Connect() {
   IdeStorageDevice::Connect();
 
-  image_->set_sector_size(2048);
+  ImageInformation info = image_->information();
+  image_block_size_ = info.block_size;
+  total_tracks_ = info.total_blocks * info.block_size / track_size_;
 }
 
 void Cdrom::SetError(int sense_key, int asc) {
@@ -178,13 +180,16 @@ void Cdrom::ParseCommandPacket() {
   case 0x12: // GPCMD_INQUIRY
     Atapi_Inquiry();
     break;
+  case 0x1B: // start stop unit such as load or eject the media
+    EndCommand();
+    break;
   case 0x1E: // prevent allow media removal
     EndCommand();
     break;
   case 0x25: // get media capacity
     io->nbytes = 8;
-    *(uint32_t*)&io->buffer[0] = htobe32(image_->total_sectors() - 1);
-    *(uint32_t*)&io->buffer[4] = htobe32(2048);
+    *(uint32_t*)&io->buffer[0] = htobe32(total_tracks_ - 1);
+    *(uint32_t*)&io->buffer[4] = htobe32(track_size_);
     StartTransfer(kIdeTransferToHost);
     break;
   case 0x28: { // GPCMD_READ_10
@@ -199,6 +204,9 @@ void Cdrom::ParseCommandPacket() {
     break;
   }
   case 0x2B: // GPCMD_SEEK
+    EndCommand();
+    break;
+  case 0x35: // GPCMD_FLUSH_CACHE
     EndCommand();
     break;
   case 0x42: { // GPCMD_READ_SUBCHANNEL
@@ -227,6 +235,7 @@ void Cdrom::ParseCommandPacket() {
     break;
   }
 }
+
 
 void Cdrom::Atapi_RequestSense() {
   auto io = port_->io();
@@ -289,7 +298,7 @@ void Cdrom::Atapi_TableOfContent() {
   switch (format)
   {
   case 0: // TOC Data format
-    io->nbytes = cdrom_read_toc(image_->total_sectors(), buf, msf, start_track);
+    io->nbytes = cdrom_read_toc(total_tracks_, buf, msf, start_track);
     if (io->nbytes < 0) {
       SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
       return;
@@ -297,14 +306,14 @@ void Cdrom::Atapi_TableOfContent() {
     StartTransfer(kIdeTransferToHost);
     break;
   case 1: // Multi-session
-    io->nbytes = 12;
     *(uint16_t*)&buf[0] = htobe16(0x000A);
     buf[2] = 1;
     buf[3] = 1;
+    io->nbytes = 12;
     StartTransfer(kIdeTransferToHost);
     break;
   case 2: // Raw TOC Data
-    io->nbytes = cdrom_read_toc_raw(image_->total_sectors(), buf, msf, start_track);
+    io->nbytes = cdrom_read_toc_raw(total_tracks_, buf, msf, start_track);
     if (io->nbytes < 0) {
       SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
       return;
@@ -324,8 +333,11 @@ void Cdrom::Atapi_ReadSectors(int chunk_count) {
 
   size_t read_count = chunk_count;
 
-  image_->Read(buf, io->lba_position, read_count);
-  io->nbytes = image_->sector_size() * read_count;
+  image_->Read(buf,
+    track_size_ / image_block_size_ * io->lba_position,
+    track_size_ / image_block_size_ * read_count
+  );
+  io->nbytes = track_size_ * read_count;
   StartTransfer(kIdeTransferToHost);
 
   io->lba_position += read_count;

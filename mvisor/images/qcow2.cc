@@ -5,12 +5,13 @@
 #include <sys/stat.h>
 #include "logger.h"
 
-class Raw : public DiskImage {
+class Qcow2 : public DiskImage {
  private:
   int fd_ = -1;
   bool readonly_ = true;
   size_t block_size_ = 512;
   size_t total_blocks_ = 0;
+  size_t image_size_ = 0;
 
   ImageInformation information() {
     return ImageInformation {
@@ -32,21 +33,22 @@ class Raw : public DiskImage {
 
     struct stat st;
     fstat(fd_, &st);
-    block_size_ = 512;
-    total_blocks_ = st.st_size / block_size_;
+    image_size_ = st.st_size;
+    ReadQcowHeader();
   }
 
+  void ReadQcowHeader() {
+
+  }
+
+
   ssize_t Read(void *buffer, off64_t block, size_t block_count) {
-    off_t offset = block * block_size_;
-    off_t nbytes = block_count * block_size_;
-    return pread(fd_, buffer, nbytes, offset);
+    MV_PANIC("not implemented");
+    return 0;
   }
 
   ssize_t Write(void *buffer, off64_t block, size_t block_count) {
-    /* Disable real write for debugging */
-    // off_t offset = block * block_size_;
-    // off_t nbytes = block_count * block_size_;
-    // return pwrite(fd_, buffer, nbytes, offset);
+    MV_PANIC("not implemented");
     return 0;
   }
 
@@ -59,4 +61,4 @@ class Raw : public DiskImage {
 
 };
 
-DECLARE_DISK_IMAGE(Raw);
+DECLARE_DISK_IMAGE(Qcow2);

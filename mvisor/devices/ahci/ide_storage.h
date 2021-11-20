@@ -125,6 +125,9 @@ class Cdrom : public IdeStorageDevice {
 
   int sense_key_;
   int asc_;
+  size_t total_tracks_;
+  size_t track_size_ = 2048; // Cdrom always use 2048 track size
+  size_t image_block_size_;
 };
 
 

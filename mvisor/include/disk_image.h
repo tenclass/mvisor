@@ -1,40 +1,35 @@
 #ifndef _MVISOR_IMAGE_H
 #define _MVISOR_IMAGE_H
 
+#include "utilities.h"
+#include "object.h"
+/* Use this macro at the end of .cc source file to declare your image format */
+#define DECLARE_DISK_IMAGE(classname) __register_class(classname, 1)
+
 #include <string>
 
-class DiskImage {
+struct ImageInformation {
+  /* Disk size is block_size * total_blocks */
+  size_t block_size;
+  size_t total_blocks;
+};
+
+class DiskImage : public Object {
  public:
   DiskImage();
   virtual ~DiskImage();
-  virtual bool Open(const std::string path, bool readonly);
-  virtual ssize_t Read(void *buffer, uint64_t sector, int count) = 0;
-  virtual ssize_t Write(void *buffer, uint64_t sector, int count);
-  virtual void Flush();
 
-  size_t disk_size() { return disk_size_; }
-  size_t sector_size() { return sector_size_; }
-  size_t total_sectors() { return total_sectors_; }
-  void set_sector_size(size_t size) {
-    sector_size_ = size;
-    total_sectors_ = disk_size_ / sector_size_;
-  }
+  /* Always use this static method to create a DiskImage */
+  static DiskImage* Open(const std::string format, const std::string path, bool readonly);
+
+  /* Interfaces for a image format to implement */
+  virtual ImageInformation information() = 0;
+  virtual ssize_t Read(void *buffer, off64_t block, size_t block_count) = 0;
+  virtual ssize_t Write(void *buffer, off64_t block, size_t block_count) = 0;
+  virtual void Flush() = 0;
 
  protected:
-  std::string path_;
-  bool readonly_ = true;
-  int fd_ = -1;
-  size_t sector_size_ = 512;
-  size_t total_sectors_ = 0;
-  size_t disk_size_ = 0;
-};
-
-class RawDiskImage : public DiskImage {
- public:
-  RawDiskImage(const std::string path, bool readonly = false);
-  virtual ssize_t Read(void *buffer, uint64_t sector, int count);
-  virtual ssize_t Write(void *buffer, uint64_t sector, int count);
-  virtual void Flush();
+  virtual void Initialize(const std::string& path, bool readonly) = 0;
 };
 
 

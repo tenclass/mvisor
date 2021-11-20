@@ -35,8 +35,9 @@ void Harddisk::Connect() {
 }
 
 void Harddisk::InitializeGemometry() {
-  gemometry_.sector_size = image_->sector_size();
-  gemometry_.total_sectors = image_->total_sectors();
+  ImageInformation info = image_->information();
+  gemometry_.sector_size = info.block_size;
+  gemometry_.total_sectors = info.total_blocks;
   gemometry_.heads = 16;
   gemometry_.sectors_per_cylinder = 63;
   gemometry_.cylinders_per_heads = gemometry_.total_sectors / (gemometry_.sectors_per_cylinder * gemometry_.heads);
@@ -270,7 +271,7 @@ void Harddisk::Ata_IdentifyDevice() {
   p[1] = gemometry_.cylinders_per_heads;
   p[3] = gemometry_.heads;
   p[4] = 512 * gemometry_.sectors_per_cylinder;
-  p[5] = 512;
+  p[5] = 512; /* Can we use larger sector size? */
   p[6] = gemometry_.sectors_per_cylinder;
   padstr((char*)(p + 10), drive_info_.serial, 20);
 
