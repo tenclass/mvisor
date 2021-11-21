@@ -124,6 +124,22 @@ bool AhciPort::HandleCommand(int slot) {
 
   if (ide_io_.transfer_type == kIdeTransferToDevice) {
     /* Move data from sglist to iobuffer ? */
+    if (!current_command_->is_atapi) {
+      AhciPrdtEntry* sg = command_table->prdt_entries;
+      int prdt_index = 0;
+      ssize_t remain_bytes = ide_io_.nbytes;
+      uint8_t* ptr = ide_io_.buffer;
+      while (remain_bytes > 0 && prdt_index < current_command_->prdt_length) {
+        void* host = manager_->TranslateGuestMemory(sg[prdt_index].address);
+        MV_ASSERT(host);
+        size_t count = remain_bytes < sg[prdt_index].size + 1 ? remain_bytes : sg[prdt_index].size + 1;
+        memcpy(ptr, host, count);
+        current_command_->bytes_transferred += count;
+        prdt_index++;
+        ptr += count;
+        remain_bytes -= count;
+      }
+    }
     drive_->EndTransfer(kIdeTransferToDevice);
   }
 
@@ -140,6 +156,7 @@ bool AhciPort::HandleCommand(int slot) {
       current_command_->bytes_transferred += count;
       prdt_index++;
       ptr += count;
+      remain_bytes -= count;
     }
     drive_->EndTransfer(kIdeTransferToHost);
     

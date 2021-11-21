@@ -43,11 +43,9 @@ class Raw : public DiskImage {
   }
 
   ssize_t Write(void *buffer, off_t block, size_t block_count) {
-    /* Disable real write for debugging */
-    // off_t offset = block * block_size_;
-    // off_t nbytes = block_count * block_size_;
-    // return pwrite(fd_, buffer, nbytes, offset);
-    return 0;
+    off_t offset = block * block_size_;
+    off_t nbytes = block_count * block_size_;
+    return pwrite(fd_, buffer, nbytes, offset);
   }
 
   void Flush() {

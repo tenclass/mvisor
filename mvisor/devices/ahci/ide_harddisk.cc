@@ -125,6 +125,7 @@ void Harddisk::StartCommand() {
       io->lba_mode = kIdeLbaMode28;
       io->dma_status = 1;
       ReadLba();
+      DumpHex(regs, sizeof(*regs));
       MV_LOG("trim at sector 0x%x count %d", io->lba_position, io->lba_count);
       EndCommand();
     } else {
@@ -146,6 +147,9 @@ void Harddisk::StartCommand() {
     io->nbytes = 1 * gemometry_.sector_size;
     StartTransfer(kIdeTransferToDevice);
     break;
+  case 0x40: // VERIFY
+    EndCommand();
+    break;
   case 0xA1: // ATA_CMD_IDENTIFY_PACKET_DEVICE
     AbortCommand();
     break;
@@ -156,6 +160,7 @@ void Harddisk::StartCommand() {
     io->lba_mode = kIdeLbaMode28;
     io->dma_status = 1;
     ReadLba();
+    // MV_LOG("read 0x%lx sectors at 0x%lx", io->lba_count, io->lba_position);
     MV_ASSERT(io->lba_count);
     Ata_ReadSectors(io->lba_count);
     break;
@@ -163,12 +168,17 @@ void Harddisk::StartCommand() {
     io->lba_mode = kIdeLbaMode28;
     io->dma_status = 1;
     ReadLba();
+    // MV_LOG("write 0x%lx sectors at 0x%lx", io->lba_count, io->lba_position);
     MV_ASSERT(io->lba_count);
     io->nbytes = io->lba_count * gemometry_.sector_size;
     StartTransfer(kIdeTransferToDevice);
     break;
+  case 0xE0:  // STANDBYNOW1
+    EndCommand();
+    break;
   case 0xE7:  // FLUSH_CACHE
   case 0xEA:  // FLUSH_CACHE_EXT
+    image_->Flush();
     EndCommand();
     break;
   case 0xF5:  // SECURITY_FREEZE_LOCK
@@ -191,9 +201,11 @@ void Harddisk::EndTransfer(IdeTransferType type) {
       switch (regs->command)
       {
       case ATA_CMD_WRITE_SECTORS:
-        Ata_WriteSectors(1);
+        MV_ASSERT((size_t)io->nbytes >= io->lba_count * gemometry_.sector_size); // data is ready?
+        Ata_WriteSectors(io->lba_count);
         break;
       case ATA_CMD_WRITE_DMA:
+        MV_ASSERT((size_t)io->nbytes >= io->lba_count * gemometry_.sector_size); // data is ready?
         Ata_WriteSectors(io->lba_count);
         break;
       default:
