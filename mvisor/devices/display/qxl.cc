@@ -11,7 +11,7 @@
 #include "vbe.h"
 #include "device_interface.h"
 
-#define VGA_ROM_PATH "../assets/vgabios-qxl.bin"
+#define VGA_ROM_PATH    "../share/vgabios-qxl.bin"
 #define VGA_PIO_BASE    0x3C0
 #define VGA_PIO_SIZE    0x20
 #define VBE_PIO_BASE    0x1CE
@@ -296,10 +296,6 @@ class Qxl : public PciDevice, public DisplayInterface {
     pci_header_.subsys_id = 0x1100;
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
     pci_header_.irq_pin = 1;
-
-    /* Initialize rom data and rom bar size */
-    LoadRomFile(VGA_ROM_PATH);
-
     
     AddPciBar(0, 384 << 20, kIoResourceTypeRam);   /* 384MB vgamem */
     // AddPciBar(1, 8 << 20, kIoResourceTypeMmio);     /* 8MB vram */
@@ -318,6 +314,12 @@ class Qxl : public PciDevice, public DisplayInterface {
     AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO");
 
     ResetRegisters();
+  }
+
+  void Connect() {
+    PciDevice::Connect();
+    /* Initialize rom data and rom bar size */
+    LoadRomFile(VGA_ROM_PATH);
   }
 
   ~Qxl() {

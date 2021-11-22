@@ -52,6 +52,10 @@
         "set": "cpp",
         "list": "cpp",
         "cinttypes": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "mutex": "cpp",
+        "filesystem": "cpp",
+        "codecvt": "cpp",
+        "condition_variable": "cpp"
     }
 }

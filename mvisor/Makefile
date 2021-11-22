@@ -3,6 +3,7 @@ LIBS := stdc++
 LIBS += pthread aio SDL
 MKDIR_P = mkdir -p
 
+# FIXME: Add -g only if debug mode is on
 CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -g
 BUILD_DIR = ../build
 

@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <cstring>
 #include "disk_image.h"
 #include "device_interface.h"
@@ -12,7 +13,7 @@
 
 #define CDROM_IMAGE           "/data/win10_21h1.iso"
 #define HARDDISK_IMAGE        "/data/hd.qcow2"
-#define BIOS_PATH             "../assets/bios-256k.bin"
+#define BIOS_PATH             "../share/bios-256k.bin"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 
@@ -21,7 +22,7 @@
  */
 Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {
-
+  InitializePath();
   InitializeKvm();
 
   memory_manager_ = new MemoryManager(this);
@@ -60,6 +61,17 @@ Machine::~Machine() {
     free(bios_backup_);
 }
 
+/* Apparently this only works under Linux */
+void Machine::InitializePath() {
+  char temp[1024] = { 0 };
+  if (readlink("/proc/self/exe", temp, sizeof(temp) - 1) > 0) {
+    executable_path_ = dirname(temp);
+  } else {
+    getcwd(temp, sizeof(temp) - 1);
+    executable_path_ = temp;
+  }
+}
+
 void Machine::InitializeKvm() {
   kvm_fd_ = open("/dev/kvm", O_RDWR);
   MV_ASSERT(kvm_fd_ > 0);
@@ -82,7 +94,12 @@ void Machine::InitializeKvm() {
 /* SeaBIOS is loaded into the end of 1MB and the end of 4GB */
 void Machine::LoadBiosFile(const char* path) {
   // Read BIOS data from path to bios_data
-  int fd = open(path, O_RDONLY);
+  int fd = -1;
+  if (path[0] == '/') {
+    fd = open(path, O_RDONLY);
+  } else {
+    fd = open((executable_path_ + "/" + path).c_str(), O_RDONLY);
+  }
   MV_ASSERT(fd > 0);
   struct stat st;
   fstat(fd, &st);
@@ -151,6 +168,7 @@ Device* Machine::CreateQ35() {
   lpc->AddChild(Device::Create("Keyboard"));
   lpc->AddChild(Device::Create("DummyDevice"));
   lpc->AddChild(Device::Create("SmBus"));
+  lpc->AddChild(Device::Create("PcSpeaker"));
   lpc->AddChild(ahci_host);
 
   auto pci_host = PciDevice::Create("PciHost");

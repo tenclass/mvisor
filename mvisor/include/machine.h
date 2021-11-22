@@ -3,6 +3,7 @@
 
 #define PAGE_SIZE 4096
 
+#include <string>
 #include <thread>
 #include <vector>
 #include <signal.h>
@@ -25,11 +26,13 @@ class Machine {
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
   int num_vcpus() { return num_vcpus_; }
+  const std::string& executable_path() { return executable_path_; }
 
  private:
   friend class Vcpu;
   friend class MemoryManager;
 
+  void InitializePath();
   void InitializeKvm();
   void CreateArchRelated();
   void CreateVcpu();
@@ -51,6 +54,8 @@ class Machine {
   size_t bios_size_;
   void* bios_data_ = nullptr;
   void* bios_backup_ = nullptr;
+
+  std::string executable_path_;
 };
 
 #endif // MVISOR_MACHINE_H

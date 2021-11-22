@@ -14,10 +14,15 @@ PciDevice::PciDevice() {
   bzero(&pci_rom_, sizeof(pci_rom_));
 }
 
-/* Some PCI device has ROM file */
+/* Some PCI device has ROM file, should we reset ROM data if system reset ??? */
 void PciDevice::LoadRomFile(const char* path) {
-  /* Load rom file */
-  int fd = open(path, O_RDONLY);
+  /* Load rom file from path */
+  int fd = -1;
+  if (path[0] == '/') {
+    fd = open(path, O_RDONLY);
+  } else {
+    fd = open((manager_->machine()->executable_path() + "/" + path).c_str(), O_RDONLY);
+  }
   MV_ASSERT(fd >= 0);
   struct stat st;
   fstat(fd, &st);
