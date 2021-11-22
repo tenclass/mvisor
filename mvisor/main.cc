@@ -9,7 +9,7 @@ using namespace std;
 int main()
 {
   const int vcpus = 4;
-  const uint64_t ram_size = 8LL * (1 << 30);
+  const uint64_t ram_size = 4LL * (1 << 30);
   Machine* machine = new Machine(vcpus, ram_size);
   Viewer* viewer = new Viewer(machine);
   machine->Run();

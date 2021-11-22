@@ -173,7 +173,6 @@ class Keyboard : public Device, public KeyboardInterface {
       mouse_sample_rate_ = data;
       mouse_command_ = 0;
       PushMouse(RESPONSE_ACK);
-      MV_LOG("set mouse sample rate to %d", data);
       break;
     case 0:
       switch (data)

@@ -10,11 +10,11 @@
 #include "storage_device.h"
 #include "logger.h"
 
-#define CDROM_IMAGE         "/data/win10_21h1.iso"
-#define HARDDISK_IMAGE      "../assets/hd.qcow2"
+#define CDROM_IMAGE           "/data/win10_21h1.iso"
+#define HARDDISK_IMAGE        "/data/hd.qcow2"
+#define BIOS_PATH             "../assets/bios-256k.bin"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
-#define BIOS_PATH "../assets/bios-256k.bin"
 
 /* The Machine class handles all the VM initialization and common operations
  * such as interrupts, start, quit, pause, resume
@@ -142,7 +142,7 @@ Device* Machine::CreateQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
   auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
   ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, true));
+  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, false));
   ahci_host->AddChild(hd);
 
   auto lpc = PciDevice::Create("Ich9Lpc");

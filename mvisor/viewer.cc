@@ -207,7 +207,8 @@ int Viewer::MainLoop() {
           /* swap the middle button and right button bit of input state */
           uint8_t state = SDL_GetMouseState(nullptr, nullptr);
           uint8_t ps2_state = (state & 1) | ((state & 2) << 1) | ((state & 4) >> 1);
-          kbd->QueueMouseEvent(ps2_state, event.motion.xrel, event.motion.yrel, 0);
+          /* multiply by 2 to prevent host mouse go out of window */
+          kbd->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
         }
         break;
       case SDL_QUIT:
