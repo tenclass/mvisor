@@ -1,4 +1,5 @@
 #include "storage_device.h"
+#include "disk_image.h"
 #include "logger.h"
 
 StorageDevice* StorageDevice::Create(const char* class_name, DiskImage* image) {
@@ -13,5 +14,9 @@ StorageDevice::StorageDevice() {
 }
 
 StorageDevice::~StorageDevice() {
-
+  /* Maybe we should use shared_ptr here ? */
+  if (image_) {
+    delete image_;
+    image_ = nullptr;
+  }
 }

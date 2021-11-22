@@ -56,6 +56,8 @@ Machine::~Machine() {
     close(kvm_fd_);
   if (bios_data_)
     free(bios_data_);
+  if (bios_backup_)
+    free(bios_backup_);
 }
 
 void Machine::InitializeKvm() {
@@ -86,11 +88,12 @@ void Machine::LoadBiosFile(const char* path) {
   fstat(fd, &st);
 
   bios_size_ = st.st_size;
-  bios_data_ = static_cast<uint8_t*>(valloc(bios_size_));
-  MV_ASSERT(bios_data_);
-  read(fd, bios_data_, bios_size_);
+  bios_backup_ = malloc(bios_size_);
+  read(fd, bios_backup_, bios_size_);
   close(fd);
 
+  bios_data_ = valloc(bios_size_);
+  memcpy(bios_data_, bios_backup_, bios_size_);
   // Map BIOS file to memory
   memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
   memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
@@ -200,4 +203,14 @@ void Machine::Quit() {
   }
 }
 
+/* Recover BIOS data and reset all vCPU */
+void Machine::Reset() {
+  memcpy(bios_data_, bios_backup_, bios_size_);
+
+  for (auto vcpu: vcpus_) {
+    vcpu->Schedule([vcpu]() {
+      vcpu->Reset();
+    });
+  }
+}
 

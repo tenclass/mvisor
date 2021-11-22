@@ -14,17 +14,18 @@ class Viewer {
 
  private:
   void DrawTextMode();
-  void DrawGraphicMode();
+  void DrawGraphicsMode();
   void DrawTextCursor();
   void DrawCharacter(int x, int y, int character, int attribute, uint8_t* font);
-  void UpdateScreenSize(int w, int h);
+  void UpdateWindow();
   void AcquireDisplayFrame();
 
   Machine* machine_;
   DeviceManager* device_manager_;
   DisplayInterface* display_;
   SDL_Surface* screen_surface_ = nullptr;
-  SDL_Surface* draw_buffer_ = nullptr;
+  bool requested_update_window_ = false;
+  DisplayMode mode_;
   uint16_t width_;
   uint16_t height_;
   uint16_t bpp_;

@@ -54,9 +54,15 @@ class Qxl : public PciDevice, public DisplayInterface {
   uint16_t height_;
   uint16_t bpp_;
 
+  std::vector<DisplayChangeListener> display_change_listerners_;
+
 
   void ResetRegisters() {
     bzero(vbe_registers_, sizeof(vbe_registers_));
+  }
+
+  void RegisterDisplayChangeListener(DisplayChangeListener callback) {
+    display_change_listerners_.push_back(callback);
   }
 
   void VbeReadPort(uint64_t port, uint16_t* data) {
@@ -107,6 +113,9 @@ class Qxl : public PciDevice, public DisplayInterface {
       case VBE_DISPI_INDEX_ENABLE:
         MV_LOG("set vbe enable %x to %x %dx%d bpp=%d", vbe_registers_[4], value,
           vbe_registers_[1], vbe_registers_[2], vbe_registers_[3]);
+        if (value & 1) {
+          UpdateRenderer();
+        }
         break;
       case VBE_DISPI_INDEX_BANK:
         vram_read_select_ = vram_base_ + (value << 16);
@@ -182,6 +191,7 @@ class Qxl : public PciDevice, public DisplayInterface {
         attribute_index_ = 0x80 | value;
         if (attribute_index_ & 0x20) {
           // renderer changed event
+          UpdateRenderer();
         }
       }
       break;
@@ -264,6 +274,12 @@ class Qxl : public PciDevice, public DisplayInterface {
     MV_LOG("map index=%d read_index=%d", index, read_index);
   }
 
+  void UpdateRenderer() {
+    for (auto listener : display_change_listerners_) {
+      listener();
+    }
+  }
+
  public:
   Qxl() {
     devfn_ = PCI_MAKE_DEVFN(1, 0);
@@ -328,9 +344,15 @@ class Qxl : public PciDevice, public DisplayInterface {
     } else {
       *mode = kDisplayVgaMode;
     }
-    *w = width_;
-    *h = height_;
-    *b = bpp_;
+    if (*mode == kDisplayTextMode) {
+      *w = 640;
+      *h = 400;
+      *b = 8;
+    } else {
+      *w = width_;
+      *h = height_;
+      *b = bpp_;
+    }
   }
 
   const uint8_t* GetPallete() const {

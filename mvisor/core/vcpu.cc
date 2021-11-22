@@ -29,6 +29,10 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
   if (coalesced_offset) {
     mmio_ring_ = (struct kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
   }
+
+  /* Save default registers for system reset */
+  ioctl(fd_, KVM_GET_REGS, &default_registers_.regs);
+  ioctl(fd_, KVM_GET_SREGS, &default_registers_.sregs);
   
   SetupCpuid();
 }
@@ -41,9 +45,17 @@ Vcpu::~Vcpu() {
     close(fd_);
 }
 
+/* Starting a vcpu is as simple as starting a thread on the host */
 void Vcpu::Start() {
-  /* Starting a vcpu is as simple as starting a thread on the host */
   thread_ = std::thread(&Vcpu::Process, this);
+}
+
+
+void Vcpu::Reset() {
+  if (ioctl(fd_, KVM_SET_REGS, &default_registers_.regs) < 0)
+    MV_PANIC("KVM_SET_REGS failed");
+  if (ioctl(fd_, KVM_SET_SREGS, &default_registers_.sregs) < 0)
+    MV_PANIC("KVM_SET_SREGS failed");
 }
 
 /* 
@@ -143,12 +155,21 @@ void Vcpu::Process() {
 
   for (; machine_->valid_;) {
     int ret = ioctl(fd_, KVM_RUN, 0);
-    if (ret < 0) {
+    if (ret < 0 && errno != EINTR) {
       MV_LOG("KVM_RUN failed vcpu=%d ret=%d", vcpu_id_, ret);
     }
 
     switch (kvm_run_->exit_reason)
     {
+    case KVM_EXIT_MMIO:
+      ProcessMmio();
+      break;
+    case KVM_EXIT_IO:
+      ProcessIo();
+      break;
+    case KVM_EXIT_INTR:
+      /* User interrupt */
+      break;
     case KVM_EXIT_UNKNOWN:
       MV_LOG("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
       break;
@@ -162,29 +183,42 @@ void Vcpu::Process() {
       PrintRegisters();
       getchar();
       break;
-    case KVM_EXIT_IO:
-      ProcessIo();
-      break;
-    case KVM_EXIT_MMIO:
-      ProcessMmio();
-      break;
     default:
-      MV_PANIC("exit reason %d, expected KVM_EXIT_HLT(%d)",
+      MV_PANIC("vcpu %d exit reason %d, expected KVM_EXIT_HLT(%d)", vcpu_id_,
         kvm_run_->exit_reason, KVM_EXIT_HLT);
     }
+
+    /* Execute tasks after processing IO/MMIO */
+    ExecuteTasks();
   }
 
 quit:
   MV_LOG("%s ended", name_);
-
-  // FIXME: should I call Quit()?
-  if (!machine_->valid_) {
-    machine_->valid_ = false;
-  }
 }
 
 void Vcpu::Kick() {
-  pthread_kill(thread_.native_handle(), SIG_USER_INTERRUPT);
+  if (thread_.joinable()) {
+    pthread_kill(thread_.native_handle(), SIG_USER_INTERRUPT);
+  }
+}
+
+void Vcpu::Schedule(VoidCallback callback) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  tasks_.emplace_back(VcpuTask {
+    .callback = callback
+  });
+  Kick();
+}
+
+void Vcpu::ExecuteTasks() {
+  while (!tasks_.empty()) {
+    VcpuTask task = tasks_.front();
+    task.callback();
+  
+    mutex_.lock();
+    tasks_.pop_front();
+    mutex_.unlock();
+  }
 }
 
 /* Used for debugging */

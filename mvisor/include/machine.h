@@ -20,6 +20,7 @@ class Machine {
   void Quit();
   bool IsValid() { return valid_; }
   void Interrupt(uint32_t irq, uint32_t level);
+  void Reset();
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
@@ -47,8 +48,9 @@ class Machine {
   IoThread* io_thread_;
 
   uint64_t ram_size_;
-  uint8_t* bios_data_ = nullptr;
   size_t bios_size_;
+  void* bios_data_ = nullptr;
+  void* bios_backup_ = nullptr;
 };
 
 #endif // MVISOR_MACHINE_H

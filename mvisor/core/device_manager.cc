@@ -27,8 +27,11 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
 }
 
 DeviceManager::~DeviceManager() {
-  for (auto device: registered_devices_) {
-    delete device;
+  if (root_) {
+    /* Both Disconnect and destruction are all invoked recursively */
+    root_->Disconnect();
+    delete root_;
+    root_ = nullptr;
   }
 }
 

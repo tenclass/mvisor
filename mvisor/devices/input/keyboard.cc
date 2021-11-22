@@ -297,7 +297,8 @@ class Keyboard : public Device, public KeyboardInterface {
       break;
     case 0xFE ... 0xFF: // pulse output line
       if ((command & 1) == 0) {
-        MV_PANIC("system reset");
+        MV_LOG("system reset");
+        manager_->machine()->Reset();
       }
       break;
     default:

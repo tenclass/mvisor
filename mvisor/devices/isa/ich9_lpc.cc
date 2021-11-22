@@ -5,6 +5,7 @@
 #include "logger.h"
 #include "pci_device.h"
 #include "device_manager.h"
+#include "machine.h"
 
 #define ICH9_LPC_PMBASE                         0x40
 #define ICH9_LPC_PMBASE_BASE_ADDRESS_MASK       Q35_MASK(32, 15, 7)
@@ -47,7 +48,7 @@
 
 #define ICH9_PMIO_SIZE                          128
 
-
+#define ACPI_BITMASK_SLEEP_ENABLE               0x2000
 
 #define PM_TIMER_FREQUENCY 3579545
 
@@ -205,8 +206,10 @@ class Ich9Lpc : public PciDevice {
     } else if (offset >= 0x4 && offset < 0x8) { // ACPI CNT
       MV_ASSERT(size == 2);
       uint16_t value = *(uint16_t*)data;
-      acpi_control_ = value;
-      MV_LOG("acpi control=0x%x", acpi_control_);
+      acpi_control_ = value & ~ACPI_BITMASK_SLEEP_ENABLE;
+      if (value & ACPI_BITMASK_SLEEP_ENABLE) {
+        AcpiSuspend((value >> 10) & 7);
+      }
     } else if (offset >= 0x20 && offset < 0x30) {  // ACPI GPE
       MV_ASSERT(size == 1);
       offset -= 0x20;
@@ -221,6 +224,20 @@ class Ich9Lpc : public PciDevice {
     }
   }
 
+  void AcpiSuspend(uint8_t type) {
+    switch (type)
+    {
+    case 0: // soft power off
+      manager_->machine()->Quit();
+      break;
+    case 1: // suspend request
+      manager_->machine()->Quit();
+      break;
+    default:
+      MV_LOG("unknown acpi suspend type=%d", type);
+      break;
+    }
+  }
 };
 
 DECLARE_DEVICE(Ich9Lpc);

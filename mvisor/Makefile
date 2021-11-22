@@ -3,7 +3,7 @@ LIBS := stdc++
 LIBS += pthread aio SDL
 MKDIR_P = mkdir -p
 
-CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -O2 -g
+CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -g
 BUILD_DIR = ../build
 
 EXECUTABLE = $(BUILD_DIR)/mvisor
@@ -18,6 +18,9 @@ $(shell mkdir -p $(dir $(MV_OBJECTS)))
 .PHONY: run all clean
 run: all
 	$(EXECUTABLE)
+
+debug: all
+	gdb $(EXECUTABLE)
 
 all: $(EXECUTABLE)
 

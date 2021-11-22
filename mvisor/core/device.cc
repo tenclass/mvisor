@@ -9,9 +9,11 @@ Device::Device() {
 }
 
 Device::~Device() {
-  if (connected_) {
-    Disconnect();
+  /* Parent device has the resposibility to delete children */
+  for (auto child : children_) {
+    delete child;
   }
+  children_.clear();
 }
 
 Device* Device::Create(const char* class_name) {
@@ -42,6 +44,9 @@ void Device::Connect() {
 }
 
 void Device::Disconnect() {
+  if (!connected_) {
+    return;
+  }
   connected_ = false;
   for (auto child : children_) {
     child->Disconnect();

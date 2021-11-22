@@ -33,6 +33,8 @@ class DummyDevice : public Device {
     AddIoResource(kIoResourceTypePio, 0x0170, 8, "IDE Secondary");
     AddIoResource(kIoResourceTypePio, 0x01E8, 8, "IDE Tertiary");
     AddIoResource(kIoResourceTypePio, 0x0168, 8, "IDE Quaternary");
+    AddIoResource(kIoResourceTypePio, 0x03F0, 8, "IDE Primary Control");
+    AddIoResource(kIoResourceTypePio, 0x0370, 8, "IDE Secondary Control");
 
     /* PORT 0278-027A - PARALLEL PRINTER PORT (usually LPT1, sometimes LPT2) */
     AddIoResource(kIoResourceTypePio, 0x0278, 3, "Parallel LPT1");

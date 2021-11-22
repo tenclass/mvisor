@@ -31,7 +31,7 @@ Nov 2021
 15. Option Roms / SMBIOS / ACPI Table ✅
 16. Boot DOS ✅
 17. Boot OS (Windows 7 or 10) ✅
-18. QCOW2
+18. QCOW2 ✅
 
 Milestone 2: Multimedia & Networking
 Dec 2021
@@ -47,8 +47,11 @@ Feb 2022
 
 ## Install
 
-Install gcc and c++, then simply type `make`.
+For CentOS 8, install libaio-devel, SDL-devel, gcc-c++.
 
+Then type `make`.
+
+An ISO image file is needed to install OS. Change the file path in machine.cc
 
 ## Screenshot
 

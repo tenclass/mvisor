@@ -31,8 +31,9 @@ void IoThread::EventLoop() {
   while (machine_->IsValid()) {
     int ret = io_getevents(context_, min_nr, max_nr, events, &timeout);
     if (ret < 0) {
+      if (ret == -EINTR)
+        continue;
       MV_PANIC("failed in io_getevents, ret=%d", ret);
-      continue;
     }
   
     if (ret == 0) {

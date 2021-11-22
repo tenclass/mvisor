@@ -16,6 +16,6 @@ int main()
 
   int ret = viewer->MainLoop();
   delete viewer;
-  // delete machine;
+  delete machine;
   return ret;
 }

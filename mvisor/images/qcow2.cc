@@ -424,7 +424,7 @@ class Qcow2 : public DiskImage {
     uint8_t *ptr = (uint8_t*)buffer;
   
     while (bytes_written < total_bytes) {
-      if (offset >= image_header_.size) {
+      if (readonly_ || offset >= image_header_.size) {
         return bytes_written;
       }
 
@@ -471,6 +471,10 @@ class Qcow2 : public DiskImage {
   }
 
   void Flush() {
+    if (readonly_) {
+      return;
+    }
+
     FlushL2Tables();
     FlushRefcountBlocks();
     if (l1_table_dirty_) {
