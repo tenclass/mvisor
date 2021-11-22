@@ -19,6 +19,7 @@ class Viewer {
   void DrawCharacter(int x, int y, int character, int attribute, uint8_t* font);
   void UpdateWindow();
   void AcquireDisplayFrame();
+  void UpdateCaption();
 
   Machine* machine_;
   DeviceManager* device_manager_;
@@ -29,6 +30,7 @@ class Viewer {
   uint16_t width_;
   uint16_t height_;
   uint16_t bpp_;
+  bool grab_input_ = false;
 };
 
 #endif // _MVISOR_VIEWER_H

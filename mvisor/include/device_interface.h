@@ -5,7 +5,8 @@
 
 class KeyboardInterface {
  public:
-  virtual void QueueKeyboardEvent(uint8_t scancode) = 0;
+  virtual void QueueKeyboardEvent(uint8_t scancode[10]) = 0;
+  virtual void QueueMouseEvent(uint8_t button_state, int rel_x, int rel_y, int rel_z) = 0;
 };
 
 enum DisplayMode {

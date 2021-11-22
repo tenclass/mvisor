@@ -116,9 +116,16 @@ void Viewer::UpdateWindow() {
     }
     SDL_SetPalette(screen_surface_, SDL_LOGPAL | SDL_PHYSPAL, colors, 0, 256);
   }
+  UpdateCaption();
+}
 
+void Viewer::UpdateCaption() {
   char title[100];
-  sprintf(title, "MVisor - A mini x86 hypervisor - %dx%dx%d", width_, height_, bpp_);
+  if (grab_input_) {
+    sprintf(title, "MVisor - Press [ESC] to release mouse");
+  } else {
+    sprintf(title, "MVisor - A mini x86 hypervisor - %dx%dx%d", width_, height_, bpp_);
+  }
   SDL_WM_SetCaption(title, "MVisor");
 }
 
@@ -174,10 +181,33 @@ int Viewer::MainLoop() {
       {
       case SDL_KEYDOWN:
       case SDL_KEYUP:
+        /* Type ESCAPE to exit mouse grab mode */
+        if (grab_input_ && event.key.keysym.sym == SDLK_ESCAPE) {
+          grab_input_ = false;
+          SDL_WM_GrabInput(SDL_GRAB_OFF);
+          SDL_ShowCursor(SDL_ENABLE);
+          UpdateCaption();
+          break;
+        }
         if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
-          for (int i = 0; transcoded[i]; i++) {
-            kbd->QueueKeyboardEvent(transcoded[i]);
-          }
+          kbd->QueueKeyboardEvent(transcoded);
+        }
+        break;
+      case SDL_MOUSEBUTTONDOWN:
+        if (!grab_input_) {
+          grab_input_ = true;
+          SDL_WM_GrabInput(SDL_GRAB_ON);
+          SDL_ShowCursor(SDL_DISABLE);
+          UpdateCaption();
+        }
+        /* fall through */
+      case SDL_MOUSEBUTTONUP:
+      case SDL_MOUSEMOTION:
+        if (grab_input_) {
+          /* swap the middle button and right button bit of input state */
+          uint8_t state = SDL_GetMouseState(nullptr, nullptr);
+          uint8_t ps2_state = (state & 1) | ((state & 2) << 1) | ((state & 4) >> 1);
+          kbd->QueueMouseEvent(ps2_state, event.motion.xrel, event.motion.yrel, 0);
         }
         break;
       case SDL_QUIT:

@@ -1,4 +1,5 @@
 #include <cstring>
+#include <mutex>
 #include "logger.h"
 #include "device_manager.h"
 #include "machine.h"
@@ -27,6 +28,7 @@ class Keyboard : public Device, public KeyboardInterface {
  private:
   std::deque<uint8_t> keyboard_queue_;
   std::deque<uint8_t> mouse_queue_;
+  std::mutex mutex_;
 
   uint8_t status_;
   uint8_t mode_;
@@ -76,6 +78,13 @@ class Keyboard : public Device, public KeyboardInterface {
     mouse_dx_ = mouse_dy_ = 0;
     mouse_disable_streaming_ = false;
     mouse_stream_mode_ = 1;
+    /* 
+     * https://wiki.osdev.org/PS/2_Mouse
+     * 0: Normal 2 buttons mouse
+     * 3: Use 3 buttons
+     * 5: Use 5 buttons
+     */
+    mouse_id_ = 3;
   }
 
   void RaiseIrq(int irq) {
@@ -130,6 +139,14 @@ class Keyboard : public Device, public KeyboardInterface {
     FillOutputData();
   }
 
+  void PushMouse4(uint8_t data[3]) {
+    mouse_queue_.push_back(data[0]);
+    mouse_queue_.push_back(data[1]);
+    mouse_queue_.push_back(data[2]);
+    mouse_queue_.push_back(data[3]);
+    FillOutputData();
+  }
+
   uint8_t ReadData() {
     status_ &= ~(STATUS_AUXDATA | STATUS_OFULL);
 
@@ -156,6 +173,7 @@ class Keyboard : public Device, public KeyboardInterface {
       mouse_sample_rate_ = data;
       mouse_command_ = 0;
       PushMouse(RESPONSE_ACK);
+      MV_LOG("set mouse sample rate to %d", data);
       break;
     case 0:
       switch (data)
@@ -359,6 +377,7 @@ class Keyboard : public Device, public KeyboardInterface {
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+    std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
 
     switch (ir.base)
@@ -380,6 +399,7 @@ class Keyboard : public Device, public KeyboardInterface {
 
 
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+    std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
     // MV_LOG("write %x %x", ir.base, *data);
 
@@ -390,10 +410,36 @@ class Keyboard : public Device, public KeyboardInterface {
     }
   }
 
-  void QueueKeyboardEvent(uint8_t scancode) {
-    if (!keyboard_disable_scanning_) {
-      PushKeyboard(scancode);
+  void QueueKeyboardEvent(uint8_t scancode[10]) {
+    if (keyboard_disable_scanning_) {
+      return;
     }
+  
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (int i = 0; i < 10 && scancode[i]; i++) {
+      PushKeyboard(scancode[i]);
+    }
+  }
+
+  void QueueMouseEvent(uint8_t button_state, int rel_x, int rel_y, int rel_z) {
+    if (mouse_disable_streaming_) {
+      return;
+    }
+  
+    std::lock_guard<std::mutex> lock(mutex_);
+    uint8_t state = mouse_button_state_ = button_state;
+    rel_y = -rel_y;
+    state |= 8; // Always 1
+    if (rel_x < 0) {
+      rel_x = 0x100 + rel_x;
+      state |= 0x10;
+    }
+    if (rel_y < 0) {
+      rel_y = 0x100 + rel_y;
+      state |= 0x20;
+    }
+    uint8_t data[] = { state, (uint8_t)rel_x, (uint8_t)rel_y, (uint8_t)rel_z };
+    PushMouse4(data);
   }
 
 };

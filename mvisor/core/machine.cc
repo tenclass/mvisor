@@ -11,7 +11,7 @@
 #include "logger.h"
 
 #define CDROM_IMAGE         "/data/win10_21h1.iso"
-#define HARDDISK_IMAGE      "../assets/empty.qcow2"
+#define HARDDISK_IMAGE      "../assets/hd.qcow2"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 #define BIOS_PATH "../assets/bios-256k.bin"
@@ -142,7 +142,7 @@ Device* Machine::CreateQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
   auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
   ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, false));
+  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, true));
   ahci_host->AddChild(hd);
 
   auto lpc = PciDevice::Create("Ich9Lpc");
