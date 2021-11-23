@@ -54,16 +54,12 @@ class Raw : public DiskImage {
     total_blocks_ = st.st_size / block_size_;
   }
 
-  ssize_t Read(void *buffer, off_t block, size_t block_count) {
-    off_t offset = block * block_size_;
-    off_t nbytes = block_count * block_size_;
-    return pread(fd_, buffer, nbytes, offset);
+  ssize_t Read(void *buffer, off_t position, size_t length) {
+    return pread(fd_, buffer, length, position);
   }
 
-  ssize_t Write(void *buffer, off_t block, size_t block_count) {
-    off_t offset = block * block_size_;
-    off_t nbytes = block_count * block_size_;
-    return pwrite(fd_, buffer, nbytes, offset);
+  ssize_t Write(void *buffer, off_t position, size_t length) {
+    return pwrite(fd_, buffer, length, position);
   }
 
   void Flush() {

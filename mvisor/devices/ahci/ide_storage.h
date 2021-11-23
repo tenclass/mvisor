@@ -21,6 +21,9 @@
 
 #include "device.h"
 #include "storage_device.h"
+#include <sys/uio.h>
+#include <vector>
+#include <functional>
 
 #define IDE_MAX_REGISTERS 18
 
@@ -38,7 +41,7 @@ enum IdeDmaMode {
 };
 
 struct IdeRegisters
-{\
+{
   uint8_t feature0;
   uint8_t feature1;
   
@@ -61,22 +64,16 @@ struct IdeRegisters
 } __attribute__((packed));
 
 
-enum IdeTransferType {
-  kIdeNoTransfer,
-  kIdeTransferToDevice,
-  kIdeTransferToHost
-};
-
 struct IdeIo {
   ssize_t         buffer_size;
   uint8_t*        buffer;
-  ssize_t         position;
   ssize_t         nbytes;
-  IdeTransferType transfer_type;
   IdeLbaMode      lba_mode;
   size_t          lba_count;
-  size_t          lba_position;
+  size_t          lba_block;
   uint32_t        dma_status;
+  uint8_t         atapi_command[16];
+  std::vector<struct iovec> vector; 
 };
 
 struct IdeDriveInfo {
@@ -91,6 +88,7 @@ enum IdeStorageType {
   kIdeStorageTypeCdrom
 };
 
+typedef std::function<void(void)> VoidCallback;
 class AhciPort;
 
 class IdeStorageDevice : public StorageDevice {
@@ -102,23 +100,25 @@ class IdeStorageDevice : public StorageDevice {
   void BindPort(AhciPort* port);
 
   virtual void StartCommand();
-  virtual void EndCommand();
   virtual void AbortCommand();
-  virtual void StartTransfer(IdeTransferType type);
-  virtual void EndTransfer(IdeTransferType type);
   virtual void Ata_ResetSignature();
 
-  IdeStorageType type() { return type_; }
+  IdeStorageType  type() { return type_; }
+  IdeIo*          io() { return &io_; }
+  IdeRegisters*   regs() { return &regs_; }
+
  protected:
   virtual void Ata_IdentifyDevice();
   virtual void Ata_SetFeatures();
 
-  /* disk or cdrom */
-  IdeStorageType type_;
-  /* port_ will be set if the drive is selected */
-  AhciPort* port_;
+  IdeRegisters    regs_;
+  IdeIo           io_;
+  
+  IdeStorageType  type_; /* disk or cdrom */
+  AhciPort*       port_; /* port_ will be set if the drive is selected */
 
-  IdeDriveInfo drive_info_;
+  IdeDriveInfo    drive_info_;
+  VoidCallback    ata_handlers_[256];
 };
 
 
@@ -126,16 +126,12 @@ class Cdrom : public IdeStorageDevice {
  public:
   Cdrom();
   void Connect();
-  void StartCommand();
-  void EndCommand();
-  void StartTransfer(IdeTransferType type);
-  void EndTransfer(IdeTransferType type);
 
  private:
   void ParseCommandPacket();
   void Atapi_IdentifyData();
   void Atapi_Inquiry();
-  void Atapi_ReadSectors(int chunk_count);
+  void Atapi_ReadSectors();
   void Atapi_TableOfContent();
   void Atapi_ModeSense();
   void Atapi_RequestSense();
@@ -146,6 +142,8 @@ class Cdrom : public IdeStorageDevice {
   size_t total_tracks_;
   size_t track_size_ = 2048; // Cdrom always use 2048 track size
   size_t image_block_size_;
+
+  VoidCallback atapi_handlers_[256];
 };
 
 
@@ -161,16 +159,13 @@ class Harddisk : public IdeStorageDevice {
  public:
   Harddisk();
   void Connect();
-  void StartCommand();
-  void EndTransfer(IdeTransferType type);
 
  private:
   void ReadLba();
   void WriteLba();
   void InitializeGemometry();
   void Ata_IdentifyDevice();
-  void Ata_ReadSectors(int chunk_count);
-  void Ata_WriteSectors(int chunk_count);
+  void Ata_ReadWriteSectors(bool is_write);
 
   DiskGemometry gemometry_;
   int multiple_sectors_;

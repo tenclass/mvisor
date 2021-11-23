@@ -42,8 +42,8 @@ class DiskImage : public Object {
 
   /* Interfaces for a image format to implement */
   virtual ImageInformation information() = 0;
-  virtual ssize_t Read(void *buffer, off_t block, size_t block_count) = 0;
-  virtual ssize_t Write(void *buffer, off_t block, size_t block_count) = 0;
+  virtual ssize_t Read(void *buffer, off_t position, size_t length) = 0;
+  virtual ssize_t Write(void *buffer, off_t position, size_t length) = 0;
   virtual void Flush() = 0;
 
  protected:

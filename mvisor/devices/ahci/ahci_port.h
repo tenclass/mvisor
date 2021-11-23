@@ -78,6 +78,7 @@ struct AhciPortRegs {
 class DeviceManager;
 class AhciHost;
 struct AhciRxFis;
+struct AhciPrdtEntry;
 
 class AhciPort {
  public:
@@ -91,26 +92,22 @@ class AhciPort {
   void TrigerIrq(int irqbit);
   void UpdateSetupPio();
 
-  inline IdeRegisters* registers() { return &ide_regs_; }
-  inline IdeIo* io() { return &ide_io_; }
  private:
   void UpdateRegisterD2H();
   bool HandleCommand(int slot);
   void CheckEngines();
   void CheckCommand();
+  void PrepareIoVector(AhciPrdtEntry* entries, uint16_t length);
 
   friend class AhciHost;
   DeviceManager*        manager_;
-  AhciHost*       host_ = nullptr;
+  AhciHost*             host_ = nullptr;
   int                   port_index_;
   AhciPortRegs          port_control_;
   IdeStorageDevice*     drive_;
-  IdeRegisters          ide_regs_;
-  IdeIo                 ide_io_;
   bool                  reg_d2h_fis_posted_ = false;
   uint8_t*              command_list_ = nullptr;
   AhciRxFis*            rx_fis_ = nullptr;
-  AhciCommandHeader*    current_command_ = nullptr;
 };
 
 #endif // __MVISOR_DEVICES_AHCI_PORT_H

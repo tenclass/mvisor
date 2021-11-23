@@ -509,48 +509,44 @@ class Qcow2 : public DiskImage {
     return length;
   }
 
-  ssize_t Read(void *buffer, off_t block, size_t block_count) {
+  ssize_t Read(void *buffer, off_t position, size_t length) {
     size_t bytes_read = 0;
-    size_t total_bytes = block_count << block_size_shift_;
     uint8_t *ptr = (uint8_t*)buffer;
-    size_t pos = block << block_size_shift_;
   
-    while (bytes_read < total_bytes) {
-      if (pos >= image_header_.size) {
+    while (bytes_read < length) {
+      if ((uint64_t)position >= image_header_.size) {
         return bytes_read;
       }
 
-      ssize_t ret = ReadCluster(ptr, pos, total_bytes - bytes_read);
+      ssize_t ret = ReadCluster(ptr, position, length - bytes_read);
       if (ret <= 0) {
         return ret;
       }
 
       bytes_read += ret;
       ptr += ret;
-      pos += ret;
+      position += ret;
     }
     return bytes_read;
   }
 
-  ssize_t Write(void *buffer, off_t block, size_t block_count) {
+  ssize_t Write(void *buffer, off_t position, size_t length) {
     size_t bytes_written = 0;
-    size_t total_bytes = block_count << block_size_shift_;
-    size_t pos = block << block_size_shift_;
     uint8_t *ptr = (uint8_t*)buffer;
   
-    while (bytes_written < total_bytes) {
-      if (readonly_ || pos >= image_header_.size) {
+    while (bytes_written < length) {
+      if (readonly_ || (uint64_t)position >= image_header_.size) {
         return bytes_written;
       }
 
-      ssize_t ret = WriteCluster(ptr, pos, total_bytes - bytes_written);
+      ssize_t ret = WriteCluster(ptr, position, length - bytes_written);
       if (ret <= 0) {
         return ret;
       }
 
       bytes_written += ret;
       ptr += ret;
-      pos += ret;
+      position += ret;
     }
     return bytes_written;
   }

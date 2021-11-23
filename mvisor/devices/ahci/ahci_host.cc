@@ -50,6 +50,7 @@ AhciHost::AhciHost() {
   memcpy(pci_header_.data + 0x80, sata_cap, sizeof(sata_cap));
 
   /* Add MSI
+   * FIXME: MSI should be implemented
   const uint8_t msi_cap[] = {
     0x05, 0xA8, 0x80, 0x00,
     0x00, 0x00, 0x00, 0x00,

@@ -86,6 +86,76 @@ Cdrom::Cdrom()
   sprintf(drive_info_.serial, "TC%05ld", drive_info_.world_wide_name);
   sprintf(drive_info_.model, "NUWA DVD-ROM");
   sprintf(drive_info_.version, "1.0");
+
+  /* ATA command handlers */
+  ata_handlers_[0xA0] = [=] () { // ATA_CMD_PACKET
+    ParseCommandPacket();
+  };
+  
+  ata_handlers_[0xA1] = [=] () { // ATA_CMD_IDENTIFY_PACKET_DEVICE
+    Atapi_IdentifyData();
+  };
+
+
+  /* ATAPI command handlers */
+  atapi_handlers_[0x00] = [=] () { // test unit ready
+  };
+  
+  atapi_handlers_[0x03] = [=] () { // request sense
+    Atapi_RequestSense();
+  };
+  
+  atapi_handlers_[0x12] = [=] () { // inquiry
+    Atapi_Inquiry();
+  };
+  
+  atapi_handlers_[0x1B] = [=] () { // start stop unit such as load or eject the media
+  };
+  
+  atapi_handlers_[0x1E] = [=] () { // prevent allow media removal
+  };
+  
+  atapi_handlers_[0x25] = [=] () { // get media capacity
+    io_.nbytes = 8;
+    *(uint32_t*)&io_.buffer[0] = htobe32(total_tracks_ - 1);
+    *(uint32_t*)&io_.buffer[4] = htobe32(track_size_);
+  };
+  
+  atapi_handlers_[0x28] = [=] () { // read 10
+    CBD_RW_DATA10* p = (CBD_RW_DATA10*)io_.atapi_command;
+    io_.lba_block = be32toh(p->lba);
+    io_.lba_count = be16toh(p->count);
+    Atapi_ReadSectors();
+  };
+  
+  atapi_handlers_[0x2B] = [=] () { // seek
+  };
+  
+  atapi_handlers_[0x35] = [=] () { // flush cache
+  };
+  
+  atapi_handlers_[0x42] = [=] () { // read subchannel
+    uint8_t size = io_.atapi_command[8] < 8 ? io_.atapi_command[8] : 8;
+    bzero(io_.buffer, size);
+    io_.nbytes = size;
+  };
+  
+  atapi_handlers_[0x43] = [=] () { // read table of content
+    Atapi_TableOfContent();
+  };
+  
+  atapi_handlers_[0x46] =          // get configuration
+  atapi_handlers_[0x4A] = [=] () { // get event status notification
+    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+  };
+
+  atapi_handlers_[0x51] = [=] () { // read disc information
+    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+  };
+  
+  atapi_handlers_[0x5A] = [=] () { // mode sense 10
+    Atapi_ModeSense();
+  };
 }
 
 void Cdrom::Connect() {
@@ -97,170 +167,48 @@ void Cdrom::Connect() {
 }
 
 void Cdrom::SetError(int sense_key, int asc) {
-  auto regs = port_->registers();
-  regs->error = sense_key << 4;
-  regs->status = ATA_SR_DRDY | ATA_SR_ERR;
-  regs->count0 = (regs->count0 & ~7) | ATA_CB_SC_P_IO | ATA_CB_SC_P_CD;
+  regs_.error = sense_key << 4;
+  regs_.status = ATA_SR_DRDY | ATA_SR_ERR;
+  regs_.count0 |= (regs_.count0 & ~7);
   sense_key_ = sense_key;
   asc_ = asc;
-  // port_->RaiseIrq();
 }
 
-
-void Cdrom::StartTransfer(IdeTransferType type) {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  if (type == kIdeTransferToHost) {
-    regs->count0 |= ATA_CB_SC_P_IO;
-  } else {
-    regs->count0 &= ~ATA_CB_SC_P_IO;
-  }
-  regs->lba1 = io->nbytes;
-  regs->lba2 = io->nbytes >> 8;
-  IdeStorageDevice::StartTransfer(type);
-}
-
-void Cdrom::EndTransfer(IdeTransferType type) {
-  IdeStorageDevice::EndTransfer(type);
-
-  auto regs = port_->registers();
-  auto io = port_->io();
-
-  if (type == kIdeTransferToDevice) {
-    regs->count0 &= ~ATA_CB_SC_P_IO;
-    if (regs->count0 & ATA_CB_SC_P_CD) {
-      regs->count0 &= ~ATA_CB_SC_P_CD;
-      switch (regs->command)
-      {
-      case ATA_CMD_PACKET:
-        ParseCommandPacket();
-        break;
-      default:
-        MV_PANIC("not impl paramters cmd %x", regs->command);
-        break;
-      }
-    }
-  } else if (type == kIdeTransferToHost) {
-    /* Device to Host, such as Read() */
-    if (io->lba_count == 0) {
-      EndCommand();
-    } else {
-      Atapi_ReadSectors(io->lba_count);
-    }
-  }
-}
-
-void Cdrom::EndCommand() {
-  auto regs = port_->registers();
-  regs->count0 |= ATA_CB_SC_P_CD | ATA_CB_SC_P_IO;
-  IdeStorageDevice::EndCommand();
-}
-
-void Cdrom::StartCommand() {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  regs->status = ATA_SR_DRDY;
-  // MV_LOG("CDROM Start command=0x%x buf[0]=0x%x", regs->command, io->buffer[0]);
-
-  switch (regs->command)
-  {
-  case 0xA0: // ATA_CMD_PACKET
-    /* Start a command transfer from host to device */
-    io->nbytes = 12; /* PACKET CMD SIZE */
-    regs->status |= ATA_SR_DRQ;
-    regs->count0 = ATA_CB_SC_P_CD; /* CD is on, command will be handled later */
-    StartTransfer(kIdeTransferToDevice);
-    break;
-  case 0xA1: // ATA_CMD_IDENTIFY_PACKET_DEVICE
-    Atapi_IdentifyData();
-    break;
-  default:
-    /* Common commands */
-    IdeStorageDevice::StartCommand();
-    break;
-  }
-}
 
 void Cdrom::ParseCommandPacket() {
-  auto io = port_->io();
-  uint8_t* buf = io->buffer;
-
-  switch (buf[0])
-  {
-  case 0x00: // test unit ready
-    // Test ready
-    io->nbytes = 0;
-    EndCommand();
-    break;
-  case 0x03: // request sense
-    Atapi_RequestSense();
-    break;
-  case 0x12: // GPCMD_INQUIRY
-    Atapi_Inquiry();
-    break;
-  case 0x1B: // start stop unit such as load or eject the media
-    EndCommand();
-    break;
-  case 0x1E: // prevent allow media removal
-    EndCommand();
-    break;
-  case 0x25: // get media capacity
-    io->nbytes = 8;
-    *(uint32_t*)&io->buffer[0] = htobe32(total_tracks_ - 1);
-    *(uint32_t*)&io->buffer[4] = htobe32(track_size_);
-    StartTransfer(kIdeTransferToHost);
-    break;
-  case 0x28: { // GPCMD_READ_10
-    CBD_RW_DATA10* p = (CBD_RW_DATA10*)buf;
-    io->lba_position = be32toh(p->lba);
-    io->lba_count = be16toh(p->count);
-    if (io->lba_count == 0) {
-      EndCommand();
-    } else {
-      Atapi_ReadSectors(io->lba_count);
-    }
-    break;
-  }
-  case 0x2B: // GPCMD_SEEK
-    EndCommand();
-    break;
-  case 0x35: // GPCMD_FLUSH_CACHE
-    EndCommand();
-    break;
-  case 0x42: { // GPCMD_READ_SUBCHANNEL
-    uint8_t size = buf[8] < 8 ? buf[8] : 8;
-    bzero(buf, size);
-    io->nbytes = size;
-    StartTransfer(kIdeTransferToHost);
-    break;
-  }
-  case 0x43: // GPCMD_READ_TOC_PMA_ATIP
-    Atapi_TableOfContent();
-    break;
-  case 0x46: // get configuration
-  case 0x4A: // get event status notification
-    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
-    break;
-  case 0x51: // read disc information
-    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
-    break;
-  case 0x5A: // GPCMD_MODE_SENSE_10
-    Atapi_ModeSense();
-    break;
-  default:
-    DumpHex(buf, 12);
-    MV_PANIC("unhandled packet 0x%x", buf[0]);
-    break;
+  uint8_t command = io_.atapi_command[0];
+  auto handler = atapi_handlers_[command];
+  if (handler) {
+    handler();
+    regs_.count0 |= ATA_CB_SC_P_IO | ATA_CB_SC_P_CD;
+  } else {
+    DumpHex(io_.atapi_command, sizeof(io_.atapi_command));
+    MV_PANIC("unhandled ATAPI command=0x%x", command);
   }
 }
 
+void Cdrom::Atapi_ReadSectors() {
+  size_t vec_index = 0;
+  size_t position = io_.lba_block * track_size_;
+  size_t remain_bytes = io_.lba_count * track_size_;
+  while (remain_bytes > 0 && vec_index < io_.vector.size()) {
+    auto iov = io_.vector[vec_index];
+  
+    auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
+    
+    image_->Read(iov.iov_base, position, length);
+    position += length;
+    remain_bytes -= length;
+    io_.nbytes += length;
+    ++vec_index;
+  }
+}
 
 void Cdrom::Atapi_RequestSense() {
-  auto io = port_->io();
-  uint8_t* buf = io->buffer;
-  int max_len = buf[4];
+  uint8_t* buf = io_.buffer;
+  int max_len = io_.atapi_command[4];
 
-  io->nbytes = max_len > 18 ? 18 : max_len;
+  io_.nbytes = max_len > 18 ? 18 : max_len;
   bzero(buf, 18);
   buf[0] = 0x70 | (1 << 7);
   buf[2] = sense_key_;
@@ -268,22 +216,16 @@ void Cdrom::Atapi_RequestSense() {
   buf[12] = asc_;
 
   if (sense_key_ == UNIT_ATTENTION) {
-      sense_key_ = NO_SENSE;
+    sense_key_ = NO_SENSE;
   }
-
-  StartTransfer(kIdeTransferToHost);
 }
 
 void Cdrom::Atapi_ModeSense() {
-  auto io = port_->io();
-  uint8_t* buf = io->buffer;
-  // int max_size = be16toh(*(uint16_t*)&buf[6]);
+  uint8_t buf[100] = { 0 };
 
-  switch (buf[2])
+  switch (io_.atapi_command[2])
   {
   case 0x2A: // Capabilities
-    io->nbytes = 28;
-    bzero(buf, 28);
     *(uint16_t*)&buf[0] = htobe16(34);
     buf[2] = 0x70;
     buf[8] = 0x2A;
@@ -295,78 +237,58 @@ void Cdrom::Atapi_ModeSense() {
     *(uint16_t*)&buf[18] = htobe16(2);
     *(uint16_t*)&buf[20] = htobe16(512);
     *(uint16_t*)&buf[22] = htobe16(706);
-    StartTransfer(kIdeTransferToHost);
+  
+    io_.nbytes = io_.buffer_size < 28 ? io_.buffer_size : 28;
+    memcpy(io_.buffer, buf, io_.nbytes);
     break;
   default:
-    MV_PANIC("not implemented cmd=0x%x", buf[2]);
+    MV_PANIC("not implemented mode sense command=0x%x", io_.atapi_command[2]);
     break;
   }
 }
 
 void Cdrom::Atapi_TableOfContent() {
-  auto io = port_->io();
-  uint8_t* buf = io->buffer;
+  uint8_t* buf = io_.buffer;
 
-  int max_size = be16toh(*(uint16_t*)&buf[7]);
-  int format = buf[9] >> 6;
-  int msf = (buf[1] >> 1) & 1;
-  int start_track = buf[6];
+  int max_size = be16toh(*(uint16_t*)&io_.atapi_command[7]);
+  int format = io_.atapi_command[9] >> 6;
+  int msf = (io_.atapi_command[1] >> 1) & 1;
+  int start_track = io_.atapi_command[6];
 
+  MV_ASSERT(max_size <= io_.buffer_size);
   bzero(buf, max_size);
   switch (format)
   {
   case 0: // TOC Data format
-    io->nbytes = cdrom_read_toc(total_tracks_, buf, msf, start_track);
-    if (io->nbytes < 0) {
+    io_.nbytes = cdrom_read_toc(total_tracks_, buf, msf, start_track);
+    if (io_.nbytes < 0) {
       SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
       return;
     }
-    StartTransfer(kIdeTransferToHost);
     break;
   case 1: // Multi-session
     *(uint16_t*)&buf[0] = htobe16(0x000A);
     buf[2] = 1;
     buf[3] = 1;
-    io->nbytes = 12;
-    StartTransfer(kIdeTransferToHost);
+    io_.nbytes = 12;
     break;
   case 2: // Raw TOC Data
-    io->nbytes = cdrom_read_toc_raw(total_tracks_, buf, msf, start_track);
-    if (io->nbytes < 0) {
+    io_.nbytes = cdrom_read_toc_raw(total_tracks_, buf, msf, start_track);
+    if (io_.nbytes < 0) {
       SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
       return;
     }
-    StartTransfer(kIdeTransferToHost);
     break;
   default:
     MV_PANIC("invalid TOC command %x", format);
     break;
   }
-  StartTransfer(kIdeTransferToHost);
-}
-
-void Cdrom::Atapi_ReadSectors(int chunk_count) {
-  auto io = port_->io();
-  uint8_t* buf = io->buffer;
-
-  size_t read_count = chunk_count;
-
-  image_->Read(buf,
-    track_size_ / image_block_size_ * io->lba_position,
-    track_size_ / image_block_size_ * read_count
-  );
-  io->nbytes = track_size_ * read_count;
-  StartTransfer(kIdeTransferToHost);
-
-  io->lba_position += read_count;
-  io->lba_count -= read_count;
 }
 
 void Cdrom::Atapi_Inquiry() {
-  auto io = port_->io();
-  uint8_t* buf = io->buffer;
+  uint8_t* buf = io_.buffer;
 
-  uint8_t size = buf[4];
+  uint8_t size = io_.atapi_command[4];
 
   buf[0] = 0x05; /* CD-ROM */
   buf[1] = 0x80; /* removable */
@@ -379,15 +301,11 @@ void Cdrom::Atapi_Inquiry() {
   padstr8(buf + 8, 8, "TENCLASS");
   padstr8(buf + 16, 16, drive_info_.model);
   padstr8(buf + 32, 4, drive_info_.version);
-  io->nbytes = size > 36 ? 36 : size;
-  StartTransfer(kIdeTransferToHost);
+  io_.nbytes = size > 36 ? 36 : size;
 }
 
 void Cdrom::Atapi_IdentifyData() {
-  auto io = port_->io();
-  uint16_t* p = (uint16_t*)io->buffer;
-  io->nbytes = 512;
-  bzero(p, io->nbytes);
+  uint16_t p[256] = { 0 };
 
   /* Removable CDROM, 50us response, 12 byte packets */
   p[0] = (2 << 14) | (5 << 8) | (1 << 7) | (2 << 5) | (0 << 0);
@@ -433,7 +351,8 @@ void Cdrom::Atapi_IdentifyData() {
       p[111] = drive_info_.world_wide_name;
   }
 
-  StartTransfer(kIdeTransferToHost);
+  io_.nbytes = io_.buffer_size < 512 ? io_.buffer_size : 512;
+  memcpy(io_.buffer, p, io_.nbytes);
 }
 
 DECLARE_DEVICE(Cdrom);

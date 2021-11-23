@@ -44,12 +44,68 @@ Harddisk::Harddisk() {
   sprintf(drive_info_.version, "1.0");
 
   multiple_sectors_ = 16;
-}
+  
+  ata_handlers_[0x06] = [=] () { // DATA SET MANAGEMENT
+    if (regs_.feature0 == 1) { // TRIM
+      io_.lba_mode = kIdeLbaMode28;
+      io_.dma_status = 1;
+      ReadLba();
+      DumpHex(&regs_, sizeof(regs_));
+      MV_LOG("trim at sector 0x%x count %d", io_.lba_block, io_.lba_count);
+    } else {
+      AbortCommand();
+      MV_PANIC("unknown data set management command=0x%x", regs_.feature0);
+    }
+  };
 
-void Harddisk::Connect() {
-  IdeStorageDevice::Connect();
+  ata_handlers_[0x20] = [=] () { // ATA_CMD_READ_SECTORS
+    MV_PANIC("ATA command without DMA is no longer supported");
+  };
 
-  InitializeGemometry();
+  ata_handlers_[0x30] = [=] () { // ATA_CMD_WRITE_SECTORS
+    MV_PANIC("ATA command without DMA is no longer supported");
+  };
+
+  ata_handlers_[0x40] = [=] () { // VERIFY
+  };
+
+  ata_handlers_[0xA1] = [=] () { // ATA_CMD_IDENTIFY_PACKET_DEVICE
+    AbortCommand();
+  };
+
+  ata_handlers_[0xB0] = [=] () { // SMART
+    AbortCommand();
+  };
+
+  ata_handlers_[0xC8] = [=] () { // ATA_CMD_READ_DMA
+    io_.lba_mode = kIdeLbaMode28;
+    io_.dma_status = 1;
+    ReadLba();
+    // MV_LOG("read 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
+    MV_ASSERT(io_.lba_count);
+    Ata_ReadWriteSectors(false);
+  };
+
+  ata_handlers_[0xCA] = [=] () { // ATA_CMD_WRITE_DMA
+    io_.lba_mode = kIdeLbaMode28;
+    io_.dma_status = 1;
+    ReadLba();
+    // MV_LOG("write 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
+    MV_ASSERT(io_.lba_count);
+    Ata_ReadWriteSectors(true);
+  };
+
+  ata_handlers_[0xE0] = [=] () { // STANDBYNOW1
+  };
+
+  ata_handlers_[0xE7] =          // FLUSH_CACHE
+  ata_handlers_[0xEA] = [=] () { // FLUSH_CACHE_EXT
+    image_->Flush();
+  };
+
+  ata_handlers_[0xF5] = [=] () { // SECURITY_FREEZE_LOCK
+    AbortCommand();
+  };
 }
 
 void Harddisk::InitializeGemometry() {
@@ -61,237 +117,101 @@ void Harddisk::InitializeGemometry() {
   gemometry_.cylinders_per_heads = gemometry_.total_sectors / (gemometry_.sectors_per_cylinder * gemometry_.heads);
 }
 
+void Harddisk::Connect() {
+  IdeStorageDevice::Connect();
+
+  InitializeGemometry();
+}
+
 void Harddisk::ReadLba() {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  size_t position = regs->lba0;
+  size_t block = regs_.lba0;
   size_t count = 0;
 
-  switch (io->lba_mode)
+  switch (io_.lba_mode)
   {
   case kIdeLbaMode28:
-    position |= (size_t)regs->lba1 << 8;
-    position |= (size_t)regs->lba2 << 16;
-    position |= (size_t)(regs->device & 0xF) << 24;
-    count = regs->count0 == 0 ? 0x100 : regs->count0;
+    block |= (size_t)regs_.lba1 << 8;
+    block |= (size_t)regs_.lba2 << 16;
+    block |= (size_t)(regs_.device & 0xF) << 24;
+    count = regs_.count0 == 0 ? 0x100 : regs_.count0;
     break;
   case kIdeLbaMode48:
-    position |= (size_t)regs->lba1 << 8;
-    position |= (size_t)regs->lba2 << 16;
-    position |= (size_t)regs->lba3 << 24;
-    position |= (size_t)regs->lba4 << 32;
-    position |= (size_t)regs->lba5 << 40;
-    if (regs->count0 == 0 && regs->count1 == 0) {
+    block |= (size_t)regs_.lba1 << 8;
+    block |= (size_t)regs_.lba2 << 16;
+    block |= (size_t)regs_.lba3 << 24;
+    block |= (size_t)regs_.lba4 << 32;
+    block |= (size_t)regs_.lba5 << 40;
+    if (regs_.count0 == 0 && regs_.count1 == 0) {
       count = 0x10000;
     } else {
-      count = (regs->count1 << 8) | regs->count0;
+      count = (regs_.count1 << 8) | regs_.count0;
     }
     break;
   default:
-    MV_PANIC("unsupported lba mode %x", io->lba_mode);
+    MV_PANIC("unsupported lba mode %x", io_.lba_mode);
     break;
   }
-  io->lba_position = position;
-  io->lba_count = count;
+  io_.lba_block = block;
+  io_.lba_count = count;
 }
 
 void Harddisk::WriteLba() {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  size_t position = io->lba_position;
-  size_t count = io->lba_count;
+  size_t block = io_.lba_block;
+  size_t count = io_.lba_count;
 
-  switch (io->lba_mode)
+  switch (io_.lba_mode)
   {
   case kIdeLbaMode28:
-    regs->device = (regs->device & 0xF0) | ((position >> 24) & 0xF);
-    regs->lba2 = (position >> 16) & 0xFF;
-    regs->lba1 = (position >> 8) & 0xFF;
-    regs->lba0 = (position >> 0) & 0xFF;
-    regs->count0 = count == 0x100 ? 0: count & 0xFF;
+    regs_.device = (regs_.device & 0xF0) | ((block >> 24) & 0xF);
+    regs_.lba2 = (block >> 16) & 0xFF;
+    regs_.lba1 = (block >> 8) & 0xFF;
+    regs_.lba0 = (block >> 0) & 0xFF;
+    regs_.count0 = count == 0x100 ? 0: count & 0xFF;
     break;
   case kIdeLbaMode48:
-    regs->lba5 = (position >> 40) & 0xFF;
-    regs->lba4 = (position >> 32) & 0xFF;
-    regs->lba3 = (position >> 24) & 0xFF;
-    regs->lba2 = (position >> 16) & 0xFF;
-    regs->lba1 = (position >> 8) & 0xFF;
-    regs->lba0 = (position >> 0) & 0xFF;
+    regs_.lba5 = (block >> 40) & 0xFF;
+    regs_.lba4 = (block >> 32) & 0xFF;
+    regs_.lba3 = (block >> 24) & 0xFF;
+    regs_.lba2 = (block >> 16) & 0xFF;
+    regs_.lba1 = (block >> 8) & 0xFF;
+    regs_.lba0 = (block >> 0) & 0xFF;
     if (count == 0x10000) {
-      regs->count0 = regs->count1 = 0;
+      regs_.count0 = regs_.count1 = 0;
     } else {
-      regs->count0 = count & 0xFF;
-      regs->count1 = (count >> 8) & 0xFF;
+      regs_.count0 = count & 0xFF;
+      regs_.count1 = (count >> 8) & 0xFF;
     }
     break;
   default:
-    MV_PANIC("unsupported lba mode %x", io->lba_mode);
+    MV_PANIC("unsupported lba mode %x", io_.lba_mode);
     break;
   }
 }
 
-void Harddisk::StartCommand() {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  // MV_LOG("HD start command=0x%x", regs->command);
-
-  regs->status = ATA_SR_DRDY;
-  switch (regs->command)
-  {
-  case 0x06: // DATA SET MANAGEMENT
-    if (regs->feature0 == 1) { // TRIM
-      io->lba_mode = kIdeLbaMode28;
-      io->dma_status = 1;
-      ReadLba();
-      DumpHex(regs, sizeof(*regs));
-      MV_LOG("trim at sector 0x%x count %d", io->lba_position, io->lba_count);
-      EndCommand();
+void Harddisk::Ata_ReadWriteSectors(bool is_write) {
+  size_t vec_index = 0;
+  size_t position = io_.lba_block * gemometry_.sector_size;
+  size_t remain_bytes = io_.lba_count * gemometry_.sector_size;
+  while (remain_bytes > 0 && vec_index < io_.vector.size()) {
+    auto iov = io_.vector[vec_index];
+  
+    auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
+    if (is_write) {
+      image_->Write(iov.iov_base, position, length);
     } else {
-      AbortCommand();
-      MV_PANIC("unknown dsm command=0x%x", regs->feature0);
+      image_->Read(iov.iov_base, position, length);
     }
-    break;
-  case 0x20: // ATA_CMD_READ_SECTORS
-    io->lba_mode = kIdeLbaMode28;
-    io->dma_status = 0;
-    ReadLba();
-    MV_ASSERT(io->lba_count);
-    Ata_ReadSectors(1);
-    break;
-  case 0x30: // ATA_CMD_WRITE_SECTORS
-    io->lba_mode = kIdeLbaMode28;
-    ReadLba();
-    MV_ASSERT(io->lba_count);
-    io->nbytes = 1 * gemometry_.sector_size;
-    StartTransfer(kIdeTransferToDevice);
-    break;
-  case 0x40: // VERIFY
-    EndCommand();
-    break;
-  case 0xA1: // ATA_CMD_IDENTIFY_PACKET_DEVICE
-    AbortCommand();
-    break;
-  case 0xB0: // SMART
-    AbortCommand();
-    break;
-  case 0xC8: // ATA_CMD_READ_DMA
-    io->lba_mode = kIdeLbaMode28;
-    io->dma_status = 1;
-    ReadLba();
-    // MV_LOG("read 0x%lx sectors at 0x%lx", io->lba_count, io->lba_position);
-    MV_ASSERT(io->lba_count);
-    Ata_ReadSectors(io->lba_count);
-    break;
-  case 0xCA: // ATA_CMD_WRITE_DMA
-    io->lba_mode = kIdeLbaMode28;
-    io->dma_status = 1;
-    ReadLba();
-    // MV_LOG("write 0x%lx sectors at 0x%lx", io->lba_count, io->lba_position);
-    MV_ASSERT(io->lba_count);
-    io->nbytes = io->lba_count * gemometry_.sector_size;
-    StartTransfer(kIdeTransferToDevice);
-    break;
-  case 0xE0:  // STANDBYNOW1
-    EndCommand();
-    break;
-  case 0xE7:  // FLUSH_CACHE
-  case 0xEA:  // FLUSH_CACHE_EXT
-    image_->Flush();
-    EndCommand();
-    break;
-  case 0xF5:  // SECURITY_FREEZE_LOCK
-    AbortCommand();
-    break;
-  default:
-    /* Common commands */
-    IdeStorageDevice::StartCommand();
-    break;
+    position += length;
+    remain_bytes -= length;
+    io_.nbytes += length;
+    ++vec_index;
   }
-}
-
-void Harddisk::EndTransfer(IdeTransferType type) {
-  IdeStorageDevice::EndTransfer(type);
-
-  auto regs = port_->registers();
-  auto io = port_->io();
-
-  if (type == kIdeTransferToDevice) {
-      switch (regs->command)
-      {
-      case ATA_CMD_WRITE_SECTORS:
-        MV_ASSERT((size_t)io->nbytes >= io->lba_count * gemometry_.sector_size); // data is ready?
-        Ata_WriteSectors(io->lba_count);
-        break;
-      case ATA_CMD_WRITE_DMA:
-        MV_ASSERT((size_t)io->nbytes >= io->lba_count * gemometry_.sector_size); // data is ready?
-        Ata_WriteSectors(io->lba_count);
-        break;
-      default:
-        MV_PANIC("not impl end transfer of cmd %x", regs->command);
-        break;
-      }
-  } else if (type == kIdeTransferToHost) {
-    switch (regs->command)
-    {
-    case ATA_CMD_READ_SECTORS:
-      if (io->lba_count == 0) {
-        EndCommand();
-      } else {
-        Ata_ReadSectors(1);
-      }
-      break;
-    default:
-      EndCommand();
-      break;
-    }
-  }
-}
-
-void Harddisk::Ata_WriteSectors(int chunk_count) {
-  auto io = port_->io();
-
-  uint64_t write_pos = io->lba_position;
-  int write_count = io->lba_count;
-  if (write_count > chunk_count)
-    write_count = chunk_count;
-
-  image_->Write(io->buffer, write_pos, write_count);
-
-  // Move forward sector offset and count
-  io->lba_count -= write_count;
-  io->lba_position += write_count;
-  if (io->lba_count == 0) {
-    EndCommand();
-  } else {
-    io->nbytes = chunk_count * gemometry_.sector_size;
-    StartTransfer(kIdeTransferToDevice);
-  }
-}
-
-
-void Harddisk::Ata_ReadSectors(int chunk_count) {
-  auto io = port_->io();
-
-  uint64_t read_pos = io->lba_position;
-  int read_count = io->lba_count;
-  if (read_count > chunk_count)
-    read_count = chunk_count;
-
-  image_->Read(io->buffer, read_pos, read_count);
-  io->nbytes = read_count * gemometry_.sector_size;
-  StartTransfer(kIdeTransferToHost);
-
-  // Move forward sector offset and count
-  io->lba_count -= read_count;
-  io->lba_position += read_count;
   WriteLba();
 }
 
+
 void Harddisk::Ata_IdentifyDevice() {
-  auto io = port_->io();
-  uint16_t* p = (uint16_t*)io->buffer;
-  io->nbytes = 512;
-  bzero(p, io->nbytes);
+  uint16_t p[256] = { 0 };
 
   p[0] = 0x0040;
   p[1] = gemometry_.cylinders_per_heads;
@@ -386,8 +306,9 @@ void Harddisk::Ata_IdentifyDevice() {
   p[101] = gemometry_.total_sectors >> 16;
   p[102] = gemometry_.total_sectors >> 32;
   p[103] = gemometry_.total_sectors >> 48;
-
-  StartTransfer(kIdeTransferToHost);
+  
+  io_.nbytes = io_.buffer_size < 512 ? io_.buffer_size : 512;
+  memcpy(io_.buffer, p, io_.nbytes);
 }
 
 DECLARE_DEVICE(Harddisk);

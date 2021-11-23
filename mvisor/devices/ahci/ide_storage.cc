@@ -26,6 +26,29 @@
 
 IdeStorageDevice::IdeStorageDevice() {
   bzero(&drive_info_, sizeof(drive_info_));
+
+  ata_handlers_[0x00] = [=] () { // NOP
+    MV_PANIC("nop");
+  };
+  
+  ata_handlers_[0x08] = [=] () { // ATA_CMD_DEVICE_RESET
+    regs_.error &= ~ATA_CB_ER_BBK;
+    regs_.error = ATA_CB_ER_NDAM;
+    regs_.status = 0; // ?
+    Ata_ResetSignature();
+  };
+  
+  ata_handlers_[0x2F] = [=] () { // READ_LOG
+    AbortCommand();
+  };
+  
+  ata_handlers_[0xEC] = [=] () { // ATA_CMD_IDENTIFY_DEVICE
+    Ata_IdentifyDevice();
+  };
+  
+  ata_handlers_[0xEF] = [=] () { // ATA_CMD_SET_FEATURES
+    Ata_SetFeatures();
+  };
 }
 
 IdeStorageDevice::~IdeStorageDevice() {
@@ -33,92 +56,50 @@ IdeStorageDevice::~IdeStorageDevice() {
 }
 
 void IdeStorageDevice::StartCommand() {
-  auto regs = port_->registers();
+  regs_.status = ATA_SR_DRDY;
+  regs_.error = 0;
+  io_.dma_status = 0;
+  io_.nbytes = 0;
 
-  switch (regs->command)
-  {
-  case 0x00: // NOP
-    MV_PANIC("nop");
-    break;
-  case 0x08: // ATA_CMD_DEVICE_RESET
-    regs->error &= ~ATA_CB_ER_BBK;
-    regs->error = ATA_CB_ER_NDAM;
-    regs->status = 0; // ?
-    Ata_ResetSignature();
-    break;
-  case 0x2F: // READ LOG
-    AbortCommand();
-    break;
-  case 0xEC: // ATA_CMD_IDENTIFY_DEVICE
-    Ata_IdentifyDevice();
-    break;
-  case 0xEF: // ATA_CMD_SET_FEATURES
-    Ata_SetFeatures();
-    break;
-  default:
-    MV_PANIC("unknown command 0x%x", regs->command);
-    break;
+  auto handler = ata_handlers_[regs_.command];
+  if (handler) {
+    handler();
+  } else {
+    MV_PANIC("unknown command 0x%x", regs_.command);
   }
 }
 
+/* Set Error and end this command */
 void IdeStorageDevice::AbortCommand() {
-  auto regs = port_->registers();
-  regs->status = ATA_SR_DRDY | ATA_SR_ERR;
-  regs->error = ATA_CB_ER_ABRT;
-  // port_->RaiseIrq();
+  regs_.status = ATA_SR_DRDY | ATA_SR_ERR;
+  regs_.error = ATA_CB_ER_ABRT;
 }
-
-void IdeStorageDevice::EndCommand() {
-  auto regs = port_->registers();
-  regs->status = ATA_SR_DRDY;
-  // port_->RaiseIrq();
-}
-
-void IdeStorageDevice::StartTransfer(IdeTransferType type) {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  io->position = 0;
-  io->transfer_type = type;
-  regs->status |= ATA_SR_DRQ | ATA_SR_DSC;
-  // port_->RaiseIrq();
-}
-
-void IdeStorageDevice::EndTransfer(IdeTransferType type) {
-  auto regs = port_->registers();
-  auto io = port_->io();
-  regs->status &= ~ATA_SR_DRQ;
-  io->position = 0; /* reset position */
-}
-
 
 void IdeStorageDevice::BindPort(AhciPort* port) {
   port_ = port;
 }
 
 void IdeStorageDevice::Reset() {
-  auto regs = port_->registers();
-  regs->status = ATA_SR_DRDY;
+  regs_.status = ATA_SR_DRDY;
   Ata_ResetSignature();
 }
 
 void IdeStorageDevice::Ata_ResetSignature() {
-  auto regs = port_->registers();
-  regs->device = ~0xF;
-  regs->count0 = 1;
-  regs->lba0 = 1;
+  regs_.device = ~0xF;
+  regs_.count0 = 1;
+  regs_.lba0 = 1;
   if (type_ == kIdeStorageTypeCdrom) {
-    regs->lba1 = 0x14;
-    regs->lba2 = 0xEB;
+    regs_.lba1 = 0x14;
+    regs_.lba2 = 0xEB;
   } else {
-    regs->lba1 = 0;
-    regs->lba2 = 0;
+    regs_.lba1 = 0;
+    regs_.lba2 = 0;
   }
 }
 
 void IdeStorageDevice::Ata_IdentifyDevice() {
   if (type_ != kIdeStorageTypeCdrom) {
-    // transfer data
-    MV_PANIC("not impl");
+    MV_PANIC("Not implemented. Harddisk should override this.");
   } else {
     if (type_ == kIdeStorageTypeCdrom) {
       Ata_ResetSignature();
@@ -128,39 +109,36 @@ void IdeStorageDevice::Ata_IdentifyDevice() {
 }
 
 void IdeStorageDevice::Ata_SetFeatures() {
-  auto regs = port_->registers();
-  switch (regs->feature0)
+  switch (regs_.feature0)
   {
   case 0x03: { // set transfer mode
-    uint8_t value = regs->count0 & 0b111;
-    switch (regs->count0 >> 3)
+    uint8_t value = regs_.count0 & 0b111;
+    switch (regs_.count0 >> 3)
     {
     case 0: // PIO default
     case 1: // PIO
-      MV_PANIC("not supported DMA mode");
+      MV_PANIC("not supported PIO mode");
       break;
     case 2: // Single world DMA
-      MV_PANIC("not supported DMA mode");
+      MV_PANIC("not supported Single world DMA mode");
       break;
     case 4: // MDMA
-      MV_PANIC("not supported DMA mode");
+      MV_PANIC("not supported MDMA mode");
       break;
     case 8: // UDMA
       MV_LOG("udma = %x", value);
       break;
     default:
-      MV_PANIC("unknown trasfer mode 0x%x", regs->count0);
+      MV_PANIC("unknown trasfer mode 0x%x", regs_.count0);
       break;
     }
-    EndCommand();
     break;
   }
   case 0xcc: /* reverting to power-on defaults enable */
   case 0x66: /* reverting to power-on defaults disable */
-    EndCommand();
     break;
   default:
-    MV_LOG("unknown set features 0x%x", regs->feature0);
+    MV_LOG("unknown set features 0x%x", regs_.feature0);
     AbortCommand();
     break;
   }

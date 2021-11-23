@@ -382,6 +382,7 @@ struct CBD_RES_MODE_SENSE_GEOM {
 #define GPCMD_VERIFY_10			    0x2f
 #define GPCMD_WRITE_10			    0x2a
 #define GPCMD_WRITE_AND_VERIFY_10	    0x2e
+
 /* This is listed as optional in ATAPI 2.6, but is (curiously)
  * missing from Mt. Fuji, Table 57.  It _is_ mentioned in Mt. Fuji
  * Table 377 as an MMC command for SCSi devices though...  Most ATAPI

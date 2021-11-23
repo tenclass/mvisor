@@ -43,16 +43,9 @@ static inline int is_native_command_queueing(uint8_t ata_cmd)
 AhciPort::AhciPort(DeviceManager* manager, AhciHost* host, int index)
   : manager_(manager), host_(host), port_index_(index)
 {
-  bzero(&ide_regs_, sizeof(ide_regs_));
-  bzero(&ide_io_, sizeof(ide_io_));
-  ide_io_.buffer_size = 512 * 256 * 256;
-  ide_io_.buffer = (uint8_t*)valloc(ide_io_.buffer_size);
 }
 
 AhciPort::~AhciPort() {
-  if (ide_io_.buffer) {
-    free(ide_io_.buffer);
-  }
 }
 
 void AhciPort::AttachDevice(IdeStorageDevice* device) {
@@ -85,15 +78,30 @@ void AhciPort::Reset() {
   }
 }
 
+void AhciPort::PrepareIoVector(AhciPrdtEntry* entries, uint16_t prdt_length) {
+  auto io = drive_->io();
+  io->vector.clear();
+  for (int prdt_index = 0; prdt_index < prdt_length; prdt_index++) {
+    void* host = manager_->TranslateGuestMemory(entries[prdt_index].address);
+    MV_ASSERT(host);
+    size_t length = entries[prdt_index].size + 1;
+    io->vector.emplace_back(iovec { .iov_base = host, .iov_len = length });
+    if (prdt_index == 0) {
+      io->buffer = (uint8_t*)host;
+      io->buffer_size = length;
+    }
+  }
+}
+
 bool AhciPort::HandleCommand(int slot) {
   MV_ASSERT(command_list_);
-  current_command_ = &((AhciCommandHeader*)command_list_)[slot];
+  AhciCommandHeader* command_ = &((AhciCommandHeader*)command_list_)[slot];
   if (drive_ == nullptr) {
     MV_PANIC("bad port %d", port_index_);
     return false;
   }
 
-  AhciCommandTable* command_table = (AhciCommandTable*)manager_->TranslateGuestMemory(current_command_->command_table_base);
+  AhciCommandTable* command_table = (AhciCommandTable*)manager_->TranslateGuestMemory(command_->command_table_base);
   MV_ASSERT(command_table);
   AhciFisRegH2D* fis = (AhciFisRegH2D*)command_table->command_fis;
 
@@ -113,79 +121,43 @@ bool AhciPort::HandleCommand(int slot) {
   }
 
   /* Copy IDE command parameters */
-  ide_regs_.command = fis->command;
-  ide_regs_.feature0 = fis->feature0;
-  ide_regs_.lba0 = fis->lba0;
-  ide_regs_.lba1 = fis->lba1;
-  ide_regs_.lba2 = fis->lba2;
-  ide_regs_.device = fis->device;
-  ide_regs_.lba3 = fis->lba3;
-  ide_regs_.lba4 = fis->lba4;
-  ide_regs_.lba5 = fis->lba5;
-  ide_regs_.control = fis->feature1;
-  ide_regs_.count0 = fis->count0;
-  ide_regs_.count1 = fis->count1;
+  auto regs = drive_->regs();
+  auto io = drive_->io();
+  regs->command = fis->command;
+  regs->feature0 = fis->feature0;
+  regs->lba0 = fis->lba0;
+  regs->lba1 = fis->lba1;
+  regs->lba2 = fis->lba2;
+  regs->device = fis->device;
+  regs->lba3 = fis->lba3;
+  regs->lba4 = fis->lba4;
+  regs->lba5 = fis->lba5;
+  regs->control = fis->feature1;
+  regs->count0 = fis->count0;
+  regs->count1 = fis->count1;
 
   /* Copy the ACMD field (ATAPI packet, if any) from the AHCI command
-    * table to ide_state->io_buffer */
-  if (current_command_->is_atapi) {
-    memcpy(ide_io_.buffer, command_table->atapi_command, 0x10);
+   * table to ide_state->io_buffer */
+  if (command_->is_atapi) {
+    memcpy(io->atapi_command, command_table->atapi_command, sizeof(io->atapi_command));
   }
 
-  ide_regs_.error = 0;
-  ide_io_.transfer_type = kIdeNoTransfer;
-  
-  current_command_->bytes_transferred = 0;
+  PrepareIoVector(command_table->prdt_entries, command_->prdt_length);
+
+  /* Currently commands are executing synchronized, however, it's easy to do a little work
+   * to implement an async version. 
+   * Set the IDE status register to BUSY without DRQ, and return immediately.
+   * When data is done, remove BUSY status and add DRQ, then raise an IRQ.
+   */
   drive_->StartCommand();
-
-  port_control_.command_issue &= ~(1U << slot);
-
-  if (ide_io_.transfer_type == kIdeTransferToDevice) {
-    /* Move data from sglist to iobuffer ? */
-    if (!current_command_->is_atapi) {
-      AhciPrdtEntry* sg = command_table->prdt_entries;
-      int prdt_index = 0;
-      ssize_t remain_bytes = ide_io_.nbytes;
-      uint8_t* ptr = ide_io_.buffer;
-      while (remain_bytes > 0 && prdt_index < current_command_->prdt_length) {
-        void* host = manager_->TranslateGuestMemory(sg[prdt_index].address);
-        MV_ASSERT(host);
-        size_t count = remain_bytes < sg[prdt_index].size + 1 ? remain_bytes : sg[prdt_index].size + 1;
-        memcpy(ptr, host, count);
-        current_command_->bytes_transferred += count;
-        prdt_index++;
-        ptr += count;
-        remain_bytes -= count;
-      }
-    }
-    drive_->EndTransfer(kIdeTransferToDevice);
-  }
-
-  if (ide_io_.transfer_type == kIdeTransferToHost) {
-    AhciPrdtEntry* sg = command_table->prdt_entries;
-    int prdt_index = 0;
-    ssize_t remain_bytes = ide_io_.nbytes;
-    uint8_t* ptr = ide_io_.buffer;
-    while (remain_bytes > 0 && prdt_index < current_command_->prdt_length) {
-      void* host = manager_->TranslateGuestMemory(sg[prdt_index].address);
-      MV_ASSERT(host);
-      size_t count = remain_bytes < sg[prdt_index].size + 1 ? remain_bytes : sg[prdt_index].size + 1;
-      memcpy(host, ptr, count);
-      current_command_->bytes_transferred += count;
-      prdt_index++;
-      ptr += count;
-      remain_bytes -= count;
-    }
-    drive_->EndTransfer(kIdeTransferToHost);
-    
-    if (ide_io_.dma_status) {
-      UpdateRegisterD2H();
-    } else {
-      UpdateSetupPio();
-    }
-  } else {
+  if (io->nbytes <= 0 || io->dma_status) {
     UpdateRegisterD2H();
+  } else {
+    UpdateSetupPio();
   }
+
+  command_->bytes_transferred = io->nbytes;
+  port_control_.command_issue &= ~(1U << slot);
   return true;
 }
 
@@ -334,23 +306,25 @@ void AhciPort::UpdateRegisterD2H() {
   auto d2h_fis = &rx_fis_->d2h_fis;
   bzero(d2h_fis, sizeof(*d2h_fis));
 
+  auto regs = drive_->regs();
+
   d2h_fis->fis_type = kAhciFisTypeRegD2H;
   d2h_fis->interrupt = 1;
-  d2h_fis->status = ide_regs_.status;
-  d2h_fis->error = ide_regs_.error;
+  d2h_fis->status = regs->status;
+  d2h_fis->error = regs->error;
 
-  d2h_fis->lba0 = ide_regs_.lba0;
-  d2h_fis->lba1 = ide_regs_.lba1;
-  d2h_fis->lba2 = ide_regs_.lba2;
-  d2h_fis->device = ide_regs_.device;
-  d2h_fis->lba3 = ide_regs_.lba3;
-  d2h_fis->lba4 = ide_regs_.lba4;
-  d2h_fis->lba5 = ide_regs_.lba5;
-  d2h_fis->count0 = ide_regs_.count0;
-  d2h_fis->count1 = ide_regs_.count1;
+  d2h_fis->lba0 = regs->lba0;
+  d2h_fis->lba1 = regs->lba1;
+  d2h_fis->lba2 = regs->lba2;
+  d2h_fis->device = regs->device;
+  d2h_fis->lba3 = regs->lba3;
+  d2h_fis->lba4 = regs->lba4;
+  d2h_fis->lba5 = regs->lba5;
+  d2h_fis->count0 = regs->count0;
+  d2h_fis->count1 = regs->count1;
 
-  port_control_.task_flie_data = (ide_regs_.error << 8) | (ide_regs_.status);
-  if (ide_regs_.status & 1) {
+  port_control_.task_flie_data = (regs->error << 8) | (regs->status);
+  if (regs->status & 1) {
     TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
   TrigerIrq(kAhciPortIrqBitDeviceToHostFis);
@@ -361,26 +335,29 @@ void AhciPort::UpdateSetupPio() {
   auto pio_fis = &rx_fis_->pio_fis;
   bzero(pio_fis, sizeof(*pio_fis));
 
+  auto regs = drive_->regs();
+  auto io = drive_->io();
+
   pio_fis->fis_type = kAhciFisTypePioSetup;
   pio_fis->interrupt = 1;
-  pio_fis->status = ide_regs_.status;
-  pio_fis->error = ide_regs_.error;
+  pio_fis->status = regs->status;
+  pio_fis->error = regs->error;
 
-  pio_fis->lba0 = ide_regs_.lba0;
-  pio_fis->lba1 = ide_regs_.lba1;
-  pio_fis->lba2 = ide_regs_.lba2;
-  pio_fis->device = ide_regs_.device;
-  pio_fis->lba3 = ide_regs_.lba3;
-  pio_fis->lba4 = ide_regs_.lba4;
-  pio_fis->lba5 = ide_regs_.lba5;
-  pio_fis->count0 = ide_regs_.count0;
-  pio_fis->count1 = ide_regs_.count1;
-  pio_fis->e_status = ide_regs_.status;
-  pio_fis->transfer_count = ide_io_.nbytes;
+  pio_fis->lba0 = regs->lba0;
+  pio_fis->lba1 = regs->lba1;
+  pio_fis->lba2 = regs->lba2;
+  pio_fis->device = regs->device;
+  pio_fis->lba3 = regs->lba3;
+  pio_fis->lba4 = regs->lba4;
+  pio_fis->lba5 = regs->lba5;
+  pio_fis->count0 = regs->count0;
+  pio_fis->count1 = regs->count1;
+  pio_fis->e_status = regs->status;
+  pio_fis->transfer_count = io->nbytes;
 
-  port_control_.task_flie_data = (ide_regs_.error << 8) | (ide_regs_.status);
+  port_control_.task_flie_data = (regs->error << 8) | (regs->status);
 
-  if (ide_regs_.status & 0x1) {
+  if (regs->status & 0x1) {
     TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
   TrigerIrq(kAhciPortIrqBitPioSetupFis);
