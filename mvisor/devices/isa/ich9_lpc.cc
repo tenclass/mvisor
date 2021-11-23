@@ -198,7 +198,7 @@ class Ich9Lpc : public PciDevice {
   }
 
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir.base == 0xB2) {
+    if (ir.base == 0xB2) { // APM IO
       if (offset == 0) {
         apm_control_ = *data;
         MV_LOG("apm control=0x%x", apm_control_);

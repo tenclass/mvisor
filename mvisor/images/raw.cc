@@ -37,6 +37,13 @@ class Raw : public DiskImage {
     };
   }
 
+  ~Raw() {
+    if (fd_ != -1) {
+      Flush();
+      close(fd_);
+    }
+  }
+
   void Initialize(const std::string& path, bool readonly) {
     readonly_ = readonly;
 
@@ -59,14 +66,23 @@ class Raw : public DiskImage {
   }
 
   ssize_t Write(void *buffer, off_t position, size_t length) {
+    if (readonly_) {
+      return 0;
+    }
     return pwrite(fd_, buffer, length, position);
   }
 
   void Flush() {
+    if (readonly_) {
+      return;
+    }
     int ret = fsync(fd_);
     if (ret < 0) {
       MV_PANIC("failed to sync disk image, ret=%d", ret);
     }
+  }
+
+  void Trim(off_t position, size_t length) {
   }
 
 };

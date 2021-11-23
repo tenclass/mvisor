@@ -1,5 +1,5 @@
 /* 
- * MVisor
+ * MVisor - PC Speaker
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 
 /* The speaker is part of PIT. We use KVM in-kernel PIT, the speaker could be
  * implemented or dummied in userspace.
+ * https://wiki.osdev.org/PC_Speaker
  */
 class PcSpeaker : public Device {
  private:

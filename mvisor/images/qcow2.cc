@@ -114,9 +114,11 @@ class Qcow2 : public DiskImage {
   size_t total_blocks_ = 0;
   size_t image_size_ = 0;
   size_t cluster_size_;
+
   size_t l2_entries_;
   size_t rfb_entries_;
   size_t refcount_bits_;
+
   uint64_t free_cluster_index_ = 0;
   uint8_t* copied_cluster_ = nullptr;
 
@@ -144,12 +146,13 @@ class Qcow2 : public DiskImage {
     l2_cache_.Clear();
     rfb_cache_.Clear();
 
-    if (copied_cluster_) {
-      delete[] copied_cluster_;
+    if (fd_ != -1) {
+      Flush();
+      close(fd_);
     }
 
-    if (fd_ != -1) {
-      close(fd_);
+    if (copied_cluster_) {
+      delete[] copied_cluster_;
     }
 
     if (backing_file_) {
@@ -305,7 +308,7 @@ class Qcow2 : public DiskImage {
     return block;
   }
 
-  RefcountBlock* GetRefcountBlock(uint64_t cluster_index, uint64_t* rfb_index) {
+  RefcountBlock* GetRefcountBlock(uint64_t cluster_index, uint64_t* rfb_index, bool allocate) {
     uint64_t rft_index = cluster_index / rfb_entries_;
     *rfb_index = cluster_index % rfb_entries_;
     
@@ -318,6 +321,9 @@ class Qcow2 : public DiskImage {
       /* If refcount block is not allocated, this cluster must be free and will be used
        * as a refcount block. Right???
        */
+      if (!allocate) {
+        return nullptr;
+      }
       block_offset = cluster_index * cluster_size_;
       rfb = NewRefcountBlock(block_offset);
       bzero(rfb->entries, rfb_entries_ * sizeof(uint16_t));
@@ -340,11 +346,27 @@ class Qcow2 : public DiskImage {
     }
   }
 
+  void FreeCluster(uint64_t start) {
+    uint64_t rfb_index;
+    uint64_t cluster_index = start / cluster_size_;
+    RefcountBlock* rfb = GetRefcountBlock(cluster_index, &rfb_index, false);
+    if (rfb == nullptr) {
+      MV_PANIC("Try to free an unallocated cluster 0x%lx", start);
+      return;
+    }
+
+    rfb->entries[rfb_index] = htobe16(0); // Set refcount to 0
+    rfb->dirty = true;
+    if (cluster_index < free_cluster_index_) {
+      free_cluster_index_ = cluster_index;
+    }
+  }
+
   /* free_cluster_index_ is initialized to zero and record last position. */
   uint64_t AllocateCluster() {
     uint64_t rfb_index;
     uint64_t cluster_index = free_cluster_index_++;
-    RefcountBlock* rfb = GetRefcountBlock(cluster_index, &rfb_index);
+    RefcountBlock* rfb = GetRefcountBlock(cluster_index, &rfb_index, true);
     while (true) {
       if (rfb == nullptr) {
         return 0; // Error occurred
@@ -355,7 +377,7 @@ class Qcow2 : public DiskImage {
       }
       cluster_index = free_cluster_index_++;
       if (++rfb_index >= rfb_entries_) {
-        rfb = GetRefcountBlock(cluster_index, &rfb_index);
+        rfb = GetRefcountBlock(cluster_index, &rfb_index, true);
       }
     }
 
@@ -592,6 +614,51 @@ class Qcow2 : public DiskImage {
     int ret = fsync(fd_);
     if (ret < 0) {
       MV_PANIC("failed to sync disk image, ret=%d", ret);
+    }
+  }
+
+  /* The return value is always less than or equal to cluster size */
+  ssize_t TrimCluster(off_t pos, size_t length) {
+    uint64_t offset_in_cluster, l2_index;
+    auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
+    if (l2_table == nullptr) {
+      return length;
+    }
+
+    uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
+    if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
+      MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
+    } else {
+      cluster_start &= QCOW2_OFFSET_MASK;
+      if (cluster_start == 0) {
+        return length;
+      }
+
+      FreeCluster(cluster_start); // Set refcount to 0
+      l2_table->entries[l2_index] = be64toh(0);
+      l2_table->dirty = true;
+    }
+    return length;
+  }
+
+  /* The OS use TRIM command to inform us some disk regions are freed
+   * To recycle these regions, clear the L2 table entry, and set the refcount to 0
+   */
+  void Trim(off_t position, size_t length) {
+    size_t bytes_trimed = 0;
+  
+    while (bytes_trimed < length) {
+      if ((uint64_t)position >= image_header_.size) {
+        return;
+      }
+
+      ssize_t ret = TrimCluster(position, length - bytes_trimed);
+      if (ret <= 0) {
+        return;
+      }
+
+      bytes_trimed += ret;
+      position += ret;
     }
   }
 

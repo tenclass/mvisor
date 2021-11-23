@@ -120,8 +120,6 @@ void Viewer::UpdateWindow() {
   if (screen_surface_) {
     SDL_FreeSurface(screen_surface_);
   }
-
-  // Fixed screen size at the moment
   screen_surface_ = SDL_SetVideoMode(width_, height_, bpp_, SDL_SWSURFACE | SDL_DOUBLEBUF | SDL_RESIZABLE);
   
   if (bpp_ <= 8) {

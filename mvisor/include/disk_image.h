@@ -45,6 +45,7 @@ class DiskImage : public Object {
   virtual ssize_t Read(void *buffer, off_t position, size_t length) = 0;
   virtual ssize_t Write(void *buffer, off_t position, size_t length) = 0;
   virtual void Flush() = 0;
+  virtual void Trim(off_t position, size_t length) = 0;
 
  protected:
   virtual void Initialize(const std::string& path, bool readonly) = 0;

@@ -35,6 +35,11 @@ static void padstr(char *str, const char *src, int len)
   }
 }
 
+/*
+ * Reference: https://read.seas.harvard.edu/cs161/2019/pdf/ata-atapi-8.pdf
+ * The implemenation of ATA does not fully comply with the specification above.
+ * It is a simplified version that just works.
+ */
 Harddisk::Harddisk() {
   type_ = kIdeStorageTypeHarddisk;
 
@@ -46,12 +51,11 @@ Harddisk::Harddisk() {
   multiple_sectors_ = 16;
   
   ata_handlers_[0x06] = [=] () { // DATA SET MANAGEMENT
-    if (regs_.feature0 == 1) { // TRIM
+    if (regs_.feature0 == 1) { // TRIM (Reference 7.5.6.1)
       io_.lba_mode = kIdeLbaMode28;
       io_.dma_status = 1;
       ReadLba();
-      DumpHex(&regs_, sizeof(regs_));
-      MV_LOG("trim at sector 0x%x count %d", io_.lba_block, io_.lba_count);
+      Ata_Trim();
     } else {
       AbortCommand();
       MV_PANIC("unknown data set management command=0x%x", regs_.feature0);
@@ -108,19 +112,19 @@ Harddisk::Harddisk() {
   };
 }
 
-void Harddisk::InitializeGemometry() {
+void Harddisk::InitializeGeometry() {
   ImageInformation info = image_->information();
-  gemometry_.sector_size = info.block_size;
-  gemometry_.total_sectors = info.total_blocks;
-  gemometry_.heads = 16;
-  gemometry_.sectors_per_cylinder = 63;
-  gemometry_.cylinders_per_heads = gemometry_.total_sectors / (gemometry_.sectors_per_cylinder * gemometry_.heads);
+  geometry_.sector_size = info.block_size;
+  geometry_.total_sectors = info.total_blocks;
+  geometry_.heads = 16;
+  geometry_.sectors_per_cylinder = 63;
+  geometry_.cylinders_per_heads = geometry_.total_sectors / (geometry_.sectors_per_cylinder * geometry_.heads);
 }
 
 void Harddisk::Connect() {
   IdeStorageDevice::Connect();
 
-  InitializeGemometry();
+  InitializeGeometry();
 }
 
 void Harddisk::ReadLba() {
@@ -190,8 +194,8 @@ void Harddisk::WriteLba() {
 
 void Harddisk::Ata_ReadWriteSectors(bool is_write) {
   size_t vec_index = 0;
-  size_t position = io_.lba_block * gemometry_.sector_size;
-  size_t remain_bytes = io_.lba_count * gemometry_.sector_size;
+  size_t position = io_.lba_block * geometry_.sector_size;
+  size_t remain_bytes = io_.lba_count * geometry_.sector_size;
   while (remain_bytes > 0 && vec_index < io_.vector.size()) {
     auto iov = io_.vector[vec_index];
   
@@ -209,16 +213,32 @@ void Harddisk::Ata_ReadWriteSectors(bool is_write) {
   WriteLba();
 }
 
+void Harddisk::Ata_Trim() {
+  for (auto vec : io_.vector) {
+    for (size_t i = 0; i < vec.iov_len / sizeof(uint64_t); i++) {
+      uint64_t value = ((uint64_t*)vec.iov_base)[i];
+      size_t block = value & 0x0000FFFFFFFFFFFF;
+      size_t count = value >> 48;
+      if (block + count >= geometry_.total_sectors) {
+        AbortCommand();
+        return;
+      }
+      if (count) {
+        image_->Trim(block * geometry_.sector_size, count * geometry_.sector_size);
+      }
+    }
+  }
+}
 
 void Harddisk::Ata_IdentifyDevice() {
   uint16_t p[256] = { 0 };
 
   p[0] = 0x0040;
-  p[1] = gemometry_.cylinders_per_heads;
-  p[3] = gemometry_.heads;
-  p[4] = 512 * gemometry_.sectors_per_cylinder;
+  p[1] = geometry_.cylinders_per_heads;
+  p[3] = geometry_.heads;
+  p[4] = 512 * geometry_.sectors_per_cylinder;
   p[5] = 512; /* Can we use larger sector size? */
-  p[6] = gemometry_.sectors_per_cylinder;
+  p[6] = geometry_.sectors_per_cylinder;
   padstr((char*)(p + 10), drive_info_.serial, 20);
 
   p[20] = 3; /* XXX: retired, remove ? */
@@ -234,11 +254,11 @@ void Harddisk::Ata_IdentifyDevice() {
   p[51] = 0x200; /* PIO transfer cycle */
   p[52] = 0x200; /* DMA transfer cycle */
   p[53] = 1 | (1 << 1) | (1 << 2); /* words 54-58,64-70,88 are valid */
-  p[54] = gemometry_.cylinders_per_heads;
-  p[55] = gemometry_.heads;
-  p[56] = gemometry_.sectors_per_cylinder;
+  p[54] = geometry_.cylinders_per_heads;
+  p[55] = geometry_.heads;
+  p[56] = geometry_.sectors_per_cylinder;
   
-  uint oldsize = gemometry_.cylinders_per_heads * gemometry_.heads * gemometry_.sectors_per_cylinder;
+  uint oldsize = geometry_.cylinders_per_heads * geometry_.heads * geometry_.sectors_per_cylinder;
   p[57] = oldsize;
   p[58] = oldsize >> 16;
   if (multiple_sectors_)
@@ -300,12 +320,12 @@ void Harddisk::Ata_IdentifyDevice() {
   p[217] = 0; /* Nominal media rotation rate */
 
   /* update size */
-  p[60] = gemometry_.total_sectors;
-  p[61] = gemometry_.total_sectors >> 16;
-  p[100] = gemometry_.total_sectors;
-  p[101] = gemometry_.total_sectors >> 16;
-  p[102] = gemometry_.total_sectors >> 32;
-  p[103] = gemometry_.total_sectors >> 48;
+  p[60] = geometry_.total_sectors;
+  p[61] = geometry_.total_sectors >> 16;
+  p[100] = geometry_.total_sectors;
+  p[101] = geometry_.total_sectors >> 16;
+  p[102] = geometry_.total_sectors >> 32;
+  p[103] = geometry_.total_sectors >> 48;
   
   io_.nbytes = io_.buffer_size < 512 ? io_.buffer_size : 512;
   memcpy(io_.buffer, p, io_.nbytes);

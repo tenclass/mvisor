@@ -50,7 +50,6 @@ AhciPort::~AhciPort() {
 
 void AhciPort::AttachDevice(IdeStorageDevice* device) {
   drive_ = device;
-  drive_->BindPort(this);
 }
 
 void AhciPort::Reset() {
@@ -78,6 +77,10 @@ void AhciPort::Reset() {
   }
 }
 
+/* io->vector contains a shadow copy to the PRDT (physical region descriptor table)
+ * io->buffer is always set to the first region of the vector for fast access.
+ * If prdt_length is zero, the function only clears the vector.
+ */
 void AhciPort::PrepareIoVector(AhciPrdtEntry* entries, uint16_t prdt_length) {
   auto io = drive_->io();
   io->vector.clear();
@@ -146,8 +149,8 @@ bool AhciPort::HandleCommand(int slot) {
 
   /* Currently commands are executing synchronized, however, it's easy to do a little work
    * to implement an async version. 
-   * Set the IDE status register to BUSY without DRQ, and return immediately.
-   * When data is done, remove BUSY status and add DRQ, then raise an IRQ.
+   * Set the IDE status register to BUSY, and return immediately.
+   * When data is done, remove BUSY status, then raise an IRQ.
    */
   drive_->StartCommand();
   if (io->nbytes <= 0 || io->dma_status) {
@@ -185,7 +188,6 @@ void AhciPort::Read(uint64_t offset, uint32_t* data) {
   } else {
     *data = *((uint32_t*)&port_control_ + reg_index);
   }
-  // MV_LOG("%d read reg 0x%x value %x", port_index_, reg_index, *data);
 }
 
 void AhciPort::CheckEngines() {
@@ -357,7 +359,7 @@ void AhciPort::UpdateSetupPio() {
 
   port_control_.task_flie_data = (regs->error << 8) | (regs->status);
 
-  if (regs->status & 0x1) {
+  if (regs->status & 0x1) { /* Check error bit */
     TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
   TrigerIrq(kAhciPortIrqBitPioSetupFis);

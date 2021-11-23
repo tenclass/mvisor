@@ -75,10 +75,6 @@ void IdeStorageDevice::AbortCommand() {
   regs_.error = ATA_CB_ER_ABRT;
 }
 
-void IdeStorageDevice::BindPort(AhciPort* port) {
-  port_ = port;
-}
-
 void IdeStorageDevice::Reset() {
   regs_.status = ATA_SR_DRDY;
   Ata_ResetSignature();

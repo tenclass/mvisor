@@ -97,7 +97,6 @@ class IdeStorageDevice : public StorageDevice {
   virtual ~IdeStorageDevice();
 
   void Reset();
-  void BindPort(AhciPort* port);
 
   virtual void StartCommand();
   virtual void AbortCommand();
@@ -115,7 +114,6 @@ class IdeStorageDevice : public StorageDevice {
   IdeIo           io_;
   
   IdeStorageType  type_; /* disk or cdrom */
-  AhciPort*       port_; /* port_ will be set if the drive is selected */
 
   IdeDriveInfo    drive_info_;
   VoidCallback    ata_handlers_[256];
@@ -147,7 +145,7 @@ class Cdrom : public IdeStorageDevice {
 };
 
 
-struct DiskGemometry {
+struct DiskGeometry {
   size_t sector_size;
   size_t total_sectors;
   size_t sectors_per_cylinder;
@@ -163,11 +161,12 @@ class Harddisk : public IdeStorageDevice {
  private:
   void ReadLba();
   void WriteLba();
-  void InitializeGemometry();
+  void InitializeGeometry();
   void Ata_IdentifyDevice();
   void Ata_ReadWriteSectors(bool is_write);
+  void Ata_Trim();
 
-  DiskGemometry gemometry_;
+  DiskGeometry geometry_;
   int multiple_sectors_;
 };
 

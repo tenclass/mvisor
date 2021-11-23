@@ -1,5 +1,5 @@
 /* 
- * MVisor
+ * MVisor - AHCI Host Controller
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -22,6 +22,11 @@
 #include "device_manager.h"
 #include "ide_storage.h"
 #include "ahci_internal.h"
+
+/* Reference:
+ * https://wiki.osdev.org/AHCI
+ * https://www.intel.com/content/dam/www/public/us/en/documents/technical-specifications/serial-ata-ahci-spec-rev1_3.pdf
+ */
 
 AhciHost::AhciHost() {
   /* FIXME: should gernerated by parent pci device */
@@ -118,8 +123,6 @@ void AhciHost::CheckIrq() {
   }
   if (host_control_.irq_status && (host_control_.global_host_control & HOST_CONTROL_IRQ_ENABLE)) {
     manager_->SetIrq(pci_header_.irq_line, 1);
-    // MV_LOG("triger irq %d", pci_header_.irq_line);
-    // DumpHex(&pci_header_, 256);
   } else {
     manager_->SetIrq(pci_header_.irq_line, 0);
   }
