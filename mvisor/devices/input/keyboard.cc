@@ -1,5 +1,5 @@
 /* 
- * MVisor
+ * MVisor I8042 PS/2
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -41,6 +41,8 @@
 #define KEYBOARD_IRQ 1
 #define MOUSE_IRQ 12
 
+/* Reference: https://wiki.osdev.org/%228042%22_PS/2_Controller
+ */
 
 class Keyboard : public Device, public KeyboardInterface {
  private:

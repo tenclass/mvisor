@@ -76,7 +76,7 @@ struct RefcountBlock {
   uint16_t    entries[];
 };
 
-/*
+/* Reference: https://git.qemu.org/?p=qemu.git;a=blob;f=docs/interop/qcow2.txt
  * All numbers in Qcow2 are stored in Big Endian byte order
  * Take an example created with the following commandline:
  * # qemu-img create -f qcow2 -F qcow2 -b win10.qcow2 hd.qcow2
@@ -507,8 +507,8 @@ class Qcow2 : public DiskImage {
       l2_table->entries[l2_index] = htobe64(cluster_start | QCOW2_OFLAG_COPIED);
       l2_table->dirty = true;
   
-      /* If not writing the whole cluster, we should the original data from the backing file
-       * Always read the whole cluster without zeroing data if cluster not exists in backing file
+      /* If not writing the whole cluster, we should read the original data from the backing file
+       * Always read the whole cluster without zeroing data if cluster exists in backing file
        */
       if (backing_file_ && !(offset_in_cluster == 0 && length == cluster_size_)) {
         auto bytes = backing_file_->ReadCluster(copied_cluster_, pos - offset_in_cluster, cluster_size_, true);

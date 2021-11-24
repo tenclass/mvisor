@@ -1,5 +1,5 @@
 /* 
- * MVisor
+ * MVisor - SDL Viewer
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -174,6 +174,11 @@ void Viewer::AcquireDisplayFrame() {
   SDL_Flip(screen_surface_);
 }
 
+/* Reference about SDL-1.2:
+ * https://www.libsdl.org/release/SDL-1.2.15/docs/html/index.html
+ * FXIME: Why not SDL2? SDL2 create lots of threads after calling SDL_Init, it crashes after
+ * a SIGUSR is sent to the vCPU.
+ */
 int Viewer::MainLoop() {
   SDL_Event event;
 

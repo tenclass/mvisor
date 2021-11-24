@@ -38,6 +38,7 @@
 
 /* The Machine class handles all the VM initialization and common operations
  * such as interrupts, start, quit, pause, resume
+ * KVM API reference: https://www.kernel.org/doc/html/latest/virt/kvm/api.html
  */
 Machine::Machine(int vcpus, uint64_t ram_size)
     : num_vcpus_(vcpus), ram_size_(ram_size) {
@@ -240,7 +241,9 @@ void Machine::Quit() {
   }
 }
 
-/* Recover BIOS data and reset all vCPU */
+/* Recover BIOS data and reset all vCPU
+ * FIXME: vCPU 0 sometimes hangs (CPU 100%) after reset
+ */
 void Machine::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
 

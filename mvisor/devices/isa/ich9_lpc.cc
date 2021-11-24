@@ -29,7 +29,7 @@
 #define ICH9_LPC_PMBASE_BASE_ADDRESS_MASK       Q35_MASK(32, 15, 7)
 #define ICH9_LPC_PMBASE_RTE                     0x1
 #define ICH9_LPC_PMBASE_DEFAULT                 0x1
-#define ICH9_PMIO_SMI_EN_APMC_EN       (1 << 5)
+#define ICH9_PMIO_SMI_EN_APMC_EN                (1 << 5)
 
 #define ICH9_LPC_ACPI_CTRL                      0x44
 #define ICH9_LPC_ACPI_CTRL_ACPI_EN              0x80

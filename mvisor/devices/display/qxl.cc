@@ -1,5 +1,5 @@
 /* 
- * MVisor
+ * MVisor VGA/VBE
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -39,6 +39,10 @@
 #define VGA_MMIO_BASE   0x000A0000
 #define VGA_MMIO_SIZE   0x00020000
 
+/* Reference:
+ * http://osdever.net/FreeVGA/vga/portidx.htm
+ * https://wiki.osdev.org/VGA_Hardware
+ */
 
 class Qxl : public PciDevice, public DisplayInterface {
  private:
