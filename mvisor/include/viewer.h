@@ -42,6 +42,8 @@ class Viewer {
   Machine* machine_;
   DeviceManager* device_manager_;
   DisplayInterface* display_;
+  KeyboardInputInterface* keyboard_;
+  SpiceAgentInterface* spice_agent_;
   SDL_Surface* screen_surface_ = nullptr;
   bool requested_update_window_ = false;
   DisplayMode mode_;

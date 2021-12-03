@@ -30,6 +30,9 @@ PciDevice::PciDevice() {
   bzero(&pci_header_, sizeof(pci_header_));
   bzero(&pci_bars_, sizeof(pci_bars_));
   bzero(&pci_rom_, sizeof(pci_rom_));
+  bzero(&msi_config_, sizeof(msi_config_));
+
+  next_capability_offset_ = 0x40;
 }
 
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */
@@ -57,6 +60,83 @@ PciDevice::~PciDevice() {
   }
 }
 
+uint8_t* PciDevice::AddCapability(uint8_t cap, const uint8_t* data, uint8_t length) {
+  PciCapabilityHeader cap_header = { .type = cap, .next = pci_header_.capability };
+  uint8_t* ptr = pci_header_.data + next_capability_offset_;
+  memcpy(ptr, &cap_header, sizeof(cap_header));
+  memcpy(ptr + 2, data, length);
+  pci_header_.capability = next_capability_offset_;
+
+  next_capability_offset_ += 2 + length;
+  pci_header_.status |= 0x10; /* Has capability */
+  return ptr;
+}
+
+void PciDevice::AddMsiCapability() {
+  MsiCapability64 cap64 = { 0 };
+  cap64.control = 0x80;
+  msi_config_.is_64bit = true;
+  msi_config_.offset = next_capability_offset_;
+  msi_config_.length = sizeof(cap64);
+  msi_config_.msi64 = (MsiCapability64*)AddCapability(0x05, (uint8_t*)&cap64.control, msi_config_.length - 2);
+}
+
+void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size) {
+  uint32_t bar_size = 0x1000;
+  AddPciBar(bar, bar_size, kIoResourceTypeMmio);
+  MV_ASSERT(table_size > 0 && table_size * sizeof(MsiXTableEntry) <= bar_size);
+
+  MsiXCapability cap = { 0 };
+  msi_config_.is_msix = true;
+  msi_config_.is_64bit = true;
+  msi_config_.msix_bar = bar;
+  msi_config_.msix_table_size = table_size;
+  msi_config_.offset = next_capability_offset_;
+  msi_config_.length = sizeof(cap);
+
+  cap.control = table_size - 1;
+  cap.table_offset = bar;
+  cap.pba_offset = bar | (pci_bars_[bar].size / 2);
+  msi_config_.msix = (MsiXCapability*)AddCapability(0x11, (uint8_t*)&cap.control, msi_config_.length - 2);
+}
+
+void PciDevice::SignalMsi(int vector) {
+  if (msi_config_.is_msix) {
+    auto &msix = msi_config_.msix_table[vector];
+    if (msix.control & 1) {
+      return; /* Masked */
+    }
+    uint64_t address = ((uint64_t)msix.message.address_hi << 32) | msix.message.address_lo;
+    manager_->SignalMsi(address, msix.message.data);
+  } else if (msi_config_.is_64bit) {
+    MV_ASSERT(vector == 0);
+    uint64_t address = ((uint64_t)msi_config_.msi64->address1 << 32) | msi_config_.msi64->address0;
+    manager_->SignalMsi(address, msi_config_.msi64->data);
+  } else {
+    MV_PANIC("not implemented 32bit msi");
+  }
+}
+
+void PciDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address) {
+    if (offset < sizeof(MsiXTableEntry) * msi_config_.msix_table_size) {
+      memcpy(data, (uint8_t*)msi_config_.msix_table + offset, size);
+    }
+  } else {
+    Device::Read(ir, offset, data, size);
+  }
+}
+
+void PciDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address) {
+    if (offset < sizeof(MsiXTableEntry) * msi_config_.msix_table_size) {
+      memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
+    }
+  } else {
+    Device::Write(ir, offset, data, size);
+  }
+}
+
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   memcpy(data, pci_header_.data + offset, length);
 }
@@ -65,7 +145,10 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   if (offset == PCI_COMMAND) {
     MV_ASSERT(length == 2);
     WritePciCommand(*(uint16_t*)data);
-    memcpy(pci_header_.data + offset, data, length);
+    return;
+  } else if (offset == PCI_STATUS) {
+    MV_ASSERT(length == 2);
+    pci_header_.status &= ~(*(uint16_t*)data);
     return;
   }
 
@@ -88,6 +171,15 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   }
 
   memcpy(pci_header_.data + offset, data, length);
+
+  if (offset >= msi_config_.offset && offset < msi_config_.offset + msi_config_.length) {
+    /* Toggle MSI/MSI-X */
+    if (msi_config_.is_msix) {
+      msi_config_.enabled = msi_config_.msix->control & 0x8000;
+    } else {
+      msi_config_.enabled = msi_config_.msi64->control & 1;
+    }
+  }
 }
 
 /* Guest rewrite the ROM address, remmap to new address */
@@ -132,6 +224,7 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
         DeactivatePciBar(i);
     }
   }
+  pci_header_.command = new_command;
 }
 
 /* Call this function in device constructor */

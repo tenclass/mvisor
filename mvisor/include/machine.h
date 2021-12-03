@@ -38,7 +38,6 @@ class Machine {
   int Run();
   void Quit();
   bool IsValid() { return valid_; }
-  void Interrupt(uint32_t irq, uint32_t level);
   void Reset();
 
   inline DeviceManager* device_manager() { return device_manager_; }
@@ -49,6 +48,7 @@ class Machine {
  private:
   friend class Vcpu;
   friend class MemoryManager;
+  friend class DeviceManager;
 
   void InitializePath();
   void InitializeKvm();

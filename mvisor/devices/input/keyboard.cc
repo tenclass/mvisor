@@ -44,7 +44,7 @@
 /* Reference: https://wiki.osdev.org/%228042%22_PS/2_Controller
  */
 
-class Keyboard : public Device, public KeyboardInterface {
+class Keyboard : public Device, public KeyboardInputInterface {
  private:
   std::deque<uint8_t> keyboard_queue_;
   std::deque<uint8_t> mouse_queue_;
@@ -461,6 +461,9 @@ class Keyboard : public Device, public KeyboardInterface {
     PushMouse4(data);
   }
 
+  bool CanAcceptInput() {
+    return !keyboard_disable_scanning_ && !mouse_disable_streaming_;
+  }
 };
 
 DECLARE_DEVICE(Keyboard);

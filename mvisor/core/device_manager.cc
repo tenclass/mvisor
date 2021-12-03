@@ -19,6 +19,7 @@
 #include "device_manager.h"
 #include <cstring>
 #include <algorithm>
+#include <sys/ioctl.h>
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
@@ -179,10 +180,10 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         --it;
       }
 
-      // if (port != 0x402) {
-      //   MV_LOG("%s handle io %s port: 0x%x size: %x data: %x count: %d", device->name(),
-      //     is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
-      // }
+      if (port != 0x402) {
+        MV_LOG("%s handle io %s port: 0x%x size: %x data: %x count: %d", device->name(),
+          is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
+      }
     }
   }
 
@@ -223,10 +224,10 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         --it;
       }
 
-      // if (base < 0xa0000 || base >= 0xc0000) {
-      //   MV_LOG("%s handle mmio %s addr: 0x%x size: %x data: %x", device->name(),
-      //     is_write ? "out" : "in", base, size, *(uint64_t*)data);
-      // }
+      if (base < 0xa0000 || base >= 0xc0000) {
+        MV_LOG("%s handle mmio %s addr: 0x%x size: %x data: %x", device->name(),
+          is_write ? "out" : "in", base, size, *(uint64_t*)data);
+      }
       return;
     }
   }
@@ -243,5 +244,24 @@ void* DeviceManager::TranslateGuestMemory(uint64_t gpa) {
 
 /* Maybe we should have an IRQ manager or just let KVM do this? */
 void DeviceManager::SetIrq(uint32_t irq, uint32_t level) {
-  machine_->Interrupt(irq, level);
+  /* Send an IRQ to the guest */
+  struct kvm_irq_level irq_level = {
+    .irq = irq,
+    .level = level
+  };
+  if (ioctl(machine_->vm_fd_, KVM_IRQ_LINE, &irq_level) != 0) {
+    MV_PANIC("KVM_IRQ_LINE failed");
+  }
+}
+
+void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
+  struct kvm_msi msi = {
+    .address_lo = (uint32_t)(address),
+    .address_hi = (uint32_t)(address >> 32),
+    .data = data
+  };
+  int ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
+  if (ret != 1) {
+    MV_PANIC("KVM_SIGNAL_MSI ret=%d", ret);
+  }
 }

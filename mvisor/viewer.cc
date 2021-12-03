@@ -183,14 +183,13 @@ int Viewer::MainLoop() {
   SDL_Event event;
 
   display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
+  keyboard_ = dynamic_cast<KeyboardInputInterface*>(device_manager_->LookupDeviceByName("Keyboard"));
+  spice_agent_ = dynamic_cast<SpiceAgentInterface*>(device_manager_->LookupDeviceByName("SpiceAgent"));
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
   });
-  KeyboardInterface* kbd = dynamic_cast<KeyboardInterface*>(
-    device_manager_->LookupDeviceByName("Keyboard")
-  );
   MV_ASSERT(display_);
-  MV_ASSERT(kbd);
+  uint32_t mouse_buttons = 0;
 
   // Loop until all vcpu exits
   while (machine_->IsValid()) {
@@ -211,11 +210,12 @@ int Viewer::MainLoop() {
           break;
         }
         if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
-          kbd->QueueKeyboardEvent(transcoded);
+          keyboard_->QueueKeyboardEvent(transcoded);
         }
         break;
       case SDL_MOUSEBUTTONDOWN:
-        if (!grab_input_) {
+        /* If pointer device is not available, try to grab input and use PS/2 input */
+        if (!grab_input_ && spice_agent_ && !spice_agent_->CanAcceptInput()) {
           grab_input_ = true;
           SDL_WM_GrabInput(SDL_GRAB_ON);
           SDL_ShowCursor(SDL_DISABLE);
@@ -223,13 +223,26 @@ int Viewer::MainLoop() {
         }
         /* fall through */
       case SDL_MOUSEBUTTONUP:
+        if (event.button.state) {
+          mouse_buttons |= (1 << event.button.button);
+        } else {
+          mouse_buttons &= ~(1 << event.button.button);
+        }
       case SDL_MOUSEMOTION:
         if (grab_input_) {
           /* swap the middle button and right button bit of input state */
-          uint8_t state = SDL_GetMouseState(nullptr, nullptr);
-          uint8_t ps2_state = (state & 1) | ((state & 2) << 1) | ((state & 4) >> 1);
+          uint8_t ps2_state = ((mouse_buttons & 2) >> 1) | (mouse_buttons & 4) | ((mouse_buttons & 8) >> 2);
           /* multiply by 2 to prevent host mouse go out of window */
-          kbd->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
+          keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
+        } else if (spice_agent_ && spice_agent_->CanAcceptInput()) {
+          int x, y;
+          SDL_GetMouseState(&x, &y);
+          spice_agent_->QueuePointerEvent(mouse_buttons, x, y);
+        }
+        break;
+      case SDL_VIDEORESIZE:
+        if (spice_agent_) {
+          spice_agent_->Resize(event.resize.w, event.resize.h);
         }
         break;
       case SDL_QUIT:

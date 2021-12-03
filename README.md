@@ -24,18 +24,28 @@ Nov 2021
 8. PCI ISA ICH9-LPC ✅
 9. QEMU CFG ✅
 10. DMA ❌
-11. IDE ❌ / AHCI ✅ / VirtIO
+11. IDE ❌ / AHCI ✅
 12. Parallel Port ❌
 13. Serial Port ❌
-14. VGA / QXL (Text VBE working)
+14. VGA / VBE ✅
 15. Option Roms / SMBIOS / ACPI Table ✅
 16. Boot DOS ✅
-17. Boot OS (Windows 7 or 10) ✅
+17. Boot OS (Windows 8 or 10) ✅
 18. QCOW2 ✅
 
 Milestone 2: Multimedia & Networking
 Dec 2021
-...
+
+1. VirtIO (Console✅ / Block / Net / Balloon)
+2. SpiceAgent
+3. QemuGuestAgent
+4. Qxl
+5. Audio (ICH9-HDA)
+6. Tap network
+7. User network
+8. SfAgent
+9. VFIO
+10. WebDAV
 
 Milestone 3: Migration
 Jan 2022

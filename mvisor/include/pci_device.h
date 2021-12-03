@@ -27,62 +27,80 @@
  * ("Configuration Mechanism #1") of the PCI Local Bus Specification 2.1 for
  * details.
  */
-#define PCI_CONFIG_ADDRESS 0xcf8
-#define PCI_CONFIG_DATA    0xcfc
-#define PCI_CONFIG_BUS_FORWARD 0xcfa
-#define PCI_IO_SIZE        0x100
-#define PCI_IOPORT_START   0x6200
-#define PCI_CONFIG_SIZE (1ULL << 24)
+#define PCI_CONFIG_ADDRESS      0xCF8
+#define PCI_CONFIG_DATA         0xCFC
+#define PCI_CONFIG_BUS_FORWARD  0xCFA
+#define PCI_IO_SIZE             0x100
+#define PCI_IOPORT_START        0x6200
+#define PCI_CONFIG_SIZE         (1ULL << 24)
 
 #define PCI_MULTI_FUNCTION 0x80
 
-struct msi_msg {
+struct MsiMessage {
   uint32_t address_lo; /* low 32 bits of msi message address */
   uint32_t address_hi; /* high 32 bits of msi message address */
-  uint32_t data;  /* 16 bits of msi message data */
-};
+  uint32_t data;       /* 16 bits of msi message data */
+} __attribute__((packed));
 
 
-struct msix_table {
-  struct msi_msg msg;
-  uint32_t ctrl;
-};
+struct MsiXTableEntry {
+  struct MsiMessage message;
+  uint32_t control;
+} __attribute__((packed));
 
-struct msix_cap {
-  uint8_t cap;
+struct MsiXCapability {
+  uint8_t capability;
   uint8_t next;
-  uint16_t ctrl;
+  uint16_t control;
   uint32_t table_offset;
   uint32_t pba_offset;
-};
+} __attribute__((packed));
 
-struct msi_cap_64 {
-  uint8_t cap;
+struct MsiCapability64 {
+  uint8_t capability;
   uint8_t next;
-  uint16_t ctrl;
-  uint32_t address_lo;
-  uint32_t address_hi;
+  uint16_t control;
+  uint32_t address0;
+  uint32_t address1;
   uint16_t data;
   uint16_t _align;
   uint32_t mask_bits;
   uint32_t pend_bits;
-};
+} __attribute__((packed));
 
-struct msi_cap_32 {
-  uint8_t cap;
+struct MsiCapability32 {
+  uint8_t capability;
   uint8_t next;
-  uint16_t ctrl;
-  uint32_t address_lo;
+  uint16_t control;
+  uint32_t address;
   uint16_t data;
   uint16_t _align;
   uint32_t mask_bits;
   uint32_t pend_bits;
+} __attribute__((packed));
+
+#define PCI_MAX_MSIX_ENTRIES 32
+struct PciMsiConfig {
+  bool      enabled;
+  bool      is_64bit;
+  bool      is_msix;
+  uint8_t   offset;
+  uint8_t   length;
+  union {
+    MsiCapability32* msi32;
+    MsiCapability64* msi64;
+    MsiXCapability*  msix;
+  };
+  /* MSI-X BAR */
+  uint8_t        msix_bar;
+  uint16_t       msix_table_size;
+  MsiXTableEntry msix_table[PCI_MAX_MSIX_ENTRIES];
 };
 
-struct pci_cap_hdr {
+struct PciCapabilityHeader {
   uint8_t type;
   uint8_t next;
-};
+} __attribute__((packed));
 
 union PciConfigAddress {
   struct {
@@ -132,7 +150,6 @@ struct PciConfigHeader {
       uint8_t    irq_pin;
       uint8_t    min_gnt;
       uint8_t    max_lat;
-      struct msix_cap msix;
     } __attribute__((packed));
     /* Pad to PCI config space size */
     uint8_t data[PCI_DEVICE_CONFIG_SIZE];
@@ -186,6 +203,8 @@ class PciDevice : public Device {
 
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
+  virtual void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void WritePciCommand(uint16_t command);
   void WritePciBar(uint8_t index, uint32_t value);
 
@@ -200,11 +219,17 @@ class PciDevice : public Device {
   void UpdateRomMapAddress(uint32_t address);
   void LoadRomFile(const char* path);
   void AddPciBar(uint8_t index, uint32_t size, IoResourceType type);
+  uint8_t* AddCapability(uint8_t cap, const uint8_t* data, uint8_t length);
+  void AddMsiCapability();
+  void AddMsiXCapability(uint8_t bar, uint16_t table_size);
+  void SignalMsi(int vector = 0);
 
   uint8_t devfn_;
   PciConfigHeader pci_header_;
   PciBarInfo pci_bars_[PCI_BAR_NUMS];
   PciRomBarInfo pci_rom_;
+  PciMsiConfig msi_config_;
+  uint16_t next_capability_offset_;
 };
 
 #endif // _MVISOR_PCI_DEVICE_H

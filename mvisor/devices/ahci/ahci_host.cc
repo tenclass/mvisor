@@ -22,6 +22,9 @@
 #include "device_manager.h"
 #include "ide_storage.h"
 #include "ahci_internal.h"
+#include "machine.h"
+#include "linux/kvm.h"
+#include <sys/ioctl.h>
 
 /* Reference:
  * https://wiki.osdev.org/AHCI
@@ -38,34 +41,19 @@ AhciHost::AhciHost() {
   pci_header_.class_code = 0x010601;
   pci_header_.revision_id = 2;
   pci_header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
-  pci_header_.subsys_vendor_id = 0x1af4;
+  pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
   pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
-  pci_header_.status = 0x10; /* Support capabilities */
   pci_header_.cacheline_size = 8;
   pci_header_.irq_pin = 1;
 
   pci_header_.data[0x90] = 1 << 6; /* Address Map Register - AHCI mode */
 
   /* Add SATA capability */
-  const uint8_t sata_cap[] = {
-    0x12, 0x00, 0x10, 0x00,
-    0x48, 0x00, 0x00, 0x00
-  };
-  memcpy(pci_header_.data + 0x80, sata_cap, sizeof(sata_cap));
-
-  /* Add MSI
-   * FIXME: MSI should be implemented
-  const uint8_t msi_cap[] = {
-    0x05, 0xA8, 0x80, 0x00,
-    0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00
-  };
-  memcpy(pci_header_.data + 0x80, msi_cap, sizeof(msi_cap)); */
-
-  /* Point to the above capability */
-  pci_header_.capability = 0x80;
+  const uint8_t sata_cap[] = { 0x10, 0x00, 0x48, 0x00, 0x00, 0x00 };
+  AddCapability(0x12, sata_cap, sizeof(sata_cap));
+  /* Add MSI */
+  AddMsiCapability();
 
   /* Memory bar */
   AddPciBar(5, 4096, kIoResourceTypeMmio);
@@ -122,9 +110,15 @@ void AhciHost::CheckIrq() {
     }
   }
   if (host_control_.irq_status && (host_control_.global_host_control & HOST_CONTROL_IRQ_ENABLE)) {
-    manager_->SetIrq(pci_header_.irq_line, 1);
+    if (msi_config_.enabled) {
+      SignalMsi();
+    } else {
+      manager_->SetIrq(pci_header_.irq_line, 1);
+    }
   } else {
-    manager_->SetIrq(pci_header_.irq_line, 0);
+    if (!msi_config_.enabled) {
+      manager_->SetIrq(pci_header_.irq_line, 0);
+    }
   }
 }
 

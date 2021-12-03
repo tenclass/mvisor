@@ -179,7 +179,7 @@ Device* Machine::CreateQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
   auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
   ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, false));
+  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, true));
   ahci_host->AddChild(hd);
 
   auto lpc = PciDevice::Create("Ich9Lpc");
@@ -189,10 +189,14 @@ Device* Machine::CreateQ35() {
   lpc->AddChild(Device::Create("DummyDevice"));
   lpc->AddChild(Device::Create("SmBus"));
   lpc->AddChild(Device::Create("PcSpeaker"));
-  lpc->AddChild(ahci_host);
+
+  auto virtio_console = PciDevice::Create("VirtioConsole");
+  virtio_console->AddChild(Device::Create("SpiceAgent"));
 
   auto pci_host = PciDevice::Create("PciHost");
   pci_host->AddChild(lpc);
+  pci_host->AddChild(ahci_host);
+  pci_host->AddChild(virtio_console);
   pci_host->AddChild(PciDevice::Create("Qxl"));
 
   auto root = Device::Create("SystemRoot");
@@ -209,16 +213,6 @@ void Machine::CreateVcpu() {
   }
 }
 
-/* Send an IRQ to the guest */
-void Machine::Interrupt(uint32_t irq, uint32_t level) {
-  struct kvm_irq_level irq_level = {
-    .irq = irq,
-    .level = level
-  };
-  if (ioctl(vm_fd_, KVM_IRQ_LINE, &irq_level) != 0) {
-    MV_PANIC("KVM_IRQ_LINE failed");
-  }
-}
 
 /* Start vCPU threads and IO thread */
 int Machine::Run() {

@@ -55,6 +55,7 @@ class DeviceManager {
   void* TranslateGuestMemory(uint64_t gpa);
   
   void SetIrq(uint32_t irq, uint32_t level);
+  void SignalMsi(uint64_t address, uint32_t data);
 
   Machine* machine() { return machine_; }
   Device* root() { return root_; }

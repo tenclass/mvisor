@@ -21,10 +21,18 @@
 
 #include <functional>
 
-class KeyboardInterface {
+class KeyboardInputInterface {
  public:
   virtual void QueueKeyboardEvent(uint8_t scancode[10]) = 0;
   virtual void QueueMouseEvent(uint8_t button_state, int rel_x, int rel_y, int rel_z) = 0;
+  virtual bool CanAcceptInput() = 0;
+};
+
+class SpiceAgentInterface {
+ public:
+  virtual void QueuePointerEvent(uint32_t buttons, uint32_t x, uint32_t y) = 0;
+  virtual bool CanAcceptInput() = 0;
+  virtual void Resize(uint32_t width, uint32_t height) = 0;
 };
 
 enum DisplayMode {

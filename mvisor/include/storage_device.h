@@ -30,7 +30,7 @@ class StorageDevice : public Device {
   static StorageDevice* Create(const char* class_name, DiskImage* image);
 
  protected:
-  DiskImage* image_;
+  DiskImage* image_ = nullptr;
 };
 
 
