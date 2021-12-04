@@ -179,7 +179,7 @@ Device* Machine::CreateQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
   auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
   ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, true));
+  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, false));
   ahci_host->AddChild(hd);
 
   auto lpc = PciDevice::Create("Ich9Lpc");
@@ -220,7 +220,8 @@ int Machine::Run() {
     vcpu->Start();
   }
 
-  io_thread_->Start();
+  // Not used yet
+  // io_thread_->Start();
   return 0;
 }
 
@@ -240,6 +241,7 @@ void Machine::Quit() {
  */
 void Machine::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
+  device_manager_->ResetDevices();
 
   for (auto vcpu: vcpus_) {
     vcpu->Schedule([vcpu]() {

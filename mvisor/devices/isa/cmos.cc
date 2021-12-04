@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <cstring>
 #include <ctime>
 #include "logger.h"
 #include "device_manager.h"
@@ -49,13 +50,6 @@
  */
 #define RTC_REG_D_VRT (1 << 7)
 
-struct rtc_device {
-  uint8_t   cmos_idx;
-  uint8_t   cmos_data[128];
-};
-
-static struct rtc_device rtc;
-
 static inline unsigned char bin2bcd(unsigned val)
 {
   return ((val / 10) << 4) + val % 10;
@@ -64,13 +58,20 @@ static inline unsigned char bin2bcd(unsigned val)
 
 class Cmos : public Device {
  private:
-  bool non_maskable_interrupt_disabled_;
+  bool      non_maskable_interrupt_disabled_;
+  uint8_t   cmos_index_;
+  uint8_t   cmos_data_[128];
 
  public:
 
   Cmos() {
-    non_maskable_interrupt_disabled_ = false;
     AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2, "CMOS");
+  }
+
+  void Reset() {
+    non_maskable_interrupt_disabled_ = false;
+    cmos_index_ = 0;
+    bzero(cmos_data_, sizeof(cmos_data_));
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -83,7 +84,7 @@ class Cmos : public Device {
     time(&timestamp);
     struct tm* tm = gmtime(&timestamp);
 
-    switch (rtc.cmos_idx) {
+    switch (cmos_index_) {
     case RTC_SECONDS:
       *data = bin2bcd(tm->tm_sec);
       break;
@@ -121,7 +122,7 @@ class Cmos : public Device {
       }
       break;
     default:
-      *data = rtc.cmos_data[rtc.cmos_idx];
+      *data = cmos_data_[cmos_index_];
       break;
     }
   }
@@ -129,18 +130,18 @@ class Cmos : public Device {
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
     if (offset == 0) { /* index register */
       uint8_t value = *data;
-      rtc.cmos_idx  = value & ~(1UL << 7);
+      cmos_index_  = value & ~(1UL << 7);
       non_maskable_interrupt_disabled_ = value & (1UL << 7);
       return;
     }
 
-    switch (rtc.cmos_idx) {
+    switch (cmos_index_) {
     case RTC_REG_C:
     case RTC_REG_D:
       /* Read-only */
       break;
     default:
-      rtc.cmos_data[rtc.cmos_idx] = *data;
+      cmos_data_[cmos_index_] = *data;
       break;
     }
     return;

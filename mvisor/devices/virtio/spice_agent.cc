@@ -18,8 +18,11 @@
 
 #include "virtio_console.h"
 #include <cstring>
+#include <chrono>
 #include "logger.h"
 #include "device_interface.h"
+
+using namespace std::chrono;
 
 /* The device uses the server port to send message */
 enum VdiSourcePort{
@@ -90,17 +93,24 @@ struct SpiceAgentMonitorsConfig {
     /* VDAgentMonitorMM physical_sizes[0]; */
 } __attribute__((packed));
 
+/* Limit send mouse frequency */
+const auto kSendMouseInterval = milliseconds(20);
 
 class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
  private:
-  bool    pending_mouse_event_ = false;
-  bool    pending_resize_event_ = false;
+  bool    pending_resize_event_;
   SpiceAgentMouseState  last_mouse_state_;
+  steady_clock::time_point last_send_mouse_time_;
   uint32_t width_, height_;
 
  public:
   SpiceAgent() {
     strcpy(port_name_, "com.redhat.spice.0");
+  }
+
+  void Reset() {
+    pending_resize_event_ = false;
+    last_send_mouse_time_ = steady_clock::now();
   }
 
   void OnMessage(uint8_t* data, size_t size) {
@@ -119,10 +129,6 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
 
   void OnGuestWritable() {
     guest_writable_ = true;
-    if (pending_mouse_event_) {
-      pending_mouse_event_ = false;
-      SendAgentMessage(kVdiServerPort, kAgentMessageMouseState, &last_mouse_state_, sizeof(last_mouse_state_));
-    }
   }
 
   void HandleAgentMessage(SpiceAgentMessage* message) {
@@ -160,7 +166,6 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     memcpy(agent_message->data, data, length);
     console_->SendPortMessage(this, buffer, buffer_size);
     delete buffer;
-    guest_writable_ = false;
   }
 
   bool CanAcceptInput() {
@@ -168,21 +173,25 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
   }
 
   void QueuePointerEvent(uint32_t buttons, uint32_t x, uint32_t y) {
+    if (!guest_connected_) {
+      return;
+    }
+    steady_clock::time_point now = steady_clock::now();
+    if (last_mouse_state_.buttons == buttons && now - last_send_mouse_time_ < kSendMouseInterval) {
+      return;
+    }
     last_mouse_state_.display_id = 0;
     last_mouse_state_.buttons = buttons;
     last_mouse_state_.x = x;
     last_mouse_state_.y = y;
-    if (guest_connected_) {
-      SendAgentMessage(kVdiServerPort, kAgentMessageMouseState, &last_mouse_state_, sizeof(last_mouse_state_));
-    } else {
-      pending_mouse_event_ = true;
-    }
+    last_send_mouse_time_ = now;
+    SendAgentMessage(kVdiServerPort, kAgentMessageMouseState, &last_mouse_state_, sizeof(last_mouse_state_));
   }
 
   void Resize(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
-    if (!guest_connected_ || !guest_writable_) {
+    if (!guest_connected_) {
       pending_resize_event_ = true;
       return;
     }

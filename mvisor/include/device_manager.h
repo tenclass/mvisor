@@ -22,6 +22,7 @@
 #include <set>
 #include <string>
 #include <deque>
+#include <thread>
 #include "pci_device.h"
 #include "device.h"
 
@@ -32,6 +33,15 @@ struct IoHandler {
   const MemoryRegion* memory_region;
 };
 
+struct IoEvent {
+  Device*   device;
+  uint64_t  address;
+  uint32_t  length;
+  uint64_t  datamatch;
+  uint32_t  flags;
+  int       fd;
+};
+
 class Machine;
 class DeviceManager {
  public:
@@ -40,9 +50,12 @@ class DeviceManager {
 
   void RegisterDevice(Device* device);
   void UnregisterDevice(Device* device);
+  void ResetDevices();
 
   void RegisterIoHandler(Device* device, const IoResource& io_resource);
   void UnregisterIoHandler(Device* device, const IoResource& io_resource);
+  void RegisterIoEvent(Device* device, uint64_t address, uint32_t length, uint64_t datamatch);
+  void UnregisterIoEvent(Device* device, uint64_t address);
 
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);
@@ -61,11 +74,18 @@ class DeviceManager {
   Device* root() { return root_; }
 
  private:
-  Machine* machine_;
-  Device* root_;
-  std::set<Device*> registered_devices_;
-  std::deque<IoHandler*> mmio_handlers_;
-  std::deque<IoHandler*> pio_handlers_;
+  void InitializeIoEvent();
+  void IoEventLoop();
+
+  Machine*                machine_;
+  Device*                 root_;
+  std::set<Device*>       registered_devices_;
+  std::deque<IoHandler*>  mmio_handlers_;
+  std::deque<IoHandler*>  pio_handlers_;
+  std::thread             ioevent_thread_;
+  std::set<IoEvent*>      ioevents_;
+  int                     epoll_fd_ = -1;
+  int                     stop_event_fd_ = -1;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

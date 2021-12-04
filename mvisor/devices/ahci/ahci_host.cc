@@ -80,11 +80,9 @@ void AhciHost::Connect() {
     }
     ports_[i]->AttachDevice(device);
   }
-
-  ResetHost();
 }
 
-void AhciHost::ResetHost() {
+void AhciHost::Reset() {
   bzero(&host_control_, sizeof(host_control_));
   host_control_.global_host_control = HOST_CONTROL_AHCI_ENABLE;
   host_control_.capabilities = (num_ports_ - 1) |
@@ -145,7 +143,7 @@ void AhciHost::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
     {
     case kAhciHostRegControl:
       if (value & HOST_CONTROL_RESET) {
-        ResetHost();
+        Reset();
       } else {
         host_control_.global_host_control = (value & 3) | HOST_CONTROL_AHCI_ENABLE;
         // Maybe irq is enabled now, so call check

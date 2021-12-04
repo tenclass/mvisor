@@ -24,11 +24,15 @@
  */
 class PcSpeaker : public Device {
  private:
-  uint8_t state_ = 0;
+  uint8_t state_;
 
  public:
   PcSpeaker () {
     AddIoResource(kIoResourceTypePio, 0x61, 1, "PcSpeaker Controller");
+  }
+
+  void Reset() {
+    state_ = 0;
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

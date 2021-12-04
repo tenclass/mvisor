@@ -645,10 +645,13 @@ class Qcow2 : public DiskImage {
    * To recycle these regions, clear the L2 table entry, and set the refcount to 0
    */
   void Trim(off_t position, size_t length) {
+    /* FIXME: this method crashes the file system */
+    return;
+
     size_t bytes_trimed = 0;
   
     while (bytes_trimed < length) {
-      if ((uint64_t)position >= image_header_.size) {
+      if (readonly_ || (uint64_t)position >= image_header_.size) {
         return;
       }
 

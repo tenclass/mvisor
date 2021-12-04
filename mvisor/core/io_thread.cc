@@ -40,6 +40,8 @@ void IoThread::Start() {
 }
 
 void IoThread::EventLoop() {
+  SetThreadName("iothread");
+
   struct timespec timeout = {
     .tv_sec = 1,
     .tv_nsec = 0

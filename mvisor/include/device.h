@@ -55,6 +55,7 @@ class Device : public Object {
   virtual void Disconnect();
   virtual void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Reset();
 
   const std::list<IoResource>& io_resources() const { return io_resources_; }
   const std::vector<Device*>& children() { return children_; }

@@ -54,17 +54,6 @@ class PciHost : public PciDevice {
  private:
   PciConfigAddress pci_config_address_;
 
-  void MchUpdatePcieXBar() {
-    uint32_t pciexbar = *(uint32_t*)(pci_header_.data + MCH_PCIEXBAR);
-    int enable = pciexbar & 1;
-    uint32_t addr = pciexbar & Q35_MASK(64, 35, 28);
-    uint64_t length = (1LL << 20) * 256;
-    RemoveIoResource(kIoResourceTypeMmio, PCIE_XBAR_NAME);
-    if (enable) {
-      AddIoResource(kIoResourceTypeMmio, addr, length, PCIE_XBAR_NAME);
-    }
-  }
-
  public:
   PciHost() {
     devfn_ = PCI_MAKE_DEVFN(0, 0);
@@ -78,6 +67,17 @@ class PciHost : public PciDevice {
 
     AddIoResource(kIoResourceTypePio, MCH_CONFIG_ADDR, 4, "MCH Config Base");
     AddIoResource(kIoResourceTypePio, MCH_CONFIG_DATA, 4, "MCH Config Data");
+  }
+
+  void MchUpdatePcieXBar() {
+    uint32_t pciexbar = *(uint32_t*)(pci_header_.data + MCH_PCIEXBAR);
+    int enable = pciexbar & 1;
+    uint32_t addr = pciexbar & Q35_MASK(64, 35, 28);
+    uint64_t length = (1LL << 20) * 256;
+    RemoveIoResource(kIoResourceTypeMmio, PCIE_XBAR_NAME);
+    if (enable) {
+      AddIoResource(kIoResourceTypeMmio, addr, length, PCIE_XBAR_NAME);
+    }
   }
 
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

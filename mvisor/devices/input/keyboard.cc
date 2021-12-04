@@ -388,8 +388,6 @@ class Keyboard : public Device, public KeyboardInputInterface {
 
  public:
   Keyboard() {
-    Reset();
-
     AddIoResource(kIoResourceTypePio, 0x92, 1, "A20 Gate");
     AddIoResource(kIoResourceTypePio, 0x60, 1, "PS2 Data");
     AddIoResource(kIoResourceTypePio, 0x64, 1, "PS2 Command");

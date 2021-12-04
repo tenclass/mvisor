@@ -19,10 +19,15 @@
 #include "device_manager.h"
 #include <cstring>
 #include <algorithm>
+#include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/eventfd.h>
+#include <sys/epoll.h>
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
+
+#define IOEVENTFD_MAX_EVENTS  20
 
 /* SystemRoot is a motherboard that holds all the funcational devices */
 class SystemRoot : public Device {
@@ -37,20 +42,45 @@ DECLARE_DEVICE(SystemRoot);
 DeviceManager::DeviceManager(Machine* machine, Device* root) :
   machine_(machine), root_(root)
 {
+  InitializeIoEvent();
+
   root_->manager_ = this;
   /* Call Connect() on all devices and do the initialization
    * 1. reset device status
    * 2. register IO handlers
    */
   root_->Connect();
+
+  /* Call Reset() on all devices after Connect() */
+  ResetDevices();
 }
 
 DeviceManager::~DeviceManager() {
+  /* Stop ioevent thread */
+  if (stop_event_fd_ != -1) {
+    uint64_t tmp = 1;
+    write(stop_event_fd_, &tmp, sizeof(tmp));
+  }
+  if (ioevent_thread_.joinable()) {
+    ioevent_thread_.join();
+  }
+
   if (root_) {
     /* Both Disconnect and destruction are all invoked recursively */
     root_->Disconnect();
     delete root_;
     root_ = nullptr;
+  }
+
+  if (epoll_fd_ != -1) {
+    close(epoll_fd_);
+  }
+}
+
+/* Called when system start or reset */
+void DeviceManager::ResetDevices() {
+  for (auto device : registered_devices_) {
+    device->Reset();
   }
 }
 
@@ -151,6 +181,68 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
   }
 }
 
+void DeviceManager::RegisterIoEvent(Device* device, uint64_t address, uint32_t length, uint64_t datamatch) {
+  IoEvent* event = new IoEvent {
+    .device = device,
+    .address = address,
+    .length = length,
+    .datamatch = datamatch,
+    .flags = KVM_IOEVENTFD_FLAG_DATAMATCH,
+    .fd = eventfd(0, 0)
+  };
+  struct kvm_ioeventfd kvm_ioevent = {
+    .datamatch = event->datamatch,
+    .addr = event->address,
+    .len = event->length,
+    .fd = event->fd,
+    .flags = event->flags
+  };
+  int ret = ioctl(machine_->vm_fd_, KVM_IOEVENTFD, &kvm_ioevent);
+  if (ret < 0) {
+    MV_PANIC("failed to register io event, ret=%d", ret);
+  }
+
+  struct epoll_event epoll_event = {
+    .events = EPOLLIN,
+    .data = {
+      .ptr = (void*)event
+    }
+  };
+  ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, event->fd, &epoll_event);
+  if (ret < 0) {
+    MV_PANIC("failed to add epoll event, ret=%d", ret);
+  }
+
+  ioevents_.insert(event);
+}
+
+void DeviceManager::UnregisterIoEvent(Device* device, uint64_t address) {
+  auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
+    return e->device == device && e->address == address;
+  });
+  MV_ASSERT(it != ioevents_.end());
+  IoEvent* event = *it;
+
+  struct kvm_ioeventfd kvm_ioevent = {
+    .datamatch = event->datamatch,
+    .addr = event->address,
+    .len = event->length,
+    .fd = event->fd,
+    .flags = event->flags | KVM_IOEVENTFD_FLAG_DEASSIGN
+  };
+  int ret = ioctl(machine_->vm_fd_, KVM_IOEVENTFD, &kvm_ioevent);
+  if (ret < 0) {
+    MV_PANIC("failed to register io event, ret=%d", ret);
+  }
+
+  ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, event->fd, nullptr);
+  if (ret < 0) {
+    MV_PANIC("failed to add epoll event, ret=%d", ret);
+  }
+
+  ioevents_.erase(event);
+}
+
 
 /* IO ports may overlap like MMIO addresses.
  * Use para-virtual drivers instead of IO operations to improve performance.
@@ -173,17 +265,17 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         ptr += size;
       }
       ++found;
-      if (it_count > 2) {
+      if (it_count >= 3) {
         // Move to the front for faster access next time
         pio_handlers_.push_front(*it);
         pio_handlers_.erase(it);
         --it;
       }
 
-      if (port != 0x402) {
-        MV_LOG("%s handle io %s port: 0x%x size: %x data: %x count: %d", device->name(),
-          is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
-      }
+      // if (port != 0x402) {
+      //   MV_LOG("%s handle io %s port: 0x%x size: %x data: %x count: %d", device->name(),
+      //     is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
+      // }
     }
   }
 
@@ -217,17 +309,17 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         device->Read(resource, base - resource.base, ptr, size);
       }
       ptr += size;
-      if (it_count > 2) {
+      if (it_count >= 3) {
         // Move to the front for faster access next time
         mmio_handlers_.push_front(*it);
         mmio_handlers_.erase(it);
         --it;
       }
 
-      if (base < 0xa0000 || base >= 0xc0000) {
-        MV_LOG("%s handle mmio %s addr: 0x%x size: %x data: %x", device->name(),
-          is_write ? "out" : "in", base, size, *(uint64_t*)data);
-      }
+      // if (base < 0xa0000 || base >= 0xc0000) {
+      //   MV_LOG("%s handle mmio %s addr: 0x%x size: %x data: %x", device->name(),
+      //     is_write ? "out" : "in", base, size, *(uint64_t*)data);
+      // }
       return;
     }
   }
@@ -263,5 +355,48 @@ void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
   int ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
   if (ret != 1) {
     MV_PANIC("KVM_SIGNAL_MSI ret=%d", ret);
+  }
+}
+
+void DeviceManager::InitializeIoEvent() {
+  epoll_fd_ = epoll_create(IOEVENTFD_MAX_EVENTS);
+  
+  stop_event_fd_ = eventfd(0, 0);
+  struct epoll_event epoll_event = {
+    .events = EPOLLIN,
+    .data = {
+      .fd = stop_event_fd_
+    }
+  };
+  if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, stop_event_fd_, &epoll_event) < 0) {
+    MV_PANIC("failed to add stop event fd");
+  }
+
+  ioevent_thread_ = std::thread(&DeviceManager::IoEventLoop, this);
+}
+
+void DeviceManager::IoEventLoop() {
+  SetThreadName("ioevent");
+
+  struct epoll_event events[IOEVENTFD_MAX_EVENTS];
+  uint64_t tmp;
+
+  while (machine_->IsValid()) {
+    int nfds = epoll_wait(epoll_fd_, events, IOEVENTFD_MAX_EVENTS, -1);
+    if (nfds < 0) {
+      MV_PANIC("nfds = %d", nfds);
+    }
+
+    for (int i = 0; i < nfds; i++) {
+      if (events[i].data.fd == stop_event_fd_) {
+        break;
+      }
+
+      IoEvent* ioevent = (IoEvent*)events[i].data.ptr;
+      if (read(ioevent->fd, &tmp, sizeof(tmp)) < 0) {
+        MV_PANIC("failed to read event");
+      }
+      HandleMmio(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true);
+    }
   }
 }

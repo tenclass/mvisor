@@ -116,12 +116,6 @@ class Ich9Lpc : public PciDevice {
 
  public:
   Ich9Lpc() {
-    bzero(&acpi_gpe_regs_, sizeof(acpi_gpe_regs_));
-    acpi_control_ = 0;
-    apm_control_ = apm_state_ = 0;
-    acpi_pm_event_status_ = 1;
-    acpi_pm_event_enable_ = 0;
-
     devfn_ = PCI_MAKE_DEVFN(0x1f, 0);
     
     pci_header_.vendor_id = 0x8086;
@@ -133,6 +127,14 @@ class Ich9Lpc : public PciDevice {
     pci_header_.subsys_id = 0x1100;
 
     AddIoResource(kIoResourceTypePio, 0xB2, 2, "APM IO");
+  }
+
+  void Reset() {
+    bzero(&acpi_gpe_regs_, sizeof(acpi_gpe_regs_));
+    acpi_control_ = 0;
+    apm_control_ = apm_state_ = 0;
+    acpi_pm_event_status_ = 1;
+    acpi_pm_event_enable_ = 0;
   }
 
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {

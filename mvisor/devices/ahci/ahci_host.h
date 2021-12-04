@@ -54,7 +54,7 @@ class AhciHost : public PciDevice {
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void CheckIrq();
-  void ResetHost();
+  void Reset();
 
  private:
   int num_ports_;

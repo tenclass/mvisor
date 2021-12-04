@@ -34,6 +34,10 @@ Device::~Device() {
   children_.clear();
 }
 
+void Device::Reset() {
+  /* Don't add anything here */
+}
+
 Device* Device::Create(const char* class_name) {
   return dynamic_cast<Device*>(realize_class(class_name));
 }

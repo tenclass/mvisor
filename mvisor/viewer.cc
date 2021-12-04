@@ -18,6 +18,7 @@
 
 #include "viewer.h"
 #include <unistd.h>
+#include <chrono>
 #include "logger.h"
 #include "viewer_font.inc"
 #include "keymap.h"
@@ -180,6 +181,11 @@ void Viewer::AcquireDisplayFrame() {
  * a SIGUSR is sent to the vCPU.
  */
 int Viewer::MainLoop() {
+  SetThreadName("viewer");
+  
+  SDL_Init(SDL_INIT_VIDEO);
+  SDL_ShowCursor(SDL_DISABLE);
+
   SDL_Event event;
 
   display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
@@ -190,9 +196,15 @@ int Viewer::MainLoop() {
   });
   MV_ASSERT(display_);
   uint32_t mouse_buttons = 0;
+  auto frame_interval_us = std::chrono::microseconds(1000000 / 30);
+
+  bool pending_resize = false;
+  int  pending_resize_w, pending_resize_h;
+  std::chrono::steady_clock::time_point pending_resize_time;
 
   // Loop until all vcpu exits
   while (machine_->IsValid()) {
+    auto frame_start_time = std::chrono::steady_clock::now();
     AcquireDisplayFrame();
 
     while (SDL_PollEvent(&event)) {
@@ -242,7 +254,10 @@ int Viewer::MainLoop() {
         break;
       case SDL_VIDEORESIZE:
         if (spice_agent_) {
-          spice_agent_->Resize(event.resize.w, event.resize.h);
+          pending_resize = true;
+          pending_resize_w = event.resize.w;
+          pending_resize_h = event.resize.h;
+          pending_resize_time = std::chrono::steady_clock::now();
         }
         break;
       case SDL_QUIT:
@@ -250,7 +265,18 @@ int Viewer::MainLoop() {
         break;
       }
     }
-    SDL_Delay(1000 / 30);
+
+    /* Check viewer window resize */
+    if (pending_resize && frame_start_time - pending_resize_time >= std::chrono::milliseconds(500)) {
+      pending_resize = false;
+      spice_agent_->Resize(pending_resize_w, pending_resize_h);
+    }
+
+    /* Keep display FPS */
+    auto frame_cost_us = std::chrono::steady_clock::now() - frame_start_time;
+    if (frame_cost_us < frame_interval_us) {
+      std::this_thread::sleep_for(frame_interval_us - frame_cost_us);
+    }
   }
   return 0;
 }

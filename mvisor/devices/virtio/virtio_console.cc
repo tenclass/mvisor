@@ -36,8 +36,6 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
 
     bzero(&console_config_, sizeof(console_config_));
     console_config_.max_nr_ports = common_config_.num_queues / 2 - 1;
-  
-    CreateQueuesForPorts();
   }
 
   void Connect() {
@@ -50,6 +48,12 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
         console_ports_.push_back(port);
       }
     }
+  }
+
+  void Reset() {
+    VirtioPci::Reset();
+  
+    CreateQueuesForPorts();
   }
 
   void CreateQueuesForPorts() {

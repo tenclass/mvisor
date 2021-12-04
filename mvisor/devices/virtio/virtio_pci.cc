@@ -68,24 +68,30 @@ VirtioPci::VirtioPci() {
 
     bzero(&common_config_, sizeof(common_config_));
     bzero(driver_features_, sizeof(driver_features_));
-    for (uint index = 0; index < queues_.size(); index++) {
-      queues_[index].index = index;
-      queues_[index].size = 0;
-    }
     /* Device common features */
     device_features_ = (1UL << VIRTIO_RING_F_INDIRECT_DESC) | (1UL << VIRTIO_RING_F_EVENT_IDX) | \
       (1UL << VIRTIO_F_VERSION_1);
 
     common_config_.num_queues = queues_.size();
-    isr_status_ = 0;
 }
 
 VirtioPci::~VirtioPci() {
-
+  /* Call reset to release io resources */
+  Reset();
 }
 
 
 void VirtioPci::Reset() {
+  isr_status_ = 0;
+  for (uint index = 0; index < queues_.size(); index++) {
+    queues_[index].index = index;
+    if (queues_[index].enabled) {
+      uint64_t notify_address =pci_bars_[4].address + 0x3000 + index * 4;
+      manager_->UnregisterIoEvent(this, notify_address);
+    }
+    queues_[index].enabled = false;
+    queues_[index].size = 0;
+  }
 }
 
 void VirtioPci::PrintQueue(VirtQueue& vq) {
@@ -174,8 +180,12 @@ void VirtioPci::EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t av
   vq.descriptor_table = (VRingDescriptor*)manager_->TranslateGuestMemory(desc_gpa);
   vq.available_ring = (VRingAvailable*)manager_->TranslateGuestMemory(avail_gpa);
   vq.used_ring = (VRingUsed*)manager_->TranslateGuestMemory(used_gpa);
-  vq.enabled = true;
   MV_ASSERT(vq.descriptor_table && vq.available_ring && vq.used_ring);
+
+  uint64_t notify_address =pci_bars_[4].address + 0x3000 + queue_index * 4;
+  manager_->RegisterIoEvent(this, notify_address, 2, queue_index);
+
+  vq.enabled = true;
 }
 
 void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) {
