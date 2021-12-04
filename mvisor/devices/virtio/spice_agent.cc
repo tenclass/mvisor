@@ -16,92 +16,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/*
+ * Reference: https://www.spice-space.org/agent-protocol.html
+ */
+
 #include "virtio_console.h"
 #include <cstring>
 #include <chrono>
+#include <cstdlib>
 #include "logger.h"
 #include "device_interface.h"
+#include "spice/vd_agent.h"
 
 using namespace std::chrono;
-
-/* The device uses the server port to send message */
-enum VdiSourcePort{
-  kVdiClientPort = 1,
-  kVdiServerPort
-};
-
-struct VdiChunkHeader {
-  uint32_t  port;
-  uint32_t  size;
-} __attribute__((packed));
-
-enum SpiceAgentMessageType {
-  kAgentMessageMouseState = 1,
-  kAgentMessageMonitorsConfig,
-  kAgentMessageReply,
-  kAgentMessageClipboard,
-  kAgentMessageDisplayConfig,
-  kAgentMessageAnnounceCapabilities,
-  kAgentMessageClipboardGrab,
-  kAgentMessageClipboardRequest,
-  kAgentMessageClipboardRelease,
-  kAgentMessageFileXferStart,
-  kAgentMessageFileXferStatus,
-  kAgentMessageFileXferData,
-  kAgentMessageClientDisconnected,
-  kAgentMessageMaxClipboard,
-  kAgentMessageAudioVolumeSync,
-  kAgentMessageGraphicsDeviceInfo,
-  kAgentMessageEndMessage
-};
-
-struct SpiceAgentMouseState {
-  uint32_t x;
-  uint32_t y;
-  uint32_t buttons;
-  uint8_t display_id;
-} __attribute__((packed));
-
-struct SpiceAgentMessage {
-  uint32_t  protocol;
-  uint32_t  type;
-  uint64_t  opaque;
-  uint32_t  size;
-  uint8_t   data[];
-} __attribute__((packed));
-
-struct SpiceAgentMonitorConfig {
-    /*
-     * Note a width and height of 0 can be used to indicate a disabled
-     * monitor, this may only be used with agents with the
-     * VD_AGENT_CAP_SPARSE_MONITORS_CONFIG capability.
-     */
-    uint32_t height;
-    uint32_t width;
-    uint32_t depth;
-    int32_t x;
-    int32_t y;
-} __attribute__((packed));
-
-struct SpiceAgentMonitorsConfig {
-    uint32_t num_of_monitors;
-#define VD_AGENT_CONFIG_MONITORS_FLAG_USE_POS         (1 << 0)
-#define VD_AGENT_CONFIG_MONITORS_FLAG_PHYSICAL_SIZE   (1 << 1)
-    uint32_t flags;
-    SpiceAgentMonitorConfig monitors[1];
-    /* only sent if the FLAG_PHYSICAL_SIZE is present: */
-    /* VDAgentMonitorMM physical_sizes[0]; */
-} __attribute__((packed));
 
 /* Limit send mouse frequency */
 const auto kSendMouseInterval = milliseconds(20);
 
 class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
  private:
-  bool    pending_resize_event_;
-  SpiceAgentMouseState  last_mouse_state_;
-  steady_clock::time_point last_send_mouse_time_;
-  uint32_t width_, height_;
+  bool                      pending_resize_event_;
+  VDAgentMouseState         last_mouse_state_;
+  steady_clock::time_point  last_send_mouse_time_;
+  uint32_t                  width_, height_;
 
  public:
   SpiceAgent() {
@@ -114,16 +51,16 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
   }
 
   void OnMessage(uint8_t* data, size_t size) {
-    if (size < sizeof(VdiChunkHeader) + sizeof(SpiceAgentMessage)) {
+    if (size < sizeof(VDIChunkHeader) + sizeof(VDAgentMessage)) {
       MV_PANIC("Chunk too small, size=0x%lx", size);
       return;
     }
-    VdiChunkHeader* chunk_header = (VdiChunkHeader*)data;
-    if (chunk_header->size + sizeof(VdiChunkHeader) != size) {
+    VDIChunkHeader* chunk_header = (VDIChunkHeader*)data;
+    if (chunk_header->size + sizeof(VDIChunkHeader) != size) {
       MV_PANIC("Invalid chunk size=0x%lx", size);
       return;
     }
-    SpiceAgentMessage* message = (SpiceAgentMessage*)(data + sizeof(VdiChunkHeader));
+    VDAgentMessage* message = (VDAgentMessage*)(data + sizeof(VDIChunkHeader));
     HandleAgentMessage(message);
   }
 
@@ -131,15 +68,17 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     guest_writable_ = true;
   }
 
-  void HandleAgentMessage(SpiceAgentMessage* message) {
+  void HandleAgentMessage(VDAgentMessage* message) {
     switch (message->type)
     {
-    case kAgentMessageAnnounceCapabilities: {
+    case VD_AGENT_ANNOUNCE_CAPABILITIES: {
       /* ui effects & color depth */
       uint8_t display_config[8] = { 0 };
-      SendAgentMessage(kVdiClientPort, kAgentMessageDisplayConfig, display_config, sizeof(display_config));
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, display_config, sizeof(display_config));
+
       uint32_t max_clipboard = 0x06400000;
-      SendAgentMessage(kVdiClientPort, kAgentMessageMaxClipboard, &max_clipboard, sizeof(max_clipboard));
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MAX_CLIPBOARD, &max_clipboard, sizeof(max_clipboard));
+
       if (pending_resize_event_) {
         Resize(width_, height_);
       }
@@ -152,13 +91,13 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     }
   }
 
-  void SendAgentMessage(VdiSourcePort port, SpiceAgentMessageType type, void* data, size_t length) {
-    size_t buffer_size = sizeof(VdiChunkHeader) + sizeof(SpiceAgentMessage) + length;
+  void SendAgentMessage(int port, int type, void* data, size_t length) {
+    size_t buffer_size = sizeof(VDIChunkHeader) + sizeof(VDAgentMessage) + length;
     uint8_t* buffer = new uint8_t[buffer_size];
-    VdiChunkHeader* chunk_header = (VdiChunkHeader*)buffer;
+    VDIChunkHeader* chunk_header = (VDIChunkHeader*)buffer;
     chunk_header->port = port;
-    chunk_header->size = sizeof(SpiceAgentMessage) + length;
-    SpiceAgentMessage* agent_message = (SpiceAgentMessage*)(buffer + sizeof(VdiChunkHeader));
+    chunk_header->size = sizeof(VDAgentMessage) + length;
+    VDAgentMessage* agent_message = (VDAgentMessage*)(buffer + sizeof(VDIChunkHeader));
     agent_message->type = type;
     agent_message->protocol = 1;
     agent_message->opaque = 0UL;
@@ -185,7 +124,7 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     last_mouse_state_.x = x;
     last_mouse_state_.y = y;
     last_send_mouse_time_ = now;
-    SendAgentMessage(kVdiServerPort, kAgentMessageMouseState, &last_mouse_state_, sizeof(last_mouse_state_));
+    SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_MOUSE_STATE, &last_mouse_state_, sizeof(last_mouse_state_));
   }
 
   void Resize(uint32_t width, uint32_t height) {
@@ -197,12 +136,15 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     }
     MV_LOG("Resize %ux%u", width_, height_);
 
-    SpiceAgentMonitorsConfig config = { 0 };
-    config.num_of_monitors = 1;
-    config.monitors[0].depth = 32;
-    config.monitors[0].width = width_;
-    config.monitors[0].height = height_;
-    SendAgentMessage(kVdiClientPort, kAgentMessageMonitorsConfig, &config, sizeof(config));
+    size_t config_size = sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig);
+    VDAgentMonitorsConfig* config = (VDAgentMonitorsConfig*)malloc(config_size);
+    bzero(config, config_size);
+    config->num_of_monitors = 1;
+    config->monitors[0].depth = 32;
+    config->monitors[0].width = width_;
+    config->monitors[0].height = height_;
+    SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, config, config_size);
+    free(config);
   }
 };
 

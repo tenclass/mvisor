@@ -179,7 +179,7 @@ Device* Machine::CreateQ35() {
   auto ahci_host = PciDevice::Create("AhciHost");
   auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
   ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, false));
+  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, true));
   ahci_host->AddChild(hd);
 
   auto lpc = PciDevice::Create("Ich9Lpc");
@@ -197,7 +197,7 @@ Device* Machine::CreateQ35() {
   pci_host->AddChild(lpc);
   pci_host->AddChild(ahci_host);
   pci_host->AddChild(virtio_console);
-  pci_host->AddChild(PciDevice::Create("Qxl"));
+  pci_host->AddChild(PciDevice::Create("Vga"));
 
   auto root = Device::Create("SystemRoot");
   root->AddChild(Device::Create("FirmwareConfig"));

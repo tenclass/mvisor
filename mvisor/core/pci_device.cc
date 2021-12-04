@@ -48,6 +48,10 @@ void PciDevice::LoadRomFile(const char* path) {
   struct stat st;
   fstat(fd, &st);
 
+  if (pci_rom_.data) {
+    free(pci_rom_.data);
+  }
+
   pci_rom_.size = (st.st_size / PAGE_SIZE + 1) * PAGE_SIZE;
   pci_rom_.data = valloc(pci_rom_.size);
   read(fd, pci_rom_.data, st.st_size);

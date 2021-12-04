@@ -38,7 +38,8 @@ class SpiceAgentInterface {
 enum DisplayMode {
   kDisplayTextMode,
   kDisplayVgaMode,
-  kDisplayVbeMode
+  kDisplayVbeMode,
+  kDisplayQxlMode
 };
 
 typedef std::function <void(void)> DisplayChangeListener;

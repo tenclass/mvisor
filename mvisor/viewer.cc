@@ -188,13 +188,18 @@ int Viewer::MainLoop() {
 
   SDL_Event event;
 
-  display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
   keyboard_ = dynamic_cast<KeyboardInputInterface*>(device_manager_->LookupDeviceByName("Keyboard"));
   spice_agent_ = dynamic_cast<SpiceAgentInterface*>(device_manager_->LookupDeviceByName("SpiceAgent"));
+  display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
+  if (display_ == nullptr) {
+    display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Vga"));
+  }
+  MV_ASSERT(display_);
+
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
   });
-  MV_ASSERT(display_);
+
   uint32_t mouse_buttons = 0;
   auto frame_interval_us = std::chrono::microseconds(1000000 / 30);
 
