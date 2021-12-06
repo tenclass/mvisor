@@ -31,7 +31,7 @@ enum LogType {
 #define MV_ERROR(fmt, ...) Log(kLogTypeError, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define MV_PANIC(fmt, ...) Log(kLogTypePanic, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define MV_ASSERT(condition) \
-  ((condition) ? (void)0 : MV_PANIC("Assertion failed, "#condition))
+  (__builtin_expect(!!(condition), 1) ? (void)0 : MV_PANIC("Assertion failed, "#condition))
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...);
 void SaveToFile(const char* path, void* data, size_t size);

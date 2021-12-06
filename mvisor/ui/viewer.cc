@@ -245,21 +245,14 @@ void Viewer::Render() {
   }
 }
 
-/* Reference about SDL-2:
- * https://wiki.libsdl.org/APIByCategory
- */
-int Viewer::MainLoop() {
-  SetThreadName("viewer");
-
-  SDL_Event event;
-
+void Viewer::LookupDevices() {
   keyboard_ = dynamic_cast<KeyboardInputInterface*>(device_manager_->LookupDeviceByName("Keyboard"));
   spice_agent_ = dynamic_cast<SpiceAgentInterface*>(device_manager_->LookupDeviceByName("SpiceAgent"));
   display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
   if (display_ == nullptr) {
     display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Vga"));
   }
-  MV_ASSERT(display_);
+  MV_ASSERT(keyboard_ && display_);
 
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
@@ -271,93 +264,30 @@ int Viewer::MainLoop() {
     std::lock_guard<std::mutex> lock(mutex_);
     cursor_updates_.push_back(update);
   });
+}
 
-  uint32_t mouse_buttons = 0;
+/* Reference about SDL-2:
+ * https://wiki.libsdl.org/APIByCategory
+ */
+int Viewer::MainLoop() {
+  SetThreadName("viewer");
+  LookupDevices();
+
   auto frame_interval_us = std::chrono::microseconds(1000000 / 30);
-
-  bool pending_resize = false;
-  int  pending_resize_w, pending_resize_h;
-  std::chrono::steady_clock::time_point pending_resize_time;
-
   // Loop until all vcpu exits
   while (machine_->IsValid()) {
     auto frame_start_time = std::chrono::steady_clock::now();
     Render();
 
+    SDL_Event event;
     while (SDL_PollEvent(&event)) {
-      std::lock_guard<std::mutex> lock(mutex_);
-      uint8_t transcoded[10] = { 0 };
-      switch (event.type)
-      {
-      case SDL_KEYDOWN:
-      case SDL_KEYUP:
-        /* Type ESCAPE to exit mouse grab mode */
-        if (grab_input_ && event.key.keysym.sym == SDLK_ESCAPE) {
-          grab_input_ = false;
-          SDL_SetWindowGrab(window_, SDL_FALSE);
-          SDL_ShowCursor(SDL_ENABLE);
-          UpdateCaption();
-          break;
-        }
-        if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
-          keyboard_->QueueKeyboardEvent(transcoded);
-        }
-        break;
-      case SDL_MOUSEBUTTONDOWN:
-        /* If pointer device is not available, try to grab input and use PS/2 input */
-        if (!grab_input_ && spice_agent_ && !spice_agent_->CanAcceptInput()) {
-          grab_input_ = true;
-          SDL_SetWindowGrab(window_, SDL_TRUE);
-          SDL_ShowCursor(SDL_DISABLE);
-          UpdateCaption();
-        }
-        /* fall through */
-      case SDL_MOUSEBUTTONUP:
-        if (event.button.state) {
-          mouse_buttons |= (1 << event.button.button);
-        } else {
-          mouse_buttons &= ~(1 << event.button.button);
-        }
-        /* fall through */
-      case SDL_MOUSEMOTION:
-        if (spice_agent_ && spice_agent_->CanAcceptInput()) {
-          int x, y;
-          SDL_GetMouseState(&x, &y);
-          spice_agent_->QueuePointerEvent(mouse_buttons, x, y);
-        } else if (grab_input_) {
-          /* swap the middle button and right button bit of input state */
-          uint8_t ps2_state = ((mouse_buttons & 2) >> 1) | (mouse_buttons & 4) | ((mouse_buttons & 8) >> 2);
-          if (event.type == SDL_MOUSEMOTION) {
-            /* multiply by 2 to prevent host mouse go out of window */
-            keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
-          } else {
-            keyboard_->QueueMouseEvent(ps2_state, 0, 0, 0);
-          }
-        }
-        break;
-      case SDL_WINDOWEVENT:
-        switch (event.window.event)
-        {
-        case SDL_WINDOWEVENT_RESIZED:
-          if (spice_agent_) {
-            pending_resize = true;
-            pending_resize_w = event.window.data1;
-            pending_resize_h = event.window.data2;
-            pending_resize_time = std::chrono::steady_clock::now();
-          }
-          break;
-        }
-        break;
-      case SDL_QUIT:
-        machine_->Quit();
-        break;
-      }
+      HandleEvent(event);
     }
 
     /* Check viewer window resize */
-    if (pending_resize && frame_start_time - pending_resize_time >= std::chrono::milliseconds(500)) {
-      pending_resize = false;
-      spice_agent_->Resize(pending_resize_w, pending_resize_h);
+    if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
+      pending_resize_.triggered = false;
+      spice_agent_->Resize(pending_resize_.width, pending_resize_.height);
     }
 
     /* Keep display FPS */
@@ -367,4 +297,86 @@ int Viewer::MainLoop() {
     }
   }
   return 0;
+}
+
+void Viewer::HandleEvent(const SDL_Event& event) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  uint8_t transcoded[10] = { 0 };
+  switch (event.type)
+  {
+  case SDL_KEYDOWN:
+  case SDL_KEYUP:
+    /* Type ESCAPE to exit mouse grab mode */
+    if (grab_input_ && event.key.keysym.sym == SDLK_ESCAPE) {
+      grab_input_ = false;
+      SDL_SetWindowGrab(window_, SDL_FALSE);
+      SDL_ShowCursor(SDL_ENABLE);
+      UpdateCaption();
+      break;
+    }
+    if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
+      keyboard_->QueueKeyboardEvent(transcoded);
+    }
+    break;
+  case SDL_MOUSEWHEEL: {
+    int x, y;
+    SDL_GetMouseState(&x, &y);
+    if (event.wheel.y > 0) {
+      spice_agent_->QueuePointerEvent(mouse_buttons_ | (1 << SPICE_MOUSE_BUTTON_UP), x, y);
+      spice_agent_->QueuePointerEvent(mouse_buttons_, x, y);
+    } else if (event.wheel.y < 0) {
+      spice_agent_->QueuePointerEvent(mouse_buttons_ | (1 << SPICE_MOUSE_BUTTON_DOWN), x, y);
+      spice_agent_->QueuePointerEvent(mouse_buttons_, x, y);
+    }
+    break;
+  }
+  case SDL_MOUSEBUTTONDOWN:
+    /* If pointer device is not available, try to grab input and use PS/2 input */
+    if (!grab_input_ && spice_agent_ && !spice_agent_->CanAcceptInput()) {
+      grab_input_ = true;
+      SDL_SetWindowGrab(window_, SDL_TRUE);
+      SDL_ShowCursor(SDL_DISABLE);
+      UpdateCaption();
+    }
+    /* fall through */
+  case SDL_MOUSEBUTTONUP:
+    if (event.button.state) {
+      mouse_buttons_ |= (1 << event.button.button);
+    } else {
+      mouse_buttons_ &= ~(1 << event.button.button);
+    }
+    /* fall through */
+  case SDL_MOUSEMOTION:
+    if (spice_agent_ && spice_agent_->CanAcceptInput()) {
+      int x, y;
+      SDL_GetMouseState(&x, &y);
+      spice_agent_->QueuePointerEvent(mouse_buttons_, x, y);
+    } else if (grab_input_) {
+      /* swap the middle button and right button bit of input state */
+      uint8_t ps2_state = ((mouse_buttons_ & 2) >> 1) | (mouse_buttons_ & 4) | ((mouse_buttons_ & 8) >> 2);
+      if (event.type == SDL_MOUSEMOTION) {
+        /* multiply by 2 to prevent host mouse go out of window */
+        keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
+      } else {
+        keyboard_->QueueMouseEvent(ps2_state, 0, 0, 0);
+      }
+    }
+    break;
+  case SDL_WINDOWEVENT:
+    switch (event.window.event)
+    {
+    case SDL_WINDOWEVENT_RESIZED:
+      if (spice_agent_) {
+        pending_resize_.triggered = true;
+        pending_resize_.width = event.window.data1;
+        pending_resize_.height = event.window.data2;
+        pending_resize_.time = std::chrono::steady_clock::now();
+      }
+      break;
+    }
+    break;
+  case SDL_QUIT:
+    machine_->Quit();
+    break;
+  }
 }
