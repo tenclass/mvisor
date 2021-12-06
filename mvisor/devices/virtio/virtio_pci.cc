@@ -86,8 +86,8 @@ void VirtioPci::Reset() {
   for (uint index = 0; index < queues_.size(); index++) {
     queues_[index].index = index;
     if (queues_[index].enabled) {
-      uint64_t notify_address =pci_bars_[4].address + 0x3000 + index * 4;
-      manager_->UnregisterIoEvent(this, notify_address);
+      uint64_t notify_address = pci_bars_[4].address + 0x3000 + index * 4;
+      manager_->UnregisterIoEvent(this, kIoResourceTypeMmio, notify_address);
     }
     queues_[index].enabled = false;
     queues_[index].size = 0;
@@ -183,7 +183,7 @@ void VirtioPci::EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t av
   MV_ASSERT(vq.descriptor_table && vq.available_ring && vq.used_ring);
 
   uint64_t notify_address =pci_bars_[4].address + 0x3000 + queue_index * 4;
-  manager_->RegisterIoEvent(this, notify_address, 2, queue_index);
+  manager_->RegisterIoEvent(this, kIoResourceTypeMmio, notify_address, 2, queue_index);
 
   vq.enabled = true;
 }

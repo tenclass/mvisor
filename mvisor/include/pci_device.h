@@ -196,6 +196,7 @@ class PciDevice : public Device {
  public:
   PciDevice();
   virtual ~PciDevice();
+  virtual void Disconnect();
 
   uint8_t bus() { return 0; }
   uint8_t devfn() { return devfn_; }

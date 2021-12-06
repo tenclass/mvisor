@@ -34,12 +34,12 @@ struct IoHandler {
 };
 
 struct IoEvent {
-  Device*   device;
-  uint64_t  address;
-  uint32_t  length;
-  uint64_t  datamatch;
-  uint32_t  flags;
-  int       fd;
+  Device*         device;
+  uint64_t        address;
+  uint32_t        length;
+  uint64_t        datamatch;
+  uint32_t        flags;
+  int             fd;
 };
 
 /* Currently used for VGA auto refresh */
@@ -65,8 +65,8 @@ class DeviceManager {
 
   void RegisterIoHandler(Device* device, const IoResource& io_resource);
   void UnregisterIoHandler(Device* device, const IoResource& io_resource);
-  void RegisterIoEvent(Device* device, uint64_t address, uint32_t length, uint64_t datamatch);
-  void UnregisterIoEvent(Device* device, uint64_t address);
+  void RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
+  void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   IoTimer* RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback);
   void UnregisterIoTimer(IoTimer* timer);
   void ModifyIoTimer(IoTimer* timer, int interval_ms);
@@ -76,8 +76,8 @@ class DeviceManager {
   PciDevice* LookupPciDevice(uint16_t bus, uint8_t devfn);
 
   /* call by machine */
-  void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count);
-  void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write);
+  void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count, bool ioeventfd = false);
+  void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write, bool ioeventfd = false);
 
   void* TranslateGuestMemory(uint64_t gpa);
   

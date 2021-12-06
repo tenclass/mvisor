@@ -84,6 +84,9 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
       }
       break;
     }
+    case VD_AGENT_REPLY:
+      /* Handle reply of monitor config and display config */ 
+      break;
     default:
       MV_LOG("Unhandled agent message type=0x%x", message->type);
       DumpHex(message, sizeof(*message) + message->size);
@@ -134,7 +137,6 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
       pending_resize_event_ = true;
       return;
     }
-    MV_LOG("Resize %ux%u", width_, height_);
 
     size_t config_size = sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig);
     VDAgentMonitorsConfig* config = (VDAgentMonitorsConfig*)malloc(config_size);

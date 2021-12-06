@@ -35,6 +35,21 @@ PciDevice::PciDevice() {
   next_capability_offset_ = 0x40;
 }
 
+PciDevice::~PciDevice() {
+  if (pci_rom_.data) {
+    free(pci_rom_.data);
+  }
+}
+
+void PciDevice::Disconnect() {
+  for (int i = 0; i < PCI_BAR_NUMS; i++) {
+    if (pci_bars_[i].active) {
+      DeactivatePciBar(i);
+    }
+  }
+  Device::Disconnect();
+}
+
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */
 void PciDevice::LoadRomFile(const char* path) {
   /* Load rom file from path */
@@ -56,12 +71,6 @@ void PciDevice::LoadRomFile(const char* path) {
   pci_rom_.data = valloc(pci_rom_.size);
   read(fd, pci_rom_.data, st.st_size);
   close(fd);
-}
-
-PciDevice::~PciDevice() {
-  if (pci_rom_.data) {
-    free(pci_rom_.data);
-  }
 }
 
 uint8_t* PciDevice::AddCapability(uint8_t cap, const uint8_t* data, uint8_t length) {
@@ -203,13 +212,10 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
 
 /* Handle IO, MMIO ON or OFF */
 void PciDevice::WritePciCommand(uint16_t new_command) {
-  int i;
-  bool toggle_io, toggle_mem;
+  int toggle_io = (pci_header_.command ^ new_command) & PCI_COMMAND_IO;
+  int toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
 
-  toggle_io = (pci_header_.command ^ new_command) & PCI_COMMAND_IO;
-  toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
-
-  for (i = 0; i < PCI_BAR_NUMS; i++) {
+  for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (!pci_header_.bars[i])
       continue;
 

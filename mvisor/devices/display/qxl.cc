@@ -85,12 +85,31 @@ class Qxl : public Vga {
     
   }
 
-  void Connect() {
+  virtual bool ActivatePciBar(uint8_t index) {
+    if (index == 3) {
+      /* Setup ioeventfd for notify commands */
+      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD, 1, 0);
+      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR, 1, 0);
+    }
+    return Vga::ActivatePciBar(index);
+  }
+
+  virtual bool DeactivatePciBar(uint8_t index) {
+    if (index == 3) {
+      manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
+      manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
+    }
+    return Vga::DeactivatePciBar(index);
+  }
+
+  virtual void Connect() {
+    /* Load QXL rom first before loading VGA rom */
     LoadRomFile(QXL_ROM_PATH);
     Vga::Connect();
   }
 
-  void Reset() {
+  virtual void Reset() {
+    /* Vga Reset() resets mode */
     Vga::Reset();
 
     IntializeQxlRom();
@@ -99,7 +118,6 @@ class Qxl : public Vga {
     // Reset cursor
     // Reset surfaces
     bzero(guest_slots_, sizeof(guest_slots_));
-    // Create primary surface
   }
 
   void IntializeQxlRom() {
@@ -322,14 +340,20 @@ class Qxl : public Vga {
   }
 
   void ReleaseGuestResource(QXLReleaseInfo* info) {
+    if (mode_ != kDisplayQxlMode) {
+      return;
+    }
     QXLReleaseRing* ring = &qxl_ram_->release_ring;
     uint32_t prod = ring->prod & SPICE_RING_INDEX_MASK(ring);
-    if (ring->items[prod].el == 0) {
-      ring->items[prod].el = info->id;
-    } else {
-      last_relealse_info_->next = info->id;
-    }
+
+    /* Careful! Union member info->id and info->next have same guest address */
+    auto id = info->id;
     info->next = 0;
+    if (ring->items[prod].el == 0) {
+      ring->items[prod].el = id;
+    } else {
+      last_relealse_info_->next = id;
+    }
     last_relealse_info_ = info;
 
     if (ring->prod - ring->cons + 1 == ring->num_items) {
@@ -359,7 +383,6 @@ class Qxl : public Vga {
       ParseCommand(command);
       bool should_wait;
       SPICE_RING_CONS_WAIT(ring, should_wait);
-      MV_ASSERT(should_wait);
     }
   }
 
@@ -376,7 +399,6 @@ class Qxl : public Vga {
       ParseCommand(command);
       bool should_wait;
       SPICE_RING_CONS_WAIT(ring, should_wait);
-      MV_ASSERT(should_wait);
     }
   }
 
@@ -394,7 +416,8 @@ class Qxl : public Vga {
       break;
     }
     default:
-      MV_LOG("unhandled command type=0x%x data=0x%lx", command.type, command.data);
+      DumpHex(&command, sizeof(command));
+      MV_PANIC("unhandled command type=0x%x data=0x%lx", command.type, command.data);
       break;
     }
   }
@@ -409,22 +432,18 @@ class Qxl : public Vga {
     MV_ASSERT(drawable->bbox.left >= 0 && drawable->bbox.top >= 0);
     MV_ASSERT(drawable->bbox.right <= (int32_t)guest_primary_.surface.width);
     MV_ASSERT(drawable->bbox.bottom <= (int32_t)guest_primary_.surface.height);
-    partial->release = [=]() {
-      ReleaseGuestResource(&drawable->release_info);
-      delete partial;
-    };
   
     switch (drawable->type)
     {
     case QXL_DRAW_COPY: {
-      QXLCopy &copy = drawable->u.copy;
+      QXLCopy* copy = &drawable->u.copy;
       MV_ASSERT(drawable->effect == QXL_EFFECT_OPAQUE);
       MV_ASSERT(drawable->clip.type == SPICE_CLIP_TYPE_NONE);
       MV_ASSERT(drawable->self_bitmap == 1);
       MV_ASSERT(drawable->self_bitmap_area.left == drawable->bbox.left && drawable->self_bitmap_area.right == drawable->bbox.right);
-      MV_ASSERT(copy.src_area.top == 0 && copy.src_area.left == 0);
-      MV_ASSERT(copy.rop_descriptor == SPICE_ROPD_OP_PUT);
-      QXLImage* image = (QXLImage*)GetMemSlotAddress(copy.src_bitmap);
+      MV_ASSERT(copy->src_area.top == 0 && copy->src_area.left == 0);
+      MV_ASSERT(copy->rop_descriptor == SPICE_ROPD_OP_PUT);
+      QXLImage* image = (QXLImage*)GetMemSlotAddress(copy->src_bitmap);
       MV_ASSERT(image->descriptor.type == SPICE_IMAGE_TYPE_BITMAP);
       MV_ASSERT(image->descriptor.flags == 0);
       QXLBitmap* bitmap = &image->bitmap;
@@ -435,13 +454,35 @@ class Qxl : public Vga {
       partial->stride = bitmap->stride;
       partial->flip = !(bitmap->flags & QXL_BITMAP_TOP_DOWN);
       GetMemSlotChunkedData(bitmap->data, partial->vector);
+      partial->release = [=]() {
+        ReleaseGuestResource(&drawable->release_info);
+        delete partial;
+      };
       NotifyDisplayRender(partial);
       break;
     }
-    case QXL_DRAW_FILL:
-      MV_LOG("drawable fill");
-      DumpHex(drawable, sizeof(*drawable));
+    case QXL_DRAW_FILL: {
+      QXLFill* fill = &drawable->u.fill;
+      MV_ASSERT(fill->rop_descriptor == SPICE_ROPD_OP_PUT);
+      QXLBrush* brush = &fill->brush;
+      MV_ASSERT(brush->type == SPICE_BRUSH_TYPE_SOLID);
+      uint32_t color = brush->u.color;
+      partial->stride = partial->width * guest_primary_.bytes_pp;
+      size_t size = partial->stride * partial->height;
+      uint8_t* data = new uint8_t[size];
+      memset(data, color, size);
+      partial->vector.emplace_back(DisplayPartialData {
+        .data = data,
+        .size = size
+      });
+      partial->release = [=]() {
+        ReleaseGuestResource(&drawable->release_info);
+        delete data;
+        delete partial;
+      };
+      NotifyDisplayRender(partial);
       break;
+    }
     default:
       DumpHex(drawable, sizeof(*drawable));
       MV_PANIC("unhandled drawable type=%d", drawable->type);
@@ -490,6 +531,7 @@ class Qxl : public Vga {
       break;
     }
     default:
+      DumpHex(cursor, sizeof(*cursor));
       MV_PANIC("unhandled cursor type=%d", cursor->type);
       break;
     }

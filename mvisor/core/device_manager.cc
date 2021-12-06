@@ -181,7 +181,7 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
   }
 }
 
-void DeviceManager::RegisterIoEvent(Device* device, uint64_t address, uint32_t length, uint64_t datamatch) {
+void DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch) {
   IoEvent* event = new IoEvent {
     .device = device,
     .address = address,
@@ -190,6 +190,9 @@ void DeviceManager::RegisterIoEvent(Device* device, uint64_t address, uint32_t l
     .flags = KVM_IOEVENTFD_FLAG_DATAMATCH,
     .fd = eventfd(0, 0)
   };
+  if (type == kIoResourceTypePio) {
+    event->flags |= KVM_IOEVENTFD_FLAG_PIO;
+  }
   struct kvm_ioeventfd kvm_ioevent = {
     .datamatch = event->datamatch,
     .addr = event->address,
@@ -216,9 +219,10 @@ void DeviceManager::RegisterIoEvent(Device* device, uint64_t address, uint32_t l
   ioevents_.insert(event);
 }
 
-void DeviceManager::UnregisterIoEvent(Device* device, uint64_t address) {
+void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address) {
   auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
-    return e->device == device && e->address == address;
+    return e->device == device && e->address == address &&
+      ((type == kIoResourceTypePio) == !!(e->flags & KVM_IOEVENTFD_FLAG_PIO));
   });
   MV_ASSERT(it != ioevents_.end());
   IoEvent* event = *it;
@@ -248,7 +252,7 @@ void DeviceManager::UnregisterIoEvent(Device* device, uint64_t address) {
  * Use para-virtual drivers instead of IO operations to improve performance.
  * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
  */
-void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count) {
+void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count, bool ioeventfd) {
   int found = 0, it_count = 0;
   std::deque<IoHandler*>::iterator it;
   for (it = pio_handlers_.begin(); it != pio_handlers_.end(); it++, it_count++) {
@@ -272,8 +276,8 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         --it;
       }
 
-      // if (port != 0x402) {
-      //   MV_LOG("%s handle io %s port: 0x%x size: %x data: %x count: %d", device->name(),
+      // if (!ioevents_.empty() && !ioeventfd && is_write) {
+      //   MV_LOG("%s handle slow io %s port: 0x%x size: %x data: %x count: %d", device->name(),
       //     is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
       // }
     }
@@ -294,7 +298,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
  * a few devices
  * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
  */
-void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write) {
+void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write, bool ioeventfd) {
   std::deque<IoHandler*>::iterator it;
   int it_count = 0;
   uint8_t *ptr = data;
@@ -316,8 +320,8 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         --it;
       }
 
-      // if (base < 0xa0000 || base >= 0xc0000) {
-      //   MV_LOG("%s handle mmio %s addr: 0x%x size: %x data: %x", device->name(),
+      // if (!ioevents_.empty() && !ioeventfd && is_write) {
+      //   MV_LOG("%s slow mmio %s addr: 0x%x size: %x data: %x", device->name(),
       //     is_write ? "out" : "in", base, size, *(uint64_t*)data);
       // }
       return;
@@ -398,7 +402,11 @@ void DeviceManager::IoEventLoop() {
       if (read(ioevent->fd, &tmp, sizeof(tmp)) < 0) {
         MV_PANIC("failed to read event");
       }
-      HandleMmio(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true);
+      if (ioevent->flags & KVM_IOEVENTFD_FLAG_PIO) {
+        HandleIo(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true, 1, true);
+      } else {
+        HandleMmio(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true, true);
+      }
     }
   }
 }
