@@ -253,7 +253,7 @@ void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint6
  * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
  */
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count, bool ioeventfd) {
-  int found = 0, it_count = 0;
+  int it_count = 0;
   std::deque<IoHandler*>::iterator it;
   for (it = pio_handlers_.begin(); it != pio_handlers_.end(); it++, it_count++) {
     auto &resource = (*it)->io_resource;
@@ -268,7 +268,6 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         }
         ptr += size;
       }
-      ++found;
       if (it_count >= 3) {
         // Move to the front for faster access next time
         pio_handlers_.push_front(*it);
@@ -280,12 +279,13 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       //   MV_LOG("%s handle slow io %s port: 0x%x size: %x data: %x count: %d", device->name(),
       //     is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
       // }
+      return;
     }
   }
 
-  if (!found) {
-    /* Accessing invalid port always returns error */
-    memset(data, 0xFF, size);
+  /* Accessing invalid port always returns error */
+  memset(data, 0xFF, size);
+  if (true) {
     /* Not allowed unhandled IO for debugging */
     MV_PANIC("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
       is_write ? "out" : "in", port, size, *(uint64_t*)data, count);

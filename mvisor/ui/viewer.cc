@@ -214,7 +214,9 @@ void Viewer::Render() {
     cursor_updates_.pop_front();
     RenderCursor(cursor_update);
     cursor_update->release();
-    redraw = true;
+    if (grab_input_) {
+      redraw = true;
+    }
   }
   if (screen_texture_ && !partials_.empty()) {
     while (!partials_.empty()) {
