@@ -1,5 +1,7 @@
 /* 
  * MVisor QXL
+ * Currently only the latest windows 8/10 guest DOD driver is tested
+ * 
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -209,7 +211,6 @@ class Qxl : public Vga {
         MV_PANIC("QXL guest OOM");
         break;
       case QXL_IO_UPDATE_IRQ:
-        MV_LOG("update irq");
         UpdateIrqLevel();
         break;
       default:
@@ -268,7 +269,7 @@ class Qxl : public Vga {
   }
 
   void DestroyPrimarySurface() {
-    MV_LOG("DestroyPrimarySurface");
+    /* Maybe we should notify the viewer??? */
   }
 
   virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) {
@@ -282,8 +283,6 @@ class Qxl : public Vga {
   }
 
   void SetInterrupt(uint32_t interrupt) {
-    MV_LOG("set interrupt %x, pending=%x mask=%x", interrupt,
-      qxl_ram_->int_pending, qxl_ram_->int_mask);
     qxl_ram_->int_pending |= interrupt;
     UpdateIrqLevel();
   }

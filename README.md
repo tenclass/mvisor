@@ -39,7 +39,7 @@ Dec 2021
 1. VirtIO (Console✅ / Block / Net / Balloon)
 2. SpiceAgent ✅
 3. QemuGuestAgent
-4. Qxl (Working)
+4. Qxl ✅
 5. Audio (ICH9-HDA)
 6. Tap network
 7. User network

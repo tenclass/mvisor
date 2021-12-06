@@ -174,7 +174,10 @@ void Vcpu::Process() {
   for (; machine_->valid_;) {
     int ret = ioctl(fd_, KVM_RUN, 0);
     if (ret < 0 && errno != EINTR) {
-      MV_LOG("KVM_RUN failed vcpu=%d ret=%d", vcpu_id_, ret);
+      if (errno == EAGAIN) {
+        continue;
+      }
+      MV_LOG("KVM_RUN failed vcpu=%d ret=%d errno=%d", vcpu_id_, ret, errno);
     }
 
     switch (kvm_run_->exit_reason)
@@ -189,7 +192,7 @@ void Vcpu::Process() {
       /* User interrupt */
       break;
     case KVM_EXIT_UNKNOWN:
-      MV_LOG("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
+      MV_PANIC("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
       break;
     case KVM_EXIT_SHUTDOWN:
       MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
