@@ -27,7 +27,6 @@
 #include "object.h"
 #include <string>
 #include <list>
-#include <vector>
 #include "vcpu.h"
 
 enum IoResourceType {
@@ -46,10 +45,8 @@ struct IoResource {
 class DeviceManager;
 class Device : public Object {
  public:
-  static Device* Create(const char* class_name);
   Device();
   virtual ~Device();
-  void AddChild(Device* device);
 
   virtual void Connect();
   virtual void Disconnect();
@@ -58,7 +55,6 @@ class Device : public Object {
   virtual void Reset();
 
   const std::list<IoResource>& io_resources() const { return io_resources_; }
-  const std::vector<Device*>& children() { return children_; }
 
  protected:
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
@@ -67,9 +63,6 @@ class Device : public Object {
 
   friend class DeviceManager;
   DeviceManager* manager_;
-  /* Device topology */
-  Device* parent_;
-  std::vector<Device*> children_;
 
   std::list<IoResource> io_resources_;
   bool connected_ = false;

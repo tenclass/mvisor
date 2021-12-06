@@ -36,9 +36,9 @@ class DiskImage : public Object {
  public:
   DiskImage();
   virtual ~DiskImage();
+  virtual void Connect();
 
   /* Always use this static method to create a DiskImage */
-  static DiskImage* Open(const std::string format, const std::string path, bool readonly);
 
   /* Interfaces for a image format to implement */
   virtual ImageInformation information() = 0;
@@ -48,6 +48,7 @@ class DiskImage : public Object {
   virtual void Trim(off_t position, size_t length) = 0;
 
  protected:
+  bool initialized_ = false;
   virtual void Initialize(const std::string& path, bool readonly) = 0;
 };
 

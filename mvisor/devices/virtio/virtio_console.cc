@@ -1,5 +1,5 @@
 /* 
- * MVisor VirtIO Serial PCI class
+ * MVisor VirtIO Console Device
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify

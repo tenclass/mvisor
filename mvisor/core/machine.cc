@@ -27,13 +27,9 @@
 #include <cstring>
 #include "disk_image.h"
 #include "device_interface.h"
-#include "storage_device.h"
 #include "logger.h"
 
-#define CDROM_IMAGE           "/data/win10_21h1.iso"
-#define HARDDISK_IMAGE        "/data/hd.qcow2"
 #define BIOS_PATH             "../share/bios-256k.bin"
-
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 
 /* The Machine class handles all the VM initialization and common operations
@@ -176,34 +172,44 @@ void Machine::CreateArchRelated() {
 
 /* Create necessary devices for a Q35 chipset machine  */
 Device* Machine::CreateQ35() {
-  auto ahci_host = PciDevice::Create("AhciHost");
-  auto cd = StorageDevice::Create("Cdrom", DiskImage::Open("Raw", CDROM_IMAGE, true));
+  auto cd = Object::Create("cdrom");
+  auto &cd_image = *Object::Create("raw-image");
+  cd_image["path"] = std::string("/data/win10_21h1.iso");
+  cd_image["readonly"] = true;
+  cd->AddChild(&cd_image);
+
+  auto hd = Object::Create("harddisk");
+  auto &hd_image = *Object::Create("qcow2-image");
+  hd_image["path"] = std::string("/data/hd.qcow2");
+  hd_image["readonly"] = true;
+  hd->AddChild(&hd_image);
+
+  auto ahci_host = Object::Create("ahci-host");
   ahci_host->AddChild(cd);
-  auto hd = StorageDevice::Create("Harddisk", DiskImage::Open("Qcow2", HARDDISK_IMAGE, true));
   ahci_host->AddChild(hd);
 
-  auto lpc = PciDevice::Create("Ich9Lpc");
-  lpc->AddChild(Device::Create("DebugConsole"));
-  lpc->AddChild(Device::Create("Cmos"));
-  lpc->AddChild(Device::Create("Keyboard"));
-  lpc->AddChild(Device::Create("DummyDevice"));
-  lpc->AddChild(Device::Create("SmBus"));
-  lpc->AddChild(Device::Create("PcSpeaker"));
+  auto lpc = Object::Create("ich9-lpc");
+  lpc->AddChild(Object::Create("debug-console"));
+  lpc->AddChild(Object::Create("cmos"));
+  lpc->AddChild(Object::Create("keyboard"));
+  lpc->AddChild(Object::Create("dummy-device"));
+  lpc->AddChild(Object::Create("sm-bus"));
+  lpc->AddChild(Object::Create("pc-speaker"));
 
-  auto virtio_console = PciDevice::Create("VirtioConsole");
-  virtio_console->AddChild(Device::Create("SpiceAgent"));
+  auto virtio_console = Object::Create("virtio-console");
+  virtio_console->AddChild(Object::Create("spice-agent"));
 
-  auto pci_host = PciDevice::Create("PciHost");
+  auto pci_host = Object::Create("pci-host");
   pci_host->AddChild(lpc);
   pci_host->AddChild(ahci_host);
   pci_host->AddChild(virtio_console);
-  pci_host->AddChild(PciDevice::Create("Qxl"));
+  pci_host->AddChild(Object::Create("qxl"));
 
-  auto root = Device::Create("SystemRoot");
-  root->AddChild(Device::Create("FirmwareConfig"));
+  auto root = Object::Create("system-root");
+  root->AddChild(Object::Create("firmware-config"));
   root->AddChild(pci_host);
 
-  return root;
+  return dynamic_cast<Device*>(root);
 }
 
 void Machine::CreateVcpu() {

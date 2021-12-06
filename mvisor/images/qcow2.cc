@@ -106,7 +106,7 @@ struct RefcountBlock {
  * or data cluster 
  */
 
-class Qcow2 : public DiskImage {
+class Qcow2Image : public DiskImage {
  private:
   int fd_ = -1;
   bool readonly_ = true;
@@ -132,7 +132,7 @@ class Qcow2 : public DiskImage {
 
   Qcow2Header image_header_;
   std::string backing_filepath_;
-  Qcow2*      backing_file_ = nullptr;
+  Qcow2Image* backing_file_ = nullptr;
 
   ImageInformation information() {
     return ImageInformation {
@@ -141,7 +141,7 @@ class Qcow2 : public DiskImage {
     };
   }
 
-  ~Qcow2() {
+  ~Qcow2Image() {
     /* Flush caches if dirty */
     l2_cache_.Clear();
     rfb_cache_.Clear();
@@ -191,7 +191,7 @@ class Qcow2 : public DiskImage {
         strncpy(temp, path.c_str(), sizeof(temp) - 1);
         backing_filepath_ = std::string(dirname(temp)) + "/" + filename;
       }
-      backing_file_ = new Qcow2();
+      backing_file_ = new Qcow2Image();
       backing_file_->Initialize(backing_filepath_, true);
     }
   
@@ -667,4 +667,4 @@ class Qcow2 : public DiskImage {
 
 };
 
-DECLARE_DISK_IMAGE(Qcow2);
+DECLARE_DISK_IMAGE(Qcow2Image);

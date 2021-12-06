@@ -16,22 +16,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef _MVISOR_CORE_INTERRUPT_MANAGER_H
-#define _MVISOR_CORE_INTERRUPT_MANAGER_H
+#ifndef _MVISOR_CONFIG_H
+#define _MVISOR_CONFIG_H
 
+#include "object.h"
 
-class Machine;
-class InterruptManager {
+class Device;
+class Configuration {
  public:
-  InterruptManager(Machine* machine);
-  ~InterruptManager();
+  bool Load(std::string path);
 
-  
+  Device* root() { return root_; }
+
  private:
-  void InitializeRouting();
-
-
-  Machine* machine_;
+  Device* root_;
 };
 
-#endif // _MVISOR_CORE_INTERRUPT_MANAGER_H
+#endif // _MVISOR_CONFIG_H

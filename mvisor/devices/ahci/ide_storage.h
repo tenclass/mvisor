@@ -20,7 +20,7 @@
 #define _MVISOR_DEVICES_IDE_STORAGE_H
 
 #include "device.h"
-#include "storage_device.h"
+#include "disk_image.h"
 #include <sys/uio.h>
 #include <vector>
 #include <functional>
@@ -91,11 +91,10 @@ enum IdeStorageType {
 typedef std::function<void(void)> VoidCallback;
 class AhciPort;
 
-class IdeStorageDevice : public StorageDevice {
+class IdeStorageDevice : public Device {
  public:
   IdeStorageDevice();
-  virtual ~IdeStorageDevice();
-
+  virtual void Connect();
   void Reset();
 
   virtual void StartCommand();
@@ -110,6 +109,7 @@ class IdeStorageDevice : public StorageDevice {
   virtual void Ata_IdentifyDevice();
   virtual void Ata_SetFeatures();
 
+  DiskImage*      image_;
   IdeRegisters    regs_;
   IdeIo           io_;
   

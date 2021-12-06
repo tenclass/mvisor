@@ -23,7 +23,7 @@
 #include <sys/stat.h>
 #include "logger.h"
 
-class Raw : public DiskImage {
+class RawImage : public DiskImage {
  private:
   int fd_ = -1;
   bool readonly_ = true;
@@ -37,7 +37,7 @@ class Raw : public DiskImage {
     };
   }
 
-  ~Raw() {
+  virtual ~RawImage() {
     if (fd_ != -1) {
       Flush();
       close(fd_);
@@ -87,4 +87,4 @@ class Raw : public DiskImage {
 
 };
 
-DECLARE_DISK_IMAGE(Raw);
+DECLARE_DISK_IMAGE(RawImage);

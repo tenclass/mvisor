@@ -58,6 +58,7 @@
         "codecvt": "cpp",
         "condition_variable": "cpp",
         "stdint.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "variant": "cpp"
     }
 }

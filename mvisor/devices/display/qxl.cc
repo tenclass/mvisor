@@ -57,7 +57,6 @@ class Qxl : public Vga {
   
   struct guest_primary {
     QXLSurfaceCreate  surface;
-    uint32_t          commands;
     uint32_t          resized;
     int32_t           qxl_stride;
     uint32_t          abs_stride;
@@ -378,7 +377,6 @@ class Qxl : public Vga {
       if (should_notify) {
         SetInterrupt(QXL_INTERRUPT_DISPLAY);
       }
-      ++guest_primary_.commands;
       ParseCommand(command);
       bool should_wait;
       SPICE_RING_CONS_WAIT(ring, should_wait);
@@ -394,7 +392,6 @@ class Qxl : public Vga {
       if (should_notify) {
         SetInterrupt(QXL_INTERRUPT_CURSOR);
       }
-      ++guest_primary_.commands;
       ParseCommand(command);
       bool should_wait;
       SPICE_RING_CONS_WAIT(ring, should_wait);

@@ -20,12 +20,29 @@
 #include "logger.h"
 #include <cstdlib>
 #include <string>
+#include <cstring>
 #include <map>
 #include "object.h"
 
 #define MAX_LEVEL 10
 
 static std::map<std::string, ClassItem*>* classes = nullptr;
+
+/* Alias PciHost to pci-host */
+std::string get_alias(const char* name) {
+  std::string ret;
+  for (size_t i = 0; i < strlen(name); i++) {
+    if (isupper(name[i])) {
+      if (i > 0) {
+        ret.push_back('-');
+      }
+      ret.push_back(tolower(name[i]));
+    } else {
+      ret.push_back(name[i]);
+    }
+  }
+  return ret;
+}
 
 void register_class(int type, const char* name, const char* source_path, ClassCreator create) {
   ClassItem* item = new ClassItem;
@@ -39,6 +56,7 @@ void register_class(int type, const char* name, const char* source_path, ClassCr
   }
   MV_ASSERT(classes->find(name) == classes->end());
   (*classes)[name] = item;
+  (*classes)[get_alias(name)] = item;
   MV_LOG("register class %s", name);
 }
 

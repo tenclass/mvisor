@@ -1,0 +1,43 @@
+name: q35-machine
+
+machine:
+  memory: 2G
+  vcpu: 4
+  bios: ../share/bios-256k.bin
+
+objects:
+  - name: system-root
+    children:
+      - pci-host
+      - firmware-config
+      
+  - name: pci-host
+    children:
+      - ich9-lpc
+      - virtio-console
+      - qxl
+      - ahci-host
+
+  - name: virtio-console
+    children:
+      - spice-agent
+
+  - name: ich9-lpc
+    children:
+      - debug-console
+      - cmos
+      - keyboard
+      - dummy-device
+      - sm-bus
+      - pc-speaker
+  
+  - name: ahci-host
+    children:
+      - cdrom
+      - harddisk
+  
+  - name: qxl
+    rom: ../share/vgabios-qxl.bin
+
+  - name: vga
+    rom: ../share/vgabios-stdvga.bin

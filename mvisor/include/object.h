@@ -19,16 +19,39 @@
 #ifndef _MVISOR_OBJECT_H
 #define _MVISOR_OBJECT_H
 
+#include <variant>
+#include <vector>
+#include <string>
+#include <map>
+
+#define OBJECT_MAX_NAME_LENGTH 100
+
+typedef std::variant<std::string, bool, uint64_t> Value;
+
 class Object {
  public:
+  static Object* Create(const char* class_name);
+
   Object();
   virtual ~Object();
 
+  virtual void AddChild(Object* device);
+
   const char* name();
   void set_name(const char* name);
+  const Object* parent() { return parent_; }
+  const std::vector<Object*>& children() { return children_; }
+  
+  Value& operator[](std::string key) { return key_values_[key]; }
+  bool has_key(std::string key) { return key_values_.find(key) != key_values_.end(); }
 
  protected:
-  char name_[100];
+  char name_[OBJECT_MAX_NAME_LENGTH];
+  std::map<std::string, Value> key_values_;
+
+  /* Object topology */
+  Object* parent_;
+  std::vector<Object*> children_;
 };
 
 #endif // _MVISOR_OBJECT_H

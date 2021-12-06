@@ -25,6 +25,7 @@
 
 
 IdeStorageDevice::IdeStorageDevice() {
+  image_ = nullptr;
   bzero(&drive_info_, sizeof(drive_info_));
 
   ata_handlers_[0x00] = [=] () { // NOP
@@ -51,8 +52,18 @@ IdeStorageDevice::IdeStorageDevice() {
   };
 }
 
-IdeStorageDevice::~IdeStorageDevice() {
-  
+void IdeStorageDevice::Connect() {
+  Device::Connect();
+
+  /* Connect to backend image */
+  for (auto object : children_) {
+    auto image = dynamic_cast<DiskImage*>(object);
+    if (image) {
+      image_ = image;
+      image_->Connect();
+      break;
+    }
+  }
 }
 
 void IdeStorageDevice::StartCommand() {

@@ -38,21 +38,15 @@ void Device::Reset() {
   /* Don't add anything here */
 }
 
-Device* Device::Create(const char* class_name) {
-  return dynamic_cast<Device*>(realize_class(class_name));
-}
-
-void Device::AddChild(Device* device) {
-  device->parent_ = this;
-  children_.push_back(device);
-}
-
 void Device::Connect() {
   MV_ASSERT(manager_);
 
   for (auto child : children_) {
-    child->manager_ = manager_;
-    child->Connect();
+    auto device = dynamic_cast<Device*>(child);
+    if (device) {
+      device->manager_ = manager_;
+      device->Connect();
+    }
   }
 
   connected_ = true;
@@ -61,7 +55,7 @@ void Device::Connect() {
     manager_->RegisterIoHandler(this, ir);
   }
   if (parent_) {
-    MV_LOG("%s <= %s", parent_->name_, name_);
+    MV_LOG("%s <= %s", parent_->name(), name_);
   }
 }
 
@@ -71,7 +65,10 @@ void Device::Disconnect() {
   }
   connected_ = false;
   for (auto child : children_) {
-    child->Disconnect();
+    auto device = dynamic_cast<Device*>(child);
+    if (device) {
+      device->Disconnect();
+    }
   }
 
   for (auto &io_resource : io_resources_) {

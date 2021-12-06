@@ -20,13 +20,18 @@
 #include "object.h"
 #include <cstring>
 #include "logger.h"
+#include "utilities.h"
+
+Object* Object::Create(const char* class_name) {
+  return realize_class(class_name);
+}
 
 const char* Object::name() {
   return name_;
 }
 
 void Object::set_name(const char* name) {
-  strncpy(name_, name, 99);
+  strncpy(name_, name, OBJECT_MAX_NAME_LENGTH - 1);
 }
 
 Object::Object() {
@@ -35,4 +40,9 @@ Object::Object() {
 
 Object::~Object() {
 
+}
+
+void Object::AddChild(Object* object) {
+  object->parent_ = this;
+  children_.push_back(object);
 }

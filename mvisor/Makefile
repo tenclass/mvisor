@@ -4,7 +4,8 @@ LIBS += pthread aio SDL2
 MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on
-CCFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -g
+CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -g
+CCFLAGS = $(CFLAGS) -std=c++17
 BUILD_DIR = ../build
 
 EXECUTABLE = $(BUILD_DIR)/mvisor
@@ -34,7 +35,7 @@ $(MV_OBJECTS): $(BUILD_DIR)/%.o: %.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/ui/keymap.o: $(BUILD_DIR)/ui/%.o: ui/%.c
-	$(CC) $(CCFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 .cc.o:
 	$(CC) $(CCFLAGS) -c -o $@ $<
