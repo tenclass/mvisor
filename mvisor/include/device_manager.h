@@ -42,6 +42,17 @@ struct IoEvent {
   int       fd;
 };
 
+/* Currently used for VGA auto refresh */
+typedef std::chrono::steady_clock::time_point IoTimePoint;
+typedef std::function<void()> VoidCallback;
+struct IoTimer {
+  Device*       device;
+  bool          permanent;
+  int           interval_ms;
+  IoTimePoint   next_timepoint;
+  VoidCallback  callback;
+};
+
 class Machine;
 class DeviceManager {
  public:
@@ -56,6 +67,9 @@ class DeviceManager {
   void UnregisterIoHandler(Device* device, const IoResource& io_resource);
   void RegisterIoEvent(Device* device, uint64_t address, uint32_t length, uint64_t datamatch);
   void UnregisterIoEvent(Device* device, uint64_t address);
+  IoTimer* RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback);
+  void UnregisterIoTimer(IoTimer* timer);
+  void ModifyIoTimer(IoTimer* timer, int interval_ms);
 
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);
@@ -76,6 +90,7 @@ class DeviceManager {
  private:
   void InitializeIoEvent();
   void IoEventLoop();
+  int CheckIoTimers();
 
   Machine*                machine_;
   Device*                 root_;
@@ -86,6 +101,7 @@ class DeviceManager {
   std::set<IoEvent*>      ioevents_;
   int                     epoll_fd_ = -1;
   int                     stop_event_fd_ = -1;
+  std::set<IoTimer*>      iotimers_;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

@@ -21,6 +21,15 @@
 
 #include "pci_device.h"
 #include "device_interface.h"
+#include "device_manager.h"
+
+enum DisplayMode {
+  kDisplayUnknownMode,
+  kDisplayTextMode,
+  kDisplayVgaMode,
+  kDisplayVbeMode,
+  kDisplayQxlMode
+};
 
 class Vga : public PciDevice, public DisplayInterface {
  private:
@@ -46,24 +55,36 @@ class Vga : public PciDevice, public DisplayInterface {
   uint32_t vram_map_select_size_;
   uint8_t* vram_read_select_;
 
-  uint16_t width_;
-  uint16_t height_;
-  uint16_t bpp_;
-
   std::vector<DisplayChangeListener> display_change_listerners_;
+  std::vector<DisplayRenderCallback> display_render_callbacks_;
+  std::vector<DisplayCursorUpdateCallback> display_cursor_callbacks_;
+  IoTimer*                           refresh_timer_;
 
   void VbeReadPort(uint64_t port, uint16_t* data);
   void VbeWritePort(uint64_t port, uint16_t value);
   void VgaReadPort(uint64_t port, uint8_t* data, uint32_t size);
   void VgaWritePort(uint64_t port, uint8_t* data, uint32_t size);
   void UpdateVRamMemoryMap();
+  void RenderTextMode();
+  void RenderGraphicsMode();
+  void DrawCharacter(uint8_t* buffer, int stride, int x, int y, int character, int attribute);
+  void DrawTextCursor(uint8_t* buffer, int stride);
+  void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
 
  protected:
   uint32_t  vram_size_;
   uint8_t*  vram_base_;
   uint32_t  vga_mem_size_;
+  DisplayMode mode_;
+  uint16_t    width_;
+  uint16_t    height_;
+  uint16_t    bpp_;
 
-  void UpdateRenderer();
+  void NotifyDisplayModeChange();
+  void NotifyDisplayRender(DisplayPartialBitmap* partial);
+  void NotifyDisplayCursorUpdate(DisplayCursorUpdate* update);
+  void OnRefreshTimer();
+  void UpdateDisplayMode();
 
  public:
   Vga();
@@ -71,15 +92,16 @@ class Vga : public PciDevice, public DisplayInterface {
 
   virtual void Reset();
   virtual void Connect();
+  virtual void Disconnect();
   virtual void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
 
-  virtual void GetDisplayMode(DisplayMode *mode, uint16_t* w, uint16_t* h, uint16_t* b);
-  virtual uint8_t* GetVRamHostAddress();
+  virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp);
 
   const uint8_t* GetPallete() const;
-  void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
   void RegisterDisplayChangeListener(DisplayChangeListener callback);
+  virtual void RegisterDisplayRenderer(DisplayRenderCallback draw_callback,
+    DisplayCursorUpdateCallback cursor_callback);
 };
 
 #endif // _MVISOR_DEVICES_VGA_H

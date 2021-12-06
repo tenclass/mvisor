@@ -197,7 +197,7 @@ Device* Machine::CreateQ35() {
   pci_host->AddChild(lpc);
   pci_host->AddChild(ahci_host);
   pci_host->AddChild(virtio_console);
-  pci_host->AddChild(PciDevice::Create("Vga"));
+  pci_host->AddChild(PciDevice::Create("Qxl"));
 
   auto root = Device::Create("SystemRoot");
   root->AddChild(Device::Create("FirmwareConfig"));

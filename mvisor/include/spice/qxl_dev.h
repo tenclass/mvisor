@@ -628,7 +628,7 @@ typedef struct SPICE_ATTR_PACKED QXLDrawable {
         QXLBlackness blackness;
         QXLInvers invers;
         QXLWhiteness whiteness;
-	QXLComposite composite;
+        QXLComposite composite;
     } u;
 } QXLDrawable;
 

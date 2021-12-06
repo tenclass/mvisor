@@ -110,7 +110,7 @@ struct VirtElement {
 class VirtioPci : public PciDevice {
  public:
   VirtioPci();
-  virtual ~VirtioPci();
+  virtual void Disconnect();
   virtual void Reset();
 
  protected: 

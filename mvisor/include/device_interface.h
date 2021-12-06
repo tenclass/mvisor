@@ -20,6 +20,7 @@
 #define _MVISOR_DEVICE_INTERFACES_H
 
 #include <functional>
+#include <vector>
 
 class KeyboardInputInterface {
  public:
@@ -35,21 +36,60 @@ class SpiceAgentInterface {
   virtual void Resize(uint32_t width, uint32_t height) = 0;
 };
 
-enum DisplayMode {
-  kDisplayTextMode,
-  kDisplayVgaMode,
-  kDisplayVbeMode,
-  kDisplayQxlMode
+
+enum CursorUpdateCommand {
+  kDisplayCursorUpdateHide,
+  kDisplayCursorUpdateSet,
+  kDisplayCursorUpdateMove
+};
+typedef std::function <void()> ReleaseDisplayResourceCallback;
+struct DisplayPartialData {
+  uint8_t*    data;
+  size_t      size;
+};
+struct DisplayPartialBitmap {
+  std::vector<DisplayPartialData> vector;
+  int         stride;
+  int         width;
+  int         height;
+  int         x;
+  int         y;
+  bool        flip;
+  ReleaseDisplayResourceCallback  release;
+};
+struct DisplayCursorUpdate {
+  CursorUpdateCommand   command;
+  union {
+    struct {
+      uint16_t x;
+      uint16_t y;
+    } move;
+    struct {
+      uint8_t   visible;
+      int       x;
+      int       y;
+      uint16_t  type;
+      uint16_t  width;
+      uint16_t  height;
+      uint16_t  hotspot_x;
+      uint16_t  hotspot_y;
+      uint8_t*  data;
+      size_t    size;
+    } set;
+  };
+  ReleaseDisplayResourceCallback release;
 };
 
 typedef std::function <void(void)> DisplayChangeListener;
+typedef std::function <void(const DisplayPartialBitmap*)> DisplayRenderCallback;
+typedef std::function <void(const DisplayCursorUpdate*)> DisplayCursorUpdateCallback;
 class DisplayInterface {
  public:
-  virtual void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end) = 0;
-  virtual uint8_t* GetVRamHostAddress() = 0;
-  virtual void GetDisplayMode(DisplayMode *mode, uint16_t* w, uint16_t* h, uint16_t* b) = 0;
+  virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) = 0;
   virtual const uint8_t* GetPallete() const = 0;
   virtual void RegisterDisplayChangeListener(DisplayChangeListener callback) = 0;
+  virtual void RegisterDisplayRenderer(DisplayRenderCallback draw_callback,
+    DisplayCursorUpdateCallback cursor_callback) = 0;
 };
 
 

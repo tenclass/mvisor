@@ -75,11 +75,11 @@ VirtioPci::VirtioPci() {
     common_config_.num_queues = queues_.size();
 }
 
-VirtioPci::~VirtioPci() {
+void VirtioPci::Disconnect() {
   /* Call reset to release io resources */
   Reset();
+  PciDevice::Disconnect();
 }
-
 
 void VirtioPci::Reset() {
   isr_status_ = 0;

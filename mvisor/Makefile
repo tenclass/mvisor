@@ -11,7 +11,6 @@ EXECUTABLE = $(BUILD_DIR)/mvisor
 MV_SOURCE := $(wildcard *.cc)
 MV_SOURCE += $(wildcard */*.cc)
 MV_SOURCE += $(wildcard devices/*/*.cc)
-MV_SOURCE += $(wildcard devices/block/*/*.cc)
 MV_OBJECTS := $(MV_SOURCE:%.cc=$(BUILD_DIR)/%.o)
 
 $(shell mkdir -p $(dir $(MV_OBJECTS)))
@@ -25,7 +24,7 @@ debug: all
 
 all: $(EXECUTABLE)
 
-$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/keymap.o
+$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/ui/keymap.o
 	$(CC) -o $@ $^ $(addprefix -l, $(LIBS))
 
 clean:
@@ -34,7 +33,7 @@ clean:
 $(MV_OBJECTS): $(BUILD_DIR)/%.o: %.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/keymap.o: $(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/ui/keymap.o: $(BUILD_DIR)/ui/%.o: ui/%.c
 	$(CC) $(CCFLAGS) -c -o $@ $<
 
 .cc.o:

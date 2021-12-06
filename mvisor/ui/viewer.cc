@@ -20,8 +20,8 @@
 #include <unistd.h>
 #include <chrono>
 #include "logger.h"
-#include "viewer_font.inc"
 #include "keymap.h"
+#include "spice/enums.h"
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   device_manager_ = machine_->device_manager();
@@ -30,90 +30,10 @@ Viewer::Viewer(Machine* machine) : machine_(machine) {
 Viewer::~Viewer() {
 }
 
-void Viewer::DrawCharacter(int x, int y, int character, int attribute, uint8_t* font) {
-  uint8_t* buffer = (uint8_t*)screen_surface_->pixels;
-  buffer += (y * 16) * screen_surface_->pitch;
-  buffer += x * 8;
-  
-  // Draw the glyph
-  uint8_t fore_color = attribute & 0xF;
-  uint8_t back_color = (attribute >> 4) & 0xF;
-  for (int yy = 0; yy < 16; yy++) {
-    for (int xx = 0; xx < 8; xx++) {
-      if (font[character * 16 + yy] & (0x80 >> xx)) {
-        buffer[xx] = fore_color;
-      } else {
-        buffer[xx] = back_color;
-      }
-    }
-    buffer += screen_surface_->pitch;
-  }
-}
-
-void Viewer::DrawTextCursor() {
-  uint32_t fore_color = 7;
-  uint8_t cx, cy, sl_start, sl_end;
-  display_->GetCursorLocation(&cx, &cy, &sl_start, &sl_end);
-
-  uint8_t* buffer = (uint8_t*)screen_surface_->pixels;
-  buffer += (cy * 16) * screen_surface_->pitch;
-  buffer += cx * 8;
-
-  uint8_t* end = buffer + screen_surface_->pitch * height_;
-
-  buffer += screen_surface_->pitch * sl_start;
-
-  for (int y = sl_start; y < sl_end; y++) {
-    for (int x = 0; x < 8; x++) {
-      if (buffer + x < end) {
-        buffer[x] = fore_color;
-      }
-    }
-    buffer += screen_surface_->pitch;
-  }
-}
-
-void Viewer::DrawTextMode() {
-  uint8_t* ptr = display_->GetVRamHostAddress();
-  if (ptr == nullptr) {
-    return;
-  }
-  // consider using BIOS fonts?
-  uint8_t* font = (uint8_t*)__font8x16;
-
-  for (int y = 0; y < 25; y++) {
-    for (int x = 0; x < 80; x++) {
-      int character = *ptr++;
-      int attribute = *ptr++;
-      DrawCharacter(x, y, character, attribute, font);
-    }
-  }
-  
-  DrawTextCursor();
-}
-
-void Viewer::DrawGraphicsMode() {
-  uint8_t* vram = display_->GetVRamHostAddress();
-  if (vram == nullptr) {
-    return;
-  }
-
-  uint8_t* dst = (uint8_t*)screen_surface_->pixels;
-  uint8_t* src = vram;
-  int src_scanline = width_ * (bpp_ >> 3);
-  for (int y = 0; y < screen_surface_->h; y++) {
-    memcpy(dst, src, src_scanline);
-    dst += screen_surface_->pitch;
-    src += src_scanline;
-  }
-}
-
 void Viewer::UpdateWindow() {
-  DisplayMode mode;
   uint16_t w, h, bpp;
-  display_->GetDisplayMode(&mode, &w, &h, &bpp);
+  display_->GetDisplayMode(&w, &h, &bpp);
 
-  mode_ = mode;
   width_ = w;
   height_ = h;
   bpp_ = bpp;
@@ -146,33 +66,105 @@ void Viewer::UpdateCaption() {
   SDL_WM_SetCaption(title, "MVisor");
 }
 
-void Viewer::AcquireDisplayFrame() {
+void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
+  SDL_LockSurface(screen_surface_);
+
+  uint8_t* dst = (uint8_t*)screen_surface_->pixels;
+  int dst_stride = screen_surface_->pitch;
+  if (partial->flip) {
+    dst += screen_surface_->pitch * (partial->y + partial->height - 1) + partial->x * (bpp_ >> 3);
+    dst_stride = -dst_stride;
+  } else {
+    dst += screen_surface_->pitch * partial->y + partial->x * (bpp_ >> 3);
+  }
+  int lines = partial->height;
+  size_t src_index = 0;
+  while (lines > 0) {
+    MV_ASSERT(src_index < partial->vector.size());
+    uint8_t* src = partial->vector[src_index].data;
+    auto copy_lines = partial->vector[src_index].size / partial->stride;
+    while (copy_lines > 0) {
+      memcpy(dst, src, partial->stride);
+      src += partial->stride;
+      dst += dst_stride;
+      --copy_lines;
+      --lines;
+    }
+    ++src_index;
+  }
+  SDL_UnlockSurface(screen_surface_);
+}
+
+void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
+  if (cursor_update->command == kDisplayCursorUpdateSet) {
+    if (cursor_) {
+      SDL_FreeCursor(cursor_);
+      cursor_ = nullptr;
+    }
+    SDL_ShowCursor(SDL_ENABLE);
+    auto set = cursor_update->set;
+    uint32_t stride = SPICE_ALIGN(set.width, 8) >> 3;
+    if (set.type == SPICE_CURSOR_TYPE_MONO) {
+      uint8_t mask[4 * 100] = { 0 };
+      cursor_ = SDL_CreateCursor(set.data + stride * set.height, mask,
+        set.width, set.height, set.hotspot_x, set.hotspot_y);
+      SDL_SetCursor(cursor_);
+    } else {
+      uint8_t* data = new uint8_t[stride * set.height];
+      uint8_t* mask = new uint8_t[stride * set.height];
+      int i = -1;
+      for (int row = 0; row < set.height; ++row) {
+        for (int col = 0; col < set.width; ++col) {
+          if (col % 8) {
+            data[i] <<= 1;
+            mask[i] <<= 1;
+          } else {
+            ++i;
+            data[i] = mask[i] = 0;
+          }
+          uint8_t* src = &set.data[set.width * 4 * row + col * 4];
+          mask[i] |= src[3] ? 1 : 0;
+          if (mask[i]) {
+            data[i] |= (src[0] || src[1] || src[2]) ? 1 : 0;
+          }
+        }
+      }
+      cursor_ = SDL_CreateCursor(data, mask,
+        set.width, set.height, set.hotspot_x, set.hotspot_y);
+      SDL_SetCursor(cursor_);
+      delete[] data;
+      delete[] mask;
+    }
+  } else if (cursor_update->command == kDisplayCursorUpdateHide) {
+    SDL_ShowCursor(SDL_DISABLE);
+  }
+}
+
+void Viewer::Render() {
+  std::lock_guard<std::mutex> lock(mutex_);
   if (requested_update_window_) {
     requested_update_window_ = false;
     UpdateWindow();
+    for (auto partial : partials_) {
+      partial->release();
+    }
+    partials_.clear();
   }
-
-  if (!screen_surface_) {
-    return;
+  if (screen_surface_ && !partials_.empty()) {
+    while (!partials_.empty()) {
+      auto partial = partials_.front();
+      partials_.pop_front();
+      RenderPartial(partial);
+      partial->release();
+    }
+    SDL_Flip(screen_surface_);
   }
-
-  SDL_LockSurface(screen_surface_);
-  switch (mode_)
-  {
-  case kDisplayTextMode:
-    DrawTextMode();
-    break;
-  case kDisplayVgaMode:
-  case kDisplayVbeMode:
-    DrawGraphicsMode();
-    break;
-  default:
-    MV_LOG("Graphics mode without VBE is not supported yet!");
-    break;
+  while (!cursor_updates_.empty()) {
+    auto cursor_update = cursor_updates_.front();
+    cursor_updates_.pop_front();
+    RenderCursor(cursor_update);
+    cursor_update->release();
   }
-  SDL_UnlockSurface(screen_surface_);
-
-  SDL_Flip(screen_surface_);
 }
 
 /* Reference about SDL-1.2:
@@ -184,7 +176,6 @@ int Viewer::MainLoop() {
   SetThreadName("viewer");
   
   SDL_Init(SDL_INIT_VIDEO);
-  SDL_ShowCursor(SDL_DISABLE);
 
   SDL_Event event;
 
@@ -199,6 +190,13 @@ int Viewer::MainLoop() {
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
   });
+  display_->RegisterDisplayRenderer([this](const DisplayPartialBitmap* partial) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    partials_.push_back(partial);
+  }, [this](const DisplayCursorUpdate* update) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    cursor_updates_.push_back(update);
+  });
 
   uint32_t mouse_buttons = 0;
   auto frame_interval_us = std::chrono::microseconds(1000000 / 30);
@@ -210,9 +208,10 @@ int Viewer::MainLoop() {
   // Loop until all vcpu exits
   while (machine_->IsValid()) {
     auto frame_start_time = std::chrono::steady_clock::now();
-    AcquireDisplayFrame();
+    Render();
 
     while (SDL_PollEvent(&event)) {
+      std::lock_guard<std::mutex> lock(mutex_);
       uint8_t transcoded[10] = { 0 };
       switch (event.type)
       {
@@ -246,15 +245,15 @@ int Viewer::MainLoop() {
           mouse_buttons &= ~(1 << event.button.button);
         }
       case SDL_MOUSEMOTION:
-        if (grab_input_) {
+        if (spice_agent_ && spice_agent_->CanAcceptInput()) {
+          int x, y;
+          SDL_GetMouseState(&x, &y);
+          spice_agent_->QueuePointerEvent(mouse_buttons, x, y);
+        } else if (grab_input_) {
           /* swap the middle button and right button bit of input state */
           uint8_t ps2_state = ((mouse_buttons & 2) >> 1) | (mouse_buttons & 4) | ((mouse_buttons & 8) >> 2);
           /* multiply by 2 to prevent host mouse go out of window */
           keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
-        } else if (spice_agent_ && spice_agent_->CanAcceptInput()) {
-          int x, y;
-          SDL_GetMouseState(&x, &y);
-          spice_agent_->QueuePointerEvent(mouse_buttons, x, y);
         }
         break;
       case SDL_VIDEORESIZE:

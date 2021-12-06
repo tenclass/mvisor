@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef _MVISOR_VIEWER_FONT_H
-#define _MVISOR_VIEWER_FONT_H
+#ifndef _MVISOR_UI_FONT_H
+#define _MVISOR_UI_FONT_H
 
 unsigned char __font8x16[256][16] = {
   {   0,   0,   0,   0,   0,   0,   0,   0,    // 0
@@ -533,4 +533,4 @@ unsigned char __font8x16[256][16] = {
   {   0,   0,   0,   0,   0,   0,   0,   0,    // 255
       0,   0,   0,   0,   0,   0,   0,   0 }};
 
-#endif // _MVISOR_VIEWER_FONT_H
+#endif // _MVISOR_UI_FONT_H

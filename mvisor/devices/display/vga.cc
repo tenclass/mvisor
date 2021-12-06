@@ -17,14 +17,16 @@
  */
 
 /*
- * Since we want to implement QXL, so don't waste time on VGA
+ * Since we want to implement QXL, so don't waste time on VGA.
+ * It's not recommended to use VGA mode due to performance problems.
  */
 
+#include "vga.h"
 #include <cstring>
 #include <sys/mman.h>
 #include "logger.h"
 #include "vbe.h"
-#include "vga.h"
+#include "vga.font.inc"
 
 #define VGA_ROM_PATH    "../share/vgabios-stdvga.bin"
 #define VGA_PIO_BASE    0x3C0
@@ -92,19 +94,26 @@ void Vga::Reset() {
   crtc_index_ = 0;
   vbe_index_ = 0;
 
+  vram_map_select_ = vram_base_;
   width_ = 0;
   height_ = 0;
   bpp_ = 0;
+  mode_ = kDisplayTextMode;
 }
 
 void Vga::Connect() {
   PciDevice::Connect();
   /* Initialize rom data and rom bar size */
-  LoadRomFile(VGA_ROM_PATH);
+  if (!pci_rom_.data) {
+    LoadRomFile(VGA_ROM_PATH);
+  }
+
+  refresh_timer_ = manager_->RegisterIoTimer(this, 1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
 }
 
-uint8_t* Vga::GetVRamHostAddress() {
-  return vram_map_select_;
+void Vga::Disconnect() {
+  manager_->UnregisterIoTimer(refresh_timer_);
+  PciDevice::Disconnect();
 }
 
 void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end) {
@@ -115,22 +124,15 @@ void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t*
   *x = location % 80;
 }
 
-void Vga::GetDisplayMode(DisplayMode *mode, uint16_t* w, uint16_t* h, uint16_t* b) {
+void Vga::GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) {
   if ((gfx_registers_[6] & 0x1) == 0) {
-    *mode = kDisplayTextMode;
-  } else if (vbe_registers_[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) {
-    *mode = kDisplayVbeMode;
-  } else {
-    *mode = kDisplayVgaMode;
-  }
-  if (*mode == kDisplayTextMode) {
     *w = 640;
     *h = 400;
-    *b = 8;
+    *bpp = 8;
   } else {
     *w = width_;
     *h = height_;
-    *b = bpp_;
+    *bpp = bpp_;
   }
 }
 
@@ -166,11 +168,6 @@ void Vga::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t s
     MV_PANIC("unhandled write at base=0x%lx offset=0x%lx data=0x%lx size=%x",
       ir.base, offset, *(uint64_t*)data, size);
   }
-}
-
-
-void Vga::RegisterDisplayChangeListener(DisplayChangeListener callback) {
-  display_change_listerners_.push_back(callback);
 }
 
 void Vga::VbeReadPort(uint64_t port, uint16_t* data) {
@@ -222,7 +219,7 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
       MV_LOG("set vbe enable %x to %x %dx%d bpp=%d", vbe_registers_[4], value,
         vbe_registers_[1], vbe_registers_[2], vbe_registers_[3]);
       if (value & 1) {
-        UpdateRenderer();
+        UpdateDisplayMode();
       }
       break;
     case VBE_DISPI_INDEX_BANK:
@@ -299,7 +296,7 @@ void Vga::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
       attribute_index_ = 0x80 | value;
       if (attribute_index_ & 0x20) {
         // renderer changed event
-        UpdateRenderer();
+        UpdateDisplayMode();
       }
     }
     break;
@@ -382,9 +379,145 @@ void Vga::UpdateVRamMemoryMap() {
   // MV_LOG("map index=%d read_index=%d", index, read_index);
 }
 
-void Vga::UpdateRenderer() {
+void Vga::UpdateDisplayMode() {
+  if (vbe_registers_[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) {
+    mode_ = kDisplayVbeMode;
+  } else if ((gfx_registers_[6] & 0x1) == 0) {
+    mode_ = kDisplayTextMode;
+  } else {
+    mode_ = kDisplayVgaMode;
+  }
+  NotifyDisplayModeChange();
+}
+
+void Vga::NotifyDisplayModeChange() {
   for (auto listener : display_change_listerners_) {
     listener();
+  }
+}
+
+void Vga::RegisterDisplayChangeListener(DisplayChangeListener callback) {
+  display_change_listerners_.push_back(callback);
+}
+
+void Vga::RegisterDisplayRenderer(DisplayRenderCallback draw_callback,
+    DisplayCursorUpdateCallback cursor_callback) {
+  display_render_callbacks_.push_back(draw_callback);
+  display_cursor_callbacks_.push_back(cursor_callback);
+}
+
+void Vga::NotifyDisplayRender(DisplayPartialBitmap* partial) {
+  for (auto renderer : display_render_callbacks_) {
+    renderer(partial);
+  }
+}
+
+void Vga::NotifyDisplayCursorUpdate(DisplayCursorUpdate* update) {
+  for (auto callback : display_cursor_callbacks_) {
+    callback(update);
+  }
+}
+
+void Vga::OnRefreshTimer() {
+  if (mode_ == kDisplayTextMode) {
+    width_ = 640;
+    height_ = 400;
+    bpp_ = 8;
+    RenderTextMode();
+  } else if (mode_ == kDisplayVbeMode) {
+    RenderGraphicsMode();
+  }
+}
+
+void Vga::RenderGraphicsMode() {
+  DisplayPartialBitmap* partial = new DisplayPartialBitmap {
+    .width = width_,
+    .height = height_,
+    .x = 0,
+    .y = 0
+  };
+  partial->stride = partial->width * (bpp_ >> 3);
+  partial->vector.emplace_back(DisplayPartialData {
+    .data = vram_map_select_,
+    .size = size_t(partial->stride * partial->height)
+  });
+  partial->release = [partial]() {
+    delete partial;
+  };
+  NotifyDisplayRender(partial);
+}
+
+void Vga::RenderTextMode() {
+  DisplayPartialBitmap* partial = new DisplayPartialBitmap {
+    .width = width_,
+    .height = height_,
+    .x = 0,
+    .y = 0
+  };
+  partial->stride = partial->width * (bpp_ >> 3);
+  uint8_t* buffer = new uint8_t[partial->stride * partial->height];
+  partial->vector.emplace_back(DisplayPartialData {
+    .data = buffer,
+    .size = size_t(partial->stride * partial->height)
+  });
+  partial->release = [partial]() {
+    delete[] partial->vector[0].data;
+    delete partial;
+  };
+
+  uint8_t* ptr = vram_map_select_;
+  for (int y = 0; y < 25; y++) {
+    for (int x = 0; x < 80; x++) {
+      int character = *ptr++;
+      int attribute = *ptr++;
+      DrawCharacter(buffer, partial->stride, x, y, character, attribute);
+    }
+  }
+  
+  DrawTextCursor(buffer, partial->stride);
+  NotifyDisplayRender(partial);
+}
+
+void Vga::DrawCharacter(uint8_t* buffer, int stride, int x, int y, int character, int attribute) {
+  uint8_t* font = (uint8_t*)__font8x16;
+
+  buffer += (y * 16) * stride;
+  buffer += x * 8;
+  
+  // Draw the glyph
+  uint8_t fore_color = attribute & 0xF;
+  uint8_t back_color = (attribute >> 4) & 0xF;
+  for (int yy = 0; yy < 16; yy++) {
+    for (int xx = 0; xx < 8; xx++) {
+      if (font[character * 16 + yy] & (0x80 >> xx)) {
+        buffer[xx] = fore_color;
+      } else {
+        buffer[xx] = back_color;
+      }
+    }
+    buffer += stride;
+  }
+}
+
+void Vga::DrawTextCursor(uint8_t* buffer, int stride) {
+  uint32_t fore_color = 7;
+  uint8_t cx, cy, sl_start, sl_end;
+  GetCursorLocation(&cx, &cy, &sl_start, &sl_end);
+
+  buffer += (cy * 16) * stride;
+  buffer += cx * 8;
+
+  uint8_t* end = buffer + stride * height_;
+
+  buffer += stride * sl_start;
+
+  for (int y = sl_start; y < sl_end; y++) {
+    for (int x = 0; x < 8; x++) {
+      if (buffer + x < end) {
+        buffer[x] = fore_color;
+      }
+    }
+    buffer += stride;
   }
 }
 

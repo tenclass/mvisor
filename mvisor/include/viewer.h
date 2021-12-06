@@ -23,6 +23,8 @@
 #include "machine.h"
 #include "device_manager.h"
 #include "device_interface.h"
+#include <mutex>
+#include <deque>
 
 class Viewer {
  public:
@@ -31,13 +33,11 @@ class Viewer {
   int MainLoop();
 
  private:
-  void DrawTextMode();
-  void DrawGraphicsMode();
-  void DrawTextCursor();
-  void DrawCharacter(int x, int y, int character, int attribute, uint8_t* font);
+  void Render();
   void UpdateWindow();
-  void AcquireDisplayFrame();
   void UpdateCaption();
+  void RenderPartial(const DisplayPartialBitmap* partial);
+  void RenderCursor(const DisplayCursorUpdate* cursor_update);
 
   Machine* machine_;
   DeviceManager* device_manager_;
@@ -45,12 +45,15 @@ class Viewer {
   KeyboardInputInterface* keyboard_;
   SpiceAgentInterface* spice_agent_;
   SDL_Surface* screen_surface_ = nullptr;
+  SDL_Cursor* cursor_ = nullptr;
   bool requested_update_window_ = false;
-  DisplayMode mode_;
   uint16_t width_;
   uint16_t height_;
   uint16_t bpp_;
   bool grab_input_ = false;
+  std::deque<const DisplayPartialBitmap*> partials_;
+  std::deque<const DisplayCursorUpdate*> cursor_updates_;
+  std::mutex mutex_;
 };
 
 #endif // _MVISOR_VIEWER_H

@@ -382,13 +382,15 @@ void DeviceManager::IoEventLoop() {
   uint64_t tmp;
 
   while (machine_->IsValid()) {
-    int nfds = epoll_wait(epoll_fd_, events, IOEVENTFD_MAX_EVENTS, -1);
+    int next_timeout_ms = CheckIoTimers();
+    int nfds = epoll_wait(epoll_fd_, events, IOEVENTFD_MAX_EVENTS, next_timeout_ms);
     if (nfds < 0) {
       MV_PANIC("nfds = %d", nfds);
     }
 
     for (int i = 0; i < nfds; i++) {
       if (events[i].data.fd == stop_event_fd_) {
+        read(stop_event_fd_, &tmp, sizeof(tmp));
         break;
       }
 
@@ -399,4 +401,54 @@ void DeviceManager::IoEventLoop() {
       HandleMmio(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true);
     }
   }
+}
+
+
+IoTimer* DeviceManager::RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback) {
+  IoTimer* timer = new IoTimer {
+    .device = device,
+    .permanent = permanent,
+    .interval_ms = interval_ms,
+    .callback = callback
+  };
+  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
+  iotimers_.insert(timer);
+
+  /* Wakeup ioevent thread and recalculate the timeout */
+  uint64_t tmp = 1;
+  write(stop_event_fd_, &tmp, sizeof(tm));
+
+  return timer;
+}
+
+void DeviceManager::UnregisterIoTimer(IoTimer* timer) {
+  iotimers_.erase(timer);
+  delete timer;
+}
+
+void DeviceManager::ModifyIoTimer(IoTimer* timer, int interval_ms) {
+  timer->interval_ms = interval_ms;
+  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
+}
+
+int DeviceManager::CheckIoTimers() {
+  auto now = std::chrono::steady_clock::now();
+  int64_t min_timeout_ms = 100000;
+
+  for (auto timer : iotimers_) {
+    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
+    if (delta_ms <= 1) {
+      timer->callback();
+      if (!timer->permanent) {
+        UnregisterIoTimer(timer);
+        continue;
+      }
+      timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
+      delta_ms = timer->interval_ms;
+    }
+    if (delta_ms < min_timeout_ms) {
+      min_timeout_ms = delta_ms;
+    }
+  }
+  return min_timeout_ms;
 }
