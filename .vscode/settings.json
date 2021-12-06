@@ -56,6 +56,8 @@
         "mutex": "cpp",
         "filesystem": "cpp",
         "codecvt": "cpp",
-        "condition_variable": "cpp"
+        "condition_variable": "cpp",
+        "stdint.h": "c",
+        "stddef.h": "c"
     }
 }

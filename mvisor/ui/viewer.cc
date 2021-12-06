@@ -25,25 +25,70 @@
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   device_manager_ = machine_->device_manager();
+  SDL_Init(SDL_INIT_VIDEO);
 }
 
 Viewer::~Viewer() {
+  DestroyWindow();
+  SDL_Quit();
 }
 
-void Viewer::UpdateWindow() {
+void Viewer::DestroyWindow() {
+  if (screen_texture_) {
+    if (palette_) {
+      SDL_FreePalette(palette_);
+      palette_ = nullptr;
+    }
+    if (cursor_) {
+      SDL_FreeCursor(cursor_);
+      cursor_ = nullptr;
+    }
+    if (server_cursor_.texture) {
+      SDL_DestroyTexture(server_cursor_.texture);
+      server_cursor_.texture = nullptr;
+    }
+    SDL_DestroyTexture(screen_texture_);
+    SDL_DestroyWindow(window_);
+    SDL_DestroyRenderer(renderer_);
+  }
+}
+
+void Viewer::CreateWindow() {
   uint16_t w, h, bpp;
   display_->GetDisplayMode(&w, &h, &bpp);
 
   width_ = w;
   height_ = h;
   bpp_ = bpp;
-
-  if (screen_surface_) {
-    SDL_FreeSurface(screen_surface_);
-  }
-  screen_surface_ = SDL_SetVideoMode(width_, height_, bpp_, SDL_SWSURFACE | SDL_DOUBLEBUF | SDL_RESIZABLE);
+  int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
+  window_ = SDL_CreateWindow("MVisor", x, y, width_, height_, SDL_WINDOW_RESIZABLE);
+  renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+  MV_ASSERT(renderer_);
   
-  if (bpp_ <= 8) {
+  switch (bpp_)
+  {
+  case 32:
+    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
+      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    break;
+  case 24:
+    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGR24,
+      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    break;
+  case 16:
+    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGR565,
+      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    break;
+  case 8:
+    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
+      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    break;
+  default:
+    MV_PANIC("unsupported video bpp=%d", bpp_);
+  }
+  MV_ASSERT(screen_texture_);
+  if (bpp_ == 8) {
+    palette_ = SDL_AllocPalette(256);
     SDL_Color colors[256];
     const uint8_t* pallete = display_->GetPallete();
     for (int i = 0; i < 256; i++) {
@@ -51,7 +96,7 @@ void Viewer::UpdateWindow() {
       colors[i].g = *pallete++ << 2;
       colors[i].b = *pallete++ << 2;
     }
-    SDL_SetPalette(screen_surface_, SDL_LOGPAL | SDL_PHYSPAL, colors, 0, 256);
+    SDL_SetPaletteColors(palette_, colors, 0, 256);
   }
   UpdateCaption();
 }
@@ -63,19 +108,19 @@ void Viewer::UpdateCaption() {
   } else {
     sprintf(title, "MVisor - A mini x86 hypervisor - %dx%dx%d", width_, height_, bpp_);
   }
-  SDL_WM_SetCaption(title, "MVisor");
+  SDL_SetWindowTitle(window_, title);
 }
 
 void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
-  SDL_LockSurface(screen_surface_);
+  uint8_t* dst;
+  int dst_stride;
+  SDL_LockTexture(screen_texture_, NULL, (void**)&dst, &dst_stride);
 
-  uint8_t* dst = (uint8_t*)screen_surface_->pixels;
-  int dst_stride = screen_surface_->pitch;
   if (partial->flip) {
-    dst += screen_surface_->pitch * (partial->y + partial->height - 1) + partial->x * (bpp_ >> 3);
+    dst += dst_stride * (partial->y + partial->height - 1) + partial->x * (bpp_ >> 3);
     dst_stride = -dst_stride;
   } else {
-    dst += screen_surface_->pitch * partial->y + partial->x * (bpp_ >> 3);
+    dst += dst_stride * partial->y + partial->x * (bpp_ >> 3);
   }
   int lines = partial->height;
   size_t src_index = 0;
@@ -92,16 +137,33 @@ void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
     }
     ++src_index;
   }
-  SDL_UnlockSurface(screen_surface_);
+  SDL_UnlockTexture(screen_texture_);
+}
+
+void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
+  MV_ASSERT(partial->width == width_ && partial->height == height_);
+  MV_ASSERT(partial->vector.size() == 1 && partial->vector[0].size == width_ * height_);
+  auto surface_8bit = SDL_CreateRGBSurfaceWithFormatFrom(partial->vector[0].data,
+    partial->width, partial->height, bpp_, partial->stride, SDL_PIXELFORMAT_INDEX8);
+  SDL_SetSurfacePalette(surface_8bit, palette_);
+  auto surface_32bit = SDL_ConvertSurfaceFormat(surface_8bit, SDL_PIXELFORMAT_BGRA32, 0);
+  SDL_UpdateTexture(screen_texture_, nullptr, surface_32bit->pixels, surface_32bit->pitch);
+  SDL_FreeSurface(surface_32bit);
+  SDL_FreeSurface(surface_8bit);
 }
 
 void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
-  if (cursor_update->command == kDisplayCursorUpdateSet) {
+  if (cursor_update->command == kDisplayCursorUpdateMove) {
+    server_cursor_.x = cursor_update->move.x;
+    server_cursor_.y = cursor_update->move.y;
+  } else if (cursor_update->command == kDisplayCursorUpdateSet) {
     if (cursor_) {
       SDL_FreeCursor(cursor_);
       cursor_ = nullptr;
     }
-    SDL_ShowCursor(SDL_ENABLE);
+    if (!grab_input_) {
+      SDL_ShowCursor(SDL_ENABLE);
+    }
     auto set = cursor_update->set;
     uint32_t stride = SPICE_ALIGN(set.width, 8) >> 3;
     if (set.type == SPICE_CURSOR_TYPE_MONO) {
@@ -110,33 +172,28 @@ void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
         set.width, set.height, set.hotspot_x, set.hotspot_y);
       SDL_SetCursor(cursor_);
     } else {
-      uint8_t* data = new uint8_t[stride * set.height];
-      uint8_t* mask = new uint8_t[stride * set.height];
-      int i = -1;
-      for (int row = 0; row < set.height; ++row) {
-        for (int col = 0; col < set.width; ++col) {
-          if (col % 8) {
-            data[i] <<= 1;
-            mask[i] <<= 1;
-          } else {
-            ++i;
-            data[i] = mask[i] = 0;
-          }
-          uint8_t* src = &set.data[set.width * 4 * row + col * 4];
-          mask[i] |= src[3] ? 1 : 0;
-          if (mask[i]) {
-            data[i] |= (src[0] || src[1] || src[2]) ? 1 : 0;
-          }
-        }
-      }
-      cursor_ = SDL_CreateCursor(data, mask,
-        set.width, set.height, set.hotspot_x, set.hotspot_y);
+      auto surface = SDL_CreateRGBSurfaceWithFormatFrom(set.data, set.width, set.height,
+        32, set.width * 4, SDL_PIXELFORMAT_BGRA32);
+      cursor_ = SDL_CreateColorCursor(surface, set.hotspot_x, set.hotspot_y);
       SDL_SetCursor(cursor_);
-      delete[] data;
-      delete[] mask;
+      /* Store the cursor texture for server cursor */
+      if (server_cursor_.texture) {
+        SDL_DestroyTexture(server_cursor_.texture);
+      }
+      server_cursor_.texture = SDL_CreateTextureFromSurface(renderer_, surface);
+      SDL_FreeSurface(surface);
     }
+    /* Used when simulate cursor */
+    server_cursor_.visible = set.visible;
+    server_cursor_.x = set.x;
+    server_cursor_.y = set.y;
+    server_cursor_.width = set.width;
+    server_cursor_.height = set.height;
+    server_cursor_.hotspot_x = set.hotspot_x;
+    server_cursor_.hotspot_y = set.hotspot_y;
   } else if (cursor_update->command == kDisplayCursorUpdateHide) {
     SDL_ShowCursor(SDL_DISABLE);
+    server_cursor_.visible = false;
   }
 }
 
@@ -144,38 +201,55 @@ void Viewer::Render() {
   std::lock_guard<std::mutex> lock(mutex_);
   if (requested_update_window_) {
     requested_update_window_ = false;
-    UpdateWindow();
+    DestroyWindow();
+    CreateWindow();
     for (auto partial : partials_) {
       partial->release();
     }
     partials_.clear();
   }
-  if (screen_surface_ && !partials_.empty()) {
-    while (!partials_.empty()) {
-      auto partial = partials_.front();
-      partials_.pop_front();
-      RenderPartial(partial);
-      partial->release();
-    }
-    SDL_Flip(screen_surface_);
-  }
+  bool redraw = false;
   while (!cursor_updates_.empty()) {
     auto cursor_update = cursor_updates_.front();
     cursor_updates_.pop_front();
     RenderCursor(cursor_update);
     cursor_update->release();
+    redraw = true;
+  }
+  if (screen_texture_ && !partials_.empty()) {
+    while (!partials_.empty()) {
+      auto partial = partials_.front();
+      partials_.pop_front();
+      if (bpp_ == 8) {
+        RenderSurface(partial);
+      } else {
+        RenderPartial(partial);
+      }
+      partial->release();
+    }
+    redraw = true;
+  }
+
+  if (redraw) {
+    SDL_RenderCopy(renderer_, screen_texture_, nullptr, nullptr);
+    if (grab_input_) {
+      SDL_Rect rect = {
+        .x = server_cursor_.x,
+        .y = server_cursor_.y,
+        .w = server_cursor_.width,
+        .h = server_cursor_.height
+      };
+      SDL_RenderCopy(renderer_, server_cursor_.texture, nullptr, &rect);
+    }
+    SDL_RenderPresent(renderer_);
   }
 }
 
-/* Reference about SDL-1.2:
- * https://www.libsdl.org/release/SDL-1.2.15/docs/html/index.html
- * FXIME: Why not SDL2? SDL2 create lots of threads after calling SDL_Init, it crashes after
- * a SIGUSR is sent to the vCPU.
+/* Reference about SDL-2:
+ * https://wiki.libsdl.org/APIByCategory
  */
 int Viewer::MainLoop() {
   SetThreadName("viewer");
-  
-  SDL_Init(SDL_INIT_VIDEO);
 
   SDL_Event event;
 
@@ -220,7 +294,7 @@ int Viewer::MainLoop() {
         /* Type ESCAPE to exit mouse grab mode */
         if (grab_input_ && event.key.keysym.sym == SDLK_ESCAPE) {
           grab_input_ = false;
-          SDL_WM_GrabInput(SDL_GRAB_OFF);
+          SDL_SetWindowGrab(window_, SDL_FALSE);
           SDL_ShowCursor(SDL_ENABLE);
           UpdateCaption();
           break;
@@ -233,7 +307,7 @@ int Viewer::MainLoop() {
         /* If pointer device is not available, try to grab input and use PS/2 input */
         if (!grab_input_ && spice_agent_ && !spice_agent_->CanAcceptInput()) {
           grab_input_ = true;
-          SDL_WM_GrabInput(SDL_GRAB_ON);
+          SDL_SetWindowGrab(window_, SDL_TRUE);
           SDL_ShowCursor(SDL_DISABLE);
           UpdateCaption();
         }
@@ -244,6 +318,7 @@ int Viewer::MainLoop() {
         } else {
           mouse_buttons &= ~(1 << event.button.button);
         }
+        /* fall through */
       case SDL_MOUSEMOTION:
         if (spice_agent_ && spice_agent_->CanAcceptInput()) {
           int x, y;
@@ -252,16 +327,25 @@ int Viewer::MainLoop() {
         } else if (grab_input_) {
           /* swap the middle button and right button bit of input state */
           uint8_t ps2_state = ((mouse_buttons & 2) >> 1) | (mouse_buttons & 4) | ((mouse_buttons & 8) >> 2);
-          /* multiply by 2 to prevent host mouse go out of window */
-          keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
+          if (event.type == SDL_MOUSEMOTION) {
+            /* multiply by 2 to prevent host mouse go out of window */
+            keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
+          } else {
+            keyboard_->QueueMouseEvent(ps2_state, 0, 0, 0);
+          }
         }
         break;
-      case SDL_VIDEORESIZE:
-        if (spice_agent_) {
-          pending_resize = true;
-          pending_resize_w = event.resize.w;
-          pending_resize_h = event.resize.h;
-          pending_resize_time = std::chrono::steady_clock::now();
+      case SDL_WINDOWEVENT:
+        switch (event.window.event)
+        {
+        case SDL_WINDOWEVENT_RESIZED:
+          if (spice_agent_) {
+            pending_resize = true;
+            pending_resize_w = event.window.data1;
+            pending_resize_h = event.window.data2;
+            pending_resize_time = std::chrono::steady_clock::now();
+          }
+          break;
         }
         break;
       case SDL_QUIT:

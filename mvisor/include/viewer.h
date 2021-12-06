@@ -19,12 +19,23 @@
 #ifndef _MVISOR_VIEWER_H
 #define _MVISOR_VIEWER_H
 
-#include <SDL/SDL.h>
+#include <SDL2/SDL.h>
 #include "machine.h"
 #include "device_manager.h"
 #include "device_interface.h"
 #include <mutex>
 #include <deque>
+
+struct SimulateCursor {
+  bool visible;
+  int x;
+  int y;
+  int width;
+  int height;
+  int hotspot_x;
+  int hotspot_y;
+  SDL_Texture* texture;
+};
 
 class Viewer {
  public:
@@ -33,10 +44,12 @@ class Viewer {
   int MainLoop();
 
  private:
+  void DestroyWindow();
   void Render();
-  void UpdateWindow();
+  void CreateWindow();
   void UpdateCaption();
   void RenderPartial(const DisplayPartialBitmap* partial);
+  void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayCursorUpdate* cursor_update);
 
   Machine* machine_;
@@ -44,8 +57,12 @@ class Viewer {
   DisplayInterface* display_;
   KeyboardInputInterface* keyboard_;
   SpiceAgentInterface* spice_agent_;
-  SDL_Surface* screen_surface_ = nullptr;
+  SDL_Window* window_ = nullptr;
+  SDL_Renderer* renderer_ = nullptr;
+  SDL_Texture* screen_texture_ = nullptr;
+  SDL_Palette* palette_ = nullptr;
   SDL_Cursor* cursor_ = nullptr;
+  SimulateCursor server_cursor_;
   bool requested_update_window_ = false;
   uint16_t width_;
   uint16_t height_;
