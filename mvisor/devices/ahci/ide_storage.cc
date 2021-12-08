@@ -44,7 +44,14 @@ IdeStorageDevice::IdeStorageDevice() {
   };
   
   ata_handlers_[0xEC] = [=] () { // ATA_CMD_IDENTIFY_DEVICE
-    Ata_IdentifyDevice();
+    if (image_ && type_ != kIdeStorageTypeCdrom) {
+      Ata_IdentifyDevice();
+    } else {
+      if (type_ == kIdeStorageTypeCdrom) {
+        Ata_ResetSignature();
+      }
+      AbortCommand();
+    }
   };
   
   ata_handlers_[0xEF] = [=] () { // ATA_CMD_SET_FEATURES
@@ -98,26 +105,28 @@ void IdeStorageDevice::Ata_ResetSignature() {
   if (type_ == kIdeStorageTypeCdrom) {
     regs_.lba1 = 0x14;
     regs_.lba2 = 0xEB;
-  } else {
+  } else if (image_) {
     regs_.lba1 = 0;
     regs_.lba2 = 0;
+  } else {
+    regs_.lba1 = 0xFF;
+    regs_.lba2 = 0xFF;
   }
 }
 
 void IdeStorageDevice::Ata_IdentifyDevice() {
-  if (type_ != kIdeStorageTypeCdrom) {
-    MV_PANIC("Not implemented. Harddisk should override this.");
-  } else {
-    if (type_ == kIdeStorageTypeCdrom) {
-      Ata_ResetSignature();
-    }
-    AbortCommand();
-  }
+  MV_PANIC("Not implemented. Harddisk should override this.");
 }
 
 void IdeStorageDevice::Ata_SetFeatures() {
   switch (regs_.feature0)
   {
+  case 0x02: // enable write cache
+    write_cache_ = true;
+    break;
+  case 0x82: // disable write cache
+    write_cache_ = false;
+    break;
   case 0x03: { // set transfer mode
     uint8_t value = regs_.count0 & 0b111;
     switch (regs_.count0 >> 3)

@@ -61,6 +61,8 @@ Vcpu::~Vcpu() {
   }
   if (fd_ > 0)
     close(fd_);
+  if (kvm_run_)
+    munmap(kvm_run_, machine_->kvm_vcpu_mmap_size_);
 }
 
 /* Starting a vcpu is as simple as starting a thread on the host */
@@ -97,6 +99,8 @@ void Vcpu::SetupCpuid() {
     case 0x1: // ACPI ID & Features
       entry->ecx &= ~(1 << 31); // disable hypervisor mode now
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
+      machine_->cpuid_version_ = entry->eax;
+      machine_->cpuid_features_ = entry->edx;
       break;
     case 0x6: // Thermal and Power Management Leaf
       entry->ecx = entry->ecx & ~(1 << 3); // disable peformance energy bias

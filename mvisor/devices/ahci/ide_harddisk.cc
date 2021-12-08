@@ -124,7 +124,9 @@ void Harddisk::InitializeGeometry() {
 void Harddisk::Connect() {
   IdeStorageDevice::Connect();
 
-  InitializeGeometry();
+  if (image_) {
+    InitializeGeometry();
+  }
 }
 
 void Harddisk::ReadLba() {
@@ -291,7 +293,7 @@ void Harddisk::Ata_IdentifyDevice() {
       p[84] = (1 << 14) | 0;
   }
   /* 14 = NOP supported, 5=WCACHE enabled, 0=SMART feature set enabled */
-  if (true) {
+  if (write_cache_) {
       p[85] = (1 << 14) | (1 << 5) | 1;
   } else {
       p[85] = (1 << 14) | 1;

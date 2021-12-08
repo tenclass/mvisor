@@ -31,6 +31,11 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
 
  public:
   VirtioConsole() {
+    devfn_ = PCI_MAKE_DEVFN(4, 0);
+    pci_header_.class_code = 0x078000;
+    pci_header_.device_id = 0x1003;
+    pci_header_.subsys_id = 0x0003;
+    
     /* Device specific features */
     device_features_ |= (1UL << VIRTIO_CONSOLE_F_EMERG_WRITE) | (1UL << VIRTIO_CONSOLE_F_MULTIPORT);
 
@@ -51,6 +56,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
   }
 
   void Reset() {
+    /* Reset all queues */
     VirtioPci::Reset();
   
     CreateQueuesForPorts();
@@ -85,13 +91,12 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     VirtElement element;
   
     while (PopQueue(vq, element)) {
-      for (auto iov : element.vector) {
+      for (auto iov : element.read_vector) {
         port->OnMessage((uint8_t*)iov.iov_base, iov.iov_len);
       }
       PushQueue(vq, element);
+      NotifyQueue(vq);
     }
-    MV_ASSERT(vq.available_ring->flags == 0);
-    NotifyQueue(vq);
   }
 
   void SendPortMessage(VirtioConsolePort* port, uint8_t* data, size_t size) {
@@ -108,21 +113,17 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     VirtElement element;
   
     while (PopQueue(vq, element)) {
-      for (auto iov : element.vector) {
+      for (auto iov : element.read_vector) {
         virtio_console_control* vcc = (virtio_console_control*)iov.iov_base;
         HandleConsoleControl(vcc);
       }
       PushQueue(vq, element);
+      NotifyQueue(vq);
     }
-    MV_ASSERT(vq.available_ring->flags == 0);
-    NotifyQueue(vq);
   }
 
   void WriteBuffer(VirtQueue& vq, void* buffer, size_t size) {
     size_t offset = 0;
-    // MV_LOG("Send size=%lu", size);
-    // DumpHex(buffer, size);
-
     while (offset < size) {
       VirtElement element;
       if (!PopQueue(vq, element)) {
@@ -131,7 +132,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
 
       element.length = 0;
       size_t remain_bytes = size - offset;
-      for (auto iov : element.vector) {
+      for (auto iov : element.write_vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
         memcpy(iov.iov_base, (uint8_t*)buffer + offset, bytes);
         offset += bytes;
@@ -140,9 +141,8 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
       }
 
       PushQueue(vq, element);
+      NotifyQueue(vq);
     }
-    MV_ASSERT(vq.used_ring->flags == 0);
-    NotifyQueue(vq);
   }
 
   void SendControlEvent(VirtioConsolePort* port, uint16_t event, uint16_t value) {

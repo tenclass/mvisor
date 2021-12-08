@@ -22,6 +22,7 @@
 #include "device_manager.h"
 #include "memory_manager.h"
 #include "machine.h"
+#include "smbios.h"
 
 #define FW_CFG_ACPI_DEVICE_ID "QEMU0002"
 
@@ -84,6 +85,8 @@ class FirmwareConfig : public Device {
 
   void AddConfigFile(std::string path, void* data, size_t size) {
     files_[path] = std::string((const char*)data, size);
+    MV_LOG("AddConfigFile %s", path.c_str());
+    DumpHex(files_[path].data(), files_[path].size());
   }
 
   void AddConfigFile(std::string path, std::string local_path) {
@@ -115,13 +118,19 @@ class FirmwareConfig : public Device {
     uint64_t numa_cfg[num_vcpus + 1] = { 0 };
     SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
     SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
-    SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 0);
+    SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
     SetConfigUInt16(FW_CFG_BOOT_MENU, 2); // show menu if more than 1 drives
 
     AddConfigFile("bios-geometry", nullptr, 0);
 
     InitializeE820Table();
     InitializeFileDir();
+
+    std::string smbios_anchor, smbios_table;
+    Smbios smbios(manager_->machine());
+    smbios.GetTables(smbios_anchor, smbios_table);
+    AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
+    AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
   }
 
   void InitializeFileDir() {

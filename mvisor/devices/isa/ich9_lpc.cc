@@ -203,11 +203,12 @@ class Ich9Lpc : public PciDevice {
     if (ir.base == 0xB2) { // APM IO
       if (offset == 0) {
         apm_control_ = *data;
-        MV_LOG("apm control=0x%x", apm_control_);
         if (apm_control_ == 2) { // Enable ACPI
           acpi_control_ |= 1;
         } else if (apm_control_ == 3) { // Disable ACPI
           acpi_control_ &= ~1;
+        } else {
+          MV_PANIC("unknown apm control=0x%x", apm_control_);
         }
       } else {
         apm_state_ = *data;

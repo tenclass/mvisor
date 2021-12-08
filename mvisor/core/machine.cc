@@ -30,6 +30,7 @@
 #include "logger.h"
 
 #define BIOS_PATH             "../share/bios-256k.bin"
+
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 
 /* The Machine class handles all the VM initialization and common operations
@@ -173,27 +174,34 @@ void Machine::CreateArchRelated() {
 /* Create necessary devices for a Q35 chipset machine  */
 Device* Machine::CreateQ35() {
   auto cd = Object::Create("cdrom");
+  auto hd = Object::Create("harddisk");
+
   auto &cd_image = *Object::Create("raw-image");
   cd_image["path"] = std::string("/data/win10_21h1.iso");
   cd_image["readonly"] = true;
   cd->AddChild(&cd_image);
 
-  auto hd = Object::Create("harddisk");
-  auto &hd_image = *Object::Create("qcow2-image");
-  hd_image["path"] = std::string("/data/hd.qcow2");
-  hd_image["readonly"] = true;
-  hd->AddChild(&hd_image);
+  auto &hd_image2 = *Object::Create("qcow2-image");
+  hd_image2["path"] = std::string("/data/hd.qcow2");
+  hd_image2["readonly"] = false;
+  hd->AddChild(&hd_image2);
 
   auto ahci_host = Object::Create("ahci-host");
   ahci_host->AddChild(cd);
   ahci_host->AddChild(hd);
 
+  // auto virtio_block = Object::Create("virtio-block");
+  // auto &hd_image = *Object::Create("qcow2-image");
+  // hd_image["path"] = std::string("/data/empty.qcow2");
+  // hd_image["readonly"] = false;
+  // virtio_block->AddChild(&hd_image);
+
   auto lpc = Object::Create("ich9-lpc");
+  lpc->AddChild(Object::Create("ich9-smbus"));
+  lpc->AddChild(Object::Create("dummy-device"));
   lpc->AddChild(Object::Create("debug-console"));
   lpc->AddChild(Object::Create("cmos"));
   lpc->AddChild(Object::Create("keyboard"));
-  lpc->AddChild(Object::Create("dummy-device"));
-  lpc->AddChild(Object::Create("sm-bus"));
   lpc->AddChild(Object::Create("pc-speaker"));
 
   auto virtio_console = Object::Create("virtio-console");
@@ -202,6 +210,7 @@ Device* Machine::CreateQ35() {
   auto pci_host = Object::Create("pci-host");
   pci_host->AddChild(lpc);
   pci_host->AddChild(ahci_host);
+  // pci_host->AddChild(virtio_block);
   pci_host->AddChild(virtio_console);
   pci_host->AddChild(Object::Create("qxl"));
 
@@ -249,6 +258,7 @@ void Machine::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
   device_manager_->ResetDevices();
 
+  MV_LOG("Resettings vCPUs");
   for (auto vcpu: vcpus_) {
     vcpu->Schedule([vcpu]() {
       vcpu->Reset();

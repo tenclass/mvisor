@@ -18,9 +18,9 @@
 
 #include "pci_device.h"
 
-class SmBus : public PciDevice {
+class Ich9Smbus : public PciDevice {
  public:
-  SmBus() {
+  Ich9Smbus() {
     devfn_ = PCI_MAKE_DEVFN(0x1f, 3);
     
     pci_header_.vendor_id = 0x8086;
@@ -36,4 +36,4 @@ class SmBus : public PciDevice {
   }
 };
 
-DECLARE_DEVICE(SmBus);
+DECLARE_DEVICE(Ich9Smbus);

@@ -23,14 +23,8 @@
 #include "device_manager.h"
 
 VirtioPci::VirtioPci() {
-    devfn_ = PCI_MAKE_DEVFN(4, 0);
-    
     pci_header_.vendor_id = 0x1AF4;
-    pci_header_.device_id = 0x1003;
-    pci_header_.class_code = 0x078000;
-    pci_header_.revision_id = 0;
     pci_header_.subsys_vendor_id = 0x1AF4;
-    pci_header_.subsys_id = 0x0003;
     pci_header_.irq_pin = 1;
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
 
@@ -113,6 +107,34 @@ void VirtioPci::PrintQueue(VirtQueue& vq) {
   }
 }
 
+void VirtioPci::AddDescriptorToElement(VirtElement& element,  VRingDescriptor* descriptor) {
+  void* host = manager_->TranslateGuestMemory(descriptor->address);
+  if (descriptor->flags & VRING_DESC_F_WRITE) {
+    element.write_vector.push_back(iovec {
+      .iov_base = host,
+      .iov_len = descriptor->length
+    });
+    element.write_size += descriptor->length;
+  } else {
+    element.read_vector.push_back(iovec {
+      .iov_base = host,
+      .iov_len = descriptor->length
+    });
+    element.read_size += descriptor->length;
+  }
+}
+
+void VirtioPci::ReadIndirectDescriptorTable(VirtElement& element, VRingDescriptor* table) {
+  VRingDescriptor* descriptor = &table[0];
+  while (true) {
+    AddDescriptorToElement(element, descriptor);
+    if ((descriptor->flags & VRING_DESC_F_NEXT) == 0) {
+      break;
+    }
+    descriptor = &table[descriptor->next];
+  }
+}
+
 bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
   if (vq.available_ring->index == vq.last_available_index) {
     return false;
@@ -120,16 +142,18 @@ bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
   // asm volatile ("lfence": : :"memory");
   
   auto item = vq.available_ring->items[vq.last_available_index++ % vq.size];
+  if (driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
+    *(uint16_t*)&vq.used_ring->items[vq.size] = vq.last_available_index;
+  }
+
   VRingDescriptor* descriptor = &vq.descriptor_table[item];
   while (true) {
-    /* FIXME: indirect is not implemented yet */
-    MV_ASSERT((descriptor->flags & VRING_DESC_F_INDIRECT) == 0);
-
-    void* host = manager_->TranslateGuestMemory(descriptor->address);
-    element.vector.push_back(iovec {
-      .iov_base = host,
-      .iov_len = descriptor->length
-    });
+    if (descriptor->flags & VRING_DESC_F_INDIRECT) {
+      VRingDescriptor* table = (VRingDescriptor*)manager_->TranslateGuestMemory(descriptor->address);
+      ReadIndirectDescriptorTable(element, table);
+    } else {
+      AddDescriptorToElement(element, descriptor);
+    }
     if ((descriptor->flags & VRING_DESC_F_NEXT) == 0) {
       break;
     }
@@ -150,6 +174,16 @@ void VirtioPci::PushQueue(VirtQueue& vq, const VirtElement& element) {
 }
 
 void VirtioPci::NotifyQueue(VirtQueue& vq) {
+  // asm volatile ("mfence": : :"memory");
+
+  if (driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
+    if (vq.used_ring->index < vq.available_ring->items[vq.size]) {
+      return;
+    }
+  } else if (vq.available_ring->flags & VRING_AVAIL_F_NO_INTERRUPT) {
+    return;
+  }
+
   /* Set queue interrupt bit */
   isr_status_ = 1;
   /* Make sure MSI X Enabled */
@@ -200,9 +234,6 @@ void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size)
     break;
   case VIRTIO_PCI_COMMON_GF:
     driver_features_[common_config_.guest_feature_select] = *(uint32_t*)data;
-    if (common_config_.guest_feature_select == 0 && driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
-      MV_PANIC("FIXME: event idx is not implemented yet");
-    }
     break;
   case VIRTIO_PCI_COMMON_Q_ENABLE:
     if (common_config_.queue_enable == 1) {
@@ -232,23 +263,30 @@ void VirtioPci::ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) 
       value = (uint32_t)(device_features_ >> 32);
     }
     break;
+  case VIRTIO_PCI_COMMON_MSIX:
+    value = common_config_.msix_config;
+    break;
   case VIRTIO_PCI_COMMON_STATUS:
     value = common_config_.device_status;
+    break;
+  case VIRTIO_PCI_COMMON_CFGGENERATION:
+    value = common_config_.config_generation;
     break;
   case VIRTIO_PCI_COMMON_NUMQ:
     value = common_config_.num_queues;
     break;
   case VIRTIO_PCI_COMMON_Q_SIZE: {
-    auto &vq = queues_[common_config_.queue_select];
-    value = vq.size;
+    value = queues_[common_config_.queue_select].size;
     break;
   }
   case VIRTIO_PCI_COMMON_Q_NOFF:
     value = common_config_.queue_select;
     break;
   case VIRTIO_PCI_COMMON_Q_MSIX: {
-    auto &q = queues_[common_config_.queue_select];
-    value = q.msix_vector;
+    value = queues_[common_config_.queue_select].msix_vector;
+    break;
+  case VIRTIO_PCI_COMMON_Q_ENABLE:
+    value = queues_[common_config_.queue_select].enabled;
     break;
   }
   default:
@@ -283,6 +321,7 @@ void VirtioPci::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint
   } else {
     PciDevice::Write(ir, offset, data, size);
   }
+  // MV_LOG("Write at base=0x%lx offset=0x%lx data=0x%lx size=%x", ir.base, offset, *(uint64_t*)data, size);
 }
 
 void VirtioPci::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -299,5 +338,6 @@ void VirtioPci::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
   } else {
     PciDevice::Read(ir, offset, data, size);
   }
+  // MV_LOG("read at base=0x%lx offset=0x%lx data=0x%lx size=%x", ir.base, offset, *(uint64_t*)data, size);
 }
 

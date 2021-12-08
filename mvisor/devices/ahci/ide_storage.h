@@ -117,6 +117,7 @@ class IdeStorageDevice : public Device {
 
   IdeDriveInfo    drive_info_;
   VoidCallback    ata_handlers_[256];
+  bool            write_cache_ = true;
 };
 
 

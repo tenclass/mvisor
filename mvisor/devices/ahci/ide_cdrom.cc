@@ -161,9 +161,11 @@ Cdrom::Cdrom()
 void Cdrom::Connect() {
   IdeStorageDevice::Connect();
 
-  ImageInformation info = image_->information();
-  image_block_size_ = info.block_size;
-  total_tracks_ = info.total_blocks * info.block_size / track_size_;
+  if (image_) {
+    ImageInformation info = image_->information();
+    image_block_size_ = info.block_size;
+    total_tracks_ = info.total_blocks * info.block_size / track_size_;
+  }
 }
 
 void Cdrom::SetError(int sense_key, int asc) {
@@ -177,6 +179,11 @@ void Cdrom::SetError(int sense_key, int asc) {
 
 void Cdrom::ParseCommandPacket() {
   uint8_t command = io_.atapi_command[0];
+  if (image_ == nullptr && command == 0x28) {
+    SetError(NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+    return;
+  }
+
   auto handler = atapi_handlers_[command];
   if (handler) {
     handler();

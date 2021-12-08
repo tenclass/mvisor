@@ -85,7 +85,7 @@ struct VRingUsed {
 
 typedef std::function<void (void)> VoidCallback;
 struct VirtQueue {
-  bool              enabled;
+  bool              enabled = false;
   int               msix_vector;
   VoidCallback      notification_callback;
   
@@ -99,8 +99,13 @@ struct VirtQueue {
 
 struct VirtElement {
   int                       id;
-  uint32_t                  length;
-  std::vector<struct iovec> vector;
+  uint32_t                  length = 0;
+  std::vector<struct iovec> read_vector;
+  std::vector<struct iovec> write_vector;
+  size_t                    read_vector_index = 0;
+  size_t                    write_vector_index = 0;
+  size_t                    read_size = 0;
+  size_t                    write_size = 0;
 
  private:
   /* disallow const copy */
@@ -113,19 +118,23 @@ class VirtioPci : public PciDevice {
   virtual void Disconnect();
   virtual void Reset();
 
+ private:
+  void ReadIndirectDescriptorTable(VirtElement& element, VRingDescriptor* table);
+  void AddDescriptorToElement(VirtElement& element,  VRingDescriptor* descriptor);
+  void ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
+  void WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
+  void WriteNotification(uint64_t offset, uint8_t* data, uint32_t size);
+  void EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t avail_gpa, uint64_t used_gpa);
+  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+
  protected: 
   void PrintQueue(VirtQueue& vq);
   bool PopQueue(VirtQueue& vq, VirtElement& element);
   void PushQueue(VirtQueue& vq, const VirtElement& element);
   void NotifyQueue(VirtQueue& vq);
   void AddQueue(uint16_t queue_size, VoidCallback callback);
-  void EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t avail_gpa, uint64_t used_gpa);
-  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
-  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size);
-  void ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
-  void WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
-  void WriteNotification(uint64_t offset, uint8_t* data, uint32_t size);
 
   virtio_pci_common_cfg       common_config_;
   uint64_t                    device_features_;

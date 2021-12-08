@@ -74,6 +74,8 @@ class Machine {
   void* bios_backup_ = nullptr;
 
   std::string executable_path_;
+  uint32_t cpuid_version_ = 0;
+  uint32_t cpuid_features_ = 0;
 };
 
 #endif // MVISOR_MACHINE_H
