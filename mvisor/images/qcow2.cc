@@ -234,6 +234,7 @@ class Qcow2Image : public DiskImage {
     }
   }
 
+  /* FIXME: should we call pwrite for multiple times to read all data ??? */
   ssize_t WriteFile(void* buffer, size_t length, off_t offset) {
     if (offset >= (ssize_t)image_header_.size) {
       MV_LOG("write overflow length=0x%lx, offset=0x%lx", length, offset);
@@ -243,6 +244,7 @@ class Qcow2Image : public DiskImage {
     return pwrite(fd_, buffer, length, offset);
   }
 
+  /* FIXME: should we call pread for multiple times to read all data ??? */
   ssize_t ReadFile(void* buffer, size_t length, off_t offset) {
     return pread(fd_, buffer, length, offset);
   }
@@ -473,8 +475,13 @@ class Qcow2Image : public DiskImage {
         return backing_file_->ReadCluster(buffer, pos, length);
       }
 
-      if (ReadFile(buffer, length, cluster_start + offset_in_cluster) != (ssize_t)length) {
-        return -1;
+      ssize_t bytes_read = ReadFile(buffer, length, cluster_start + offset_in_cluster);
+      if (bytes_read < 0) {
+        return bytes_read;
+      }
+      if ((size_t)bytes_read < length) {
+        /* Reach the end of file??? */
+        bzero((uint8_t*)buffer + bytes_read, length - bytes_read);
       }
     }
     return length;
@@ -523,7 +530,8 @@ class Qcow2Image : public DiskImage {
       }
   
       if (WriteFile(buffer, length, cluster_start + offset_in_cluster) != (ssize_t)length) {
-        MV_PANIC("failed to write image file at 0x%lx", cluster_start);
+        MV_PANIC("failed to write image file pos=0x%lx cluster_start=0x%lx offset=0x%lx length=0x%lx",
+          pos, cluster_start, offset_in_cluster, length);
         return -1;
       }
     }

@@ -399,6 +399,9 @@ class Qxl : public Vga {
   }
 
   void ParseCommand(QXLCommand& command) {
+    if (mode_ != kDisplayQxlMode) {
+      return;
+    }
     switch (command.type)
     {
     case QXL_CMD_DRAW: {
@@ -426,8 +429,13 @@ class Qxl : public Vga {
       .y = drawable->bbox.top
     };
     MV_ASSERT(drawable->bbox.left >= 0 && drawable->bbox.top >= 0);
-    MV_ASSERT(drawable->bbox.right <= (int32_t)guest_primary_.surface.width);
-    MV_ASSERT(drawable->bbox.bottom <= (int32_t)guest_primary_.surface.height);
+    if (drawable->bbox.right > (int32_t)guest_primary_.surface.width ||
+      drawable->bbox.bottom > (int32_t)guest_primary_.surface.height) {
+      MV_LOG("Invalid draw box %d-%d %d-%d surface %ux%u",
+        drawable->bbox.left, drawable->bbox.right, drawable->bbox.top, drawable->bbox.bottom,
+        guest_primary_.surface.width, guest_primary_.surface.height);
+      return;
+    }
   
     switch (drawable->type)
     {

@@ -36,7 +36,7 @@ Nov 2021
 Milestone 2: Multimedia & Networking
 Dec 2021
 
-1. VirtIO (Console✅ / Block (developing) / Net / Balloon)
+1. VirtIO (Console✅ / Block✅ / Net / Balloon)
 2. SpiceAgent ✅
 3. QemuGuestAgent
 4. Qxl ✅

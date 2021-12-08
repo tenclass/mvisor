@@ -74,6 +74,11 @@ void IdeStorageDevice::Connect() {
 }
 
 void IdeStorageDevice::StartCommand() {
+  /* ignore commands sent to inexistent devices */
+  if (image_ == nullptr) {
+    return;
+  }
+
   regs_.status = ATA_SR_DRDY;
   regs_.error = 0;
   io_.dma_status = 0;

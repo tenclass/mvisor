@@ -94,7 +94,7 @@ struct VirtQueue {
   VRingDescriptor*  descriptor_table;
   VRingAvailable*   available_ring;
   VRingUsed*        used_ring;
-  int               last_available_index;
+  uint16_t          last_available_index;
 };
 
 struct VirtElement {
@@ -107,6 +107,11 @@ struct VirtElement {
   size_t                    read_size = 0;
   size_t                    write_size = 0;
 
+  void Initialize() {
+    id = length = read_vector_index = write_vector_index = read_size = write_size = 0;
+    read_vector.clear();
+    write_vector.clear();
+  }
  private:
   /* disallow const copy */
   const VirtElement& operator=(const VirtElement&);

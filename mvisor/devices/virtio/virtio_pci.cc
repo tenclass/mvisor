@@ -139,7 +139,9 @@ bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
   if (vq.available_ring->index == vq.last_available_index) {
     return false;
   }
-  // asm volatile ("lfence": : :"memory");
+  asm volatile ("lfence": : :"memory");
+
+  element.Initialize();
   
   auto item = vq.available_ring->items[vq.last_available_index++ % vq.size];
   if (driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
@@ -169,22 +171,26 @@ void VirtioPci::PushQueue(VirtQueue& vq, const VirtElement& element) {
   auto &item = vq.used_ring->items[vq.used_ring->index % vq.size];
   item.id = element.id;
   item.length = element.length;
-  // asm volatile ("sfence": : :"memory");
+
+  /* Make sure other vCPU could see the buffer before we update index. */
+  asm volatile ("sfence": : :"memory");
   ++vq.used_ring->index;
 }
 
 void VirtioPci::NotifyQueue(VirtQueue& vq) {
-  // asm volatile ("mfence": : :"memory");
+  asm volatile ("mfence": : :"memory");
 
   if (driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
-    if (vq.used_ring->index < vq.available_ring->items[vq.size]) {
+    /* Carefully handle the overflow */
+    uint16_t compare = vq.used_ring->index - vq.available_ring->items[vq.size];
+    if (compare != 1) {
       return;
     }
   } else if (vq.available_ring->flags & VRING_AVAIL_F_NO_INTERRUPT) {
     return;
   }
 
-  /* Set queue interrupt bit */
+  /* Set queue interrupt bit, driver better not use it */
   isr_status_ = 1;
   /* Make sure MSI X Enabled */
   if (vq.msix_vector == VIRTIO_MSI_NO_VECTOR) {
@@ -275,13 +281,13 @@ void VirtioPci::ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) 
   case VIRTIO_PCI_COMMON_NUMQ:
     value = common_config_.num_queues;
     break;
+  case VIRTIO_PCI_COMMON_Q_NOFF:
+    value = common_config_.queue_select;
+    break;
   case VIRTIO_PCI_COMMON_Q_SIZE: {
     value = queues_[common_config_.queue_select].size;
     break;
   }
-  case VIRTIO_PCI_COMMON_Q_NOFF:
-    value = common_config_.queue_select;
-    break;
   case VIRTIO_PCI_COMMON_Q_MSIX: {
     value = queues_[common_config_.queue_select].msix_vector;
     break;

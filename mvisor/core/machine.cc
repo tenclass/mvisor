@@ -182,7 +182,7 @@ Device* Machine::CreateQ35() {
   cd->AddChild(&cd_image);
 
   auto &hd_image2 = *Object::Create("qcow2-image");
-  hd_image2["path"] = std::string("/data/hd.qcow2");
+  hd_image2["path"] = std::string("/data/empty.qcow2");
   hd_image2["readonly"] = false;
   hd->AddChild(&hd_image2);
 
@@ -190,11 +190,11 @@ Device* Machine::CreateQ35() {
   ahci_host->AddChild(cd);
   ahci_host->AddChild(hd);
 
-  // auto virtio_block = Object::Create("virtio-block");
-  // auto &hd_image = *Object::Create("qcow2-image");
-  // hd_image["path"] = std::string("/data/empty.qcow2");
-  // hd_image["readonly"] = false;
-  // virtio_block->AddChild(&hd_image);
+  auto virtio_block = Object::Create("virtio-block");
+  auto &hd_image = *Object::Create("qcow2-image");
+  hd_image["path"] = std::string("/data/hd.qcow2");
+  hd_image["readonly"] = false;
+  virtio_block->AddChild(&hd_image);
 
   auto lpc = Object::Create("ich9-lpc");
   lpc->AddChild(Object::Create("ich9-smbus"));
@@ -210,7 +210,7 @@ Device* Machine::CreateQ35() {
   auto pci_host = Object::Create("pci-host");
   pci_host->AddChild(lpc);
   pci_host->AddChild(ahci_host);
-  // pci_host->AddChild(virtio_block);
+  pci_host->AddChild(virtio_block);
   pci_host->AddChild(virtio_console);
   pci_host->AddChild(Object::Create("qxl"));
 

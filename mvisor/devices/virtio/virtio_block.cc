@@ -19,9 +19,12 @@
 #include "virtio_pci.h"
 #include <cstring>
 #include <linux/virtio_blk.h>
+#include <cmath>
 #include "logger.h"
 #include "disk_image.h"
 #include "machine.h"
+
+#define DEFAULT_QUEUE_SIZE 256
 
 class VirtioBlock : public VirtioPci {
  private:
@@ -36,7 +39,7 @@ class VirtioBlock : public VirtioPci {
     pci_header_.subsys_id = 0x0002;
     
     device_features_ |= (1UL << VIRTIO_BLK_F_SEG_MAX) |
-      (1UL << VIRTIO_BLK_F_GEOMETRY) |
+      (0UL << VIRTIO_BLK_F_GEOMETRY) |
       (1UL << VIRTIO_BLK_F_BLK_SIZE) |
       (1UL << VIRTIO_BLK_F_FLUSH) |
       (1UL << VIRTIO_BLK_F_TOPOLOGY) |
@@ -71,21 +74,30 @@ class VirtioBlock : public VirtioPci {
     auto information = image_->information();
     block_config_.capacity = information.total_blocks;
     block_config_.blk_size = information.block_size;
+
+    block_config_.num_queues = manager_->machine()->num_vcpus();
+    block_config_.seg_max = DEFAULT_QUEUE_SIZE - 2;
+    block_config_.wce = 1; // write back (enable cache)
+    block_config_.max_discard_sectors = __INT_MAX__ / block_config_.blk_size;
+    block_config_.max_discard_seg = 1;
+    block_config_.discard_sector_alignment = 1;
+    block_config_.max_write_zeroes_sectors = block_config_.max_discard_sectors;
+    block_config_.max_write_zeroes_seg = block_config_.max_discard_seg;
+    block_config_.write_zeroes_may_unmap = 1;
   }
 
   void Reset() {
     /* Reset all queues */
     VirtioPci::Reset();
   
-    for (int i = 0; i < 1; ++i) {
-      AddQueue(256, std::bind(&VirtioBlock::OnOutput, this, i));
+    for (int i = 0; i < block_config_.num_queues; ++i) {
+      AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioBlock::OnOutput, this, i));
     }
   }
 
   void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
     MV_ASSERT(offset + size <= sizeof(block_config_));
     memcpy(data, (uint8_t*)&block_config_ + offset, size);
-    MV_LOG("read device config at 0x%lx size=%x", offset, size);
   }
 
   void OnOutput(int queue_index) {
@@ -93,25 +105,26 @@ class VirtioBlock : public VirtioPci {
     VirtElement element;
   
     while (PopQueue(vq, element)) {
-      HandleCommand(element);
+      HandleCommand(vq, element);
       PushQueue(vq, element);
       NotifyQueue(vq);
-      // printf("virtqueue %d push used_idx=%d id=%d len=0x%x in_num=%lu out_num=%lu in_size=%lx out_size=0x%lx\n",
-      //   queue_index, vq.used_ring->index, element.id, element.length, element.write_vector.size(), element.read_vector.size(),
-      //   element.write_size, element.read_size);
     }
   }
 
-  void HandleCommand(VirtElement& element) {
+  void HandleCommand(VirtQueue& vq, VirtElement& element) {
+    /* Read block header */
     virtio_blk_outhdr* request = (virtio_blk_outhdr*)element.read_vector[0].iov_base;
+    // MV_LOG("queue %d request %d(%d) desc_id=%d type=%x sector=%lx read_size=%lu:%lu write_size=%lu:%lu",
+    //   vq.index, vq.available_ring->index, vq.last_available_index, element.id, request->type, request->sector,
+    //   element.read_vector.size(), element.read_size, element.write_vector.size(), element.write_size);
+
+    /* Get status header at the end of vector, currently only 1 byte */
     auto &last_write_iov = element.write_vector[element.write_vector.size() - 1];
-    MV_ASSERT(last_write_iov.iov_len == 1);
     uint8_t* status = (uint8_t*)last_write_iov.iov_base;
+    MV_ASSERT(last_write_iov.iov_len == 1);
+    /* Set the vring length to bytes returned */
     element.length = element.write_size;
 
-    MV_LOG("request type=%x sector=%lx read_size=%lu:%lu write_size=%lu:%lu",
-      request->type, request->sector,
-      element.read_vector.size(), element.read_size, element.write_vector.size(), element.write_size);
     switch (request->type)
     {
     case VIRTIO_BLK_T_IN: {
