@@ -82,9 +82,10 @@ void Vcpu::Reset() {
  * Intel CPUID Instruction Reference
  * https://www.intel.com/content/dam/develop/external/us/en/documents/ \
  * architecture-instruction-set-extensions-programming-reference.pdf
- * TODO: Win10 shows unknown processor
+ * TODO: Hyper-V
  */
 void Vcpu::SetupCpuid() {
+  static const char cpu_model[48] = "Intel Xeon Processor (Cascadelake)";
   struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)malloc(
     sizeof(*cpuid) + MAX_KVM_CPUID_ENTRIES * sizeof(cpuid->entries[0]));
   
@@ -105,6 +106,37 @@ void Vcpu::SetupCpuid() {
     case 0x6: // Thermal and Power Management Leaf
       entry->ecx = entry->ecx & ~(1 << 3); // disable peformance energy bias
       break;
+    case 0xB: // CPU topology (cores = num_vcpus / 2, threads per core = 2)
+      if (machine_->num_vcpus_ % 2 == 0) {
+        switch (entry->index)
+        {
+        case 0:
+          entry->ebx = machine_->num_vcpus_;
+          break;
+        default:
+          entry->ebx = 0;
+          break;
+        }
+      } else {
+        switch (entry->index)
+        {
+        case 0:
+          entry->ebx = 2;
+          break;
+        case 1:
+          entry->ebx = machine_->num_vcpus_ / 2;
+        default:
+          entry->ebx = 0;
+          break;
+        }
+      }
+      entry->edx = vcpu_id_;
+      break;
+    case 0x80000002 ... 0x80000004: { // Setup CPU model string
+      uint32_t offset = (entry->function - 0x80000002) * 16;
+      memcpy(&entry->eax, cpu_model + offset, 16);
+      break;
+    }
     default:
       break;
     }
