@@ -69,7 +69,7 @@ void MemoryManager::InitializeSystemRam() {
   /* Don't map MMIO region */
   const uint64_t low_ram_upper_bound = 2 * (1LL << 30);
   const uint64_t high_ram_lower_bound = 1LL << 32;
-  if (machine_->ram_size_ < low_ram_upper_bound) {
+  if (machine_->ram_size_ <= low_ram_upper_bound) {
     Map(0, machine_->ram_size_, ram_host_, kMemoryTypeRam, "free");
   } else {
     // Split the ram to two segments leaving a hole in the GPA

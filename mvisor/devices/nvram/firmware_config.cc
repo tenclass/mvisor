@@ -121,10 +121,14 @@ class FirmwareConfig : public Device {
     SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
     SetConfigUInt16(FW_CFG_BOOT_MENU, 2); // show menu if more than 1 drives
 
-    AddConfigFile("bios-geometry", nullptr, 0);
-
     InitializeE820Table();
+
+    InitializeFiles();
     InitializeFileDir();
+  }
+
+  void InitializeFiles () {
+    AddConfigFile("bios-geometry", nullptr, 0);
 
     std::string smbios_anchor, smbios_table;
     Smbios smbios(manager_->machine());

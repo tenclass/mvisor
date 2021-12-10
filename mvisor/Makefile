@@ -23,6 +23,9 @@ run: all
 debug: all
 	gdb $(EXECUTABLE)
 
+image:
+	qemu-img create -f qcow2 -F qcow2 -b /data/win10.qcow2 /data/hd.qcow2
+
 all: $(EXECUTABLE)
 
 $(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/ui/keymap.o
