@@ -63,13 +63,22 @@ void AhciPort::Reset() {
   port_control_.sata_active = 0;
   port_control_.task_flie_data = 0x7F;
   port_control_.signature = 0xFFFFFFFF;
-  reg_d2h_fis_posted_ = false;
+  init_d2h_sent_ = false;
 
   if (!drive_) {
     return;
   }
 
-  drive_->Ata_ResetSignature();
+  drive_->Reset();
+}
+
+void AhciPort::UpdateInitD2H() {
+  if (init_d2h_sent_) {
+    return;
+  }
+  init_d2h_sent_ = true;
+
+  UpdateRegisterD2H();
   if (drive_->type() == kIdeStorageTypeCdrom) {
     port_control_.signature = ATA_SIGNATURE_CDROM;
   } else {
@@ -160,14 +169,13 @@ bool AhciPort::HandleCommand(int slot) {
   }
 
   command_->bytes_transferred = io->nbytes;
-  port_control_.command_issue &= ~(1U << slot);
   return true;
 }
 
 void AhciPort::CheckCommand() {
   if ((port_control_.command & PORT_CMD_START) && port_control_.command_issue) {
     for (int slot = 0; (slot < 32) && port_control_.command_issue; slot++) {
-      if ((port_control_.command_issue & (1U << slot)) && !HandleCommand(slot)) {
+      if ((port_control_.command_issue & (1U << slot)) && HandleCommand(slot)) {
         port_control_.command_issue &= ~(1U << slot);
       }
     }
@@ -178,7 +186,7 @@ void AhciPort::Read(uint64_t offset, uint32_t* data) {
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
   if (reg_index == kAhciPortRegSataStatus) {
-    if (drive_) {
+    if (drive_ && drive_->IsAvailable()) {
       *data = ATA_SCR_SSTATUS_DET_DEV_PRESENT_PHY_UP |  // Physical communication established
         ATA_SCR_SSTATUS_SPD_GEN1 |                      // Speed
         ATA_SCR_SSTATUS_IPM_ACTIVE;                     // Full power
@@ -269,9 +277,8 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
       issuing deferred until the OS enables FIS receival.
       Instead, we only submit it once - which works in most
       cases, but is a hack. */
-    if ((port_control_.command & PORT_CMD_FIS_ON) && !reg_d2h_fis_posted_) {
-      reg_d2h_fis_posted_ = true;
-      UpdateRegisterD2H();
+    if ((port_control_.command & PORT_CMD_FIS_ON) && !init_d2h_sent_) {
+      UpdateInitD2H();
     }
     CheckCommand();
     break;

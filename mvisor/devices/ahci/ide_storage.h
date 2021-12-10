@@ -96,6 +96,7 @@ class IdeStorageDevice : public Device {
   IdeStorageDevice();
   virtual void Connect();
   void Reset();
+  bool IsAvailable();
 
   virtual void StartCommand();
   virtual void AbortCommand();

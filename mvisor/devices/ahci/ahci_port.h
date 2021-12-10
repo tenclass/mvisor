@@ -89,11 +89,12 @@ class AhciPort {
   void Write(uint64_t offset, uint32_t value);
   void Read(uint64_t offset, uint32_t* data);
   void Reset();
-  void TrigerIrq(int irqbit);
-  void UpdateSetupPio();
 
  private:
+  void TrigerIrq(int irqbit);
+  void UpdateInitD2H();
   void UpdateRegisterD2H();
+  void UpdateSetupPio();
   bool HandleCommand(int slot);
   void CheckEngines();
   void CheckCommand();
@@ -105,7 +106,7 @@ class AhciPort {
   int                   port_index_;
   AhciPortRegs          port_control_;
   IdeStorageDevice*     drive_;
-  bool                  reg_d2h_fis_posted_ = false;
+  bool                  init_d2h_sent_ = false;
   uint8_t*              command_list_ = nullptr;
   AhciRxFis*            rx_fis_ = nullptr;
 };

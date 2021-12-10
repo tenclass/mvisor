@@ -99,6 +99,10 @@ Cdrom::Cdrom()
 
   /* ATAPI command handlers */
   atapi_handlers_[0x00] = [=] () { // test unit ready
+    if (image_ == nullptr) {
+      SetError(NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+      return;
+    }
   };
   
   atapi_handlers_[0x03] = [=] () { // request sense
@@ -116,12 +120,20 @@ Cdrom::Cdrom()
   };
   
   atapi_handlers_[0x25] = [=] () { // get media capacity
+    if (image_ == nullptr) {
+      SetError(NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+      return;
+    }
     io_.nbytes = 8;
     *(uint32_t*)&io_.buffer[0] = htobe32(total_tracks_ - 1);
     *(uint32_t*)&io_.buffer[4] = htobe32(track_size_);
   };
   
   atapi_handlers_[0x28] = [=] () { // read 10
+    if (image_ == nullptr) {
+      SetError(NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+      return;
+    }
     CBD_RW_DATA10* p = (CBD_RW_DATA10*)io_.atapi_command;
     io_.lba_block = be32toh(p->lba);
     io_.lba_count = be16toh(p->count);
@@ -141,6 +153,10 @@ Cdrom::Cdrom()
   };
   
   atapi_handlers_[0x43] = [=] () { // read table of content
+    if (image_ == nullptr) {
+      SetError(NOT_READY, ASC_MEDIUM_NOT_PRESENT);
+      return;
+    }
     Atapi_TableOfContent();
   };
   
@@ -179,10 +195,6 @@ void Cdrom::SetError(int sense_key, int asc) {
 
 void Cdrom::ParseCommandPacket() {
   uint8_t command = io_.atapi_command[0];
-  if (image_ == nullptr && command == 0x28) {
-    SetError(NOT_READY, ASC_MEDIUM_NOT_PRESENT);
-    return;
-  }
 
   auto handler = atapi_handlers_[command];
   if (handler) {

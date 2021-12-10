@@ -176,15 +176,15 @@ Device* Machine::CreateQ35() {
   auto cd = Object::Create("cdrom");
   auto hd = Object::Create("harddisk");
 
-  auto &cd_image = *Object::Create("raw-image");
-  cd_image["path"] = std::string("/data/win10_21h1.iso");
-  cd_image["readonly"] = true;
-  cd->AddChild(&cd_image);
+  // auto &cd_image = *Object::Create("raw-image");
+  // cd_image["path"] = std::string("/data/win10_21h1.iso");
+  // cd_image["readonly"] = true;
+  // cd->AddChild(&cd_image);
 
-  auto &hd_image2 = *Object::Create("qcow2-image");
-  hd_image2["path"] = std::string("/data/empty.qcow2");
-  hd_image2["readonly"] = false;
-  hd->AddChild(&hd_image2);
+  // auto &hd_image2 = *Object::Create("qcow2-image");
+  // hd_image2["path"] = std::string("/data/empty.qcow2");
+  // hd_image2["readonly"] = false;
+  // hd->AddChild(&hd_image2);
 
   auto ahci_host = Object::Create("ahci-host");
   ahci_host->AddChild(cd);

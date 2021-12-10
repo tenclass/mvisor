@@ -85,7 +85,7 @@ void AhciHost::Connect() {
 void AhciHost::Reset() {
   bzero(&host_control_, sizeof(host_control_));
   host_control_.global_host_control = HOST_CONTROL_AHCI_ENABLE;
-  host_control_.capabilities = (num_ports_ - 1) |
+  host_control_.capabilities = (num_ports_ > 0 ? num_ports_ - 1 : 0) |
     (AHCI_NUM_COMMAND_SLOTS << 8) |
     (AHCI_SUPPORTED_SPEED_GEN1 << AHCI_SUPPORTED_SPEED) |
     // HOST_CAP_NCQ |
@@ -125,7 +125,9 @@ void AhciHost::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32
 
   if (offset >= 0x100) {
     int port = (offset - 0x100) >> 7;
-    ports_[port]->Read(offset & 0x7f, (uint32_t*)data);
+    if (ports_[port]) {
+      ports_[port]->Read(offset & 0x7f, (uint32_t*)data);
+    }
   } else {
     memcpy(data, (uint8_t*)&host_control_ + offset, size);
   }

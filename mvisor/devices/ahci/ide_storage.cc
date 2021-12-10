@@ -73,12 +73,16 @@ void IdeStorageDevice::Connect() {
   }
 }
 
-void IdeStorageDevice::StartCommand() {
-  /* ignore commands sent to inexistent devices */
-  if (image_ == nullptr) {
-    return;
-  }
+bool IdeStorageDevice::IsAvailable() {
+   if (type_ == kIdeStorageTypeCdrom) {
+     return true;
+   } else {
+     return image_ != nullptr;
+   }
+}
 
+void IdeStorageDevice::StartCommand() {
+  MV_ASSERT(IsAvailable());
   regs_.status = ATA_SR_DRDY;
   regs_.error = 0;
   io_.dma_status = 0;
@@ -99,8 +103,12 @@ void IdeStorageDevice::AbortCommand() {
 }
 
 void IdeStorageDevice::Reset() {
-  regs_.status = ATA_SR_DRDY;
   Ata_ResetSignature();
+  regs_.status = ATA_SR_DSC | ATA_SR_DF;
+  if (type_ == kIdeStorageTypeCdrom) {
+    regs_.status |= ATA_SR_DRDY;
+  }
+  regs_.error = ATA_CB_ER_NDAM;
 }
 
 void IdeStorageDevice::Ata_ResetSignature() {
