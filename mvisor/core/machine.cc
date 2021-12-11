@@ -207,11 +207,14 @@ Device* Machine::CreateQ35() {
   auto virtio_console = Object::Create("virtio-console");
   virtio_console->AddChild(Object::Create("spice-agent"));
 
+  auto virtio_network = Object::Create("virtio-network");
+
   auto pci_host = Object::Create("pci-host");
   pci_host->AddChild(lpc);
   pci_host->AddChild(ahci_host);
   pci_host->AddChild(virtio_block);
   pci_host->AddChild(virtio_console);
+  pci_host->AddChild(virtio_network);
   pci_host->AddChild(Object::Create("qxl"));
 
   auto root = Object::Create("system-root");

@@ -37,6 +37,7 @@ class DiskImage : public Object {
   DiskImage();
   virtual ~DiskImage();
   virtual void Connect();
+  bool readonly() { return readonly_; }
 
   /* Always use this static method to create a DiskImage */
 
@@ -49,6 +50,7 @@ class DiskImage : public Object {
 
  protected:
   bool initialized_ = false;
+  bool readonly_ = false;
   virtual void Initialize(const std::string& path, bool readonly) = 0;
 };
 

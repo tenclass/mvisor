@@ -26,7 +26,6 @@
 class RawImage : public DiskImage {
  private:
   int fd_ = -1;
-  bool readonly_ = true;
   size_t block_size_ = 512;
   size_t total_blocks_ = 0;
 

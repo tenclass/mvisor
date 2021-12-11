@@ -41,7 +41,7 @@
 
 
 Vga::Vga() {
-  devfn_ = PCI_MAKE_DEVFN(1, 0);
+  devfn_ = PCI_MAKE_DEVFN(2, 0);
   
   /* PCI config */
   pci_header_.vendor_id = 0x1234;

@@ -109,7 +109,6 @@ struct RefcountBlock {
 class Qcow2Image : public DiskImage {
  private:
   int fd_ = -1;
-  bool readonly_ = true;
   size_t block_size_shift_ = 9; // 512 block size
   size_t total_blocks_ = 0;
   size_t image_size_ = 0;

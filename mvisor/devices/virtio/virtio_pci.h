@@ -102,13 +102,11 @@ struct VirtElement {
   uint32_t                  length = 0;
   std::vector<struct iovec> read_vector;
   std::vector<struct iovec> write_vector;
-  size_t                    read_vector_index = 0;
-  size_t                    write_vector_index = 0;
   size_t                    read_size = 0;
   size_t                    write_size = 0;
 
   void Initialize() {
-    id = length = read_vector_index = write_vector_index = read_size = write_size = 0;
+    id = length = read_size = write_size = 0;
     read_vector.clear();
     write_vector.clear();
   }
@@ -140,12 +138,14 @@ class VirtioPci : public PciDevice {
   void NotifyQueue(VirtQueue& vq);
   void AddQueue(uint16_t queue_size, VoidCallback callback);
   virtual void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size);
 
   virtio_pci_common_cfg       common_config_;
   uint64_t                    device_features_;
   uint32_t                    driver_features_[2];
   std::array<VirtQueue, 64>   queues_;
   uint8_t                     isr_status_;
+  bool                        use_ioevent_ = false;
 };
 
 #endif // _MVISOR_DEVICES_VIRTIO_PCI_H

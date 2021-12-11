@@ -18,8 +18,8 @@
 
 #include "virtio_pci.h"
 #include <cstring>
-#include <linux/virtio_blk.h>
 #include <cmath>
+#include "linux/virtio_blk.h"
 #include "logger.h"
 #include "disk_image.h"
 #include "machine.h"
@@ -38,13 +38,16 @@ class VirtioBlock : public VirtioPci {
     pci_header_.device_id = 0x1001;
     pci_header_.subsys_id = 0x0002;
     
+    AddMsiXCapability(1, 2);
+
     device_features_ |= (1UL << VIRTIO_BLK_F_SEG_MAX) |
-      (0UL << VIRTIO_BLK_F_GEOMETRY) |
+      // (1UL << VIRTIO_BLK_F_GEOMETRY) |
       (1UL << VIRTIO_BLK_F_BLK_SIZE) |
       (1UL << VIRTIO_BLK_F_FLUSH) |
-      (1UL << VIRTIO_BLK_F_TOPOLOGY) |
+      // (1UL << VIRTIO_BLK_F_TOPOLOGY) |
       (1UL << VIRTIO_BLK_F_WCE) |
       (1UL << VIRTIO_BLK_F_MQ) |
+      // FIXME: DISCARD & WRITE_ZERO needs latest guest drivers
       (1UL << VIRTIO_BLK_F_DISCARD) |
       (1UL << VIRTIO_BLK_F_WRITE_ZEROES);
     bzero(&block_config_, sizeof(block_config_));
@@ -67,6 +70,9 @@ class VirtioBlock : public VirtioPci {
     }
     if (image_) {
       InitializeGeometry();
+      if (image_->readonly()) {
+        device_features_ |= VIRTIO_BLK_F_RO;
+      }
     }
   }
 

@@ -115,6 +115,7 @@ void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size) {
 
 void PciDevice::SignalMsi(int vector) {
   if (msi_config_.is_msix) {
+    MV_ASSERT(vector < msi_config_.msix_table_size);
     auto &msix = msi_config_.msix_table[vector];
     if (msix.control & 1) {
       return; /* Masked */

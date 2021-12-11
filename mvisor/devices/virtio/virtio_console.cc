@@ -36,8 +36,10 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     pci_header_.device_id = 0x1003;
     pci_header_.subsys_id = 0x0003;
     
+    AddMsiXCapability(1, 2);
+
     /* Device specific features */
-    device_features_ |= (1UL << VIRTIO_CONSOLE_F_EMERG_WRITE) | (1UL << VIRTIO_CONSOLE_F_MULTIPORT);
+    device_features_ |= (1UL << VIRTIO_CONSOLE_F_MULTIPORT);
 
     bzero(&console_config_, sizeof(console_config_));
     console_config_.max_nr_ports = common_config_.num_queues / 2 - 1;

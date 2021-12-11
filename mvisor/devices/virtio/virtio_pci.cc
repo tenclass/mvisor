@@ -58,7 +58,6 @@ VirtioPci::VirtioPci() {
     AddCapability(0x09, cap_device_config, sizeof(cap_device_config));
     AddCapability(0x09, cap_notification, sizeof(cap_notification));
     AddCapability(0x09, cap_pci_config_access, sizeof(cap_pci_config_access));
-    AddMsiXCapability(1, 2);
 
     bzero(&common_config_, sizeof(common_config_));
     bzero(driver_features_, sizeof(driver_features_));
@@ -67,6 +66,7 @@ VirtioPci::VirtioPci() {
       (1UL << VIRTIO_F_VERSION_1);
 
     common_config_.num_queues = queues_.size();
+    use_ioevent_ = true;
 }
 
 void VirtioPci::Disconnect() {
@@ -79,7 +79,7 @@ void VirtioPci::Reset() {
   isr_status_ = 0;
   for (uint index = 0; index < queues_.size(); index++) {
     queues_[index].index = index;
-    if (queues_[index].enabled) {
+    if (queues_[index].enabled && use_ioevent_) {
       uint64_t notify_address = pci_bars_[4].address + 0x3000 + index * 4;
       manager_->UnregisterIoEvent(this, kIoResourceTypeMmio, notify_address);
     }
@@ -144,7 +144,7 @@ bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
   element.Initialize();
   
   auto item = vq.available_ring->items[vq.last_available_index++ % vq.size];
-  if (driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
+  if (driver_features_[0] & (1 << VIRTIO_RING_F_EVENT_IDX)) {
     *(uint16_t*)&vq.used_ring->items[vq.size] = vq.last_available_index;
   }
 
@@ -180,7 +180,7 @@ void VirtioPci::PushQueue(VirtQueue& vq, const VirtElement& element) {
 void VirtioPci::NotifyQueue(VirtQueue& vq) {
   asm volatile ("mfence": : :"memory");
 
-  if (driver_features_[0] & VIRTIO_RING_F_EVENT_IDX) {
+  if (driver_features_[0] & (1 << VIRTIO_RING_F_EVENT_IDX)) {
     /* Carefully handle the overflow */
     uint16_t compare = vq.used_ring->index - vq.available_ring->items[vq.size];
     if (compare != 1) {
@@ -190,13 +190,17 @@ void VirtioPci::NotifyQueue(VirtQueue& vq) {
     return;
   }
 
-  /* Set queue interrupt bit, driver better not use it */
+  /* Set queue interrupt bit */
   isr_status_ = 1;
   /* Make sure MSI X Enabled */
   if (vq.msix_vector == VIRTIO_MSI_NO_VECTOR) {
     MV_PANIC("MSI X is not enabled");
   }
-  SignalMsi(vq.msix_vector);
+  if (msi_config_.enabled) {
+    SignalMsi(vq.msix_vector);
+  } else if (pci_header_.irq_line) {
+    manager_->SetIrq(pci_header_.irq_line, isr_status_ & 1);
+  }
 }
 
 void VirtioPci::AddQueue(uint16_t queue_size, VoidCallback callback) {
@@ -222,8 +226,10 @@ void VirtioPci::EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t av
   vq.used_ring = (VRingUsed*)manager_->TranslateGuestMemory(used_gpa);
   MV_ASSERT(vq.descriptor_table && vq.available_ring && vq.used_ring);
 
-  uint64_t notify_address =pci_bars_[4].address + 0x3000 + queue_index * 4;
-  manager_->RegisterIoEvent(this, kIoResourceTypeMmio, notify_address, 2, queue_index);
+  if (use_ioevent_) {
+    uint64_t notify_address =pci_bars_[4].address + 0x3000 + queue_index * 4;
+    manager_->RegisterIoEvent(this, kIoResourceTypeMmio, notify_address, 2, queue_index);
+  }
 
   vq.enabled = true;
 }
@@ -306,6 +312,11 @@ void VirtioPci::ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) 
   MV_PANIC("not implemented");
 }
 
+void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
+  MV_PANIC("%s not implemented write device offset=0x%lx data=0x%lx size=%d",
+    name_, offset, *(uint64_t*)data, size);
+}
+
 void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size) {
   uint16_t queue = offset / 4;
   MV_ASSERT(size == 2 && queue == *(uint16_t*)data && queue < queues_.size());
@@ -318,9 +329,8 @@ void VirtioPci::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint
     if (offset < 0x1000) { /* Common config */
       WriteCommonConfig(offset, data, size);
     } else if (offset < 0x2000) { /* ISR Status */
-    } else if (offset < 0x3000) { /* Device config */        
-      MV_PANIC("%s write %s base=0x%lx offset=0x%lx data=0x%lx size=%d",
-        ir.name, "Device", ir.base, offset, *(uint64_t*)data, size);
+    } else if (offset < 0x3000) { /* Device config */
+      WriteDeviceConfig(offset - 0x2000, data, size);
     } else if (offset < 0x4000) { /* Notification */
       WriteNotification(offset - 0x3000, data, size);
     }
@@ -337,7 +347,8 @@ void VirtioPci::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
     } else if (offset < 0x2000) { /* ISR Status */
       *data = isr_status_;
       isr_status_ = 0;
-    } else if (offset < 0x3000) { /* Device config */        
+      manager_->SetIrq(pci_header_.irq_line, 0);
+    } else if (offset < 0x3000) { /* Device config */
       ReadDeviceConfig(offset - 0x2000, data, size);
     } else if (offset < 0x4000) { /* Notification */
     }
