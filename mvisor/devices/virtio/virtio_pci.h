@@ -23,7 +23,7 @@
 
 #include <linux/virtio_pci.h>
 #include <linux/uio.h>
-#include <vector>
+#include <deque>
 
 /* We support indirect buffer descriptors */
 #define VIRTIO_RING_F_INDIRECT_DESC	28
@@ -99,17 +99,15 @@ struct VirtQueue {
 
 struct VirtElement {
   int                       id;
-  uint32_t                  length = 0;
-  std::vector<struct iovec> read_vector;
-  std::vector<struct iovec> write_vector;
-  size_t                    read_size = 0;
-  size_t                    write_size = 0;
+  uint32_t                  length;
+  std::deque<struct iovec>  vector;
+  size_t                    size;
 
   void Initialize() {
-    id = length = read_size = write_size = 0;
-    read_vector.clear();
-    write_vector.clear();
+    id = length = size = 0;
+    vector.clear();
   }
+
  private:
   /* disallow const copy */
   const VirtElement& operator=(const VirtElement&);

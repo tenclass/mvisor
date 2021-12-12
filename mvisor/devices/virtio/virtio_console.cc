@@ -93,7 +93,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     VirtElement element;
   
     while (PopQueue(vq, element)) {
-      for (auto iov : element.read_vector) {
+      for (auto &iov : element.vector) {
         port->OnMessage((uint8_t*)iov.iov_base, iov.iov_len);
       }
       PushQueue(vq, element);
@@ -115,7 +115,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     VirtElement element;
   
     while (PopQueue(vq, element)) {
-      for (auto iov : element.read_vector) {
+      for (auto &iov : element.vector) {
         virtio_console_control* vcc = (virtio_console_control*)iov.iov_base;
         HandleConsoleControl(vcc);
       }
@@ -134,7 +134,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
 
       element.length = 0;
       size_t remain_bytes = size - offset;
-      for (auto iov : element.write_vector) {
+      for (auto &iov : element.vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
         memcpy(iov.iov_base, (uint8_t*)buffer + offset, bytes);
         offset += bytes;

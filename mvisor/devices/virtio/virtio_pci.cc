@@ -109,19 +109,11 @@ void VirtioPci::PrintQueue(VirtQueue& vq) {
 
 void VirtioPci::AddDescriptorToElement(VirtElement& element,  VRingDescriptor* descriptor) {
   void* host = manager_->TranslateGuestMemory(descriptor->address);
-  if (descriptor->flags & VRING_DESC_F_WRITE) {
-    element.write_vector.push_back(iovec {
-      .iov_base = host,
-      .iov_len = descriptor->length
-    });
-    element.write_size += descriptor->length;
-  } else {
-    element.read_vector.push_back(iovec {
-      .iov_base = host,
-      .iov_len = descriptor->length
-    });
-    element.read_size += descriptor->length;
-  }
+  element.vector.push_back(iovec {
+    .iov_base = host,
+    .iov_len = descriptor->length
+  });
+  element.size += descriptor->length;
 }
 
 void VirtioPci::ReadIndirectDescriptorTable(VirtElement& element, VRingDescriptor* table) {

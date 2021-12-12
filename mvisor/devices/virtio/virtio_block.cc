@@ -118,42 +118,41 @@ class VirtioBlock : public VirtioPci {
   }
 
   void HandleCommand(VirtQueue& vq, VirtElement& element) {
+    auto &vector = element.vector;
     /* Read block header */
-    virtio_blk_outhdr* request = (virtio_blk_outhdr*)element.read_vector[0].iov_base;
-    // MV_LOG("queue %d request %d(%d) desc_id=%d type=%x sector=%lx read_size=%lu:%lu write_size=%lu:%lu",
-    //   vq.index, vq.available_ring->index, vq.last_available_index, element.id, request->type, request->sector,
-    //   element.read_vector.size(), element.read_size, element.write_vector.size(), element.write_size);
+    virtio_blk_outhdr* request = (virtio_blk_outhdr*)vector.front().iov_base;
+    vector.pop_front();
 
     /* Get status header at the end of vector, currently only 1 byte */
-    auto &last_write_iov = element.write_vector[element.write_vector.size() - 1];
-    uint8_t* status = (uint8_t*)last_write_iov.iov_base;
-    MV_ASSERT(last_write_iov.iov_len == 1);
-    /* Set the vring length to bytes returned */
-    element.length = element.write_size;
+    uint8_t* status = (uint8_t*)vector.back().iov_base;
+    MV_ASSERT(vector.back().iov_len == 1);
+    vector.pop_back();
+
+    /* Set the vring data length to bytes returned */
+    element.length = sizeof(*status);
 
     switch (request->type)
     {
     case VIRTIO_BLK_T_IN: {
-      MV_ASSERT(element.read_vector.size() == 1);
       size_t position = request->sector * block_config_.blk_size;
-      for (size_t index = 0; index < element.write_vector.size() - 1; index++) {
-        void* buffer = element.write_vector[index].iov_base;
-        size_t length = element.write_vector[index].iov_len;
+      for (auto &iov : vector) {
+        void* buffer = iov.iov_base;
+        size_t length = iov.iov_len;
         size_t bytes = (size_t )image_->Read(buffer, position, length);
         if (bytes != length) {
           MV_PANIC("failed read bytes=%lx pos=%lx length=%lx", bytes, position, length);
         }
         position += length;
+        element.length += length;
       }
       *status = 0;
       break;
     }
     case VIRTIO_BLK_T_OUT: {
-      MV_ASSERT(element.write_vector.size() == 1);
       size_t position = request->sector * block_config_.blk_size;
-      for (size_t index = 1; index < element.read_vector.size(); index++) {
-        void* buffer = element.read_vector[index].iov_base;
-        size_t length = element.read_vector[index].iov_len;
+      for (auto &iov : vector) {
+        void* buffer = iov.iov_base;
+        size_t length = iov.iov_len;
         size_t bytes = (size_t )image_->Write(buffer, position, length);
         if (bytes != length) {
           MV_PANIC("failed write bytes=%lx pos=%lx length=%lx", bytes, position, length);
@@ -164,14 +163,16 @@ class VirtioBlock : public VirtioPci {
       break;
     }
     case VIRTIO_BLK_T_FLUSH:
-      MV_ASSERT(element.write_vector.size() == 1);
       image_->Flush();
       *status = 0;
       break;
     case VIRTIO_BLK_T_GET_ID: {
-      void* buffer = element.write_vector[0].iov_base;
-      MV_ASSERT(element.write_vector[0].iov_len >= 20);
+      auto &iov = vector.front();
+      void* buffer = iov.iov_base;
+      MV_ASSERT(iov.iov_len >= 20);
+
       strcpy((char*)buffer, "virtio-block");
+      element.length += iov.iov_len;
       *status = 0;
       break;
     }

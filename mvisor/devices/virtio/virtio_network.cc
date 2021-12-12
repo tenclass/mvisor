@@ -133,7 +133,7 @@ class VirtioNetwork : public VirtioPci {
 
       element.length = 0;
       size_t remain_bytes = size - offset;
-      for (auto iov : element.write_vector) {
+      for (auto &iov : element.vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
         memcpy(iov.iov_base, (uint8_t*)buffer + offset, bytes);
         offset += bytes;
@@ -147,32 +147,45 @@ class VirtioNetwork : public VirtioPci {
   }
 
   void HandleTransmit(VirtQueue& vq, VirtElement& element) {
-    // virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)element.read_vector[0].iov_base;
-    for (auto vec : element.read_vector) {
+    auto &vector = element.vector;
+    MV_ASSERT(vector.size() >= 2);
+    
+    virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)vector.front().iov_base;
+    vector.pop_front();
+
+    MV_ASSERT(header->gso_type == VIRTIO_NET_HDR_GSO_NONE);
+    for (auto &vec : vector) {
       DumpHex(vec.iov_base, vec.iov_len);
     }
-    MV_LOG("vectors read=%lu write=%lu rs=%lu ws=%lu", element.read_vector.size(), element.write_vector.size(),
-      element.read_size, element.write_size);
+    MV_LOG("vector size=%lu bytes=%lu", vector.size(), element.size);
   }
 
   void HandleControl(VirtQueue& vq, VirtElement& element) {
-    virtio_net_ctrl_hdr* control = (virtio_net_ctrl_hdr*)element.read_vector[0].iov_base;
-    uint8_t* status = (uint8_t*)element.write_vector[0].iov_base;
-    MV_ASSERT(element.write_vector[0].iov_len == 1);
+    auto &vector = element.vector;
+    MV_ASSERT(vector.size() >= 3);
+
+    virtio_net_ctrl_hdr* control = (virtio_net_ctrl_hdr*)vector.front().iov_base;
+    vector.pop_front();
+
+    uint8_t* status = (uint8_t*)vector.back().iov_base;
+    MV_ASSERT(vector.back().iov_len == 1);
+    vector.pop_back();
+
     element.length = sizeof(*status);
+    auto &iov = vector.front();
 
     switch (control->cls)
     {
     case VIRTIO_NET_CTRL_RX:
-      MV_ASSERT(element.read_vector[1].iov_len == 1);
-      *status = ControlRxMode(control->cmd, *(uint8_t*)element.read_vector[1].iov_base);
+      MV_ASSERT(iov.iov_len == 1);
+      *status = ControlRxMode(control->cmd, *(uint8_t*)iov.iov_base);
       break;
     case VIRTIO_NET_CTRL_MAC:
-      *status = ControlMacTable(control->cmd, (virtio_net_ctrl_mac*)element.read_vector[1].iov_base);
+      *status = ControlMacTable(control->cmd, (virtio_net_ctrl_mac*)iov.iov_base);
       break;
     case VIRTIO_NET_CTRL_VLAN:
-      if (element.read_vector[1].iov_len == 2) {
-        *status = ControlVlanTable(control->cmd, *(uint16_t*)element.read_vector[1].iov_base);
+      if (iov.iov_len == 2) {
+        *status = ControlVlanTable(control->cmd, *(uint16_t*)iov.iov_base);
       } else {
         *status = VIRTIO_NET_ERR;
       }

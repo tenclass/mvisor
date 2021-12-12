@@ -63,17 +63,15 @@ void SaveToFile(const char* path, void* data, size_t size) {
 void DumpHex(void* data, size_t size) {
   uint8_t* ptr = (uint8_t*)data;
   printf("%08x  ", 0);
-  for (int i = 0; i < (int)size;) {
+  for (size_t i = 0; i < size;) {
     printf("%02x ", ptr[i++]);
     if (i % 16 == 0) {
-      printf("\n%08x  ", i);
+      printf("\n%08lx  ", i);
     } else if (i % 8 == 0) {
       printf(" ");
     }
   }
-  if (size % 16 != 0) {
-    printf("\n");
-  }
+  printf("\n");
 }
 
 void SetThreadName(const char* name) {
