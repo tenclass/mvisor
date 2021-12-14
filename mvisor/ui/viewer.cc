@@ -48,15 +48,18 @@ void Viewer::DestroyWindow() {
       server_cursor_.texture = nullptr;
     }
     SDL_DestroyTexture(screen_texture_);
-    SDL_DestroyWindow(window_);
     SDL_DestroyRenderer(renderer_);
+    SDL_DestroyWindow(window_);
+    screen_texture_ = nullptr;
+    renderer_ = nullptr;
+    window_ = nullptr;
   }
 }
 
 void Viewer::CreateWindow() {
   uint16_t w, h, bpp;
   display_->GetDisplayMode(&w, &h, &bpp);
-
+  MV_ASSERT(w && h && bpp);
   width_ = w;
   height_ = h;
   bpp_ = bpp;
@@ -248,13 +251,14 @@ void Viewer::Render() {
 }
 
 void Viewer::LookupDevices() {
-  keyboard_ = dynamic_cast<KeyboardInputInterface*>(device_manager_->LookupDeviceByName("Keyboard"));
-  spice_agent_ = dynamic_cast<SpiceAgentInterface*>(device_manager_->LookupDeviceByName("SpiceAgent"));
-  display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Qxl"));
+  keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Keyboard"));
+  spice_agent_ = dynamic_cast<SpiceAgentInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
+  display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Qxl"));
   if (display_ == nullptr) {
-    display_ = dynamic_cast<DisplayInterface*>(device_manager_->LookupDeviceByName("Vga"));
+    display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Vga"));
   }
   MV_ASSERT(keyboard_ && display_);
+  MV_ASSERT(spice_agent_);
 
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;

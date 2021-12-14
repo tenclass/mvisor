@@ -37,12 +37,18 @@ Object* realize_class(const char* name);
 #define __register_class(cb, type)	\
 static Object* __create__##cb() { \
   auto o = new cb; \
-  o->set_name(#cb); \
   return o; \
 } \
 static void __attribute__ ((constructor)) __init__##cb(void) \
 {	\
   register_class(type, #cb, __FILE__, __create__##cb); \
 }
+
+
+/* Use this macro at the end of .cc source file to declare your device */
+#define DECLARE_DEVICE(classname)       __register_class(classname, 2)
+#define DECLARE_NETWORK(classname)      __register_class(classname, 3)
+#define DECLARE_DISK_IMAGE(classname)   __register_class(classname, 4)
+#define DECLARE_AGENT(classname)        __register_class(classname, 5)
 
 #endif // _MVISOR_UTILITY_H

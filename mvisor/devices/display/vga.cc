@@ -28,7 +28,6 @@
 #include "vbe.h"
 #include "vga.font.inc"
 
-#define VGA_ROM_PATH    "../share/vgabios-stdvga.bin"
 #define VGA_PIO_BASE    0x3C0
 #define VGA_PIO_SIZE    0x20
 #define VBE_PIO_BASE    0x1CE
@@ -105,7 +104,10 @@ void Vga::Connect() {
   PciDevice::Connect();
   /* Initialize rom data and rom bar size */
   if (!pci_rom_.data) {
-    LoadRomFile(VGA_ROM_PATH);
+    if (has_key("rom")) {
+      std::string path = std::get<std::string>(key_values_["rom"]);
+      LoadRomFile(path.c_str());
+    }
   }
 
   refresh_timer_ = manager_->RegisterIoTimer(this, 1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
@@ -216,8 +218,10 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
       bpp_ = value;
       break;
     case VBE_DISPI_INDEX_ENABLE:
-      MV_LOG("set vbe enable %x to %x %dx%d bpp=%d", vbe_registers_[4], value,
-        vbe_registers_[1], vbe_registers_[2], vbe_registers_[3]);
+      if (debug_) {
+        MV_LOG("set vbe enable %x to %x %dx%d bpp=%d", vbe_registers_[4], value,
+          vbe_registers_[1], vbe_registers_[2], vbe_registers_[3]);
+      }
       if (value & 1) {
         UpdateDisplayMode();
       }
@@ -376,7 +380,9 @@ void Vga::UpdateVRamMemoryMap() {
   vram_map_select_size_ = map_types[index][1];
   vram_map_select_ = vram_base_ + map_types[index][0] - VGA_MMIO_BASE;
   vram_read_select_ = vram_base_ + vram_map_select_size_ * read_index;
-  // MV_LOG("map index=%d read_index=%d", index, read_index);
+  if (debug_) {
+    MV_LOG("map index=%d read_index=%d", index, read_index);
+  }
 }
 
 void Vga::UpdateDisplayMode() {

@@ -6,38 +6,40 @@ machine:
   bios: ../share/bios-256k.bin
 
 objects:
-  - name: system-root
+  - class: system-root
     children:
       - pci-host
       - firmware-config
+      - dummy-device
+      - debug-console
       
-  - name: pci-host
+  - class: pci-host
     children:
       - ich9-lpc
-      - virtio-console
-      - qxl
       - ahci-host
+      - ich9-smbus
+      - qxl
+      - virtio-console
+      - virtio-block
+      - virtio-network
 
-  - name: virtio-console
+  - class: virtio-console
     children:
       - spice-agent
 
-  - name: ich9-lpc
+  - class: ich9-lpc
     children:
-      - debug-console
       - cmos
       - keyboard
-      - dummy-device
-      - sm-bus
       - pc-speaker
   
-  - name: ahci-host
+  - class: ahci-host
     children:
-      - cdrom
-      - harddisk
+      - ahci-cdrom
+      - ahci-disk
   
-  - name: qxl
+  - class: qxl
     rom: ../share/vgabios-qxl.bin
 
-  - name: vga
+  - class: vga
     rom: ../share/vgabios-stdvga.bin

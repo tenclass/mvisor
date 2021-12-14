@@ -85,8 +85,10 @@ class FirmwareConfig : public Device {
 
   void AddConfigFile(std::string path, void* data, size_t size) {
     files_[path] = std::string((const char*)data, size);
-    MV_LOG("AddConfigFile %s", path.c_str());
-    DumpHex(files_[path].data(), files_[path].size());
+    if (debug_) {
+      MV_LOG("AddConfigFile %s", path.c_str());
+      DumpHex(files_[path].data(), files_[path].size());
+    }
   }
 
   void AddConfigFile(std::string path, std::string local_path) {

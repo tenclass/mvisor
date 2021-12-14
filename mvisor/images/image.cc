@@ -27,6 +27,18 @@ DiskImage::~DiskImage()
 {
 }
 
+DiskImage* DiskImage::Create(std::string path, bool readonly) {
+  DiskImage* image;
+  if (path.find(".qcow2") != std::string::npos) {
+    image = dynamic_cast<DiskImage*>(Object::Create("qcow2-image"));
+  } else {
+    image = dynamic_cast<DiskImage*>(Object::Create("raw-image"));
+  }
+  MV_ASSERT(image);
+  image->Initialize(path, readonly);
+  return image;
+}
+
 void DiskImage::Connect() {
   if (!initialized_) {
     initialized_ = true;

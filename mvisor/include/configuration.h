@@ -19,17 +19,30 @@
 #ifndef _MVISOR_CONFIG_H
 #define _MVISOR_CONFIG_H
 
+#include <string>
+#include <map>
+#include <set>
+#include <cstdio>
+#include <yaml-cpp/yaml.h>
 #include "object.h"
 
 class Device;
+class Machine;
 class Configuration {
  public:
+  Configuration(Machine* machine);
   bool Load(std::string path);
-
-  Device* root() { return root_; }
+  std::string FindPath(std::string path) const;
 
  private:
-  Device* root_;
+  void InitializePaths();
+  bool LoadFile(std::string path);
+  void LoadMachine(YAML::Node node);
+  void LoadObjects(YAML::Node node);
+
+  Machine*    machine_;
+  Device*     root_;
+  std::set<std::string> directories_;
 };
 
 #endif // _MVISOR_CONFIG_H

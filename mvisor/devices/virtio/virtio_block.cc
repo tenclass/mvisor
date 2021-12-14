@@ -53,24 +53,29 @@ class VirtioBlock : public VirtioPci {
     bzero(&block_config_, sizeof(block_config_));
   }
 
-  virtual ~VirtioBlock() {
+  virtual void Disconnect() {
+    VirtioPci::Disconnect();
+    if (image_) {
+      delete image_;
+      image_ = nullptr;
+    }
   }
 
-  void Connect() {
+  virtual void Connect() {
     VirtioPci::Connect();
 
     /* Connect to backend image */
-    for (auto object : children_) {
-      auto image = dynamic_cast<DiskImage*>(object);
-      if (image) {
-        image->Connect();
-        image_ = image;
-        break;
-      }
+    bool readonly = false;
+    if (has_key("readonly")) {
+      readonly = std::get<bool>(key_values_["readonly"]);
+    }
+    if (has_key("image")) {
+      std::string path = std::get<std::string>(key_values_["image"]);
+      image_ = DiskImage::Create(path, readonly);
     }
     if (image_) {
       InitializeGeometry();
-      if (image_->readonly()) {
+      if (readonly) {
         device_features_ |= VIRTIO_BLK_F_RO;
       }
     }
@@ -154,10 +159,7 @@ class VirtioBlock : public VirtioPci {
         void* buffer = iov.iov_base;
         size_t length = iov.iov_len;
         size_t bytes = (size_t )image_->Write(buffer, position, length);
-        if (bytes != length) {
-          MV_PANIC("failed write bytes=%lx pos=%lx length=%lx", bytes, position, length);
-        }
-        position += length;
+        position += bytes;
       }
       *status = 0;
       break;

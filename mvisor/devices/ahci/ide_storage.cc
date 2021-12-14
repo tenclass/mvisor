@@ -59,17 +59,25 @@ IdeStorageDevice::IdeStorageDevice() {
   };
 }
 
+void IdeStorageDevice::Disconnect() {
+  Device::Disconnect();
+  if (image_) {
+    delete image_;
+    image_ = nullptr;
+  }
+}
+
 void IdeStorageDevice::Connect() {
   Device::Connect();
 
   /* Connect to backend image */
-  for (auto object : children_) {
-    auto image = dynamic_cast<DiskImage*>(object);
-    if (image) {
-      image_ = image;
-      image_->Connect();
-      break;
-    }
+  bool readonly = type_ == kIdeStorageTypeCdrom;
+  if (has_key("readonly")) {
+    readonly = std::get<bool>(key_values_["readonly"]);
+  }
+  if (has_key("image")) {
+    std::string path = std::get<std::string>(key_values_["image"]);
+    image_ = DiskImage::Create(path, readonly);
   }
 }
 
@@ -155,7 +163,7 @@ void IdeStorageDevice::Ata_SetFeatures() {
       MV_PANIC("not supported MDMA mode");
       break;
     case 8: // UDMA
-      MV_LOG("udma = %x", value);
+      if (debug_) MV_LOG("udma = %x", value);
       break;
     default:
       MV_PANIC("unknown trasfer mode 0x%x", regs_.count0);

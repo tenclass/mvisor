@@ -205,7 +205,7 @@ void Vcpu::Process() {
   SetThreadName(name_);
   SetupSingalHandler();
 
-  MV_LOG("%s started", name_);
+  if (machine_->debug()) MV_LOG("%s started", name_);
 
   for (; machine_->valid_;) {
     int ret = ioctl(fd_, KVM_RUN, 0);
@@ -250,7 +250,7 @@ void Vcpu::Process() {
   }
 
 quit:
-  MV_LOG("%s ended", name_);
+  if (machine_->debug_) MV_LOG("%s ended", name_);
 }
 
 void Vcpu::Kick() {

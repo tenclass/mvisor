@@ -19,6 +19,7 @@
 
 #include "object.h"
 #include <cstring>
+#include <algorithm>
 #include "logger.h"
 #include "utilities.h"
 
@@ -26,12 +27,16 @@ Object* Object::Create(const char* class_name) {
   return realize_class(class_name);
 }
 
-const char* Object::name() {
-  return name_;
-}
-
 void Object::set_name(const char* name) {
   strncpy(name_, name, OBJECT_MAX_NAME_LENGTH - 1);
+}
+
+void Object::set_classname(const char* classname) {
+  strncpy(classname_, classname, OBJECT_MAX_NAME_LENGTH - 1);
+}
+
+void Object::set_debug(bool debug) {
+  debug_ = debug;
 }
 
 Object::Object() {
@@ -44,5 +49,7 @@ Object::~Object() {
 
 void Object::AddChild(Object* object) {
   object->parent_ = this;
-  children_.push_back(object);
+  if (std::find(children_.begin(), children_.end(), object) == children_.end()) {
+    children_.push_back(object);
+  }
 }

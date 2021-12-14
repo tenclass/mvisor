@@ -24,58 +24,68 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <map>
 #include <signal.h>
+#include "object.h"
 #include "vcpu.h"
 #include "io_thread.h"
 #include "memory_manager.h"
 #include "device_manager.h"
+#include "configuration.h"
 
 class Machine {
  public:
-  Machine(int vcpus, uint64_t ram_size);
+  Machine(std::string config_path);
   ~Machine();
 
   int Run();
   void Quit();
   bool IsValid() { return valid_; }
   void Reset();
+  Object* LookupObjectByName(std::string name);
+  Object* LookupObjectByClass(std::string class_name);
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
-  int num_vcpus() { return num_vcpus_; }
-  const std::string& executable_path() { return executable_path_; }
+  inline const Configuration* configuration() { return config_; }
+  inline int num_vcpus() { return num_vcpus_; }
+  inline uint64_t ram_size() { return ram_size_; }
+  inline bool debug() { return debug_; }
 
  private:
   friend class Vcpu;
   friend class MemoryManager;
   friend class DeviceManager;
+  friend class Configuration;
 
-  void InitializePath();
   void InitializeKvm();
   void CreateArchRelated();
   void CreateVcpu();
-  Device* CreateQ35();
-  void LoadBiosFile(const char* path);
+  void LoadBiosFile();
 
   bool valid_ = true;
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;
   
+  uint64_t ram_size_ = 0;
   int num_vcpus_ = 0;
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;
+  Configuration* config_;
   IoThread* io_thread_;
 
-  uint64_t ram_size_;
+  std::string bios_path_;
   size_t bios_size_;
   void* bios_data_ = nullptr;
   void* bios_backup_ = nullptr;
 
-  std::string executable_path_;
   uint32_t cpuid_version_ = 0;
   uint32_t cpuid_features_ = 0;
+
+  std::map<std::string, Object*> objects_;
+  bool debug_ = false;
 };
 
 #endif // MVISOR_MACHINE_H

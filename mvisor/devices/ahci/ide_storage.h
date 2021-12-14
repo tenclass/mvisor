@@ -84,7 +84,7 @@ struct IdeDriveInfo {
 };
 
 enum IdeStorageType {
-  kIdeStorageTypeHarddisk,
+  kIdeStorageTypeDisk,
   kIdeStorageTypeCdrom
 };
 
@@ -95,18 +95,19 @@ class IdeStorageDevice : public Device {
  public:
   IdeStorageDevice();
   virtual void Connect();
+  virtual void Disconnect();
   void Reset();
   bool IsAvailable();
 
   virtual void StartCommand();
   virtual void AbortCommand();
-  virtual void Ata_ResetSignature();
 
   IdeStorageType  type() { return type_; }
   IdeIo*          io() { return &io_; }
   IdeRegisters*   regs() { return &regs_; }
 
  protected:
+  virtual void Ata_ResetSignature();
   virtual void Ata_IdentifyDevice();
   virtual void Ata_SetFeatures();
 
@@ -122,10 +123,10 @@ class IdeStorageDevice : public Device {
 };
 
 
-class Cdrom : public IdeStorageDevice {
+class AhciCdrom : public IdeStorageDevice {
  public:
-  Cdrom();
-  void Connect();
+  AhciCdrom();
+  virtual void Connect();
 
  private:
   void ParseCommandPacket();
@@ -155,10 +156,10 @@ struct DiskGeometry {
   size_t heads;
 };
 
-class Harddisk : public IdeStorageDevice {
+class AhciDisk : public IdeStorageDevice {
  public:
-  Harddisk();
-  void Connect();
+  AhciDisk();
+  virtual void Connect();
 
  private:
   void ReadLba();

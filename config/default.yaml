@@ -4,28 +4,15 @@ base: q35.yaml
 machine:
   memory: 8G
   vcpu: 4
+  debug: No
 
 objects:
-  - name: cdrom
-    image: win10_iso
+  # - class: ahci-cdrom
+  #   image: /data/win10_21h1.iso
   
-  - name: harddisk
-    image: hd_image
+  # - class: ahci-disk
+  #   image: /data/empty.qcow2
 
-  - name: virtio-block
-    image: hd_image
-  
-  - name: win10_iso
-    class: raw-image
-    path: /data/win10_21h1.iso
-    readonly: Yes
-  
-  - name: dostools
-    class: raw-image
-    path: /data/dostools.iso
-    readonly: Yes
-  
-  - name: hd_image
-    class: qcow2-image
-    path: /data/hd.qcow2
-    readonly: Yes
+  - class: virtio-block
+    image: /data/hd.qcow2
+    readonly: No

@@ -21,8 +21,6 @@
 
 #include "utilities.h"
 #include "object.h"
-/* Use this macro at the end of .cc source file to declare your image format */
-#define DECLARE_DISK_IMAGE(classname) __register_class(classname, 1)
 
 #include <string>
 
@@ -34,6 +32,8 @@ struct ImageInformation {
 
 class DiskImage : public Object {
  public:
+  static DiskImage* Create(std::string path, bool readonly);
+
   DiskImage();
   virtual ~DiskImage();
   virtual void Connect();

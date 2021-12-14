@@ -27,8 +27,6 @@
 #include "qxl.modes.inc"
 #include "machine.h"
 
-#define QXL_ROM_PATH    "../share/vgabios-qxl.bin"
-
 #define NUM_MEMSLOTS 8
 #define MEMSLOT_GENERATION_BITS 8
 #define MEMSLOT_SLOT_BITS 8
@@ -101,12 +99,6 @@ class Qxl : public Vga {
       manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
     }
     return Vga::DeactivatePciBar(index);
-  }
-
-  virtual void Connect() {
-    /* Load QXL rom first before loading VGA rom */
-    LoadRomFile(QXL_ROM_PATH);
-    Vga::Connect();
   }
 
   virtual void Reset() {

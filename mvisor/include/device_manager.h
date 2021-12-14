@@ -22,6 +22,7 @@
 #include <set>
 #include <string>
 #include <deque>
+#include <mutex>
 #include <thread>
 #include "pci_device.h"
 #include "device.h"
@@ -84,8 +85,8 @@ class DeviceManager {
   void SetIrq(uint32_t irq, uint32_t level);
   void SignalMsi(uint64_t address, uint32_t data);
 
-  Machine* machine() { return machine_; }
-  Device* root() { return root_; }
+  inline Machine* machine() { return machine_; }
+  inline Device* root() { return root_; }
 
  private:
   void InitializeIoEvent();
@@ -99,6 +100,7 @@ class DeviceManager {
   std::deque<IoHandler*>  pio_handlers_;
   std::thread             ioevent_thread_;
   std::set<IoEvent*>      ioevents_;
+  std::recursive_mutex    mutex_;
   int                     epoll_fd_ = -1;
   int                     stop_event_fd_ = -1;
   std::set<IoTimer*>      iotimers_;

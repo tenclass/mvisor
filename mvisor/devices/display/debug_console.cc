@@ -17,6 +17,7 @@
  */
 
 #include "device.h"
+#include "machine.h"
 
 class DebugConsole : public Device {
  public:
@@ -25,7 +26,9 @@ class DebugConsole : public Device {
   }
 
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    putchar(*data);
+    if (manager_->machine()->debug()) {
+      putchar(*data);
+    }
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

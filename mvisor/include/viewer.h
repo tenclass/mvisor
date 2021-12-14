@@ -34,7 +34,7 @@ struct SimulateCursor {
   int height;
   int hotspot_x;
   int hotspot_y;
-  SDL_Texture* texture;
+  SDL_Texture* texture = nullptr;
 };
 
 struct PendingResize {

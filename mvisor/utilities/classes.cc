@@ -57,7 +57,7 @@ void register_class(int type, const char* name, const char* source_path, ClassCr
   MV_ASSERT(classes->find(name) == classes->end());
   (*classes)[name] = item;
   (*classes)[get_alias(name)] = item;
-  MV_LOG("register class %s", name);
+  // MV_LOG("register class %s", name);
 }
 
 
@@ -67,6 +67,8 @@ Object* realize_class(const char* name) {
     MV_PANIC("class not found %s", name);
   }
   Object* o = it->second->create();
+  o->set_classname(it->second->class_name);
+  o->set_name(name);
   return o;
 }
 

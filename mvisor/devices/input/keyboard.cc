@@ -365,7 +365,7 @@ class Keyboard : public Device, public KeyboardInputInterface {
       break;
     case 0xED: // set leds
       PushKeyboard(RESPONSE_ACK);
-      MV_LOG("set leds %d", data);
+      if (debug_) MV_LOG("set leds %d", data);
       break;
     case 0xF0: // keyboard scancode set
       PushKeyboard(RESPONSE_ACK);
@@ -411,14 +411,18 @@ class Keyboard : public Device, public KeyboardInputInterface {
       *data = 2;
       break;
     }
-    // MV_LOG("read %x %x", ir.base, *data);
+    if (debug_) {
+      MV_LOG("read %x %x", ir.base, *data);
+    }
   }
 
 
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
     std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
-    // MV_LOG("write %x %x", ir.base, *data);
+    if (debug_) {
+      MV_LOG("write %x %x", ir.base, *data);
+    }
 
     if (ir.base == 0x64) { // command port
       WriteCommandPort(*data);

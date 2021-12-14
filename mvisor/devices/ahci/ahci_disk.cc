@@ -40,8 +40,8 @@ static void padstr(char *str, const char *src, int len)
  * The implemenation of ATA does not fully comply with the specification above.
  * It is a simplified version that just works.
  */
-Harddisk::Harddisk() {
-  type_ = kIdeStorageTypeHarddisk;
+AhciDisk::AhciDisk() {
+  type_ = kIdeStorageTypeDisk;
 
   drive_info_.world_wide_name = rand();
   sprintf(drive_info_.serial, "TC%05ld", drive_info_.world_wide_name);
@@ -85,7 +85,9 @@ Harddisk::Harddisk() {
     io_.lba_mode = kIdeLbaMode28;
     io_.dma_status = 1;
     ReadLba();
-    // MV_LOG("read 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
+    if (debug_) {
+      MV_LOG("read 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
+    }
     MV_ASSERT(io_.lba_count);
     Ata_ReadWriteSectors(false);
   };
@@ -94,7 +96,9 @@ Harddisk::Harddisk() {
     io_.lba_mode = kIdeLbaMode28;
     io_.dma_status = 1;
     ReadLba();
-    // MV_LOG("write 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
+    if (debug_) {
+      MV_LOG("write 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
+    }
     MV_ASSERT(io_.lba_count);
     Ata_ReadWriteSectors(true);
   };
@@ -112,7 +116,7 @@ Harddisk::Harddisk() {
   };
 }
 
-void Harddisk::InitializeGeometry() {
+void AhciDisk::InitializeGeometry() {
   ImageInformation info = image_->information();
   geometry_.sector_size = info.block_size;
   geometry_.total_sectors = info.total_blocks;
@@ -121,7 +125,7 @@ void Harddisk::InitializeGeometry() {
   geometry_.cylinders_per_heads = geometry_.total_sectors / (geometry_.sectors_per_cylinder * geometry_.heads);
 }
 
-void Harddisk::Connect() {
+void AhciDisk::Connect() {
   IdeStorageDevice::Connect();
 
   if (image_) {
@@ -129,7 +133,7 @@ void Harddisk::Connect() {
   }
 }
 
-void Harddisk::ReadLba() {
+void AhciDisk::ReadLba() {
   size_t block = regs_.lba0;
   size_t count = 0;
 
@@ -161,7 +165,7 @@ void Harddisk::ReadLba() {
   io_.lba_count = count;
 }
 
-void Harddisk::WriteLba() {
+void AhciDisk::WriteLba() {
   size_t block = io_.lba_block;
   size_t count = io_.lba_count;
 
@@ -194,7 +198,7 @@ void Harddisk::WriteLba() {
   }
 }
 
-void Harddisk::Ata_ReadWriteSectors(bool is_write) {
+void AhciDisk::Ata_ReadWriteSectors(bool is_write) {
   size_t vec_index = 0;
   size_t position = io_.lba_block * geometry_.sector_size;
   size_t remain_bytes = io_.lba_count * geometry_.sector_size;
@@ -215,7 +219,7 @@ void Harddisk::Ata_ReadWriteSectors(bool is_write) {
   WriteLba();
 }
 
-void Harddisk::Ata_Trim() {
+void AhciDisk::Ata_Trim() {
   for (auto vec : io_.vector) {
     for (size_t i = 0; i < vec.iov_len / sizeof(uint64_t); i++) {
       uint64_t value = ((uint64_t*)vec.iov_base)[i];
@@ -232,7 +236,7 @@ void Harddisk::Ata_Trim() {
   }
 }
 
-void Harddisk::Ata_IdentifyDevice() {
+void AhciDisk::Ata_IdentifyDevice() {
   uint16_t p[256] = { 0 };
 
   p[0] = 0x0040;
@@ -333,4 +337,4 @@ void Harddisk::Ata_IdentifyDevice() {
   memcpy(io_.buffer, p, io_.nbytes);
 }
 
-DECLARE_DEVICE(Harddisk);
+DECLARE_DEVICE(AhciDisk);

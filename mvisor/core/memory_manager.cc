@@ -60,7 +60,8 @@ MemoryManager::~MemoryManager() {
 
 /* Allocate system ram for guest */
 void MemoryManager::InitializeSystemRam() {
-  MV_LOG("RAM size: %lu MB", machine_->ram_size_ >> 20);
+  if (machine_->debug_)
+    MV_LOG("RAM size: %lu MB", machine_->ram_size_ >> 20);
 
   ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -162,8 +163,9 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   region->flags = 0;
   strncpy(region->name, name, 20 - 1);
 
-  MV_LOG("map region %s gpa=0x%lx size=0x%lx type=0x%x", region->name,
-    region->gpa, region->size, region->type);
+  if (machine_->debug_)
+    MV_LOG("map region %s gpa=0x%lx size=0x%lx type=0x%x", region->name,
+      region->gpa, region->size, region->type);
   
   AddMemoryRegion(region);
   return region;
@@ -172,8 +174,9 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
 /* TODO: should merge the slots after unmap */
 void MemoryManager::Unmap(const MemoryRegion** pregion) {
   MemoryRegion* region = (MemoryRegion*)*pregion;
-  MV_LOG("unmap region %s gpa=0x%lx size=%lx type=%x", region->name,
-    region->gpa, region->size, region->type);
+  if (machine_->debug_)
+    MV_LOG("unmap region %s gpa=0x%lx size=%lx type=%x", region->name,
+      region->gpa, region->size, region->type);
 
   // Remove KVM slots
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ) {

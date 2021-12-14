@@ -19,6 +19,7 @@
 #include <cstring>
 #include "logger.h"
 #include "device.h"
+#include "machine.h"
 
 /* All IO devices not implemented, put them here to ignore IO access */
 class DummyDevice : public Device {
@@ -84,9 +85,11 @@ class DummyDevice : public Device {
 
   void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
     // Do nothing
-    MV_LOG("%s ignore %s write base=0x%lx offset=0x%lx data=0x%lx size=%d",
-      ir.type == kIoResourceTypeMmio ? "MMIO" : "PIO",
-      ir.name, ir.base, offset, *(uint64_t*)data, size);
+    if (manager_->machine()->debug()) {
+      MV_LOG("%s ignore %s write base=0x%lx offset=0x%lx data=0x%lx size=%d",
+        ir.type == kIoResourceTypeMmio ? "MMIO" : "PIO",
+        ir.name, ir.base, offset, *(uint64_t*)data, size);
+    }
   }
 
   void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

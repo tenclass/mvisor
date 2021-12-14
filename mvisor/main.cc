@@ -18,17 +18,37 @@
 
 #include <cstdio>
 #include <string>
+#include <unistd.h>
 
 #include "machine.h"
 #include "viewer.h"
 
 using namespace std;
 
-int main()
+void print_help() {
+  printf("mvisor -f [config_path]\n");
+}
+
+int main(int argc, char* argv[])
 {
-  const int vcpus = 4;
-  const uint64_t ram_size = 4LL * (1 << 30);
-  Machine* machine = new Machine(vcpus, ram_size);
+  std::string config_path = "../config/default.yaml";
+  int option;
+  while ((option = getopt(argc, argv, "f:h")) != -1) {
+    switch (option)
+    {
+    case 'f':
+      config_path = optarg;
+      break;
+    case 'h':
+      print_help();
+      return 0;
+    case '?':
+      fprintf(stderr, "Unknown option: %c\n", (char)optopt);
+      return -1;
+    }
+  }
+
+  Machine* machine = new Machine(config_path);
   Viewer* viewer = new Viewer(machine);
   machine->Run();
 

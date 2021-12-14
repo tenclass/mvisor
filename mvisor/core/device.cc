@@ -20,6 +20,7 @@
 #include <cstring>
 #include "logger.h"
 #include "utilities.h"
+#include "machine.h"
 #include "device_manager.h"
 
 Device::Device() {
@@ -27,17 +28,13 @@ Device::Device() {
 }
 
 Device::~Device() {
-  /* Parent device has the resposibility to delete children */
-  for (auto child : children_) {
-    delete child;
-  }
-  children_.clear();
 }
 
 void Device::Reset() {
   /* Don't add anything here */
 }
 
+/* Connect() is called when device manager initialize */
 void Device::Connect() {
   MV_ASSERT(manager_);
 
@@ -54,11 +51,12 @@ void Device::Connect() {
   for (auto ir : io_resources_) {
     manager_->RegisterIoHandler(this, ir);
   }
-  if (parent_) {
+  if (parent_ && manager_->machine()->debug()) {
     MV_LOG("%s <= %s", parent_->name(), name_);
   }
 }
 
+/* Disconnect() is called when device manager is being destroyed */
 void Device::Disconnect() {
   if (!connected_) {
     return;

@@ -37,8 +37,12 @@ class Object {
 
   virtual void AddChild(Object* device);
 
-  const char* name();
+  const char* name() { return name_; }
+  const char* classname() { return classname_; }
+  bool debug() { return debug_; }
+  void set_debug(bool debug);
   void set_name(const char* name);
+  void set_classname(const char* classname);
   const Object* parent() { return parent_; }
   const std::vector<Object*>& children() { return children_; }
   
@@ -46,7 +50,9 @@ class Object {
   bool has_key(std::string key) { return key_values_.find(key) != key_values_.end(); }
 
  protected:
+  bool debug_ = false;
   char name_[OBJECT_MAX_NAME_LENGTH];
+  char classname_[OBJECT_MAX_NAME_LENGTH];
   std::map<std::string, Value> key_values_;
 
   /* Object topology */

@@ -20,10 +20,11 @@
  * Reference: https://www.spice-space.org/agent-protocol.html
  */
 
-#include "virtio_console.h"
 #include <cstring>
 #include <chrono>
 #include <cstdlib>
+#include "object.h"
+#include "utilities.h"
 #include "logger.h"
 #include "device_interface.h"
 #include "spice/vd_agent.h"
@@ -33,7 +34,7 @@ using namespace std::chrono;
 /* Limit send mouse frequency */
 const auto kSendMouseInterval = milliseconds(20);
 
-class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
+class SpiceAgent : public Object, public SerialPortInterface, public SpiceAgentInterface {
  private:
   bool                      pending_resize_event_;
   VDAgentMouseState         last_mouse_state_;
@@ -43,9 +44,6 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
  public:
   SpiceAgent() {
     strcpy(port_name_, "com.redhat.spice.0");
-  }
-
-  void Reset() {
     pending_resize_event_ = false;
     last_send_mouse_time_ = steady_clock::now();
   }
@@ -64,8 +62,8 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     HandleAgentMessage(message);
   }
 
-  void OnGuestWritable() {
-    guest_writable_ = true;
+  void OnWritable() {
+    writable_ = true;
   }
 
   void HandleAgentMessage(VDAgentMessage* message) {
@@ -106,16 +104,16 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
     agent_message->opaque = 0UL;
     agent_message->size = length;
     memcpy(agent_message->data, data, length);
-    console_->SendPortMessage(this, buffer, buffer_size);
+    device_->SendMessage(this, buffer, buffer_size);
     delete buffer;
   }
 
   bool CanAcceptInput() {
-    return guest_connected_;
+    return ready_;
   }
 
   void QueuePointerEvent(uint32_t buttons, uint32_t x, uint32_t y) {
-    if (!guest_connected_) {
+    if (!ready_) {
       return;
     }
     steady_clock::time_point now = steady_clock::now();
@@ -133,7 +131,7 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
   void Resize(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
-    if (!guest_connected_) {
+    if (!ready_) {
       pending_resize_event_ = true;
       return;
     }
@@ -150,4 +148,4 @@ class SpiceAgent : public VirtioConsolePort, public SpiceAgentInterface {
   }
 };
 
-DECLARE_DEVICE(SpiceAgent);
+DECLARE_AGENT(SpiceAgent);

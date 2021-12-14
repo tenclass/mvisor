@@ -23,13 +23,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <libgen.h>
 #include <cstring>
 #include "disk_image.h"
 #include "device_interface.h"
 #include "logger.h"
-
-#define BIOS_PATH             "../share/bios-256k.bin"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 
@@ -37,9 +34,13 @@
  * such as interrupts, start, quit, pause, resume
  * KVM API reference: https://www.kernel.org/doc/html/latest/virt/kvm/api.html
  */
-Machine::Machine(int vcpus, uint64_t ram_size)
-    : num_vcpus_(vcpus), ram_size_(ram_size) {
-  InitializePath();
+Machine::Machine(std::string config_path) {
+  /* Load the configuration and set values of num_vcpus & ram_size */
+  config_ = new Configuration(this);
+  if (!config_->Load(config_path)) {
+    MV_PANIC("failed to load config file: %s", config_path.c_str());
+  }
+
   InitializeKvm();
 
   memory_manager_ = new MemoryManager(this);
@@ -48,11 +49,14 @@ Machine::Machine(int vcpus, uint64_t ram_size)
   CreateVcpu();
 
   /* Currently, a Q35 chipset mother board is implemented */
-  Device* root = CreateQ35();
+  Device* root = dynamic_cast<Device*>(LookupObjectByName("system-root"));
+  if (!root) {
+    MV_PANIC("failed to find system-root device");
+  }
   device_manager_ = new DeviceManager(this, root);
   io_thread_ = new IoThread(this);
 
-  LoadBiosFile(BIOS_PATH);
+  LoadBiosFile();
 }
 
 /* Free VM resources */
@@ -68,6 +72,11 @@ Machine::~Machine() {
   delete device_manager_;
   delete memory_manager_;
 
+  // delete objects created by confiration
+  for (auto it = objects_.begin(); it != objects_.end(); it++) {
+    delete it->second;
+  }
+
   if (vm_fd_ > 0)
     close(vm_fd_);
   if (kvm_fd_ > 0)
@@ -76,17 +85,6 @@ Machine::~Machine() {
     free(bios_data_);
   if (bios_backup_)
     free(bios_backup_);
-}
-
-/* Apparently this only works under Linux */
-void Machine::InitializePath() {
-  char temp[1024] = { 0 };
-  if (readlink("/proc/self/exe", temp, sizeof(temp) - 1) > 0) {
-    executable_path_ = dirname(temp);
-  } else {
-    getcwd(temp, sizeof(temp) - 1);
-    executable_path_ = temp;
-  }
 }
 
 void Machine::InitializeKvm() {
@@ -109,14 +107,9 @@ void Machine::InitializeKvm() {
 }
 
 /* SeaBIOS is loaded into the end of 1MB and the end of 4GB */
-void Machine::LoadBiosFile(const char* path) {
+void Machine::LoadBiosFile() {
   // Read BIOS data from path to bios_data
-  int fd = -1;
-  if (path[0] == '/') {
-    fd = open(path, O_RDONLY);
-  } else {
-    fd = open((executable_path_ + "/" + path).c_str(), O_RDONLY);
-  }
+  int fd = open(bios_path_.c_str(), O_RDONLY);
   MV_ASSERT(fd > 0);
   struct stat st;
   fstat(fd, &st);
@@ -171,59 +164,6 @@ void Machine::CreateArchRelated() {
   }
 }
 
-/* Create necessary devices for a Q35 chipset machine  */
-Device* Machine::CreateQ35() {
-  auto cd = Object::Create("cdrom");
-  auto hd = Object::Create("harddisk");
-
-  // auto &cd_image = *Object::Create("raw-image");
-  // cd_image["path"] = std::string("/data/win10_21h1.iso");
-  // cd_image["readonly"] = true;
-  // cd->AddChild(&cd_image);
-
-  // auto &hd_image2 = *Object::Create("qcow2-image");
-  // hd_image2["path"] = std::string("/data/empty.qcow2");
-  // hd_image2["readonly"] = false;
-  // hd->AddChild(&hd_image2);
-
-  auto ahci_host = Object::Create("ahci-host");
-  ahci_host->AddChild(cd);
-  ahci_host->AddChild(hd);
-
-  auto virtio_block = Object::Create("virtio-block");
-  auto &hd_image = *Object::Create("qcow2-image");
-  hd_image["path"] = std::string("/data/hd.qcow2");
-  hd_image["readonly"] = false;
-  virtio_block->AddChild(&hd_image);
-
-  auto lpc = Object::Create("ich9-lpc");
-  lpc->AddChild(Object::Create("ich9-smbus"));
-  lpc->AddChild(Object::Create("dummy-device"));
-  lpc->AddChild(Object::Create("debug-console"));
-  lpc->AddChild(Object::Create("cmos"));
-  lpc->AddChild(Object::Create("keyboard"));
-  lpc->AddChild(Object::Create("pc-speaker"));
-
-  auto virtio_console = Object::Create("virtio-console");
-  virtio_console->AddChild(Object::Create("spice-agent"));
-
-  auto virtio_network = Object::Create("virtio-network");
-
-  auto pci_host = Object::Create("pci-host");
-  pci_host->AddChild(lpc);
-  pci_host->AddChild(ahci_host);
-  pci_host->AddChild(virtio_block);
-  pci_host->AddChild(virtio_console);
-  pci_host->AddChild(virtio_network);
-  pci_host->AddChild(Object::Create("qxl"));
-
-  auto root = Object::Create("system-root");
-  root->AddChild(Object::Create("firmware-config"));
-  root->AddChild(pci_host);
-
-  return dynamic_cast<Device*>(root);
-}
-
 void Machine::CreateVcpu() {
   for (int i = 0; i < num_vcpus_; ++i) {
     Vcpu* vcpu = new Vcpu(this, i);
@@ -267,5 +207,24 @@ void Machine::Reset() {
       vcpu->Reset();
     });
   }
+}
+
+/* Find the first object with matching name */
+Object* Machine::LookupObjectByName(std::string name) {
+  auto it = objects_.find(name);
+  if (it == objects_.end()) {
+    return nullptr;
+  }
+  return it->second;
+}
+
+/* Find the first object with matching name */
+Object* Machine::LookupObjectByClass(std::string name) {
+  for (auto it = objects_.begin(); it != objects_.end(); it++) {
+    if (name == it->second->classname()) {
+      return it->second;
+    }
+  }
+  return nullptr;
 }
 

@@ -57,11 +57,14 @@ Feb 2022
 
 ## Install
 
-For CentOS 8, install libaio-devel, SDL2-devel, gcc-c++.
+For CentOS 8,
 
-Then type `make`.
+```
+yum install -y libaio-devel SDL2-devel yaml-cpp-devel gcc-c++
+make -j 8
+```
 
-An ISO image file is needed to install OS. Change the file path in machine.cc
+An ISO image file is needed to install OS. Modify config/default.yaml to configure image path.
 
 Guest tools:
 

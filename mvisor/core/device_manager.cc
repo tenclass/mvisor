@@ -66,10 +66,8 @@ DeviceManager::~DeviceManager() {
   }
 
   if (root_) {
-    /* Both Disconnect and destruction are all invoked recursively */
+    /* Disconnect invoked recursively */
     root_->Disconnect();
-    delete root_;
-    root_ = nullptr;
   }
 
   if (epoll_fd_ != -1) {
@@ -143,6 +141,7 @@ void DeviceManager::UnregisterDevice(Device* device) {
 
 
 void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resource) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (io_resource.type == kIoResourceTypePio) {
     pio_handlers_.push_back(new IoHandler {
       .io_resource = io_resource,
@@ -162,6 +161,7 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
 }
 
 void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (io_resource.type == kIoResourceTypePio) {
     for (auto it = pio_handlers_.begin(); it != pio_handlers_.end(); it++) {
       if ((*it)->device == device && (*it)->io_resource.base == io_resource.base) {
@@ -216,10 +216,13 @@ void DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uint64_
     MV_PANIC("failed to add epoll event, ret=%d", ret);
   }
 
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   ioevents_.insert(event);
 }
 
 void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+
   auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
     return e->device == device && e->address == address &&
       ((type == kIoResourceTypePio) == !!(e->flags & KVM_IOEVENTFD_FLAG_PIO));
@@ -250,15 +253,25 @@ void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint6
 
 /* IO ports may overlap like MMIO addresses.
  * Use para-virtual drivers instead of IO operations to improve performance.
- * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
+ * It seems no race condition would happen among vCPUs
  */
 void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count, bool ioeventfd) {
   int it_count = 0;
   std::deque<IoHandler*>::iterator it;
+
+  mutex_.lock();
   for (it = pio_handlers_.begin(); it != pio_handlers_.end(); it++, it_count++) {
     auto &resource = (*it)->io_resource;
     if (port >= resource.base && port < resource.base + resource.length) {
       Device* device = (*it)->device;
+      if (it_count >= 3) {
+        // Move to the front for faster access next time
+        pio_handlers_.push_front(*it);
+        pio_handlers_.erase(it);
+        --it;
+      }
+      mutex_.unlock();
+
       uint8_t* ptr = data;
       for (uint32_t i = 0; i < count; i++) {
         if (is_write) {
@@ -267,12 +280,6 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
           device->Read(resource, port - resource.base, ptr, size);
         }
         ptr += size;
-      }
-      if (it_count >= 3) {
-        // Move to the front for faster access next time
-        pio_handlers_.push_front(*it);
-        pio_handlers_.erase(it);
-        --it;
       }
 
       // if (!ioevents_.empty() && !ioeventfd && is_write) {
@@ -284,10 +291,11 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
   }
 
   /* Accessing invalid port always returns error */
+  mutex_.unlock();
   memset(data, 0xFF, size);
-  if (true) {
+  if (machine_->debug()) {
     /* Not allowed unhandled IO for debugging */
-    MV_PANIC("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
+    MV_LOG("unhandled io %s port: 0x%x size: %x data: %016lx count: %d",
       is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
   }
 }
@@ -296,28 +304,30 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
 /* Use for loop to find MMIO handlers is stupid, unless we are sure addresses not overlapped.
  * But moving the handler to the front works great for now, 99% MMIOs are concentrated on
  * a few devices
- * FIXME: Needs mutex here, race condition could happen among multiple vCPUs
+ * Race condition could happen among multiple vCPUs, should be handled carefully in Read / Write
  */
 void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write, bool ioeventfd) {
   std::deque<IoHandler*>::iterator it;
   int it_count = 0;
-  uint8_t *ptr = data;
+
+  mutex_.lock();
   for (it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++, it_count++) {
     auto &resource = (*it)->io_resource;
     if (base >= resource.base && base < resource.base + resource.length) {
       Device* device = (*it)->device;
 
-      if (is_write) {
-        device->Write(resource, base - resource.base, ptr, size);
-      } else {
-        device->Read(resource, base - resource.base, ptr, size);
-      }
-      ptr += size;
       if (it_count >= 3) {
         // Move to the front for faster access next time
         mmio_handlers_.push_front(*it);
         mmio_handlers_.erase(it);
         --it;
+      }
+      mutex_.unlock();
+
+      if (is_write) {
+        device->Write(resource, base - resource.base, data, size);
+      } else {
+        device->Read(resource, base - resource.base, data, size);
       }
 
       // if (!ioevents_.empty() && !ioeventfd && is_write) {
@@ -420,7 +430,11 @@ IoTimer* DeviceManager::RegisterIoTimer(Device* device, int interval_ms, bool pe
     .callback = callback
   };
   timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
-  iotimers_.insert(timer);
+
+  {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    iotimers_.insert(timer);
+  }
 
   /* Wakeup ioevent thread and recalculate the timeout */
   uint64_t tmp = 1;
@@ -430,6 +444,7 @@ IoTimer* DeviceManager::RegisterIoTimer(Device* device, int interval_ms, bool pe
 }
 
 void DeviceManager::UnregisterIoTimer(IoTimer* timer) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   iotimers_.erase(timer);
   delete timer;
 }
@@ -443,19 +458,27 @@ int DeviceManager::CheckIoTimers() {
   auto now = std::chrono::steady_clock::now();
   int64_t min_timeout_ms = 100000;
 
+  std::vector<IoTimer*> triggered;
+
+  mutex_.lock();
   for (auto timer : iotimers_) {
     auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
     if (delta_ms <= 1) {
-      timer->callback();
-      if (!timer->permanent) {
-        UnregisterIoTimer(timer);
-        continue;
-      }
+      triggered.push_back(timer);
       timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
       delta_ms = timer->interval_ms;
     }
     if (delta_ms < min_timeout_ms) {
       min_timeout_ms = delta_ms;
+    }
+  }
+  mutex_.unlock();
+  
+  for (auto timer : triggered) {
+    timer->callback();
+    if (!timer->permanent) {
+      UnregisterIoTimer(timer);
+      continue;
     }
   }
   return min_timeout_ms;

@@ -16,18 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "virtio_console.h"
 #include <cstring>
 #include <array>
 #include <functional>
+#include <linux/virtio_console.h>
+#include "device_interface.h"
 #include "logger.h"
 #include "device_manager.h"
 #include "virtio_pci.h"
 
-class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
+class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
  private:
-  virtio_console_config           console_config_;
-  std::vector<VirtioConsolePort*> console_ports_;
+  virtio_console_config             console_config_;
+  std::vector<SerialPortInterface*> console_ports_;
 
  public:
   VirtioConsole() {
@@ -48,11 +49,13 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
   void Connect() {
     VirtioPci::Connect();
 
-    for (auto device : children_) {
-      VirtioConsolePort* port = dynamic_cast<VirtioConsolePort*>(device);
+    for (auto object : children_) {
+      SerialPortInterface* port = dynamic_cast<SerialPortInterface*>(object);
       if (port) {
         port->Initialize(this, console_ports_.size() + 1);
         console_ports_.push_back(port);
+      } else {
+        MV_PANIC("%s is not a port object", object->name());
       }
     }
   }
@@ -84,7 +87,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
 
   void OnPortInput(uint32_t id) {
     auto port = FindPortById(id);
-    port->OnGuestWritable();
+    port->OnWritable();
   }
 
   void OnPortOutput(uint32_t id) {
@@ -101,7 +104,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     }
   }
 
-  void SendPortMessage(VirtioConsolePort* port, uint8_t* data, size_t size) {
+  void SendMessage(SerialPortInterface* port, uint8_t* data, size_t size) {
     auto &vq = queues_[2 + port->port_id() * 2];
     WriteBuffer(vq, data, size);
   }
@@ -147,7 +150,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     }
   }
 
-  void SendControlEvent(VirtioConsolePort* port, uint16_t event, uint16_t value) {
+  void SendControlEvent(SerialPortInterface* port, uint16_t event, uint16_t value) {
     virtio_console_control vcc = {
       .id = port->port_id(),
       .event = event,
@@ -156,7 +159,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     WriteBuffer(queues_[2], &vcc, sizeof(vcc));
   }
 
-  VirtioConsolePort* FindPortById(uint32_t id) {
+  SerialPortInterface* FindPortById(uint32_t id) {
     for (auto &port: console_ports_) {
       if (port->port_id() == id) {
         return port;
@@ -165,7 +168,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
     return nullptr;
   }
 
-  void SendPortName(VirtioConsolePort* port) {
+  void SendPortName(SerialPortInterface* port) {
     virtio_console_control vcc = {
       .id = port->port_id(),
       .event = VIRTIO_CONSOLE_PORT_NAME,
@@ -198,7 +201,7 @@ class VirtioConsole : public VirtioPci, public VirtioConsoleInterface {
       break;
     
     case VIRTIO_CONSOLE_PORT_OPEN:
-      port->SetGuestConnected(vcc->value);
+      port->SetReady(vcc->value);
       break;
     default:
       MV_PANIC("port=%d event=%d", vcc->id, vcc->event);

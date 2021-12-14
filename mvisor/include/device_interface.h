@@ -93,4 +93,36 @@ class DisplayInterface {
 };
 
 
+
+class SerialPortInterface;
+class SerialDeviceInterface {
+ public:
+  virtual void SendMessage(SerialPortInterface* port, uint8_t* data, size_t size) = 0;
+};
+
+class SerialPortInterface {
+ public:
+  virtual void OnMessage(uint8_t* data, size_t size) = 0;
+  virtual void OnWritable() = 0;
+
+  virtual void SetReady(bool ready) {
+    ready_ = ready;
+  }
+
+  void Initialize(SerialDeviceInterface* device, uint32_t id) {
+    device_ = device;
+    port_id_ = id;
+  }
+  uint32_t port_id() { return port_id_; }
+  const char* port_name() { return port_name_; }
+
+ protected:
+  SerialDeviceInterface* device_;
+  uint32_t  port_id_;
+  char      port_name_[100];
+  bool      ready_ = false;
+  bool      writable_ = false;
+};
+
+
 #endif // _MVISOR_DEVICE_INTERFACES_H

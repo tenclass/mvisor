@@ -78,7 +78,7 @@ static void padstr8(uint8_t *buf, int buf_size, const char *src)
 int cdrom_read_toc_raw(int nb_sectors, uint8_t *buf, int msf, int session_num);
 int cdrom_read_toc(int nb_sectors, uint8_t *buf, int msf, int start_track);
 
-Cdrom::Cdrom()
+AhciCdrom::AhciCdrom()
 {
   type_ = kIdeStorageTypeCdrom;
 
@@ -174,7 +174,7 @@ Cdrom::Cdrom()
   };
 }
 
-void Cdrom::Connect() {
+void AhciCdrom::Connect() {
   IdeStorageDevice::Connect();
 
   if (image_) {
@@ -184,7 +184,7 @@ void Cdrom::Connect() {
   }
 }
 
-void Cdrom::SetError(int sense_key, int asc) {
+void AhciCdrom::SetError(int sense_key, int asc) {
   regs_.error = sense_key << 4;
   regs_.status = ATA_SR_DRDY | ATA_SR_ERR;
   regs_.count0 |= (regs_.count0 & ~7);
@@ -193,7 +193,7 @@ void Cdrom::SetError(int sense_key, int asc) {
 }
 
 
-void Cdrom::ParseCommandPacket() {
+void AhciCdrom::ParseCommandPacket() {
   uint8_t command = io_.atapi_command[0];
 
   auto handler = atapi_handlers_[command];
@@ -206,7 +206,7 @@ void Cdrom::ParseCommandPacket() {
   }
 }
 
-void Cdrom::Atapi_ReadSectors() {
+void AhciCdrom::Atapi_ReadSectors() {
   size_t vec_index = 0;
   size_t position = io_.lba_block * track_size_;
   size_t remain_bytes = io_.lba_count * track_size_;
@@ -223,7 +223,7 @@ void Cdrom::Atapi_ReadSectors() {
   }
 }
 
-void Cdrom::Atapi_RequestSense() {
+void AhciCdrom::Atapi_RequestSense() {
   uint8_t* buf = io_.buffer;
   int max_len = io_.atapi_command[4];
 
@@ -239,7 +239,7 @@ void Cdrom::Atapi_RequestSense() {
   }
 }
 
-void Cdrom::Atapi_ModeSense() {
+void AhciCdrom::Atapi_ModeSense() {
   uint8_t buf[100] = { 0 };
 
   switch (io_.atapi_command[2])
@@ -266,7 +266,7 @@ void Cdrom::Atapi_ModeSense() {
   }
 }
 
-void Cdrom::Atapi_TableOfContent() {
+void AhciCdrom::Atapi_TableOfContent() {
   uint8_t* buf = io_.buffer;
 
   int max_size = be16toh(*(uint16_t*)&io_.atapi_command[7]);
@@ -304,7 +304,7 @@ void Cdrom::Atapi_TableOfContent() {
   }
 }
 
-void Cdrom::Atapi_Inquiry() {
+void AhciCdrom::Atapi_Inquiry() {
   uint8_t* buf = io_.buffer;
 
   uint8_t size = io_.atapi_command[4];
@@ -323,7 +323,7 @@ void Cdrom::Atapi_Inquiry() {
   io_.nbytes = size > 36 ? 36 : size;
 }
 
-void Cdrom::Atapi_IdentifyData() {
+void AhciCdrom::Atapi_IdentifyData() {
   uint16_t p[256] = { 0 };
 
   /* Removable CDROM, 50us response, 12 byte packets */
@@ -374,4 +374,4 @@ void Cdrom::Atapi_IdentifyData() {
   memcpy(io_.buffer, p, io_.nbytes);
 }
 
-DECLARE_DEVICE(Cdrom);
+DECLARE_DEVICE(AhciCdrom);

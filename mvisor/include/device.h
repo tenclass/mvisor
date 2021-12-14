@@ -21,9 +21,6 @@
 
 
 #include "utilities.h"
-/* Use this macro at the end of .cc source file to declare your device */
-#define DECLARE_DEVICE(classname) __register_class(classname, 2)
-
 #include "object.h"
 #include <string>
 #include <list>

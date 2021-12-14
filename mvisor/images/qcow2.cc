@@ -193,8 +193,7 @@ class Qcow2Image : public DiskImage {
       backing_file_ = new Qcow2Image();
       backing_file_->Initialize(backing_filepath_, true);
     }
-  
-    MV_LOG("open qcow2 %s file size=%ld", path.c_str(), image_size_);
+    // MV_LOG("open qcow2 %s file size=%ld", path.c_str(), image_size_);
   }
 
   void InitializeQcow2Header() {

@@ -1,10 +1,10 @@
 INCLUDE_DIRS := ./include /usr/include
 LIBS := stdc++
-LIBS += pthread aio SDL2
+LIBS += pthread aio SDL2 yaml-cpp
 MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on
-CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -fno-exceptions -g
+CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -g
 CCFLAGS = $(CFLAGS) -std=c++17
 BUILD_DIR = ../build
 
