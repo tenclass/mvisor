@@ -20,6 +20,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <set>
+#include "device_interface.h"
 #include "linux/virtio_net.h"
 #include "logger.h"
 
@@ -34,18 +35,12 @@ struct RxMode {
   bool  no_broadcast;
 };
 
-struct MacAddress {
-  uint8_t data[6];
-  bool operator < (const MacAddress& a) const {
-    return memcmp(data, a.data, 6) < 0;
-  }
-};
-
-class VirtioNetwork : public VirtioPci {
+class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
  private:
   virtio_net_config net_config_;
   RxMode            rx_mode_;
   std::set<MacAddress> mac_table_;
+  NetworkBackendInterface* backend_ = nullptr;
 
  public:
   VirtioNetwork() {
@@ -54,7 +49,11 @@ class VirtioNetwork : public VirtioPci {
     pci_header_.device_id = 0x1000;
     pci_header_.subsys_id = 0x0001;
     
-    device_features_ |= (1UL << VIRTIO_NET_F_MAC) |
+    // FIXME: IRQ interrupts sometimes not work on Windows 10
+    AddMsiXCapability(1, 4);
+    
+    device_features_ |=
+      (1UL << VIRTIO_NET_F_MAC) |
       (1UL << VIRTIO_NET_F_MRG_RXBUF) |
       (1UL << VIRTIO_NET_F_STATUS) |
       (1UL << VIRTIO_NET_F_CTRL_VQ) |
@@ -74,6 +73,29 @@ class VirtioNetwork : public VirtioPci {
     mac[2] = 0x00;
     for (int i = 3; i < 6; i++) {
       mac[i] = rand() & 0xFF;
+    }
+  }
+
+  virtual void Disconnect() {
+    VirtioPci::Disconnect();
+    if (backend_) {
+      delete dynamic_cast<Object*>(backend_);
+      backend_ = nullptr;
+    }
+  }
+
+  virtual void Connect() {
+    VirtioPci::Connect();
+    /* Check user network or tap network */
+    if (has_key("backend")) {
+      std::string network_type = std::get<std::string>(key_values_["backend"]);
+      backend_ = dynamic_cast<NetworkBackendInterface*>(Object::Create(network_type.c_str()));
+      MV_ASSERT(backend_);
+      MacAddress mac;
+      memcpy(mac.data, net_config_.mac, sizeof(mac.data));
+      backend_->Initialize(this, mac);
+    } else {
+      MV_PANIC("network backend is not set");
     }
   }
 
@@ -123,7 +145,8 @@ class VirtioNetwork : public VirtioPci {
     }
   }
 
-  void WriteBuffer(VirtQueue& vq, void* buffer, size_t size) {
+  virtual void WriteBuffer(void* buffer, size_t size) {
+    VirtQueue& vq = queues_[0];
     size_t offset = 0;
     while (offset < size) {
       VirtElement element;
@@ -131,7 +154,16 @@ class VirtioNetwork : public VirtioPci {
         break;
       }
 
-      element.length = 0;
+      if (offset == 0) {
+        /* Prepend virtio net header to the buffer vector, the first buffer length = 0xC */
+        virtio_net_hdr_v1 header = { .gso_type = VIRTIO_NET_HDR_GSO_NONE };
+        auto &iov = element.vector[0];
+        MV_ASSERT(iov.iov_len == sizeof(header));
+        memcpy(iov.iov_base, &header, sizeof(header));
+        element.length += sizeof(header);
+        element.vector.pop_front();
+      }
+
       size_t remain_bytes = size - offset;
       for (auto &iov : element.vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
@@ -154,10 +186,9 @@ class VirtioNetwork : public VirtioPci {
     vector.pop_front();
 
     MV_ASSERT(header->gso_type == VIRTIO_NET_HDR_GSO_NONE);
-    for (auto &vec : vector) {
-      DumpHex(vec.iov_base, vec.iov_len);
+    if (backend_) {
+      backend_->OnFrameFromGuest(vector);
     }
-    MV_LOG("vector size=%lu bytes=%lu", vector.size(), element.size);
   }
 
   void HandleControl(VirtQueue& vq, VirtElement& element) {
@@ -166,6 +197,7 @@ class VirtioNetwork : public VirtioPci {
 
     virtio_net_ctrl_hdr* control = (virtio_net_ctrl_hdr*)vector.front().iov_base;
     vector.pop_front();
+    // MV_LOG("control cls=0x%x cmd=0x%x vector size=%d", control->cls, control->cmd, vector.size());
 
     uint8_t* status = (uint8_t*)vector.back().iov_base;
     MV_ASSERT(vector.back().iov_len == 1);
@@ -177,7 +209,7 @@ class VirtioNetwork : public VirtioPci {
     switch (control->cls)
     {
     case VIRTIO_NET_CTRL_RX:
-      MV_ASSERT(iov.iov_len == 1);
+      MV_ASSERT(iov.iov_len >= 1);
       *status = ControlRxMode(control->cmd, *(uint8_t*)iov.iov_base);
       break;
     case VIRTIO_NET_CTRL_MAC:

@@ -22,7 +22,7 @@
 #include "pci_device.h"
 
 #include <linux/virtio_pci.h>
-#include <linux/uio.h>
+#include <sys/uio.h>
 #include <deque>
 
 /* We support indirect buffer descriptors */

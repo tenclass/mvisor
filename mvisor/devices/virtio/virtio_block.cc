@@ -143,8 +143,8 @@ class VirtioBlock : public VirtioPci {
       for (auto &iov : vector) {
         void* buffer = iov.iov_base;
         size_t length = iov.iov_len;
-        size_t bytes = (size_t )image_->Read(buffer, position, length);
-        if (bytes != length) {
+        ssize_t bytes = image_->Read(buffer, position, length);
+        if (bytes != (ssize_t)length) {
           MV_PANIC("failed read bytes=%lx pos=%lx length=%lx", bytes, position, length);
         }
         position += length;
@@ -158,7 +158,10 @@ class VirtioBlock : public VirtioPci {
       for (auto &iov : vector) {
         void* buffer = iov.iov_base;
         size_t length = iov.iov_len;
-        size_t bytes = (size_t )image_->Write(buffer, position, length);
+        ssize_t bytes = image_->Write(buffer, position, length);
+        if (bytes <= 0) {
+          break;
+        }
         position += bytes;
       }
       *status = 0;

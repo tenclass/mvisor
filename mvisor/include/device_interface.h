@@ -21,6 +21,9 @@
 
 #include <functional>
 #include <vector>
+#include <cstring>
+#include <deque>
+#include <sys/uio.h>
 
 class KeyboardInputInterface {
  public:
@@ -124,5 +127,31 @@ class SerialPortInterface {
   bool      writable_ = false;
 };
 
+
+struct MacAddress {
+  union {
+    uint8_t   data[6];
+    uint64_t  value : 48;
+  };
+  bool operator < (const MacAddress& a) const {
+    return memcmp(data, a.data, 6) < 0;
+  }
+};
+class NetworkDeviceInterface {
+ public:
+  virtual void WriteBuffer(void* buffer, size_t size) = 0;
+};
+class DeviceManager;
+class NetworkBackendInterface {
+ public:
+  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) = 0;
+  virtual void OnFrameFromGuest(std::deque<struct iovec>& vector) = 0;
+  virtual void OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) = 0;
+
+  NetworkDeviceInterface* device() { return device_; }
+ protected:
+  NetworkDeviceInterface* device_;
+  MacAddress guest_mac_;
+};
 
 #endif // _MVISOR_DEVICE_INTERFACES_H

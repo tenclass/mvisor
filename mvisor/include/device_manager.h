@@ -34,18 +34,28 @@ struct IoHandler {
   const MemoryRegion* memory_region;
 };
 
+typedef std::function<void()> VoidCallback;
+typedef std::function<void(uint32_t)> EventsCallback;
+
+enum IoEventType {
+  kIoEventPio,
+  kIoEventMmio,
+  kIoEventFd
+};
+
 struct IoEvent {
+  IoEventType     type;
   Device*         device;
   uint64_t        address;
   uint32_t        length;
   uint64_t        datamatch;
   uint32_t        flags;
   int             fd;
+  EventsCallback  callback;
 };
 
 /* Currently used for VGA auto refresh */
 typedef std::chrono::steady_clock::time_point IoTimePoint;
-typedef std::function<void()> VoidCallback;
 struct IoTimer {
   Device*       device;
   bool          permanent;
@@ -68,6 +78,8 @@ class DeviceManager {
   void UnregisterIoHandler(Device* device, const IoResource& io_resource);
   void RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
   void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
+  void RegisterIoEvent(Device* device, int fd, uint32_t events, EventsCallback callback);
+  void UnregisterIoEvent(Device* device, int fd);
   IoTimer* RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback);
   void UnregisterIoTimer(IoTimer* timer);
   void ModifyIoTimer(IoTimer* timer, int interval_ms);

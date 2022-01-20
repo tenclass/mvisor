@@ -135,7 +135,6 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
         break;
       }
 
-      element.length = 0;
       size_t remain_bytes = size - offset;
       for (auto &iov : element.vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;

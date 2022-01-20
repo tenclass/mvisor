@@ -23,11 +23,12 @@
 #include <sys/ioctl.h>
 #include <sys/eventfd.h>
 #include <sys/epoll.h>
+#include <signal.h>
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
 
-#define IOEVENTFD_MAX_EVENTS  20
+#define IOEVENTFD_MAX_EVENTS  1000
 
 /* SystemRoot is a motherboard that holds all the funcational devices */
 class SystemRoot : public Device {
@@ -192,6 +193,9 @@ void DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uint64_
   };
   if (type == kIoResourceTypePio) {
     event->flags |= KVM_IOEVENTFD_FLAG_PIO;
+    event->type = kIoEventPio;
+  } else {
+    event->type = kIoEventMmio;
   }
   struct kvm_ioeventfd kvm_ioevent = {
     .datamatch = event->datamatch,
@@ -245,6 +249,46 @@ void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint6
   ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, event->fd, nullptr);
   if (ret < 0) {
     MV_PANIC("failed to add epoll event, ret=%d", ret);
+  }
+
+  ioevents_.erase(event);
+}
+
+
+void DeviceManager::RegisterIoEvent(Device* device, int fd, uint32_t events, EventsCallback callback) {
+  IoEvent* event = new IoEvent {
+    .type = kIoEventFd,
+    .device = device,
+    .fd = fd,
+    .callback = callback
+  };
+  struct epoll_event epoll_event = {
+    .events = events,
+    .data = {
+      .ptr = (void*)event
+    }
+  };
+  int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, event->fd, &epoll_event);
+  if (ret < 0) {
+    MV_PANIC("failed to add epoll event, fd=%d ret=%d", event->fd, ret);
+  }
+
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  ioevents_.insert(event);
+}
+
+void DeviceManager::UnregisterIoEvent(Device* device, int fd) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+  auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
+    return e->device == device && e->fd == fd;
+  });
+  MV_ASSERT(it != ioevents_.end());
+  IoEvent* event = *it;
+
+  int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, event->fd, nullptr);
+  if (ret < 0) {
+    MV_PANIC("failed to delete epoll event, fd=%d ret=%d", event->fd, ret);
   }
 
   ioevents_.erase(event);
@@ -373,6 +417,8 @@ void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
 }
 
 void DeviceManager::InitializeIoEvent() {
+  signal(SIGPIPE, SIG_IGN);
+
   epoll_fd_ = epoll_create(IOEVENTFD_MAX_EVENTS);
   
   stop_event_fd_ = eventfd(0, 0);
@@ -390,7 +436,7 @@ void DeviceManager::InitializeIoEvent() {
 }
 
 void DeviceManager::IoEventLoop() {
-  SetThreadName("ioevent");
+  SetThreadName("device-ioevent");
 
   struct epoll_event events[IOEVENTFD_MAX_EVENTS];
   uint64_t tmp;
@@ -409,13 +455,22 @@ void DeviceManager::IoEventLoop() {
       }
 
       IoEvent* ioevent = (IoEvent*)events[i].data.ptr;
-      if (read(ioevent->fd, &tmp, sizeof(tmp)) < 0) {
-        MV_PANIC("failed to read event");
+      if (ioevent->type == kIoEventPio || ioevent->type == kIoEventMmio) {
+        if (read(ioevent->fd, &tmp, sizeof(tmp)) < 0) {
+          MV_PANIC("failed to read event");
+        }
       }
-      if (ioevent->flags & KVM_IOEVENTFD_FLAG_PIO) {
+      switch (ioevent->type)
+      {
+      case kIoEventPio:
         HandleIo(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true, 1, true);
-      } else {
+        break;
+      case kIoEventMmio:
         HandleMmio(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true, true);
+        break;
+      case kIoEventFd:
+        ioevent->callback(events[i].events);
+        break;
       }
     }
   }

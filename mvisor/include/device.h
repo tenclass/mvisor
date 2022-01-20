@@ -52,7 +52,7 @@ class Device : public Object {
   virtual void Reset();
 
   const std::list<IoResource>& io_resources() const { return io_resources_; }
-
+  DeviceManager* manager() { return manager_; }
  protected:
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
   void RemoveIoResource(IoResourceType type, const char* name);

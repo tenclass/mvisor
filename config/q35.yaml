@@ -43,3 +43,7 @@ objects:
 
   - class: vga
     rom: ../share/vgabios-stdvga.bin
+
+  - class: virtio-network
+    backend: uip
+
