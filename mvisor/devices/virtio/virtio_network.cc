@@ -86,6 +86,16 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
   virtual void Connect() {
     VirtioPci::Connect();
+
+    /* Configurable MAC address */
+    if (has_key("mac")) {
+      uint32_t mac[6];
+      std::string mac_string = std::get<std::string>(key_values_["mac"]);
+      sscanf(mac_string.c_str(), "%02x:%02x:%02x:%02x:%02x:%02x", &mac[0], &mac[1], &mac[2],
+        &mac[3], &mac[4], &mac[5]);
+      for (int i = 0; i < 6; i++)
+        net_config_.mac[i] = mac[i];
+    }
     /* Check user network or tap network */
     if (has_key("backend")) {
       std::string network_type = std::get<std::string>(key_values_["backend"]);
@@ -120,7 +130,9 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
   }
 
   void OnReceive(int queue_index) {
-    MV_LOG("OnReceive %d", queue_index);
+    if (debug_) {
+      MV_LOG("OnReceive %d", queue_index);
+    }
   }
 
   void OnTransmit(int queue_index) {
@@ -151,6 +163,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     while (offset < size) {
       VirtElement element;
       if (!PopQueue(vq, element)) {
+        MV_PANIC("network queue is full, increase queue size");
         break;
       }
 
@@ -175,6 +188,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
       PushQueue(vq, element);
       NotifyQueue(vq);
+      MV_ASSERT(offset == size);
     }
   }
 

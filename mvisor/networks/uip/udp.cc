@@ -78,8 +78,8 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
   ip->tos = 0;
   ip->tot_len = htons(sizeof(udphdr) + sizeof(iphdr) + packet->data_length);
   ip->id = 0;
-  ip->frag_off = 0;
-  ip->ttl = 64;
+  ip->frag_off = htons(0x4000);
+  ip->ttl = 128;
   ip->protocol = 0x11;
   ip->check = 0;
   ip->saddr = htonl(dip_);
@@ -125,7 +125,11 @@ void RedirectUdpSocket::InitializeRedirect() {
       OnRemoteDataAvailable();
     }
   });
-  MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
+
+  debug_ = device->debug();
+  if (debug_) {
+    MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
+  }
 }
 
 void RedirectUdpSocket::OnRemoteDataAvailable() {

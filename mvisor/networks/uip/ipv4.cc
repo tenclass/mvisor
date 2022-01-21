@@ -26,6 +26,7 @@ Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip)
 	sip_ = ntohl(ip->saddr);
 	dip_ = ntohl(ip->daddr);
 	closed_ = false;
+	debug_ = false;
 	active_time_ = time(nullptr);
 }
 

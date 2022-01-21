@@ -41,10 +41,11 @@ struct DhcpMessage {
 } __attribute__((packed));
 
 
-void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask) {
+void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask, uint32_t guest_ip) {
   router_mac_ = router_mac;
   router_ip_ = router_ip;
   subnet_mask_ = subnet_mask;
+  guest_ip_ = guest_ip;
 
   // Load DNS nameservers
   FILE* fp = fopen("/etc/resolv.conf", "r");
@@ -145,9 +146,7 @@ std::string DhcpServiceUdpSocket::CreateDhcpResponse(DhcpMessage* request, int d
   response->message_type = 2;
   response->client_ip = 0;
 
-  // Assign IP 172.16.1.128 to machine
-  // FIXME: should be configurable
-  response->your_ip = htonl(0xAC100180);
+  response->your_ip = htonl(guest_ip_);
   response->next_server_ip = 0;
   response->relay_agent_ip = 0;
 

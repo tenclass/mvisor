@@ -53,6 +53,7 @@ class Uip : public Object, public NetworkBackendInterface {
   MacAddress router_mac_;
   uint32_t router_ip_;
   uint32_t router_subnet_mask_;
+  uint32_t guest_ip_;
   std::list<TcpSocket*> tcp_sockets_;
   std::list<UdpSocket*> udp_sockets_;
   std::recursive_mutex mutex_;
@@ -70,20 +71,24 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   /* UIP Router Configuration
-   * Router MAC: 0050FF000001
-   * Router IP: 172.16.0.1
+   * Router MAC: 5255C0A80001
+   * Router IP: 192.168.0.1
    */
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
     device_ = device;
     guest_mac_ = mac;
-    memcpy(router_mac_.data, "\x00\x50\xFF\x00\x00\x01", 6);
-    router_ip_ = 0xAC100001;
+    memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", 6);
+
+    // Assign IP 192.168.1.1 to machine
+    // FIXME: should be configurable
     router_subnet_mask_ = 0xFFFF0000;
+    router_ip_ = 0xC0A80001;
+    guest_ip_ = 0xC0A80101;
 
     // This function could only be called once
     MV_ASSERT(real_device_ == nullptr);
     real_device_ = dynamic_cast<Device*>(device_);
-    timer_ = real_device_->manager()->RegisterIoTimer(real_device_, 5000, true, [this](){
+    timer_ = real_device_->manager()->RegisterIoTimer(real_device_, 10 * 1000, true, [this](){
       OnTimer();
     });
   }
@@ -106,7 +111,9 @@ class Uip : public Object, public NetworkBackendInterface {
         it++;
       }
     }
-    MV_LOG("tcp_sockets size=%lu udp_sockets size=%lu", tcp_sockets_.size(), udp_sockets_.size());
+    if (real_device_->debug()) {
+      MV_LOG("tcp_sockets.size=%lu udp_sockets.size=%lu", tcp_sockets_.size(), udp_sockets_.size());
+    }
   }
 
   virtual void OnFrameFromGuest(std::deque<struct iovec>& vector) {
@@ -190,13 +197,14 @@ class Uip : public Object, public NetworkBackendInterface {
       break;
     }
     default:
-      MV_LOG("==================Not UDP or TCP===================");
-      for (auto &vec : vector) {
-        DumpHex(vec.iov_base, vec.iov_len);
+      if (real_device_->debug()) {
+        MV_LOG("==================Not UDP or TCP===================");
+        for (auto &vec : vector) {
+          DumpHex(vec.iov_base, vec.iov_len);
+        }
+        MV_LOG("vector size=%lu", vector.size());
+        MV_PANIC("ip packet protocol=%d", ip->protocol);
       }
-      MV_LOG("vector size=%lu", vector.size());
-      MV_ASSERT(vector.size() == 2);
-      MV_PANIC("ip packet protocol=%d", ip->protocol);
       break;
     }
   }
@@ -204,7 +212,7 @@ class Uip : public Object, public NetworkBackendInterface {
   TcpSocket* LookupTcpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     for (auto socket : tcp_sockets_) {
-      if (socket->Equals(sip, dip, sport, dport) && socket->IsActive()) {
+      if (socket->Equals(sip, dip, sport, dport)) {
         return socket;
       }
     }
@@ -225,7 +233,6 @@ class Uip : public Object, public NetworkBackendInterface {
     if (tcp->syn) {
       if (socket == nullptr) {
         socket = new RedirectTcpSocket(this, eth, ip, tcp);
-        socket->InitializeRedirect(tcp);
         std::lock_guard<std::recursive_mutex> lock(mutex_);
         tcp_sockets_.push_back(socket);
       }
@@ -233,20 +240,31 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   
     if (socket == nullptr) {
-      MV_LOG("failed to lookup TCP %x:%u -> %x:%u", sip, sport, dip, dport);
+      if (real_device_->debug()) {
+        MV_LOG("failed to lookup TCP %x:%u -> %x:%u syn:%d ack:%d rst:%d fin:%d", sip, sport, dip, dport,
+          tcp->syn, tcp->ack, tcp->rst, tcp->fin);
+      }
       return;
-    }
-    socket->UpdateGuestAck(tcp);
-
-    // If send window buffer is full, try again when new guest ack comes
-    if (tcp->ack && socket->IsGuestOverflow()) {
-      socket->OnRemoteDataAvailable();
     }
 
     // Guest is closing the TCP
     if (tcp->fin) {
       socket->Shutdown(SHUT_WR);
       return;
+    }
+
+    // ACK is always set if not SYN or FIN or RST
+    if (!tcp->ack) {
+      return;
+    }
+
+    if (!socket->UpdateGuestAck(tcp)) {
+      return;
+    }
+
+    // If send window buffer is full, try again when new guest ack comes
+    if (socket->IsGuestOverflow()) {
+      socket->OnRemoteDataAvailable();
     }
 
     size_t payload_length = ntohs(ip->tot_len) - ip->ihl * 4 - tcp->doff * 4;
@@ -280,7 +298,7 @@ class Uip : public Object, public NetworkBackendInterface {
   UdpSocket* LookupUdpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     for (auto socket : udp_sockets_) {
-      if (socket->Equals(sip, dip, sport, dport) && socket->IsActive()) {
+      if (socket->Equals(sip, dip, sport, dport)) {
         return socket;
       }
     }
@@ -298,12 +316,13 @@ class Uip : public Object, public NetworkBackendInterface {
       // Check if it's UDP broadcast
       if (dip == 0xFFFFFFFF || (dip & router_subnet_mask_) == (router_ip_ & router_subnet_mask_)) {
         if (dport == 67) {
-          MV_LOG("new dhcp socket");
           auto dhcp = new DhcpServiceUdpSocket(this, eth, ip, udp);
-          dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_);
+          dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_, guest_ip_);
           socket = dhcp;
         } else {
-          MV_LOG("unhandled UDP to %x:%d", dip, dport);
+          if (real_device_->debug()) {
+            MV_LOG("unhandled UDP to %x:%d", dip, dport);
+          }
           return;
         }
       } else {

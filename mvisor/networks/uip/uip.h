@@ -30,9 +30,9 @@
 
 #define UIP_MAX_BUFFER_SIZE (64*1024 + 16)
 #define UIP_MAX_UDP_PAYLOAD (64*1024 - 20 - 8)
-#define UIP_MAX_TCP_PAYLOAD (64*1024 - 20 - 20)
+#define UIP_MAX_TCP_PAYLOAD (64*1024 - 144)
 
-#define REDIRECT_TIMEOUT_SECONDS (20)
+#define REDIRECT_TIMEOUT_SECONDS (120)
 
 struct PseudoHeader {
 	uint32_t sip;
@@ -69,13 +69,14 @@ class Ipv4Socket {
   uint32_t dip_;
   bool closed_;
   time_t active_time_;
+  bool debug_;
 };
 
 
 class TcpSocket : public Ipv4Socket {
  public:
   TcpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, tcphdr* tcp);
-  void UpdateGuestAck(tcphdr* tcp);
+  bool UpdateGuestAck(tcphdr* tcp);
    
   inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
@@ -86,6 +87,8 @@ class TcpSocket : public Ipv4Socket {
   virtual Ipv4Packet* AllocatePacket();
   uint16_t CalculateTcpChecksum(Ipv4Packet* packet);
   void OnDataFromHost(Ipv4Packet* packet, uint32_t tcp_flags);
+  void ParseTcpOptions(tcphdr* tcp);
+  void FillTcpOptions(tcphdr* tcp);
 
   uint16_t sport_;
   uint16_t dport_;
@@ -96,6 +99,9 @@ class TcpSocket : public Ipv4Socket {
   uint32_t isn_guest_;
   uint32_t ack_host_;
   uint32_t seq_host_;
+  uint16_t mss_;
+  uint8_t  window_scale_;
+  bool     sack_permitted_;
 };
 
 class UdpSocket : public Ipv4Socket {
@@ -120,7 +126,6 @@ class RedirectTcpSocket : public TcpSocket {
  public:
   RedirectTcpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, tcphdr* tcp);
   virtual ~RedirectTcpSocket();
-  void InitializeRedirect(tcphdr* tcp);
   void Shutdown(int how);
   void OnDataFromGuest(void* data, size_t length);
   void OnRemoteDataAvailable();
@@ -129,6 +134,7 @@ class RedirectTcpSocket : public TcpSocket {
   virtual bool IsActive();
 
  protected:
+  void InitializeRedirect();
   void OnRemoteConnected();
 
   bool write_done_;
@@ -162,16 +168,17 @@ class DhcpServiceUdpSocket : public UdpSocket {
   DhcpServiceUdpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, udphdr* udp) :
     UdpSocket(backend, eth, ip, udp) {
   }
-  void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask);
+  void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask, uint32_t guest_ip);
   void OnDataFromGuest(void* data, size_t length);
   std::string CreateDhcpResponse(DhcpMessage* request, int dhcp_type);
   size_t FillDhcpOptions(uint8_t* option, int dhcp_type);
 
  private:
-  MacAddress router_mac_;
-  uint32_t router_ip_;
-  uint32_t subnet_mask_;
   std::vector<uint32_t> nameservers_;
+  MacAddress router_mac_;
+  uint32_t subnet_mask_;
+  uint32_t router_ip_;
+  uint32_t guest_ip_;
 };
 
 #endif // _MVISOR_NETWORKS_USER_H

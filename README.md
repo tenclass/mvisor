@@ -34,9 +34,9 @@ Nov 2021
 18. QCOW2 ✅
 
 Milestone 2: Multimedia & Networking
-Dec 2021
+Feb 2022
 
-1. VirtIO (Console ✅ / Block ✅ / Net / Balloon)
+1. VirtIO (Console ✅ / Block ✅ / Net ✅ / Balloon)
 2. SpiceAgent ✅
 3. QemuGuestAgent
 4. Qxl ✅
@@ -48,11 +48,11 @@ Dec 2021
 10. WebDAV
 
 Milestone 3: Migration
-Jan 2022
+Mar 2022
 ...
 
 Milestone 4: Virtualization Management
-Feb 2022
+Apr 2022
 ...
 
 ## Install
