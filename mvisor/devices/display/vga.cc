@@ -54,14 +54,11 @@ Vga::Vga() {
   pci_header_.irq_pin = 1;
   
 
-  /* Bar 0: 256MB VRAM (total) */
+  /* Bar 0: 256MB VRAM (default total) */
   vga_mem_size_ = 16 << 20;
   vram_size_ = 256 << 20;
-  vram_base_ = (uint8_t*)mmap(nullptr, vram_size_, PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
 
-  AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* 384MB vgamem */
-  pci_bars_[0].host_memory = vram_base_;
+  AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* vgamem */
   /* FIXME: bar 2 should be implemented for stdvga if Qxl is not enabled??? */
 
   AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
@@ -70,9 +67,6 @@ Vga::Vga() {
 }
 
 Vga::~Vga() {
-  if (vram_base_) {
-    munmap((void*)vram_base_, vram_size_);
-  }
 }
 
 void Vga::Reset() {
@@ -101,19 +95,32 @@ void Vga::Reset() {
 }
 
 void Vga::Connect() {
-  PciDevice::Connect();
   /* Initialize rom data and rom bar size */
-  if (!pci_rom_.data) {
-    if (has_key("rom")) {
-      std::string path = std::get<std::string>(key_values_["rom"]);
-      LoadRomFile(path.c_str());
+  if (!pci_rom_.data && has_key("rom")) {
+    std::string path = std::get<std::string>(key_values_["rom"]);
+    LoadRomFile(path.c_str());
+  }
+  if (!vram_base_) {
+    if (has_key("vram_size")) {
+      uint64_t size = std::get<uint64_t>(key_values_["vram_size"]);
+      MV_ASSERT(size >= 32 && size <= 1024);
+      vram_size_ = size << 20;
     }
+    vram_base_ = (uint8_t*)mmap(nullptr, vram_size_, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    pci_bars_[0].host_memory = vram_base_;
   }
 
   refresh_timer_ = manager_->RegisterIoTimer(this, 1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
+
+  PciDevice::Connect();
 }
 
 void Vga::Disconnect() {
+  if (vram_base_) {
+    munmap((void*)vram_base_, vram_size_);
+    vram_base_ = nullptr;
+  }
   manager_->UnregisterIoTimer(refresh_timer_);
   PciDevice::Disconnect();
 }

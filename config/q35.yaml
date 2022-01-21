@@ -40,6 +40,7 @@ objects:
   
   - class: qxl
     rom: ../share/vgabios-qxl.bin
+    vram_size: 256
 
   - class: vga
     rom: ../share/vgabios-stdvga.bin
