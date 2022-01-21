@@ -38,31 +38,31 @@ Ipv4Packet* UdpSocket::AllocatePacket() {
 }
 
 uint16_t UdpSocket::CalculateUdpChecksum(Ipv4Packet* packet) {
-	PseudoHeader hdr;
-	auto ip = packet->ip;
+  PseudoHeader hdr;
+  auto ip = packet->ip;
   auto udp = packet->udp;
-	int udp_len;
-	uint8_t *pad;
+  int udp_len;
+  uint8_t *pad;
 
-	ip = packet->ip;
+  ip = packet->ip;
 
-	hdr.sip = ip->saddr;
-	hdr.dip	= ip->daddr;
-	hdr.zero = 0;
-	hdr.protocol = ip->protocol;
-	hdr.length = udp->len;
+  hdr.sip = ip->saddr;
+  hdr.dip = ip->daddr;
+  hdr.zero = 0;
+  hdr.protocol = ip->protocol;
+  hdr.length = udp->len;
 
-	udp_len	= ntohs(udp->len);
+  udp_len = ntohs(udp->len);
 
-	if (udp_len % 2) {
-		pad = (uint8_t *)udp + udp_len;
-		*pad = 0;
-		memcpy((uint8_t *)udp + udp_len + 1, &hdr, sizeof(hdr));
-		return CalculateChecksum((uint8_t *)udp, udp_len + 1 + sizeof(hdr));
-	} else {
-		memcpy((uint8_t *)udp + udp_len, &hdr, sizeof(hdr));
-		return CalculateChecksum((uint8_t *)udp, udp_len + sizeof(hdr));
-	}
+  if (udp_len % 2) {
+    pad = (uint8_t *)udp + udp_len;
+    *pad = 0;
+    memcpy((uint8_t *)udp + udp_len + 1, &hdr, sizeof(hdr));
+    return CalculateChecksum((uint8_t *)udp, udp_len + 1 + sizeof(hdr));
+  } else {
+    memcpy((uint8_t *)udp + udp_len, &hdr, sizeof(hdr));
+    return CalculateChecksum((uint8_t *)udp, udp_len + sizeof(hdr));
+  }
 }
 
 void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {

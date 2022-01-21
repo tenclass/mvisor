@@ -36,11 +36,11 @@ struct AHCIHostControlRegs {
   uint32_t    extended_capabilities;
   uint32_t    bohc; // BIOS/OS handoff control and status
 
-	// 0x2C - 0x9F, Reserved
-	uint8_t     reserved[0xA0-0x2C];
+  // 0x2C - 0x9F, Reserved
+  uint8_t     reserved[0xA0-0x2C];
  
-	// 0xA0 - 0xFF, Vendor specific registers
-	uint8_t     vendor[0x100-0xA0];
+  // 0xA0 - 0xFF, Vendor specific registers
+  uint8_t     vendor[0x100-0xA0];
 } __attribute__((packed));
 
 class AhciHost;

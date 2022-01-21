@@ -34,13 +34,13 @@ struct ClassItem {
 void register_class(int type, const char* name, const char* source_path, ClassCreator create);
 Object* realize_class(const char* name);
 
-#define __register_class(cb, type)	\
+#define __register_class(cb, type) \
 static Object* __create__##cb() { \
   auto o = new cb; \
   return o; \
 } \
 static void __attribute__ ((constructor)) __init__##cb(void) \
-{	\
+{ \
   register_class(type, #cb, __FILE__, __create__##cb); \
 }
 

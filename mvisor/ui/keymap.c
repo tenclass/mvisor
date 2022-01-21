@@ -503,23 +503,23 @@ const size_t qemu_input_map_qcode_to_atset1_len = sizeof(qemu_input_map_qcode_to
  * The output `transcoded` might have more than one byte.
  */
 int TranslateScancode(uint8_t scancode, int pressed, uint8_t transcoded[10]) {
-	if (scancode >= qemu_input_map_usb_to_qcode_len) {
-		return 0;
-	}
-	uint16_t qcode = qemu_input_map_usb_to_qcode[scancode];
-	if (qcode >= qemu_input_map_qcode_to_atset1_len) {
-		return 0;
-	}
+  if (scancode >= qemu_input_map_usb_to_qcode_len) {
+    return 0;
+  }
+  uint16_t qcode = qemu_input_map_usb_to_qcode[scancode];
+  if (qcode >= qemu_input_map_qcode_to_atset1_len) {
+    return 0;
+  }
   int transcoded_size = 0;
-	uint16_t keycode = qemu_input_map_qcode_to_atset1[qcode];
-	if (keycode & 0xff00) {
-		transcoded[transcoded_size++] = keycode >> 8;
-	}
-	if (!pressed) {
-		keycode |= 0x80;
-	}
+  uint16_t keycode = qemu_input_map_qcode_to_atset1[qcode];
+  if (keycode & 0xff00) {
+    transcoded[transcoded_size++] = keycode >> 8;
+  }
+  if (!pressed) {
+    keycode |= 0x80;
+  }
   if (keycode & 0xff) {
-	  transcoded[transcoded_size++] = keycode;
+    transcoded[transcoded_size++] = keycode;
   }
   return transcoded_size;
 }

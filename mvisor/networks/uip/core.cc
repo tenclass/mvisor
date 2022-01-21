@@ -33,19 +33,19 @@
 #include "device_manager.h"
 
 struct ArpMessage {
-	uint16_t		ar_hrd;		/* format of hardware address	*/
-	uint16_t		ar_pro;		/* format of protocol address	*/
-	uint8_t	    ar_hln;		/* length of hardware address	*/
-	uint8_t 	  ar_pln;		/* length of protocol address	*/
-	uint16_t		ar_op;		/* ARP opcode (command)		*/
+  uint16_t    ar_hrd;    /* format of hardware address  */
+  uint16_t    ar_pro;    /* format of protocol address  */
+  uint8_t     ar_hln;    /* length of hardware address  */
+  uint8_t     ar_pln;    /* length of protocol address  */
+  uint16_t    ar_op;     /* ARP opcode (command)    */
 
-	 /*
-	  *	 Ethernet looks like this : This bit is variable sized however...
-	  */
-	uint8_t 		ar_sha[ETH_ALEN];	/* sender hardware address	*/
-	uint32_t 		ar_sip;		/* sender IP address		*/
-	uint8_t 		ar_tha[ETH_ALEN];	/* target hardware address	*/
-	uint32_t 		ar_tip;		/* target IP address		*/
+   /*
+    * Ethernet looks like this : This bit is variable sized however...
+    */
+  uint8_t     ar_sha[ETH_ALEN];  /* sender hardware address  */
+  uint32_t    ar_sip;            /* sender IP address    */
+  uint8_t     ar_tha[ETH_ALEN];  /* target hardware address  */
+  uint32_t    ar_tip;            /* target IP address    */
 } __attribute__((packed));
 
 class Uip : public Object, public NetworkBackendInterface {
@@ -77,7 +77,7 @@ class Uip : public Object, public NetworkBackendInterface {
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
     device_ = device;
     guest_mac_ = mac;
-    memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", 6);
+    memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", ETH_ALEN);
 
     // Assign IP 192.168.1.1 to machine
     // FIXME: should be configurable
@@ -131,8 +131,8 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   void ParseEthPacket(std::deque<struct iovec>& vector, ethhdr* eth) {
-    if (memcmp(eth->h_dest, router_mac_.data, 6) != 0 &&
-      memcmp(eth->h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", 6) != 0) {
+    if (memcmp(eth->h_dest, router_mac_.data, ETH_ALEN) != 0 &&
+      memcmp(eth->h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", ETH_ALEN) != 0) {
       // ignore packets to other ethernet addresses
       return;
     }

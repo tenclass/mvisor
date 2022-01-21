@@ -35,11 +35,11 @@
 #define REDIRECT_TIMEOUT_SECONDS (120)
 
 struct PseudoHeader {
-	uint32_t sip;
-	uint32_t dip;
-	uint8_t zero;
-	uint8_t protocol;
-	uint16_t length;
+  uint32_t sip;
+  uint32_t dip;
+  uint8_t zero;
+  uint8_t protocol;
+  uint16_t length;
 } __attribute__((packed));
 
 

@@ -114,31 +114,31 @@ Ipv4Packet* TcpSocket::AllocatePacket() {
 }
 
 uint16_t TcpSocket::CalculateTcpChecksum(Ipv4Packet* packet) {
-	PseudoHeader hdr;
-	auto ip = packet->ip;
+  PseudoHeader hdr;
+  auto ip = packet->ip;
   auto tcp = packet->tcp;
-	int tcp_len;
-	uint8_t *pad;
+  int tcp_len;
+  uint8_t *pad;
 
-	ip = packet->ip;
-	tcp_len	= ntohs(ip->tot_len) - ip->ihl * 4;
+  ip = packet->ip;
+  tcp_len = ntohs(ip->tot_len) - ip->ihl * 4;
   MV_ASSERT(tcp_len <= UIP_MAX_TCP_PAYLOAD + 20);
 
-	hdr.sip = ip->saddr;
-	hdr.dip	= ip->daddr;
-	hdr.zero = 0;
-	hdr.protocol = ip->protocol;
-	hdr.length = htons(tcp_len);
+  hdr.sip = ip->saddr;
+  hdr.dip  = ip->daddr;
+  hdr.zero = 0;
+  hdr.protocol = ip->protocol;
+  hdr.length = htons(tcp_len);
 
-	if (tcp_len % 2) {
-		pad = (uint8_t *)tcp + tcp_len;
-		*pad = 0;
-		memcpy((uint8_t *)tcp + tcp_len + 1, &hdr, sizeof(hdr));
-		return CalculateChecksum((uint8_t *)tcp, tcp_len + 1 + sizeof(hdr));
-	} else {
-		memcpy((uint8_t *)tcp + tcp_len, &hdr, sizeof(hdr));
-		return CalculateChecksum((uint8_t *)tcp, tcp_len + sizeof(hdr));
-	}
+  if (tcp_len % 2) {
+    pad = (uint8_t *)tcp + tcp_len;
+    *pad = 0;
+    memcpy((uint8_t *)tcp + tcp_len + 1, &hdr, sizeof(hdr));
+    return CalculateChecksum((uint8_t *)tcp, tcp_len + 1 + sizeof(hdr));
+  } else {
+    memcpy((uint8_t *)tcp + tcp_len, &hdr, sizeof(hdr));
+    return CalculateChecksum((uint8_t *)tcp, tcp_len + sizeof(hdr));
+  }
 }
 
 void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {

@@ -22,16 +22,16 @@
 
 
 Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip) :
-	backend_(backend) {
-	sip_ = ntohl(ip->saddr);
-	dip_ = ntohl(ip->daddr);
-	closed_ = false;
-	debug_ = false;
-	active_time_ = time(nullptr);
+  backend_(backend) {
+  sip_ = ntohl(ip->saddr);
+  dip_ = ntohl(ip->daddr);
+  closed_ = false;
+  debug_ = false;
+  active_time_ = time(nullptr);
 }
 
 bool Ipv4Socket::IsActive() {
-	return !closed_;
+  return !closed_;
 }
 
 Ipv4Packet* Ipv4Socket::AllocatePacket() {
@@ -42,7 +42,7 @@ Ipv4Packet* Ipv4Socket::AllocatePacket() {
   packet->data = (void*)&packet->ip[1];
   packet->tcp = nullptr;
   packet->udp = nullptr;
-	packet->data_length = 0;
+  packet->data_length = 0;
   return packet;
 }
 
@@ -52,19 +52,19 @@ void Ipv4Socket::FreePacket(Ipv4Packet* packet) {
 }
 
 uint16_t Ipv4Socket::CalculateChecksum(uint8_t* addr, uint16_t count) {
-	long sum = 0;
+  long sum = 0;
 
-	while (count > 1) {
-		sum	+= *(uint16_t *)addr;
-		addr	+= 2;
-		count	-= 2;
-	}
+  while (count > 1) {
+    sum += *(uint16_t *)addr;
+    addr += 2;
+    count -= 2;
+  }
 
-	if (count > 0)
-		sum += *(uint8_t*)addr;
+  if (count > 0)
+    sum += *(uint8_t*)addr;
 
-	while (sum >> 16)
-		sum = (sum & 0xffff) + (sum >> 16);
+  while (sum >> 16)
+    sum = (sum & 0xffff) + (sum >> 16);
 
-	return ~sum;
+  return ~sum;
 }
