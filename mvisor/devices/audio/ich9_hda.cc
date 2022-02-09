@@ -90,7 +90,7 @@ class Ich9Hda : public PciDevice {
     regs_.corb_size = 0x42; // 1KB, 256 entries
     regs_.rirb_size = 0x42;
     for (auto &stream : regs_.streams) {
-      stream.fifo_size = 256;
+      stream.fifo_size = 0x100;
     }
     // Setup available codecs
     for (size_t i = 0; i < codecs_.size(); i++) {
@@ -160,10 +160,8 @@ class Ich9Hda : public PciDevice {
     if (offset >= 0x80 && offset < 0x180) {
       uint64_t stream_desc_index = (offset - 0x80) / 0x20;
       uint64_t stream_desc_offset = (offset - 0x80) % 0x20;
-      if (stream_desc_offset < 4) {
-        SetStreamControl(stream_desc_index, stream_desc_offset, data, size);
-        return;
-      }
+      WriteStreamDescriptor(stream_desc_index, stream_desc_offset, data, size);
+      return;
     }
 
     switch (offset)
@@ -246,7 +244,11 @@ class Ich9Hda : public PciDevice {
 
     auto &entry = stream_state.buffers[stream_state.buffers_index];
     MV_ASSERT(entry.length <= length);
-    memcpy(destination, entry.data, entry.length);
+    if (index >= 4) {
+      memcpy(destination, entry.data, entry.length);
+    } else {
+      memcpy(entry.data, destination, entry.length);
+    }
     stream.link_position_in_buffer += entry.length;
     stream_state.buffers_index++;
     if (debug_) {
@@ -264,16 +266,10 @@ class Ich9Hda : public PciDevice {
     return entry.length;
   }
 
-  void SetStreamControl(uint64_t index, uint64_t offset, uint8_t* data, uint32_t size) {
+  void WriteStreamControl(uint64_t index, uint8_t control) {
     auto &stream = regs_.streams[index];
-    if (offset == offsetof(Ich9HdaStream, status)) {
-      stream.status &= ~(data[0] & 0x1C);
-      CheckIrqLevel();
-      return;
-    }
-
     uint8_t old_control = stream.control;
-    memcpy((uint8_t*)&stream + offset, data, size);
+    stream.control = control;
     if (stream.control & 0x01) { // reset
       if (debug_) {
         MV_LOG("streams[%d] reset", index);
@@ -299,11 +295,29 @@ class Ich9Hda : public PciDevice {
           MV_LOG("stream[%d] nr=%d stop", index, stream.stream_id);
         }
         for (auto codec : codecs_) {
-         codec->StopStream(stream.stream_id, index >= 4);
+        codec->StopStream(stream.stream_id, index >= 4);
         }
       }
     }
     CheckIrqLevel();
+  }
+
+  void WriteStreamDescriptor(uint64_t index, uint64_t offset, uint8_t* data, uint32_t size) {
+    auto &stream = regs_.streams[index];
+    switch (offset)
+    {
+    case offsetof(Ich9HdaStream, control):
+      MV_ASSERT(size == 1);
+      WriteStreamControl(index, data[0]);
+      break;
+    case offsetof(Ich9HdaStream, status):
+      stream.status &= ~(data[0] & 0x1C);
+      CheckIrqLevel();
+      break;
+    default:
+      memcpy((uint8_t*)&stream + offset, data, size);
+      break;
+    }
   }
 
   void PopCorbEntries() {

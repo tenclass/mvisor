@@ -31,10 +31,12 @@ objects:
       - pc-speaker
   
   - class: ich9-hda
+    debug: No
     children:
       - hda-duplex
     
   - class: hda-duplex
+    debug: No
 
   - class: ahci-host
     children:

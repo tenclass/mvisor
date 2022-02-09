@@ -93,7 +93,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     bzero(streams_.data(), streams_.size() * sizeof(HdaStream));
     nodes_.clear();
     subsystem_id_ = (0x1AF4 << 16) | 0x21;  // duplex, no mixer
-    pcm_formats_ = AC_SUPPCM_BITS_16 | 0x1FC;
+    pcm_formats_ = AC_SUPPCM_BITS_16 | (1 << 6); // 48000 Hz
     
     // root node
     HdaNode root = { .id = AC_NODE_ROOT, .name = "root" };
@@ -156,7 +156,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     adc.stream->output = false;
     adc.stream->format = AC_FMT_TYPE_PCM | AC_FMT_BITS_16 | (1 << AC_FMT_CHAN_SHIFT);
     adc.connection.push_back(5);
-    adc.parameters[AC_PAR_AUDIO_WIDGET_CAP] = (AC_WID_AUD_IN | AC_WCAP_TYPE_SHIFT) |
+    adc.parameters[AC_PAR_AUDIO_WIDGET_CAP] = (AC_WID_AUD_IN << AC_WCAP_TYPE_SHIFT) |
       AC_WCAP_CONN_LIST | AC_WCAP_FORMAT_OVRD | AC_WCAP_AMP_OVRD | AC_WCAP_STEREO;
     adc.parameters[AC_PAR_CONNLIST_LEN] = adc.connection.size();
     adc.parameters[AC_PAR_PCM] = pcm_formats_;
@@ -211,12 +211,16 @@ class HdaDuplex : public Device, public HdaCodecInterface {
       node.stream->id = (payload >> 4) & 0xF;
       node.stream->channel = payload & 0xF;
       callback(0);
+      if (debug_) {
+        MV_LOG("node[%d] %s stream_id=%d channel=%d", node.id, node.name.c_str(),
+          node.stream->id, node.stream->channel);
+      }
       break;
     case AC_VERB_SET_STREAM_FORMAT:
       node.stream->format = payload;
       SetupStream(node.stream);
       if (debug_) {
-        MV_LOG("node[%d] %s format=0x%x nchannels=%d frequency=%d", node.id, node.name.c_str(),\
+        MV_LOG("node[%d] %s format=0x%x nchannels=%d frequency=%d", node.id, node.name.c_str(),
           node.stream->format, node.stream->nchannels, node.stream->frequency);
       }
       callback(0);
@@ -301,7 +305,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
   void OnStreamTimer(HdaStream* stream) {
     size_t transferred = stream->transfer_callback(stream->buffer, HDA_STREAM_BUFFER_SIZE);
     stream->position += transferred;
-    if (fp_output_) {
+    if (stream->output && fp_output_) {
       fwrite(stream->buffer, transferred, 1, fp_output_);
     }
 
