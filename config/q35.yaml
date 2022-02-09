@@ -16,16 +16,13 @@ objects:
   - class: pci-host
     children:
       - ich9-lpc
-      - ahci-host
       - ich9-smbus
+      - ich9-hda
+      - ahci-host
       - qxl
       - virtio-console
       - virtio-block
       - virtio-network
-
-  - class: virtio-console
-    children:
-      - spice-agent
 
   - class: ich9-lpc
     children:
@@ -33,6 +30,12 @@ objects:
       - keyboard
       - pc-speaker
   
+  - class: ich9-hda
+    children:
+      - hda-duplex
+    
+  - class: hda-duplex
+
   - class: ahci-host
     children:
       - ahci-cdrom
@@ -44,6 +47,10 @@ objects:
 
   - class: vga
     rom: ../share/vgabios-stdvga.bin
+
+  - class: virtio-console
+    children:
+      - spice-agent
 
   - class: virtio-network
     backend: uip

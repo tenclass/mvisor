@@ -232,12 +232,11 @@ class Qcow2Image : public DiskImage {
     }
   }
 
-  /* FIXME: should we call pwrite for multiple times to read all data ??? */
+  /* FIXME: should we call pwrite for multiple times to write all data ??? */
   ssize_t WriteFile(void* buffer, size_t length, off_t offset) {
     if (offset >= (ssize_t)image_header_.size) {
       MV_LOG("write overflow length=0x%lx, offset=0x%lx", length, offset);
-      int a = 0;
-      return 4 / a;
+      return 0;
     }
     return pwrite(fd_, buffer, length, offset);
   }

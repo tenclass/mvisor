@@ -518,7 +518,7 @@ int DeviceManager::CheckIoTimers() {
   mutex_.lock();
   for (auto timer : iotimers_) {
     auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
-    if (delta_ms <= 1) {
+    if (delta_ms <= 0) {
       triggered.push_back(timer);
       timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
       delta_ms = timer->interval_ms;

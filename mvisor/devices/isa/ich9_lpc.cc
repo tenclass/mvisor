@@ -130,6 +130,8 @@ class Ich9Lpc : public PciDevice {
   }
 
   void Reset() {
+    PciDevice::Reset();
+
     bzero(&acpi_gpe_regs_, sizeof(acpi_gpe_regs_));
     acpi_control_ = 0;
     apm_control_ = apm_state_ = 0;

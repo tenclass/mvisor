@@ -70,6 +70,7 @@ Vga::~Vga() {
 }
 
 void Vga::Reset() {
+  PciDevice::Reset();
   bzero(vbe_registers_, sizeof(vbe_registers_));
   bzero(sequence_registers_, sizeof(sequence_registers_));
   bzero(gfx_registers_, sizeof(gfx_registers_));

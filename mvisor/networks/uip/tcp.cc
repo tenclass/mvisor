@@ -160,6 +160,7 @@ void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {
   if (flags & TCP_FLAG_SYN) {
     tcp->syn = 1;
     tcp->doff = 8;
+    // To get peer window scale work, add options
     FillTcpOptions(tcp);
   } else {
     tcp->doff = 5;

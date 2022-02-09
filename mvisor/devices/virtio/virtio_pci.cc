@@ -25,7 +25,7 @@
 VirtioPci::VirtioPci() {
     pci_header_.vendor_id = 0x1AF4;
     pci_header_.subsys_vendor_id = 0x1AF4;
-    pci_header_.irq_pin = 1;
+    pci_header_.irq_pin = 0;
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
 
     AddPciBar(0, 0x40, kIoResourceTypePio);
@@ -76,6 +76,7 @@ void VirtioPci::Disconnect() {
 }
 
 void VirtioPci::Reset() {
+  PciDevice::Reset();
   isr_status_ = 0;
   for (uint index = 0; index < queues_.size(); index++) {
     queues_[index].index = index;
