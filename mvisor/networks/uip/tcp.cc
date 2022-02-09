@@ -313,7 +313,7 @@ void RedirectTcpSocket::OnRemoteDataAvailable() {
     return;
   }
   auto packet = AllocatePacket();
-  int ret = read(fd_, packet->data, available);
+  int ret = recv(fd_, packet->data, available, 0);
   if (ret <= 0) {
     if (errno != EAGAIN) {
       Shutdown(SHUT_RD);
@@ -332,7 +332,7 @@ void RedirectTcpSocket::OnDataFromGuest(void* data, size_t length) {
     return;
   }
 
-  int ret = write(fd_, data, length);
+  int ret = send(fd_, data, length, 0);
   if (ret != (int)length) {
     if (ret < 0) {
       MV_LOG("ERROR TCP %d %x:%u -> %x:%u is already closed. length=%d ret=%d",

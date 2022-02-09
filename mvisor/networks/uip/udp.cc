@@ -135,9 +135,6 @@ void RedirectUdpSocket::InitializeRedirect() {
 void RedirectUdpSocket::OnRemoteDataAvailable() {
   auto packet = AllocatePacket();
   int ret = recvfrom(fd_, packet->data, UIP_MAX_UDP_PAYLOAD, 0, nullptr, nullptr);
-  if (ret == -1) {
-    MV_PANIC("failed to recvfrom fd=%d ret=%d", fd_, ret);
-  }
   if (ret < 0) {
     FreePacket(packet);
     return;
