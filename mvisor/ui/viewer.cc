@@ -65,7 +65,7 @@ void Viewer::CreateWindow() {
   bpp_ = bpp;
   int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
   window_ = SDL_CreateWindow("MVisor", x, y, width_, height_, SDL_WINDOW_RESIZABLE);
-  renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+  renderer_ = SDL_CreateRenderer(window_, -1, 0);
   MV_ASSERT(renderer_);
   
   switch (bpp_)
