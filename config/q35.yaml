@@ -3,7 +3,7 @@ name: q35-machine
 machine:
   memory: 2G
   vcpu: 4
-  bios: ../share/bios-256k.bin
+  bios: ../share/bios-debug.bin
 
 objects:
   - class: system-root
@@ -19,6 +19,7 @@ objects:
       - ich9-smbus
       - ich9-hda
       - ahci-host
+      - xhci-host
       - qxl
       - virtio-console
       - virtio-block
@@ -42,6 +43,9 @@ objects:
     children:
       - ahci-cdrom
       - ahci-disk
+  
+  - class: xhci-host
+    debug: No
   
   - class: qxl
     rom: ../share/vgabios-qxl.bin

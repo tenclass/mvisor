@@ -94,6 +94,8 @@ struct PciMsiConfig {
   /* MSI-X BAR */
   uint8_t        msix_bar;
   uint16_t       msix_table_size;
+  uint64_t       msix_space_offset;
+  uint64_t       msix_space_size;
   MsiXTableEntry msix_table[PCI_MAX_MSIX_ENTRIES];
 };
 
@@ -222,7 +224,7 @@ class PciDevice : public Device {
   void AddPciBar(uint8_t index, uint32_t size, IoResourceType type);
   uint8_t* AddCapability(uint8_t cap, const uint8_t* data, uint8_t length);
   void AddMsiCapability();
-  void AddMsiXCapability(uint8_t bar, uint16_t table_size);
+  void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);
   void SignalMsi(int vector = 0);
 
   uint8_t devfn_;

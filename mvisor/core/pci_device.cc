@@ -90,22 +90,22 @@ void PciDevice::AddMsiCapability() {
   msi_config_.msi64 = (MsiCapability64*)AddCapability(0x05, (uint8_t*)&cap64.control, msi_config_.length - 2);
 }
 
-void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size) {
-  uint32_t bar_size = 0x1000;
-  AddPciBar(bar, bar_size, kIoResourceTypeMmio);
-  MV_ASSERT(table_size > 0 && table_size * sizeof(MsiXTableEntry) <= bar_size);
+void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size) {
+  MV_ASSERT(table_size > 0 && table_size * sizeof(MsiXTableEntry) <= space_size);
 
   MsiXCapability cap = { 0 };
   msi_config_.is_msix = true;
   msi_config_.is_64bit = true;
   msi_config_.msix_bar = bar;
   msi_config_.msix_table_size = table_size;
+  msi_config_.msix_space_offset = space_offset;
+  msi_config_.msix_space_size = space_size;
   msi_config_.offset = next_capability_offset_;
   msi_config_.length = sizeof(cap);
 
   cap.control = table_size - 1;
-  cap.table_offset = bar;
-  cap.pba_offset = bar | (pci_bars_[bar].size / 2);
+  cap.table_offset = bar | space_offset;
+  cap.pba_offset = bar | (space_offset + space_size / 2);
   msi_config_.msix = (MsiXCapability*)AddCapability(0x11, (uint8_t*)&cap.control, msi_config_.length - 2);
 }
 
@@ -128,7 +128,10 @@ void PciDevice::SignalMsi(int vector) {
 }
 
 void PciDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address) {
+  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address &&
+    offset >= msi_config_.msix_space_offset &&
+    offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
+  ) {
     if (offset < sizeof(MsiXTableEntry) * msi_config_.msix_table_size) {
       memcpy(data, (uint8_t*)msi_config_.msix_table + offset, size);
     }
@@ -138,7 +141,10 @@ void PciDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
 }
 
 void PciDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address) {
+  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address &&
+    offset >= msi_config_.msix_space_offset &&
+    offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
+  ) {
     if (offset < sizeof(MsiXTableEntry) * msi_config_.msix_table_size) {
       memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
     }

@@ -50,7 +50,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     pci_header_.subsys_id = 0x0001;
     
     // FIXME: IRQ interrupts sometimes not work on Windows 10
-    AddMsiXCapability(1, 4);
+    AddPciBar(1, 0x1000, kIoResourceTypeMmio);
+    AddMsiXCapability(1, 4, 0, 0x1000);
     
     device_features_ |=
       (1UL << VIRTIO_NET_F_MAC) |

@@ -201,7 +201,9 @@ void Machine::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
   device_manager_->ResetDevices();
 
-  MV_LOG("Resettings vCPUs");
+  if (debug_) {
+    MV_LOG("Resettings vCPUs");
+  }
   for (auto vcpu: vcpus_) {
     vcpu->Schedule([vcpu]() {
       vcpu->Reset();

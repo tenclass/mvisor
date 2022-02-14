@@ -19,7 +19,7 @@ $(shell mkdir -p $(dir $(MV_OBJECTS)))
 
 .PHONY: run all clean
 run: all
-	$(EXECUTABLE)
+	time $(EXECUTABLE)
 
 debug: all
 	gdb $(EXECUTABLE)

@@ -37,7 +37,8 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
     pci_header_.device_id = 0x1003;
     pci_header_.subsys_id = 0x0003;
     
-    AddMsiXCapability(1, 2);
+    AddPciBar(1, 0x1000, kIoResourceTypeMmio);
+    AddMsiXCapability(1, 2, 0, 0x1000);
 
     /* Device specific features */
     device_features_ |= (1UL << VIRTIO_CONSOLE_F_MULTIPORT);

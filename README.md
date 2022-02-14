@@ -45,7 +45,8 @@ Feb 2022
 7. User network ✅
 8. SfAgent
 9. VFIO
-10. WebDAV
+10. Samba
+11. XHCI (USB 3.0)
 
 Milestone 3: Migration
 Mar 2022
