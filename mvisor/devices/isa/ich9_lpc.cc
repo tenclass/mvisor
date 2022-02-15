@@ -116,7 +116,7 @@ class Ich9Lpc : public PciDevice {
 
  public:
   Ich9Lpc() {
-    devfn_ = PCI_MAKE_DEVFN(0x1f, 0);
+    devfn_ = PCI_MAKE_DEVFN(0x1F, 0);
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x2918;

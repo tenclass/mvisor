@@ -251,7 +251,7 @@ void Viewer::Render() {
 }
 
 void Viewer::LookupDevices() {
-  keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Keyboard"));
+  keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2Keyboard"));
   spice_agent_ = dynamic_cast<SpiceAgentInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
   display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Qxl"));
   if (display_ == nullptr) {

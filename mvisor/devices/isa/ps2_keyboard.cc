@@ -44,7 +44,7 @@
 /* Reference: https://wiki.osdev.org/%228042%22_PS/2_Controller
  */
 
-class Keyboard : public Device, public KeyboardInputInterface {
+class Ps2Keyboard : public Device, public KeyboardInputInterface {
  private:
   std::deque<uint8_t> keyboard_queue_;
   std::deque<uint8_t> mouse_queue_;
@@ -389,7 +389,7 @@ class Keyboard : public Device, public KeyboardInputInterface {
 
 
  public:
-  Keyboard() {
+  Ps2Keyboard() {
     AddIoResource(kIoResourceTypePio, 0x92, 1, "A20 Gate");
     AddIoResource(kIoResourceTypePio, 0x60, 1, "PS2 Data");
     AddIoResource(kIoResourceTypePio, 0x64, 1, "PS2 Command");
@@ -470,4 +470,4 @@ class Keyboard : public Device, public KeyboardInputInterface {
   }
 };
 
-DECLARE_DEVICE(Keyboard);
+DECLARE_DEVICE(Ps2Keyboard);

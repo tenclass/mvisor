@@ -33,7 +33,7 @@
 
 AhciHost::AhciHost() {
   /* FIXME: should gernerated by parent pci device */
-  devfn_ = PCI_MAKE_DEVFN(0x1f, 2);
+  devfn_ = PCI_MAKE_DEVFN(0x1F, 2);
   
   /* PCI config */
   pci_header_.vendor_id = 0x8086;

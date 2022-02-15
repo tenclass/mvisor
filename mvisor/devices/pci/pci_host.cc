@@ -21,8 +21,8 @@
 #include "device_manager.h"
 #include "pci_device.h"
 
-#define MCH_CONFIG_ADDR            0xcf8
-#define MCH_CONFIG_DATA            0xcfc
+#define MCH_CONFIG_ADDR            0xCF8
+#define MCH_CONFIG_DATA            0xCFC
 
 #define MCH_PCIEXBAR 0x60
 #define MCH_PCIEXBAR_SIZE 0x04
@@ -59,10 +59,10 @@ class PciHost : public PciDevice {
     devfn_ = PCI_MAKE_DEVFN(0, 0);
     
     pci_header_.vendor_id = 0x8086;
-    pci_header_.device_id = 0x29c0;
+    pci_header_.device_id = 0x29C0;
     pci_header_.class_code = 0x060000;
     pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
-    pci_header_.subsys_vendor_id = 0x1af4;
+    pci_header_.subsys_vendor_id = 0x1AF4;
     pci_header_.subsys_id = 0x1100;
 
     AddIoResource(kIoResourceTypePio, MCH_CONFIG_ADDR, 4, "MCH Config Base");
