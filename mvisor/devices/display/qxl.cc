@@ -87,8 +87,8 @@ class Qxl : public Vga {
   virtual bool ActivatePciBar(uint8_t index) {
     if (index == 3) {
       /* Setup ioeventfd for notify commands */
-      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD, 1, 0);
-      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR, 1, 0);
+      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
+      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
     }
     return Vga::ActivatePciBar(index);
   }

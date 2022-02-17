@@ -76,13 +76,16 @@ class DeviceManager {
 
   void RegisterIoHandler(Device* device, const IoResource& io_resource);
   void UnregisterIoHandler(Device* device, const IoResource& io_resource);
-  void RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
-  void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
+  IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address);
+  IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
   void RegisterIoEvent(Device* device, int fd, uint32_t events, EventsCallback callback);
+  void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
+  void UnregisterIoEvent(IoEvent* event);
   void UnregisterIoEvent(Device* device, int fd);
   IoTimer* RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback);
   void UnregisterIoTimer(IoTimer* timer);
   void ModifyIoTimer(IoTimer* timer, int interval_ms);
+  void RunOnIoThread(VoidCallback callback);
 
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);

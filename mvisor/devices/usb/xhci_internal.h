@@ -59,7 +59,6 @@ struct XhciPortRegisters {
   uint32_t  pm_status_control;
   uint32_t  link_info;
   uint32_t  reserved;
-  /* User defined state variables */
 } __attribute__((packed));
 
 struct XhciEventRingSegment {
@@ -77,8 +76,8 @@ struct XhciInterruptRegisters {
   uint64_t  event_ring_dequeue_pointer;
   /* User defined state variables */
   XhciEventRingSegment event_ring_segment;
-  uint64_t  event_ring_dequeue_index;
   uint64_t  event_ring_enqueue_index;
+  bool      producer_cycle_bit;
 } __attribute__((packed));
 
 
@@ -87,7 +86,41 @@ struct XhciRuntimeRegisters {
   uint32_t  reserved[7];
 } __attribute__((packed));
 
+struct XhciTransferRequestBlock {
+  uint64_t  parameter;
+  uint32_t  status;
+  uint32_t  control;
+  /* User defined state variables */
+  uint64_t  address;
+} __attribute__((packed));
 
+
+enum {
+    PLS_U0              =  0,
+    PLS_U1              =  1,
+    PLS_U2              =  2,
+    PLS_U3              =  3,
+    PLS_DISABLED        =  4,
+    PLS_RX_DETECT       =  5,
+    PLS_INACTIVE        =  6,
+    PLS_POLLING         =  7,
+    PLS_RECOVERY        =  8,
+    PLS_HOT_RESET       =  9,
+    PLS_COMPILANCE_MODE = 10,
+    PLS_TEST_MODE       = 11,
+    PLS_RESUME          = 15,
+};
+
+enum EPType {
+    ET_INVALID = 0,
+    ET_ISO_OUT,
+    ET_BULK_OUT,
+    ET_INTR_OUT,
+    ET_CONTROL,
+    ET_ISO_IN,
+    ET_BULK_IN,
+    ET_INTR_IN,
+};
 
 enum TRBType {
     TRB_RESERVED = 0,
@@ -125,6 +158,44 @@ enum TRBType {
     /* vendor specific bits */
     CR_VENDOR_NEC_FIRMWARE_REVISION  = 49,
     CR_VENDOR_NEC_CHALLENGE_RESPONSE = 50,
+};
+
+enum TRBCCode {
+    CC_INVALID = 0,
+    CC_SUCCESS,
+    CC_DATA_BUFFER_ERROR,
+    CC_BABBLE_DETECTED,
+    CC_USB_TRANSACTION_ERROR,
+    CC_TRB_ERROR,
+    CC_STALL_ERROR,
+    CC_RESOURCE_ERROR,
+    CC_BANDWIDTH_ERROR,
+    CC_NO_SLOTS_ERROR,
+    CC_INVALID_STREAM_TYPE_ERROR,
+    CC_SLOT_NOT_ENABLED_ERROR,
+    CC_EP_NOT_ENABLED_ERROR,
+    CC_SHORT_PACKET,
+    CC_RING_UNDERRUN,
+    CC_RING_OVERRUN,
+    CC_VF_ER_FULL,
+    CC_PARAMETER_ERROR,
+    CC_BANDWIDTH_OVERRUN,
+    CC_CONTEXT_STATE_ERROR,
+    CC_NO_PING_RESPONSE_ERROR,
+    CC_EVENT_RING_FULL_ERROR,
+    CC_INCOMPATIBLE_DEVICE_ERROR,
+    CC_MISSED_SERVICE_ERROR,
+    CC_COMMAND_RING_STOPPED,
+    CC_COMMAND_ABORTED,
+    CC_STOPPED,
+    CC_STOPPED_LENGTH_INVALID,
+    CC_MAX_EXIT_LATENCY_TOO_LARGE_ERROR = 29,
+    CC_ISOCH_BUFFER_OVERRUN = 31,
+    CC_EVENT_LOST_ERROR,
+    CC_UNDEFINED_ERROR,
+    CC_INVALID_STREAM_ID_ERROR,
+    CC_SECONDARY_BANDWIDTH_ERROR,
+    CC_SPLIT_TRANSACTION_ERROR
 };
 
 
@@ -192,21 +263,64 @@ enum TRBType {
 
 #define TRB_SIZE 16
 
-enum {
-    PLS_U0              =  0,
-    PLS_U1              =  1,
-    PLS_U2              =  2,
-    PLS_U3              =  3,
-    PLS_DISABLED        =  4,
-    PLS_RX_DETECT       =  5,
-    PLS_INACTIVE        =  6,
-    PLS_POLLING         =  7,
-    PLS_RECOVERY        =  8,
-    PLS_HOT_RESET       =  9,
-    PLS_COMPILANCE_MODE = 10,
-    PLS_TEST_MODE       = 11,
-    PLS_RESUME          = 15,
-};
+#define TRB_C               (1<<0)
+#define TRB_TYPE_SHIFT          10
+#define TRB_TYPE_MASK       0x3f
+#define TRB_TYPE(t)         (((t).control >> TRB_TYPE_SHIFT) & TRB_TYPE_MASK)
+
+#define TRB_EV_ED           (1<<2)
+
+#define TRB_TR_ENT          (1<<1)
+#define TRB_TR_ISP          (1<<2)
+#define TRB_TR_NS           (1<<3)
+#define TRB_TR_CH           (1<<4)
+#define TRB_TR_IOC          (1<<5)
+#define TRB_TR_IDT          (1<<6)
+#define TRB_TR_TBC_SHIFT        7
+#define TRB_TR_TBC_MASK     0x3
+#define TRB_TR_BEI          (1<<9)
+#define TRB_TR_TLBPC_SHIFT      16
+#define TRB_TR_TLBPC_MASK   0xf
+#define TRB_TR_FRAMEID_SHIFT    20
+#define TRB_TR_FRAMEID_MASK 0x7ff
+#define TRB_TR_SIA          (1<<31)
+
+#define TRB_TR_DIR          (1<<16)
+
+#define TRB_CR_SLOTID_SHIFT     24
+#define TRB_CR_SLOTID_MASK  0xff
+#define TRB_CR_EPID_SHIFT       16
+#define TRB_CR_EPID_MASK    0x1f
+
+#define TRB_CR_BSR          (1<<9)
+#define TRB_CR_DC           (1<<9)
+
+#define TRB_LK_TC           (1<<1)
+
+#define TRB_INTR_SHIFT          22
+#define TRB_INTR_MASK       0x3ff
+#define TRB_INTR(t)         (((t).status >> TRB_INTR_SHIFT) & TRB_INTR_MASK)
+
+#define EP_TYPE_MASK        0x7
+#define EP_TYPE_SHIFT           3
+
+#define EP_STATE_MASK       0x7
+#define EP_DISABLED         (0<<0)
+#define EP_RUNNING          (1<<0)
+#define EP_HALTED           (2<<0)
+#define EP_STOPPED          (3<<0)
+#define EP_ERROR            (4<<0)
+
+#define SLOT_STATE_MASK     0x1f
+#define SLOT_STATE_SHIFT        27
+#define SLOT_STATE(s)       (((s)>>SLOT_STATE_SHIFT)&SLOT_STATE_MASK)
+#define SLOT_ENABLED        0
+#define SLOT_DEFAULT        1
+#define SLOT_ADDRESSED      2
+#define SLOT_CONFIGURED     3
+
+#define SLOT_CONTEXT_ENTRIES_MASK 0x1f
+#define SLOT_CONTEXT_ENTRIES_SHIFT 27
 
 #define get_field(data, field)                  \
     (((data) >> field##_SHIFT) & field##_MASK)

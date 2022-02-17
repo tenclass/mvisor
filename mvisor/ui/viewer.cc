@@ -276,7 +276,7 @@ void Viewer::LookupDevices() {
  * https://wiki.libsdl.org/APIByCategory
  */
 int Viewer::MainLoop() {
-  SetThreadName("viewer");
+  SetThreadName("mvisor-viewer");
   LookupDevices();
 
   auto frame_interval_us = std::chrono::microseconds(1000000 / 30);

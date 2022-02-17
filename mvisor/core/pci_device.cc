@@ -132,9 +132,9 @@ void PciDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
     offset >= msi_config_.msix_space_offset &&
     offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
   ) {
-    if (offset < sizeof(MsiXTableEntry) * msi_config_.msix_table_size) {
-      memcpy(data, (uint8_t*)msi_config_.msix_table + offset, size);
-    }
+    offset -= msi_config_.msix_space_offset;
+    MV_ASSERT(offset + size <= sizeof(MsiXTableEntry) * msi_config_.msix_table_size);
+    memcpy(data, (uint8_t*)msi_config_.msix_table + offset, size);
   } else {
     Device::Read(ir, offset, data, size);
   }
@@ -145,19 +145,21 @@ void PciDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint
     offset >= msi_config_.msix_space_offset &&
     offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
   ) {
-    if (offset < sizeof(MsiXTableEntry) * msi_config_.msix_table_size) {
-      memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
-    }
+    offset -= msi_config_.msix_space_offset;
+    MV_ASSERT(offset + size <= sizeof(MsiXTableEntry) * msi_config_.msix_table_size);
+    memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
   } else {
     Device::Write(ir, offset, data, size);
   }
 }
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
+  MV_ASSERT(offset + length <= PCI_DEVICE_CONFIG_SIZE);
   memcpy(data, pci_header_.data + offset, length);
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
+  MV_ASSERT(offset + length <= PCI_DEVICE_CONFIG_SIZE);
   if (offset == PCI_COMMAND) {
     MV_ASSERT(length == 2);
     WritePciCommand(*(uint16_t*)data);

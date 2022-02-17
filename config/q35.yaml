@@ -46,6 +46,8 @@ objects:
   
   - class: xhci-host
     debug: No
+    children:
+      - usb-tablet
   
   - class: qxl
     rom: ../share/vgabios-qxl.bin

@@ -220,8 +220,8 @@ void VirtioPci::EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t av
   MV_ASSERT(vq.descriptor_table && vq.available_ring && vq.used_ring);
 
   if (use_ioevent_) {
-    uint64_t notify_address =pci_bars_[4].address + 0x3000 + queue_index * 4;
-    manager_->RegisterIoEvent(this, kIoResourceTypeMmio, notify_address, 2, queue_index);
+    uint64_t notify_address = pci_bars_[4].address + 0x3000 + queue_index * 4;
+    manager_->RegisterIoEvent(this, kIoResourceTypeMmio, notify_address);
   }
 
   vq.enabled = true;
@@ -312,7 +312,7 @@ void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size)
 
 void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size) {
   uint16_t queue = offset / 4;
-  MV_ASSERT(size == 2 && queue == *(uint16_t*)data && queue < queues_.size());
+  MV_ASSERT(queue < queues_.size());
   auto vq = queues_[queue];
   vq.notification_callback();
 }

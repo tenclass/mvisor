@@ -40,7 +40,7 @@ void IoThread::Start() {
 }
 
 void IoThread::EventLoop() {
-  SetThreadName("iothread");
+  SetThreadName("mvisor-iothread");
 
   struct timespec timeout = {
     .tv_sec = 1,

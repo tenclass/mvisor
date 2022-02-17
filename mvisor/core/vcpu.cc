@@ -200,7 +200,7 @@ void Vcpu::SetupSingalHandler() {
 /* Initialize and executing a vCPU thread */
 void Vcpu::Process() {
   current_vcpu_ = this;
-  sprintf(name_, "vcpu-%d", vcpu_id_);
+  sprintf(name_, "mvisor-vcpu-%d", vcpu_id_);
   
   SetThreadName(name_);
   SetupSingalHandler();
