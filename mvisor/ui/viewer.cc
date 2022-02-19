@@ -200,8 +200,8 @@ void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
   }
 }
 
+/* Only use mutex with dequee, since we don't want to block the IoThread */
 void Viewer::Render() {
-  std::lock_guard<std::mutex> lock(mutex_);
   if (requested_update_window_) {
     requested_update_window_ = false;
     DestroyWindow();
@@ -213,8 +213,10 @@ void Viewer::Render() {
   }
   bool redraw = false;
   while (!cursor_updates_.empty()) {
+    mutex_.lock();
     auto cursor_update = cursor_updates_.front();
     cursor_updates_.pop_front();
+    mutex_.unlock();
     RenderCursor(cursor_update);
     cursor_update->release();
     if (grab_input_) {
@@ -223,8 +225,10 @@ void Viewer::Render() {
   }
   if (screen_texture_ && !partials_.empty()) {
     while (!partials_.empty()) {
+      mutex_.lock();
       auto partial = partials_.front();
       partials_.pop_front();
+      mutex_.unlock();
       if (bpp_ == 8) {
         RenderSurface(partial);
       } else {
