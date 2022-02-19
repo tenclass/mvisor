@@ -59,6 +59,7 @@ class Uip : public Object, public NetworkBackendInterface {
   std::recursive_mutex mutex_;
   IoTimer* timer_ = nullptr;
   Device* real_device_ = nullptr;
+  std::vector<Ipv4Packet*> queued_packets_;
 
  public:
   Uip() {
@@ -66,7 +67,7 @@ class Uip : public Object, public NetworkBackendInterface {
 
   ~Uip() {
     if (timer_) {
-      real_device_->manager()->UnregisterIoTimer(timer_);
+      real_device_->manager()->io()->RemoveTimer(timer_);
     }
   }
 
@@ -88,7 +89,7 @@ class Uip : public Object, public NetworkBackendInterface {
     // This function could only be called once
     MV_ASSERT(real_device_ == nullptr);
     real_device_ = dynamic_cast<Device*>(device_);
-    timer_ = real_device_->manager()->RegisterIoTimer(real_device_, 10 * 1000, true, [this](){
+    timer_ = real_device_->manager()->io()->AddTimer(10 * 1000, true, [this](){
       OnTimer();
     });
   }
@@ -116,18 +117,56 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
+  virtual void OnReceiveAvailable() {
+    while (!queued_packets_.empty()) {
+      auto packet = queued_packets_.back();
+      queued_packets_.pop_back();
+      if (!OnPacketFromHost(packet))
+        break;
+    }
+  }
+
   virtual void OnFrameFromGuest(std::deque<struct iovec>& vector) {
     ParseEthPacket(vector, (struct ethhdr*)vector[0].iov_base);
   }
 
-  virtual void OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
+  virtual bool OnPacketFromHost(Ipv4Packet* packet) {
+    size_t packet_length = sizeof(ethhdr) + ntohs(packet->ip->tot_len);
+    if (OnFrameFromHost(ETH_P_IP, packet->buffer, packet_length)) {
+      packet->Release();
+      return true;
+    } else {
+      queued_packets_.push_back(packet);
+      return false;
+    }
+  }
+
+  /* when return nullptr, socket should retry later */
+  virtual Ipv4Packet* AllocatePacket(bool urgent) {
+    if (!urgent && !queued_packets_.empty()) {
+      return nullptr;
+    }
+    Ipv4Packet* packet = new Ipv4Packet;
+    packet->eth = (ethhdr*)packet->buffer;
+    packet->ip = (iphdr*)&packet->eth[1];
+    packet->data = (void*)&packet->ip[1];
+    packet->tcp = nullptr;
+    packet->udp = nullptr;
+    packet->data_length = 0;
+    packet->Release = [packet]() {
+      delete packet;
+    };
+    return packet;
+  }
+
+  bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
     // fill eth headers
     ethhdr* eth = (ethhdr*)buffer;
     eth->h_proto = htons(protocol);
     memcpy(eth->h_dest, guest_mac_.data, sizeof(eth->h_dest));
     memcpy(eth->h_source, router_mac_.data, sizeof(eth->h_source));
   
-    device_->WriteBuffer(buffer, size);
+    return device_->WriteBuffer(buffer, size);
   }
 
   void ParseEthPacket(std::deque<struct iovec>& vector, ethhdr* eth) {

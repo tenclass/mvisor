@@ -1,6 +1,6 @@
 INCLUDE_DIRS := ./include /usr/include
 LIBS := stdc++
-LIBS += pthread aio SDL2 yaml-cpp
+LIBS += pthread uring SDL2 yaml-cpp
 MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on

@@ -134,6 +134,9 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     if (debug_) {
       MV_LOG("OnReceive %d", queue_index);
     }
+    if (backend_) {
+      backend_->OnReceiveAvailable();
+    }
   }
 
   void OnTransmit(int queue_index) {
@@ -158,14 +161,16 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
   }
 
-  virtual void WriteBuffer(void* buffer, size_t size) {
+  virtual bool WriteBuffer(void* buffer, size_t size) {
     VirtQueue& vq = queues_[0];
     size_t offset = 0;
     while (offset < size) {
       VirtElement element;
       if (!PopQueue(vq, element)) {
-        MV_PANIC("network queue is full, increase queue size");
-        break;
+        if (debug_) {
+          MV_LOG("network queue is full, queue size=%d", vq.size);
+        }
+        return false;
       }
 
       if (offset == 0) {
@@ -191,6 +196,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       NotifyQueue(vq);
       MV_ASSERT(offset == size);
     }
+    return true;
   }
 
   void HandleTransmit(VirtQueue& vq, VirtElement& element) {

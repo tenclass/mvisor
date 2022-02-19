@@ -139,14 +139,16 @@ struct MacAddress {
 };
 class NetworkDeviceInterface {
  public:
-  virtual void WriteBuffer(void* buffer, size_t size) = 0;
+  virtual bool WriteBuffer(void* buffer, size_t size) = 0;
 };
-class DeviceManager;
+struct Ipv4Packet;
 class NetworkBackendInterface {
  public:
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) = 0;
   virtual void OnFrameFromGuest(std::deque<struct iovec>& vector) = 0;
-  virtual void OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) = 0;
+  virtual bool OnPacketFromHost(Ipv4Packet* packet) = 0;
+  virtual Ipv4Packet* AllocatePacket(bool urgent) = 0;
+  virtual void OnReceiveAvailable() = 0;
 
   NetworkDeviceInterface* device() { return device_; }
  protected:

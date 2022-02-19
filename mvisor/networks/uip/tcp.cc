@@ -20,7 +20,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/epoll.h>
+#include <poll.h>
 #include "logger.h"
 #include "device_manager.h"
 
@@ -100,16 +100,19 @@ bool TcpSocket::UpdateGuestAck(tcphdr* tcp) {
 
   // Keep alive
   active_time_ = time(nullptr);
-  auto packet = AllocatePacket();
-  OnDataFromHost(packet, TCP_FLAG_ACK);
-  FreePacket(packet);
+  auto packet = AllocatePacket(true);
+  if (packet) {
+    OnDataFromHost(packet, TCP_FLAG_ACK);
+  }
   return false;
 }
 
-Ipv4Packet* TcpSocket::AllocatePacket() {
-  Ipv4Packet* packet = Ipv4Socket::AllocatePacket();
-  packet->tcp = (tcphdr*)packet->data;
-  packet->data = (void*)&packet->tcp[1];
+Ipv4Packet* TcpSocket::AllocatePacket(bool urgent) {
+  Ipv4Packet* packet = Ipv4Socket::AllocatePacket(urgent);
+  if (packet) {
+    packet->tcp = (tcphdr*)packet->data;
+    packet->data = (void*)&packet->tcp[1];
+  }
   return packet;
 }
 
@@ -188,8 +191,7 @@ void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
   tcp->check = CalculateTcpChecksum(packet);
 
-  size_t packet_length = sizeof(ethhdr) + ntohs(ip->tot_len);
-  backend_->OnFrameFromHost(ETH_P_IP, packet->buffer, packet_length);
+  backend_->OnPacketFromHost(packet);
 
   active_time_ = time(nullptr);
 }
@@ -202,10 +204,13 @@ RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, ethhdr* e
 }
 
 RedirectTcpSocket::~RedirectTcpSocket() {
+  if (polling_request_) {
+    auto device = dynamic_cast<Device*>(backend_->device());
+    device->manager()->io()->StopPolling(polling_request_);
+  }
   if (fd_ > 0) {
-    Device* device = dynamic_cast<Device*>(backend_->device());
-    device->manager()->UnregisterIoEvent(device, fd_);
     close(fd_);
+    fd_ = -1;
   }
 }
 
@@ -229,20 +234,27 @@ void RedirectTcpSocket::Shutdown(int how) {
       write_done_ = true;
 
       ack_host_ += 1;
-      auto packet = AllocatePacket();
-      OnDataFromHost(packet, TCP_FLAG_ACK);
-      FreePacket(packet);
+      auto packet = AllocatePacket(true);
+      if (packet) {
+        OnDataFromHost(packet, TCP_FLAG_ACK);
+      }
     }
   } else if (how == SHUT_RD) {
     if (debug_) {
       MV_LOG("shutdown SHUT_RD TCP %d %x:%u -> %x:%u, errno=%d", fd_, sip_, sport_, dip_, dport_, errno);
     }
+    if (polling_request_) {
+      auto device = dynamic_cast<Device*>(backend_->device());
+      device->manager()->io()->StopPolling(polling_request_);
+      polling_request_ = nullptr;
+    }
     if (!read_done_) {
       read_done_ = true;
 
-      auto packet = AllocatePacket();
-      OnDataFromHost(packet, TCP_FLAG_FIN | TCP_FLAG_ACK);
-      FreePacket(packet);
+      auto packet = AllocatePacket(true);
+      if (packet) {
+        OnDataFromHost(packet, TCP_FLAG_FIN | TCP_FLAG_ACK);
+      }
       seq_host_ += 1;
     }
   }
@@ -278,15 +290,20 @@ void RedirectTcpSocket::InitializeRedirect() {
   int ret = connect(fd_, (struct sockaddr*)&daddr, sizeof(daddr));
   MV_ASSERT(ret == -1 && errno == EINPROGRESS);
 
-  Device* device = dynamic_cast<Device*>(backend_->device());
-  device->manager()->RegisterIoEvent(device, fd_, EPOLLIN | EPOLLOUT | EPOLLET, [=](uint32_t events) {
-    if (events & EPOLLIN) {
-      OnRemoteDataAvailable();
-    } else if (events & EPOLLOUT) { // socket is connected or send buffer is not full
+  auto device = dynamic_cast<Device*>(backend_->device());
+  polling_request_ = device->manager()->io()->StartPolling(fd_, POLLIN | POLLOUT, [=](uint events) {
+    if (events & POLLOUT) { // socket is connected or send buffer is not full
+      device->manager()->io()->ModifyPolling(polling_request_, POLLIN);
       if (!connected_) {
         connected_ = true;
         OnRemoteConnected();
       }
+    }
+    if (events & POLLIN) {
+      OnRemoteDataAvailable();
+    }
+    if (events & POLLRDHUP) {
+      Shutdown(SHUT_RD);
     }
   });
 
@@ -298,10 +315,11 @@ void RedirectTcpSocket::InitializeRedirect() {
 
 void RedirectTcpSocket::OnRemoteConnected() {
   connected_ = true;
-  auto packet = AllocatePacket();
-  OnDataFromHost(packet, TCP_FLAG_SYN | TCP_FLAG_ACK);
+  auto packet = AllocatePacket(true);
+  if (packet) {
+    OnDataFromHost(packet, TCP_FLAG_SYN | TCP_FLAG_ACK);
+  }
   seq_host_ += 1;
-  FreePacket(packet);
 }
 
 void RedirectTcpSocket::OnRemoteDataAvailable() {
@@ -312,19 +330,32 @@ void RedirectTcpSocket::OnRemoteDataAvailable() {
   if (available <= 0) {
     return;
   }
-  auto packet = AllocatePacket();
+  auto packet = AllocatePacket(false);
+  if (packet == nullptr) {
+    if (debug_) {
+      MV_LOG("TCP fd=%d failed to allocate packet", fd_);
+    }
+    auto device = dynamic_cast<Device*>(backend_->device());
+    auto io = device->manager()->io();
+    io->ModifyPolling(polling_request_, 0);
+    io->AddTimer(10, false, [io, this]() {
+      io->ModifyPolling(polling_request_, POLLIN);
+    });
+    active_time_ = time(nullptr);
+    return;
+  }
   int ret = recv(fd_, packet->data, available, 0);
   if (ret <= 0) {
     if (errno != EAGAIN) {
       Shutdown(SHUT_RD);
     }
+    packet->Release();
   } else {
     packet->data_length = ret;
     OnDataFromHost(packet, TCP_FLAG_ACK);
     seq_host_ += packet->data_length;
     guest_overflow_ = ret == available;
   }
-  FreePacket(packet);
 }
 
 void RedirectTcpSocket::OnDataFromGuest(void* data, size_t length) {
@@ -344,7 +375,8 @@ void RedirectTcpSocket::OnDataFromGuest(void* data, size_t length) {
   }
 
   ack_host_ += ret;
-  auto packet = AllocatePacket();
-  OnDataFromHost(packet, TCP_FLAG_ACK);
-  FreePacket(packet);
+  auto packet = AllocatePacket(true);
+  if (packet) {
+    OnDataFromHost(packet, TCP_FLAG_ACK);
+  }
 }

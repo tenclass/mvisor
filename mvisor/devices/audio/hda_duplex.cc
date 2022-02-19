@@ -319,7 +319,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     }
 
     if (stream->timer->interval_ms != next_interval) {
-      manager_->ModifyIoTimer(stream->timer, next_interval);
+      manager_->io()->ModifyTimer(stream->timer, next_interval);
     }
   }
 
@@ -336,12 +336,12 @@ class HdaDuplex : public Device, public HdaCodecInterface {
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
       MV_ASSERT(stream->timer == nullptr);
-      stream->timer = manager_->RegisterIoTimer(this, 1, true, [this, stream]() {
+      stream->timer = manager_->io()->AddTimer(1, true, [this, stream]() {
         OnStreamTimer(stream);
       });
     } else {
       MV_ASSERT(stream->timer);
-      manager_->UnregisterIoTimer(stream->timer);
+      manager_->io()->RemoveTimer(stream->timer);
       stream->timer = nullptr;
     }
   }

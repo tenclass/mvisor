@@ -238,12 +238,15 @@ class Qcow2Image : public DiskImage {
       MV_LOG("write overflow length=0x%lx, offset=0x%lx", length, offset);
       return 0;
     }
-    return pwrite(fd_, buffer, length, offset);
+    ssize_t ret = pwrite(fd_, buffer, length, offset);
+    MV_ASSERT(ret == (ssize_t)length);
+    return ret;
   }
 
   /* FIXME: should we call pread for multiple times to read all data ??? */
   ssize_t ReadFile(void* buffer, size_t length, off_t offset) {
-    return pread(fd_, buffer, length, offset);
+    ssize_t ret = pread(fd_, buffer, length, offset);
+    return ret;
   }
 
   void InitializeL1Table() {

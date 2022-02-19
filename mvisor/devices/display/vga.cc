@@ -112,7 +112,7 @@ void Vga::Connect() {
     pci_bars_[0].host_memory = vram_base_;
   }
 
-  refresh_timer_ = manager_->RegisterIoTimer(this, 1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
+  refresh_timer_ = manager_->io()->AddTimer(1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
 
   PciDevice::Connect();
 }
@@ -122,7 +122,7 @@ void Vga::Disconnect() {
     munmap((void*)vram_base_, vram_size_);
     vram_base_ = nullptr;
   }
-  manager_->UnregisterIoTimer(refresh_timer_);
+  manager_->io()->RemoveTimer(refresh_timer_);
   PciDevice::Disconnect();
 }
 

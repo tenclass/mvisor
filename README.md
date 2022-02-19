@@ -61,7 +61,7 @@ Apr 2022
 For CentOS 8,
 
 ```
-yum install -y libaio-devel SDL2-devel yaml-cpp-devel gcc-c++
+yum install -y liburing-devel SDL2-devel yaml-cpp-devel gcc-c++
 make -j 8
 ```
 

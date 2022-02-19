@@ -26,6 +26,7 @@
 #include <thread>
 #include "pci_device.h"
 #include "device.h"
+#include "io_thread.h"
 
 struct MemoryRegion;
 struct IoHandler {
@@ -35,7 +36,6 @@ struct IoHandler {
 };
 
 typedef std::function<void()> VoidCallback;
-typedef std::function<void(uint32_t)> EventsCallback;
 
 enum IoEventType {
   kIoEventPio,
@@ -51,17 +51,7 @@ struct IoEvent {
   uint64_t        datamatch;
   uint32_t        flags;
   int             fd;
-  EventsCallback  callback;
-};
-
-/* Currently used for VGA auto refresh */
-typedef std::chrono::steady_clock::time_point IoTimePoint;
-struct IoTimer {
-  Device*       device;
-  bool          permanent;
-  int           interval_ms;
-  IoTimePoint   next_timepoint;
-  VoidCallback  callback;
+  IoRequest*      request;
 };
 
 class Machine;
@@ -82,10 +72,6 @@ class DeviceManager {
   void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   void UnregisterIoEvent(IoEvent* event);
   void UnregisterIoEvent(Device* device, int fd);
-  IoTimer* RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback);
-  void UnregisterIoTimer(IoTimer* timer);
-  void ModifyIoTimer(IoTimer* timer, int interval_ms);
-  void RunOnIoThread(VoidCallback callback);
 
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);
@@ -102,23 +88,16 @@ class DeviceManager {
 
   inline Machine* machine() { return machine_; }
   inline Device* root() { return root_; }
+  IoThread* io();
 
  private:
-  void InitializeIoEvent();
-  void IoEventLoop();
-  int CheckIoTimers();
-
   Machine*                machine_;
   Device*                 root_;
   std::set<Device*>       registered_devices_;
   std::deque<IoHandler*>  mmio_handlers_;
   std::deque<IoHandler*>  pio_handlers_;
-  std::thread             ioevent_thread_;
   std::set<IoEvent*>      ioevents_;
   std::recursive_mutex    mutex_;
-  int                     epoll_fd_ = -1;
-  int                     stop_event_fd_ = -1;
-  std::set<IoTimer*>      iotimers_;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

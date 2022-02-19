@@ -3,7 +3,7 @@ name: q35-machine
 machine:
   memory: 2G
   vcpu: 4
-  bios: ../share/bios-debug.bin
+  bios: ../share/bios-256k.bin
 
 objects:
   - class: system-root

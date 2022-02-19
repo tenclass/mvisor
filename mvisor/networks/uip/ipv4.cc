@@ -34,21 +34,12 @@ bool Ipv4Socket::IsActive() {
   return !closed_;
 }
 
-Ipv4Packet* Ipv4Socket::AllocatePacket() {
-  Ipv4Packet* packet = new Ipv4Packet;
-  packet->buffer = new uint8_t[UIP_MAX_BUFFER_SIZE];
-  packet->eth = (ethhdr*)packet->buffer;
-  packet->ip = (iphdr*)&packet->eth[1];
-  packet->data = (void*)&packet->ip[1];
-  packet->tcp = nullptr;
-  packet->udp = nullptr;
-  packet->data_length = 0;
-  return packet;
+Ipv4Packet* Ipv4Socket::AllocatePacket(bool urgent) {
+  return backend_->AllocatePacket(urgent);
 }
 
-void Ipv4Socket::FreePacket(Ipv4Packet* packet) {
-  delete packet->buffer;
-  delete packet;
+void Ipv4Socket::OnRemoteDataAvailable() {
+  MV_PANIC("not implemented");
 }
 
 uint16_t Ipv4Socket::CalculateChecksum(uint8_t* addr, uint16_t count) {

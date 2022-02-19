@@ -92,110 +92,111 @@ struct XhciTransferRequestBlock {
   uint32_t  control;
   /* User defined state variables */
   uint64_t  address;
+  bool      cycle_bit;
 } __attribute__((packed));
 
 
 enum {
-    PLS_U0              =  0,
-    PLS_U1              =  1,
-    PLS_U2              =  2,
-    PLS_U3              =  3,
-    PLS_DISABLED        =  4,
-    PLS_RX_DETECT       =  5,
-    PLS_INACTIVE        =  6,
-    PLS_POLLING         =  7,
-    PLS_RECOVERY        =  8,
-    PLS_HOT_RESET       =  9,
-    PLS_COMPILANCE_MODE = 10,
-    PLS_TEST_MODE       = 11,
-    PLS_RESUME          = 15,
+  PLS_U0              =  0,
+  PLS_U1              =  1,
+  PLS_U2              =  2,
+  PLS_U3              =  3,
+  PLS_DISABLED        =  4,
+  PLS_RX_DETECT       =  5,
+  PLS_INACTIVE        =  6,
+  PLS_POLLING         =  7,
+  PLS_RECOVERY        =  8,
+  PLS_HOT_RESET       =  9,
+  PLS_COMPILANCE_MODE = 10,
+  PLS_TEST_MODE       = 11,
+  PLS_RESUME          = 15,
 };
 
 enum EPType {
-    ET_INVALID = 0,
-    ET_ISO_OUT,
-    ET_BULK_OUT,
-    ET_INTR_OUT,
-    ET_CONTROL,
-    ET_ISO_IN,
-    ET_BULK_IN,
-    ET_INTR_IN,
+  ET_INVALID = 0,
+  ET_ISO_OUT,
+  ET_BULK_OUT,
+  ET_INTR_OUT,
+  ET_CONTROL,
+  ET_ISO_IN,
+  ET_BULK_IN,
+  ET_INTR_IN,
 };
 
 enum TRBType {
-    TRB_RESERVED = 0,
-    TR_NORMAL,
-    TR_SETUP,
-    TR_DATA,
-    TR_STATUS,
-    TR_ISOCH,
-    TR_LINK,
-    TR_EVDATA,
-    TR_NOOP,
-    CR_ENABLE_SLOT,
-    CR_DISABLE_SLOT,
-    CR_ADDRESS_DEVICE,
-    CR_CONFIGURE_ENDPOINT,
-    CR_EVALUATE_CONTEXT,
-    CR_RESET_ENDPOINT,
-    CR_STOP_ENDPOINT,
-    CR_SET_TR_DEQUEUE,
-    CR_RESET_DEVICE,
-    CR_FORCE_EVENT,
-    CR_NEGOTIATE_BW,
-    CR_SET_LATENCY_TOLERANCE,
-    CR_GET_PORT_BANDWIDTH,
-    CR_FORCE_HEADER,
-    CR_NOOP,
-    ER_TRANSFER = 32,
-    ER_COMMAND_COMPLETE,
-    ER_PORT_STATUS_CHANGE,
-    ER_BANDWIDTH_REQUEST,
-    ER_DOORBELL,
-    ER_HOST_CONTROLLER,
-    ER_DEVICE_NOTIFICATION,
-    ER_MFINDEX_WRAP,
-    /* vendor specific bits */
-    CR_VENDOR_NEC_FIRMWARE_REVISION  = 49,
-    CR_VENDOR_NEC_CHALLENGE_RESPONSE = 50,
+  TRB_RESERVED = 0,
+  TR_NORMAL,
+  TR_SETUP,
+  TR_DATA,
+  TR_STATUS,
+  TR_ISOCH,
+  TR_LINK,
+  TR_EVDATA,
+  TR_NOOP,
+  CR_ENABLE_SLOT,
+  CR_DISABLE_SLOT,
+  CR_ADDRESS_DEVICE,
+  CR_CONFIGURE_ENDPOINT,
+  CR_EVALUATE_CONTEXT,
+  CR_RESET_ENDPOINT,
+  CR_STOP_ENDPOINT,
+  CR_SET_TR_DEQUEUE,
+  CR_RESET_DEVICE,
+  CR_FORCE_EVENT,
+  CR_NEGOTIATE_BW,
+  CR_SET_LATENCY_TOLERANCE,
+  CR_GET_PORT_BANDWIDTH,
+  CR_FORCE_HEADER,
+  CR_NOOP,
+  ER_TRANSFER = 32,
+  ER_COMMAND_COMPLETE,
+  ER_PORT_STATUS_CHANGE,
+  ER_BANDWIDTH_REQUEST,
+  ER_DOORBELL,
+  ER_HOST_CONTROLLER,
+  ER_DEVICE_NOTIFICATION,
+  ER_MFINDEX_WRAP,
+  /* vendor specific bits */
+  CR_VENDOR_NEC_FIRMWARE_REVISION  = 49,
+  CR_VENDOR_NEC_CHALLENGE_RESPONSE = 50,
 };
 
 enum TRBCCode {
-    CC_INVALID = 0,
-    CC_SUCCESS,
-    CC_DATA_BUFFER_ERROR,
-    CC_BABBLE_DETECTED,
-    CC_USB_TRANSACTION_ERROR,
-    CC_TRB_ERROR,
-    CC_STALL_ERROR,
-    CC_RESOURCE_ERROR,
-    CC_BANDWIDTH_ERROR,
-    CC_NO_SLOTS_ERROR,
-    CC_INVALID_STREAM_TYPE_ERROR,
-    CC_SLOT_NOT_ENABLED_ERROR,
-    CC_EP_NOT_ENABLED_ERROR,
-    CC_SHORT_PACKET,
-    CC_RING_UNDERRUN,
-    CC_RING_OVERRUN,
-    CC_VF_ER_FULL,
-    CC_PARAMETER_ERROR,
-    CC_BANDWIDTH_OVERRUN,
-    CC_CONTEXT_STATE_ERROR,
-    CC_NO_PING_RESPONSE_ERROR,
-    CC_EVENT_RING_FULL_ERROR,
-    CC_INCOMPATIBLE_DEVICE_ERROR,
-    CC_MISSED_SERVICE_ERROR,
-    CC_COMMAND_RING_STOPPED,
-    CC_COMMAND_ABORTED,
-    CC_STOPPED,
-    CC_STOPPED_LENGTH_INVALID,
-    CC_MAX_EXIT_LATENCY_TOO_LARGE_ERROR = 29,
-    CC_ISOCH_BUFFER_OVERRUN = 31,
-    CC_EVENT_LOST_ERROR,
-    CC_UNDEFINED_ERROR,
-    CC_INVALID_STREAM_ID_ERROR,
-    CC_SECONDARY_BANDWIDTH_ERROR,
-    CC_SPLIT_TRANSACTION_ERROR
+  CC_INVALID = 0,
+  CC_SUCCESS,
+  CC_DATA_BUFFER_ERROR,
+  CC_BABBLE_DETECTED,
+  CC_USB_TRANSACTION_ERROR,
+  CC_TRB_ERROR,
+  CC_STALL_ERROR,
+  CC_RESOURCE_ERROR,
+  CC_BANDWIDTH_ERROR,
+  CC_NO_SLOTS_ERROR,
+  CC_INVALID_STREAM_TYPE_ERROR,
+  CC_SLOT_NOT_ENABLED_ERROR,
+  CC_EP_NOT_ENABLED_ERROR,
+  CC_SHORT_PACKET,
+  CC_RING_UNDERRUN,
+  CC_RING_OVERRUN,
+  CC_VF_ER_FULL,
+  CC_PARAMETER_ERROR,
+  CC_BANDWIDTH_OVERRUN,
+  CC_CONTEXT_STATE_ERROR,
+  CC_NO_PING_RESPONSE_ERROR,
+  CC_EVENT_RING_FULL_ERROR,
+  CC_INCOMPATIBLE_DEVICE_ERROR,
+  CC_MISSED_SERVICE_ERROR,
+  CC_COMMAND_RING_STOPPED,
+  CC_COMMAND_ABORTED,
+  CC_STOPPED,
+  CC_STOPPED_LENGTH_INVALID,
+  CC_MAX_EXIT_LATENCY_TOO_LARGE_ERROR = 29,
+  CC_ISOCH_BUFFER_OVERRUN = 31,
+  CC_EVENT_LOST_ERROR,
+  CC_UNDEFINED_ERROR,
+  CC_INVALID_STREAM_ID_ERROR,
+  CC_SECONDARY_BANDWIDTH_ERROR,
+  CC_SPLIT_TRANSACTION_ERROR
 };
 
 
@@ -323,14 +324,14 @@ enum TRBCCode {
 #define SLOT_CONTEXT_ENTRIES_SHIFT 27
 
 #define get_field(data, field)                  \
-    (((data) >> field##_SHIFT) & field##_MASK)
+  (((data) >> field##_SHIFT) & field##_MASK)
 
 #define set_field(data, newval, field) do {                     \
-        uint32_t val = *data;                                   \
-        val &= ~(field##_MASK << field##_SHIFT);                \
-        val |= ((newval) & field##_MASK) << field##_SHIFT;      \
-        *data = val;                                            \
-    } while (0)
+    uint32_t val = *data;                                   \
+    val &= ~(field##_MASK << field##_SHIFT);                \
+    val |= ((newval) & field##_MASK) << field##_SHIFT;      \
+    *data = val;                                            \
+  } while (0)
 
 
 #endif // _MVISOR_DEVICES_USB_XHCI_HOST_H

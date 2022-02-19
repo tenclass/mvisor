@@ -19,7 +19,8 @@
 #include "uip.h"
 #include <arpa/inet.h>
 #include <fcntl.h>
-#include <sys/epoll.h>
+#include <poll.h>
+#include <unistd.h>
 #include "logger.h"
 #include "device_manager.h"
 
@@ -30,10 +31,12 @@ UdpSocket::UdpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, u
   dport_ = ntohs(udp->dest);
 }
 
-Ipv4Packet* UdpSocket::AllocatePacket() {
-  Ipv4Packet* packet = Ipv4Socket::AllocatePacket();
-  packet->udp = (udphdr*)packet->data;
-  packet->data = (void*)&packet->udp[1];
+Ipv4Packet* UdpSocket::AllocatePacket(bool urgent) {
+  Ipv4Packet* packet = Ipv4Socket::AllocatePacket(urgent);
+  if (packet) {
+    packet->udp = (udphdr*)packet->data;
+    packet->data = (void*)&packet->udp[1];
+  }
   return packet;
 }
 
@@ -89,16 +92,19 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
   udp->check = CalculateUdpChecksum(packet);
 
-  size_t packet_length = sizeof(ethhdr) + ntohs(ip->tot_len);
-  backend_->OnFrameFromHost(ETH_P_IP, packet->buffer, packet_length);
+  backend_->OnPacketFromHost(packet);
 
   active_time_ = time(nullptr);
 }
 
 RedirectUdpSocket::~RedirectUdpSocket() {
-  if (fd_ > 0) {
-    Device* device = dynamic_cast<Device*>(backend_->device());
-    device->manager()->UnregisterIoEvent(device, fd_);
+  if (fd_ >= 0) {
+    close(fd_);
+    fd_ = -1;
+  }
+  if (polling_request_) {
+    auto device = dynamic_cast<Device*>(backend_->device());
+    device->manager()->io()->StopPolling(polling_request_);
   }
 }
 
@@ -119,9 +125,9 @@ void RedirectUdpSocket::InitializeRedirect() {
   flags |= O_NONBLOCK;
   fcntl(fd_, F_SETFL, flags);
 
-  Device* device = dynamic_cast<Device*>(backend_->device());
-  device->manager()->RegisterIoEvent(device, fd_, EPOLLIN, [=](uint32_t events) {
-    if (events & EPOLLIN) {
+  auto device = dynamic_cast<Device*>(backend_->device());
+  polling_request_ = device->manager()->io()->StartPolling(fd_, POLLIN, [=](uint events) {
+    if (events & POLLIN) {
       OnRemoteDataAvailable();
     }
   });
@@ -133,16 +139,29 @@ void RedirectUdpSocket::InitializeRedirect() {
 }
 
 void RedirectUdpSocket::OnRemoteDataAvailable() {
-  auto packet = AllocatePacket();
+  auto packet = AllocatePacket(false);
+  if (packet == nullptr) {
+    if (debug_) {
+      MV_LOG("UDP fd=%d failed to allocate packet", fd_, this);
+    }
+    auto device = dynamic_cast<Device*>(backend_->device());
+    auto io = device->manager()->io();
+    io->ModifyPolling(polling_request_, 0);
+    io->AddTimer(10, false, [io, this]() {
+      io->ModifyPolling(polling_request_, POLLIN);
+    });
+    active_time_ = time(nullptr);
+    return;
+  }
+
   int ret = recvfrom(fd_, packet->data, UIP_MAX_UDP_PAYLOAD, 0, nullptr, nullptr);
   if (ret < 0) {
-    FreePacket(packet);
+    packet->Release();
     return;
   }
   
   packet->data_length = ret;
   OnDataFromHost(packet);
-  FreePacket(packet);
 }
 
 void RedirectUdpSocket::OnDataFromGuest(void* data, size_t length) {

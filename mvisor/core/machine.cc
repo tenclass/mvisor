@@ -53,8 +53,8 @@ Machine::Machine(std::string config_path) {
   if (!root) {
     MV_PANIC("failed to find system-root device");
   }
-  device_manager_ = new DeviceManager(this, root);
   io_thread_ = new IoThread(this);
+  device_manager_ = new DeviceManager(this, root);
 
   LoadBiosFile();
 }
@@ -67,10 +67,11 @@ Machine::~Machine() {
   for (auto vcpu: vcpus_) {
     delete vcpu;
   }
-  delete io_thread_;
+  io_thread_->Stop();
 
   delete device_manager_;
   delete memory_manager_;
+  delete io_thread_;
 
   // delete objects created by confiration
   for (auto it = objects_.begin(); it != objects_.end(); it++) {
@@ -177,9 +178,7 @@ int Machine::Run() {
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }
-
-  // Not used yet
-  // io_thread_->Start();
+  io_thread_->Start();
   return 0;
 }
 

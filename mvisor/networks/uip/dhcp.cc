@@ -83,7 +83,10 @@ void DhcpServiceUdpSocket::OnDataFromGuest(void* data, size_t length) {
   }
 
   // Build UDP reply message
-  auto packet = AllocatePacket();
+  auto packet = AllocatePacket(false);
+  if (packet == nullptr) {
+    return;
+  }
   packet->data_length = reply.size();
   memcpy(packet->data, reply.data(), packet->data_length);
 
@@ -94,8 +97,6 @@ void DhcpServiceUdpSocket::OnDataFromGuest(void* data, size_t length) {
   OnDataFromHost(packet);
   sip_ = sip;
   dip_ = dip;
-
-  FreePacket(packet);
 }
 
 size_t DhcpServiceUdpSocket::FillDhcpOptions(uint8_t* option, int dhcp_type) {

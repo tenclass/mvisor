@@ -269,6 +269,7 @@ class XhciHost : public PciDevice {
       void* hva = manager_->TranslateGuestMemory(ring.dequeue);
       memcpy(&trb, hva, TRB_SIZE);
       trb.address = ring.dequeue;
+      trb.cycle_bit = ring.consumer_cycle_bit;
       
       if (!!(trb.control & TRB_C) != ring.consumer_cycle_bit) {
         // Maybe software is still writing the ring ??
@@ -922,7 +923,13 @@ class XhciHost : public PciDevice {
   }
 
   void StallEndpoint(XhciTransfer* transfer) {
-    MV_PANIC("stall endpoint not implemented");
+    auto endpoint = transfer->endpoint;
+    MV_ASSERT(endpoint->type != ET_ISO_IN && endpoint->type != ET_ISO_OUT);
+
+    endpoint->ring.dequeue = transfer->trbs[0].address;
+    endpoint->ring.consumer_cycle_bit = transfer->trbs[0].cycle_bit;
+
+    SetEndpointState(endpoint, EP_HALTED);
   }
 
   void SetEndpointState(XhciEndpoint* endpoint, uint32_t state) {
@@ -1081,6 +1088,8 @@ class XhciHost : public PciDevice {
     if (transfer->status != CC_SUCCESS) {
       StallEndpoint(transfer);
     }
+
+    // Update ring dequeue to context
     auto endpoint = transfer->endpoint;
     SetEndpointState(endpoint, endpoint->state);
   }
@@ -1334,7 +1343,7 @@ class XhciHost : public PciDevice {
     uint64_t slot_id = offset >> 2;
     uint32_t value = *(uint32_t*)data;
 
-    manager_->RegisterIoTimer(this, 20, false, [=]() {
+    manager_->io()->Schedule([=]() {
       std::lock_guard<std::mutex> lock(mutex_);
       if (slot_id == 0) {
         ProcessCommands();

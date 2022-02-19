@@ -22,8 +22,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/eventfd.h>
-#include <sys/epoll.h>
 #include <signal.h>
+#include <poll.h>
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
@@ -39,12 +39,13 @@ class SystemRoot : public Device {
 };
 DECLARE_DEVICE(SystemRoot);
 
+inline IoThread* DeviceManager::io() {
+  return machine_->io_thread_;
+}
 
 DeviceManager::DeviceManager(Machine* machine, Device* root) :
   machine_(machine), root_(root)
 {
-  InitializeIoEvent();
-
   root_->manager_ = this;
   /* Call Connect() on all devices and do the initialization
    * 1. reset device status
@@ -57,22 +58,9 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
 }
 
 DeviceManager::~DeviceManager() {
-  /* Stop ioevent thread */
-  if (stop_event_fd_ != -1) {
-    uint64_t tmp = 1;
-    write(stop_event_fd_, &tmp, sizeof(tmp));
-  }
-  if (ioevent_thread_.joinable()) {
-    ioevent_thread_.join();
-  }
-
   if (root_) {
     /* Disconnect invoked recursively */
     root_->Disconnect();
-  }
-
-  if (epoll_fd_ != -1) {
-    close(epoll_fd_);
   }
 }
 
@@ -184,6 +172,7 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_res
 
 IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch) {
   IoEvent* event = new IoEvent {
+    .type = kIoEventFd,
     .device = device,
     .address = address,
     .length = length,
@@ -209,16 +198,15 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
     MV_PANIC("failed to register io event, ret=%d", ret);
   }
 
-  struct epoll_event epoll_event = {
-    .events = EPOLLIN,
-    .data = {
-      .ptr = (void*)event
+  event->request = io()->StartPolling(event->fd, POLLIN, [event, this](int events) {
+    uint64_t tmp;
+    read(event->fd, &tmp, sizeof(tmp));
+    if (event->type == kIoEventMmio) {
+      HandleMmio(event->address, (uint8_t*)&event->datamatch, event->length, true, true);
+    } else if (event->type == kIoEventPio) {
+      HandleIo(event->address, (uint8_t*)&event->datamatch, event->length, true, 1, true);
     }
-  };
-  ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, event->fd, &epoll_event);
-  if (ret < 0) {
-    MV_PANIC("failed to add epoll event, ret=%d", ret);
-  }
+  });
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ioevents_.insert(event);
@@ -230,6 +218,10 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
 }
 
 void DeviceManager::UnregisterIoEvent(IoEvent* event) {
+  if (event->request) {
+    io()->StopPolling(event->request);
+  }
+
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   if (event->type == kIoEventMmio || event->type == kIoEventPio) {
@@ -242,13 +234,8 @@ void DeviceManager::UnregisterIoEvent(IoEvent* event) {
     };
     int ret = ioctl(machine_->vm_fd_, KVM_IOEVENTFD, &kvm_ioevent);
     if (ret < 0) {
-      MV_PANIC("failed to register io event, ret=%d", ret);
+      MV_PANIC("failed to unregister io event, ret=%d", ret);
     }
-  }
-
-  int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, event->fd, nullptr);
-  if (ret < 0) {
-    MV_PANIC("failed to add epoll event, ret=%d", ret);
   }
 
   ioevents_.erase(event);
@@ -265,39 +252,6 @@ void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint6
   MV_ASSERT(it != ioevents_.end());
   UnregisterIoEvent(*it);
 }
-
-void DeviceManager::RegisterIoEvent(Device* device, int fd, uint32_t events, EventsCallback callback) {
-  IoEvent* event = new IoEvent {
-    .type = kIoEventFd,
-    .device = device,
-    .fd = fd,
-    .callback = callback
-  };
-  struct epoll_event epoll_event = {
-    .events = events,
-    .data = {
-      .ptr = (void*)event
-    }
-  };
-  int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, event->fd, &epoll_event);
-  if (ret < 0) {
-    MV_PANIC("failed to add epoll event, fd=%d ret=%d", event->fd, ret);
-  }
-
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  ioevents_.insert(event);
-}
-
-void DeviceManager::UnregisterIoEvent(Device* device, int fd) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
-  auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
-    return e->device == device && e->fd == fd;
-  });
-  MV_ASSERT(it != ioevents_.end());
-  UnregisterIoEvent(*it);
-}
-
 
 /* IO ports may overlap like MMIO addresses.
  * Use para-virtual drivers instead of IO operations to improve performance.
@@ -331,11 +285,11 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         ptr += size;
       }
 
-      if (!ioeventfd && machine_->debug()) {
+      if (machine_->debug()) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
-        if (cost_us >= 1000) {
-          MV_LOG("%s slow io %s port: 0x%x size: %u data: %lx within %.3lfms", device->name(),
+        if ((!ioeventfd && cost_us >= 1000) || (ioeventfd && cost_us >= 10000)) {
+          MV_LOG("%s slow %sio %s port=0x%x size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "event " : "",
             is_write ? "out" : "in", port, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
       }
@@ -384,11 +338,11 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         device->Read(resource, base - resource.base, data, size);
       }
 
-      if (!ioeventfd && machine_->debug()) {
+      if (machine_->debug()) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
-        if (cost_us >= 1000) {
-          MV_LOG("%s slow mmio %s addr: 0x%lx size: %u data: %lx within %.3lfms", device->name(),
+        if ((!ioeventfd && cost_us >= 1000) || (ioeventfd && cost_us >= 10000)) {
+          MV_LOG("%s slow %smmio %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "event " : "",
             is_write ? "out" : "in", base, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
       }
@@ -430,129 +384,3 @@ void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
   }
 }
 
-void DeviceManager::InitializeIoEvent() {
-  signal(SIGPIPE, SIG_IGN);
-
-  epoll_fd_ = epoll_create(IOEVENTFD_MAX_EVENTS);
-  
-  stop_event_fd_ = eventfd(0, 0);
-  struct epoll_event epoll_event = {
-    .events = EPOLLIN,
-    .data = {
-      .fd = stop_event_fd_
-    }
-  };
-  if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, stop_event_fd_, &epoll_event) < 0) {
-    MV_PANIC("failed to add stop event fd");
-  }
-
-  ioevent_thread_ = std::thread(&DeviceManager::IoEventLoop, this);
-}
-
-void DeviceManager::IoEventLoop() {
-  SetThreadName("mvisor-ioevent");
-
-  struct epoll_event events[IOEVENTFD_MAX_EVENTS];
-  uint64_t tmp;
-
-  while (machine_->IsValid()) {
-    int next_timeout_ms = CheckIoTimers();
-    int nfds = epoll_wait(epoll_fd_, events, IOEVENTFD_MAX_EVENTS, next_timeout_ms);
-    if (nfds < 0) {
-      MV_PANIC("nfds = %d", nfds);
-    }
-
-    for (int i = 0; i < nfds; i++) {
-      if (events[i].data.fd == stop_event_fd_) {
-        read(stop_event_fd_, &tmp, sizeof(tmp));
-        break;
-      }
-
-      IoEvent* ioevent = (IoEvent*)events[i].data.ptr;
-      if (ioevent->type == kIoEventPio || ioevent->type == kIoEventMmio) {
-        if (read(ioevent->fd, &tmp, sizeof(tmp)) < 0) {
-          MV_PANIC("failed to read event");
-        }
-      }
-      switch (ioevent->type)
-      {
-      case kIoEventPio:
-        HandleIo(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true, 1, true);
-        break;
-      case kIoEventMmio:
-        HandleMmio(ioevent->address, (uint8_t*)&ioevent->datamatch, ioevent->length, true, true);
-        break;
-      case kIoEventFd:
-        ioevent->callback(events[i].events);
-        break;
-      }
-    }
-  }
-}
-
-
-IoTimer* DeviceManager::RegisterIoTimer(Device* device, int interval_ms, bool permanent, VoidCallback callback) {
-  IoTimer* timer = new IoTimer {
-    .device = device,
-    .permanent = permanent,
-    .interval_ms = interval_ms,
-    .callback = callback
-  };
-  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
-
-  {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
-    iotimers_.insert(timer);
-  }
-
-  /* Wakeup ioevent thread and recalculate the timeout */
-  uint64_t tmp = 1;
-  write(stop_event_fd_, &tmp, sizeof(tm));
-
-  return timer;
-}
-
-void DeviceManager::UnregisterIoTimer(IoTimer* timer) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  iotimers_.erase(timer);
-  delete timer;
-}
-
-void DeviceManager::ModifyIoTimer(IoTimer* timer, int interval_ms) {
-  timer->interval_ms = interval_ms;
-  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
-}
-
-int DeviceManager::CheckIoTimers() {
-  auto now = std::chrono::steady_clock::now();
-  int64_t min_timeout_ms = 100000;
-
-  std::vector<IoTimer*> triggered;
-
-  mutex_.lock();
-  for (auto timer : iotimers_) {
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
-    if (delta_ms <= 0) {
-      triggered.push_back(timer);
-      timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
-      delta_ms = timer->interval_ms;
-    }
-    if (delta_ms < min_timeout_ms) {
-      min_timeout_ms = delta_ms;
-    }
-  }
-  mutex_.unlock();
-  
-  for (auto timer : triggered) {
-    timer->callback();
-    if (!timer->permanent) {
-      UnregisterIoTimer(timer);
-      continue;
-    }
-  }
-  return min_timeout_ms;
-}
-
-void DeviceManager::RunOnIoThread(VoidCallback callback) {
-  RegisterIoTimer(nullptr, 0, false, callback);
-}

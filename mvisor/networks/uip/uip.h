@@ -27,6 +27,7 @@
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <ctime>
+#include "io_thread.h"
 
 #define UIP_MAX_BUFFER_SIZE (64*1024 + 16)
 #define UIP_MAX_UDP_PAYLOAD (64*1024 - 20 - 8)
@@ -43,14 +44,17 @@ struct PseudoHeader {
 } __attribute__((packed));
 
 
+class Ipv4Socket;
 struct Ipv4Packet {
-  uint8_t*  buffer;
-  ethhdr*   eth;
-  iphdr*    ip;
-  udphdr*   udp;
-  tcphdr*   tcp;
-  void*     data;
-  size_t    data_length;
+  Ipv4Socket*   socket;
+  uint8_t       buffer[UIP_MAX_BUFFER_SIZE];
+  ethhdr*       eth;
+  iphdr*        ip;
+  udphdr*       udp;
+  tcphdr*       tcp;
+  void*         data;
+  size_t        data_length;
+  IoCallback    Release;
 };
 
 class Ipv4Socket {
@@ -58,10 +62,10 @@ class Ipv4Socket {
   Ipv4Socket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip);
   virtual ~Ipv4Socket() {}
   virtual bool IsActive();
+  virtual void OnRemoteDataAvailable();
   
  protected:
-  virtual Ipv4Packet* AllocatePacket();
-  virtual void FreePacket(Ipv4Packet* packet);
+  virtual Ipv4Packet* AllocatePacket(bool urgent);
   uint16_t CalculateChecksum(uint8_t* addr, uint16_t count);
 
   NetworkBackendInterface* backend_;
@@ -84,7 +88,7 @@ class TcpSocket : public Ipv4Socket {
   virtual void OnDataFromGuest(void* data, size_t length) = 0;
 
  protected:
-  virtual Ipv4Packet* AllocatePacket();
+  virtual Ipv4Packet* AllocatePacket(bool urgent);
   uint16_t CalculateTcpChecksum(Ipv4Packet* packet);
   void OnDataFromHost(Ipv4Packet* packet, uint32_t tcp_flags);
   void ParseTcpOptions(tcphdr* tcp);
@@ -114,7 +118,7 @@ class UdpSocket : public Ipv4Socket {
   virtual void OnDataFromGuest(void* data, size_t length) = 0;
 
  protected:
-  virtual Ipv4Packet* AllocatePacket();
+  virtual Ipv4Packet* AllocatePacket(bool urgent);
   uint16_t CalculateUdpChecksum(Ipv4Packet* packet);
   void OnDataFromHost(Ipv4Packet* packet);
 
@@ -128,10 +132,10 @@ class RedirectTcpSocket : public TcpSocket {
   virtual ~RedirectTcpSocket();
   void Shutdown(int how);
   void OnDataFromGuest(void* data, size_t length);
-  void OnRemoteDataAvailable();
   bool IsGuestOverflow() { return guest_overflow_; }
   bool IsConnected() { return connected_; }
   virtual bool IsActive();
+  virtual void OnRemoteDataAvailable();
 
  protected:
   void InitializeRedirect();
@@ -142,6 +146,7 @@ class RedirectTcpSocket : public TcpSocket {
   int fd_;
   bool connected_;
   bool guest_overflow_;
+  IoRequest* polling_request_ = nullptr;
 };
 
 class Device;
@@ -155,11 +160,12 @@ class RedirectUdpSocket : public UdpSocket {
   virtual ~RedirectUdpSocket();
   void InitializeRedirect();
   void OnDataFromGuest(void* data, size_t length);
-  void OnRemoteDataAvailable();
   virtual bool IsActive();
+  virtual void OnRemoteDataAvailable();
 
  protected:
   int fd_;
+  IoRequest* polling_request_ = nullptr;
 };
 
 struct DhcpMessage;

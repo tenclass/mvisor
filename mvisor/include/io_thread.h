@@ -19,21 +19,36 @@
 #ifndef _MVISOR_IO_THREAD_H
 #define _MVISOR_IO_THREAD_H
 
-#include <libaio.h>
+#include <liburing.h>
 #include <thread>
 #include <functional>
+#include <chrono>
+#include <unordered_set>
+#include <mutex>
+
+typedef std::function<void(uint)> EventsCallback;
+typedef std::function<void()> IoCallback;
+typedef std::chrono::steady_clock::time_point IoTimePoint;
+
+struct IoTimer {
+  bool          permanent;
+  int           interval_ms;
+  IoTimePoint   next_timepoint;
+  IoCallback    callback;
+};
 
 enum IoRequestType {
+  kIoRequestPoll,
   kIoRequestRead,
   kIoRequestWrite
 };
 
-typedef std::function<void()> IoCallback;
 struct IoRequest {
-  enum IoRequestType type;
-  IoCallback callback;
-  // io control block ??
-  struct iocb iocb;
+  enum IoRequestType  type;
+  int                 fd;
+  uint                poll_mask;
+  EventsCallback      callback;
+  bool                removed;
 };
 
 class Machine;
@@ -42,20 +57,31 @@ class IoThread {
  public:
   IoThread(Machine* machine);
   ~IoThread();
-
   void Start();
-  const IoRequest* QueueIo(IoRequestType type, int fd, void* buffer, size_t bytes,
-    off_t offset, IoCallback callback);
-  const IoRequest* QueueIov(IoRequestType type, int fd, const struct iovec* iov, int iov_count,
-    off_t offset, IoCallback callback);
-  void CancelIo(const IoRequest* request);
+  void Stop();
+
+  IoRequest* Read(int fd, void* buffer, size_t bytes, off_t offset, EventsCallback callback);
+  IoRequest* Write(int fd, void* buffer, size_t bytes, off_t offset, EventsCallback callback);
+  IoRequest* StartPolling(int fd, uint poll_mask, EventsCallback callback);
+  void ModifyPolling(IoRequest* request, uint poll_mask);
+  void StopPolling(IoRequest* request);
+  void StopPolling(int fd);
+
+  IoTimer* AddTimer(int interval_ms, bool permanent, IoCallback callback);
+  void RemoveTimer(IoTimer* timer);
+  void ModifyTimer(IoTimer* timer, int interval_ms);
+  void Schedule(IoCallback callback);
 
  private:
-  void EventLoop();
+  void RunLoop();
+  int CheckTimers();
 
-  std::thread thread_;
-  Machine* machine_;
-  io_context_t context_;
+  std::thread           thread_;
+  Machine*              machine_;
+  struct io_uring       ring_;
+  std::recursive_mutex  mutex_;
+  std::unordered_set<IoTimer*>    timers_;
+  std::unordered_set<IoRequest*>  requests_;
 };
 
 #endif // _MVISOR_IO_THREAD_H
