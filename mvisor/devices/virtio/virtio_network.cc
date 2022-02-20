@@ -141,9 +141,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
   void OnTransmit(int queue_index) {
     auto &vq = queues_[queue_index];
-    VirtElement element;
   
-    while (PopQueue(vq, element)) {
+    while (auto element = PopQueue(vq)) {
       HandleTransmit(vq, element);
       PushQueue(vq, element);
       NotifyQueue(vq);
@@ -154,7 +153,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     auto &vq = queues_[queue_index];
     VirtElement element;
   
-    while (PopQueue(vq, element)) {
+    while (auto element = PopQueue(vq)) {
       HandleControl(vq, element);
       PushQueue(vq, element);
       NotifyQueue(vq);
@@ -165,8 +164,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     VirtQueue& vq = queues_[0];
     size_t offset = 0;
     while (offset < size) {
-      VirtElement element;
-      if (!PopQueue(vq, element)) {
+      auto element = PopQueue(vq);
+      if (!element) {
         if (debug_) {
           MV_LOG("network queue is full, queue size=%d", vq.size);
         }
@@ -176,20 +175,20 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       if (offset == 0) {
         /* Prepend virtio net header to the buffer vector, the first buffer length = 0xC */
         virtio_net_hdr_v1 header = { .gso_type = VIRTIO_NET_HDR_GSO_NONE };
-        auto &iov = element.vector[0];
+        auto &iov = element->vector[0];
         MV_ASSERT(iov.iov_len == sizeof(header));
         memcpy(iov.iov_base, &header, sizeof(header));
-        element.length += sizeof(header);
-        element.vector.pop_front();
+        element->length += sizeof(header);
+        element->vector.pop_front();
       }
 
       size_t remain_bytes = size - offset;
-      for (auto &iov : element.vector) {
+      for (auto &iov : element->vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
         memcpy(iov.iov_base, (uint8_t*)buffer + offset, bytes);
         offset += bytes;
         remain_bytes -= bytes;
-        element.length += bytes;
+        element->length += bytes;
       }
 
       PushQueue(vq, element);
@@ -199,8 +198,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     return true;
   }
 
-  void HandleTransmit(VirtQueue& vq, VirtElement& element) {
-    auto &vector = element.vector;
+  void HandleTransmit(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
+    auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 2);
     
     virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)vector.front().iov_base;
@@ -212,8 +211,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
   }
 
-  void HandleControl(VirtQueue& vq, VirtElement& element) {
-    auto &vector = element.vector;
+  void HandleControl(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
+    auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 3);
 
     virtio_net_ctrl_hdr* control = (virtio_net_ctrl_hdr*)vector.front().iov_base;
@@ -224,7 +223,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     MV_ASSERT(vector.back().iov_len == 1);
     vector.pop_back();
 
-    element.length = sizeof(*status);
+    element->length = sizeof(*status);
     auto &iov = vector.front();
 
     switch (control->cls)

@@ -77,7 +77,7 @@ void IdeStorageDevice::Connect() {
   }
   if (has_key("image")) {
     std::string path = std::get<std::string>(key_values_["image"]);
-    image_ = DiskImage::Create(path, readonly);
+    image_ = DiskImage::Create(this, path, readonly);
   }
 }
 
@@ -89,16 +89,31 @@ bool IdeStorageDevice::IsAvailable() {
    }
 }
 
-void IdeStorageDevice::StartCommand() {
+void IdeStorageDevice::StartCommand(VoidCallback iocp) {
   MV_ASSERT(IsAvailable());
-  regs_.status = ATA_SR_DRDY;
+
   regs_.error = 0;
   io_.dma_status = 0;
   io_.nbytes = 0;
+  
+  if (regs_.status & (ATA_SR_BSY)) {
+    if (regs_.command != ATA_CMD_DEVICE_RESET || type_ != kIdeStorageTypeCdrom) {
+      MV_PANIC("invalid command 0x%x while busy", regs_.command);
+      return;
+    }
+  }
+
+  io_complete_ = iocp;
+  io_async_ = false;
+  regs_.status = ATA_SR_DRDY | ATA_SR_BSY;
 
   auto handler = ata_handlers_[regs_.command];
   if (handler) {
     handler();
+    if (!io_async_) {
+      regs_.status &= ~ATA_SR_BSY;
+      io_complete_();
+    }
   } else {
     MV_PANIC("unknown command 0x%x", regs_.command);
   }

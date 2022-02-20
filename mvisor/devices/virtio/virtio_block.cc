@@ -72,7 +72,7 @@ class VirtioBlock : public VirtioPci {
     }
     if (has_key("image")) {
       std::string path = std::get<std::string>(key_values_["image"]);
-      image_ = DiskImage::Create(path, readonly);
+      image_ = DiskImage::Create(this, path, readonly);
     }
     if (image_) {
       InitializeGeometry();
@@ -114,17 +114,44 @@ class VirtioBlock : public VirtioPci {
 
   void OnOutput(int queue_index) {
     auto &vq = queues_[queue_index];
-    VirtElement element;
-  
-    while (PopQueue(vq, element)) {
-      HandleCommand(vq, element);
-      PushQueue(vq, element);
-      NotifyQueue(vq);
+
+    while (auto element = PopQueue(vq)) {
+      HandleCommand(vq, element, [=, &vq]() {
+        PushQueue(vq, element);
+        NotifyQueue(vq);
+      });
     }
   }
 
-  void HandleCommand(VirtQueue& vq, VirtElement& element) {
-    auto &vector = element.vector;
+  void BlockIoAsync(std::shared_ptr<VirtElement> element, size_t position, bool is_write, VoidCallback callback) {
+    auto vector(element->vector);
+    for (auto &iov : vector) {
+      void* buffer = iov.iov_base;
+      size_t length = iov.iov_len;
+
+      auto io_complete = [=](ssize_t bytes) {
+        if (!is_write && bytes != (ssize_t)length) {
+          MV_PANIC("failed read bytes=%lx pos=%lx length=%lx", bytes, position, length);
+        }
+        if (!is_write) {
+          element->length += length;
+        }
+        element->vector.pop_back();
+        if (element->vector.empty()) {
+          callback();
+        }
+      };
+      if (is_write) {
+        image_->Write(buffer, position, length, io_complete);
+      } else {
+        image_->Read(buffer, position, length, io_complete);
+      }
+      position += length;
+    }
+  }
+
+  void HandleCommand(VirtQueue& vq, std::shared_ptr<VirtElement> element, VoidCallback callback) {
+    auto &vector = element->vector;
     /* Read block header */
     virtio_blk_outhdr* request = (virtio_blk_outhdr*)vector.front().iov_base;
     vector.pop_front();
@@ -135,42 +162,27 @@ class VirtioBlock : public VirtioPci {
     vector.pop_back();
 
     /* Set the vring data length to bytes returned */
-    element.length = sizeof(*status);
+    element->length = sizeof(*status);
 
     switch (request->type)
     {
     case VIRTIO_BLK_T_IN: {
-      size_t position = request->sector * block_config_.blk_size;
-      for (auto &iov : vector) {
-        void* buffer = iov.iov_base;
-        size_t length = iov.iov_len;
-        ssize_t bytes = image_->Read(buffer, position, length);
-        if (bytes != (ssize_t)length) {
-          MV_PANIC("failed read bytes=%lx pos=%lx length=%lx", bytes, position, length);
-        }
-        position += length;
-        element.length += length;
-      }
       *status = 0;
+      size_t position = request->sector * block_config_.blk_size;
+      BlockIoAsync(element, position, false, callback);
       break;
     }
     case VIRTIO_BLK_T_OUT: {
-      size_t position = request->sector * block_config_.blk_size;
-      for (auto &iov : vector) {
-        void* buffer = iov.iov_base;
-        size_t length = iov.iov_len;
-        ssize_t bytes = image_->Write(buffer, position, length);
-        if (bytes <= 0) {
-          break;
-        }
-        position += bytes;
-      }
       *status = 0;
+      size_t position = request->sector * block_config_.blk_size;
+      BlockIoAsync(element, position, true, callback);
       break;
     }
     case VIRTIO_BLK_T_FLUSH:
-      image_->Flush();
       *status = 0;
+      image_->Flush([callback](ssize_t ret) {
+        callback();
+      });
       break;
     case VIRTIO_BLK_T_GET_ID: {
       auto &iov = vector.front();
@@ -178,8 +190,9 @@ class VirtioBlock : public VirtioPci {
       MV_ASSERT(iov.iov_len >= 20);
 
       strcpy((char*)buffer, "virtio-block");
-      element.length += iov.iov_len;
+      element->length += iov.iov_len;
       *status = 0;
+      callback();
       break;
     }
     default:

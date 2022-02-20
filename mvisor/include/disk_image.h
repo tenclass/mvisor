@@ -19,10 +19,13 @@
 #ifndef _MVISOR_IMAGE_H
 #define _MVISOR_IMAGE_H
 
+#include <string>
+#include <functional>
+
 #include "utilities.h"
 #include "object.h"
 
-#include <string>
+typedef std::function<void(ssize_t ret)> IoCallback;
 
 struct ImageInformation {
   /* Disk size is block_size * total_blocks */
@@ -30,9 +33,10 @@ struct ImageInformation {
   size_t total_blocks;
 };
 
+class Device;
 class DiskImage : public Object {
  public:
-  static DiskImage* Create(std::string path, bool readonly);
+  static DiskImage* Create(Device* device, std::string path, bool readonly);
 
   DiskImage();
   virtual ~DiskImage();
@@ -43,14 +47,17 @@ class DiskImage : public Object {
 
   /* Interfaces for a image format to implement */
   virtual ImageInformation information() = 0;
-  virtual ssize_t Read(void *buffer, off_t position, size_t length) = 0;
-  virtual ssize_t Write(void *buffer, off_t position, size_t length) = 0;
-  virtual void Flush() = 0;
-  virtual void Trim(off_t position, size_t length) = 0;
+  virtual void Read(void *buffer, off_t position, size_t length, IoCallback callback) = 0;
+  virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) = 0;
+  virtual void Flush(IoCallback callback) = 0;
+  /* Optional */
+  virtual void Trim(off_t position, size_t length, IoCallback callback);
 
  protected:
   bool initialized_ = false;
   bool readonly_ = false;
+  Device* device_ = nullptr;
+
   virtual void Initialize(const std::string& path, bool readonly) = 0;
 };
 

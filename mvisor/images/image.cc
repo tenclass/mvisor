@@ -27,7 +27,7 @@ DiskImage::~DiskImage()
 {
 }
 
-DiskImage* DiskImage::Create(std::string path, bool readonly) {
+DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly) {
   DiskImage* image;
   if (path.find(".qcow2") != std::string::npos) {
     image = dynamic_cast<DiskImage*>(Object::Create("qcow2-image"));
@@ -35,6 +35,7 @@ DiskImage* DiskImage::Create(std::string path, bool readonly) {
     image = dynamic_cast<DiskImage*>(Object::Create("raw-image"));
   }
   MV_ASSERT(image);
+  image->device_ = device;
   image->Initialize(path, readonly);
   return image;
 }
@@ -48,3 +49,6 @@ void DiskImage::Connect() {
   }
 }
 
+void DiskImage::Trim(off_t position, size_t length, IoCallback callback) {
+  callback(0);
+}

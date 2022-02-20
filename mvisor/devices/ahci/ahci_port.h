@@ -109,6 +109,7 @@ class AhciPort {
   bool                  init_d2h_sent_ = false;
   uint8_t*              command_list_ = nullptr;
   AhciRxFis*            rx_fis_ = nullptr;
+  int                   busy_slot_ = -1;
 };
 
 #endif // __MVISOR_DEVICES_AHCI_PORT_H

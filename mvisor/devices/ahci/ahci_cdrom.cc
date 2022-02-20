@@ -207,18 +207,25 @@ void AhciCdrom::ParseCommandPacket() {
 }
 
 void AhciCdrom::Atapi_ReadSectors() {
+  io_async_ = true;
   size_t vec_index = 0;
   size_t position = io_.lba_block * track_size_;
-  size_t remain_bytes = io_.lba_count * track_size_;
+  size_t total_bytes = io_.lba_count * track_size_;
+  size_t remain_bytes = total_bytes;
   while (remain_bytes > 0 && vec_index < io_.vector.size()) {
-    auto iov = io_.vector[vec_index];
+    auto &iov = io_.vector[vec_index];
   
     auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
     
-    image_->Read(iov.iov_base, position, length);
+    image_->Read(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
+      io_.nbytes += length;
+      if (io_.nbytes == (ssize_t)total_bytes) {
+        regs_.status &= ~ATA_SR_BSY;
+        io_complete_();
+      }
+    });
     position += length;
     remain_bytes -= length;
-    io_.nbytes += length;
     ++vec_index;
   }
 }

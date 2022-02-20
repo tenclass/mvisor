@@ -98,7 +98,7 @@ void IoThread::RunLoop() {
   }
 }
 
-IoRequest* IoThread::Read(int fd, void* buffer, size_t bytes, off_t offset, EventsCallback callback) {
+IoRequest* IoThread::Read(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   IoRequest* r = new IoRequest {
@@ -115,7 +115,7 @@ IoRequest* IoThread::Read(int fd, void* buffer, size_t bytes, off_t offset, Even
   return r;
 }
 
-IoRequest* IoThread::Write(int fd, void* buffer, size_t bytes, off_t offset, EventsCallback callback) {
+IoRequest* IoThread::Write(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   IoRequest* r = new IoRequest {
@@ -132,7 +132,24 @@ IoRequest* IoThread::Write(int fd, void* buffer, size_t bytes, off_t offset, Eve
   return r;
 }
 
-IoRequest* IoThread::StartPolling(int fd, uint poll_mask, EventsCallback callback) {
+IoRequest* IoThread::FSync(int fd, bool data_sync, IoCallback callback) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+  IoRequest* r = new IoRequest {
+    .type = kIoRequestWrite,
+    .fd = fd,
+    .callback = callback
+  };
+  requests_.insert(r);
+
+  auto sqe = io_uring_get_sqe(&ring_);
+  io_uring_prep_fsync(sqe, fd, data_sync ? IORING_FSYNC_DATASYNC : 0);
+  io_uring_sqe_set_data(sqe, r);
+  io_uring_submit(&ring_);
+  return r;
+}
+
+IoRequest* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   IoRequest* r = new IoRequest {
@@ -181,7 +198,7 @@ void IoThread::StopPolling(int fd) {
   MV_PANIC("not found fd=%d", fd);
 }
 
-IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, IoCallback callback) {
+IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callback) {
   IoTimer* timer = new IoTimer {
     .permanent = permanent,
     .interval_ms = interval_ms,
@@ -241,7 +258,7 @@ int IoThread::CheckTimers() {
   return min_timeout_ms;
 }
 
-void IoThread::Schedule(IoCallback callback) {
+void IoThread::Schedule(VoidCallback callback) {
   AddTimer(0, false, callback);
 }
 

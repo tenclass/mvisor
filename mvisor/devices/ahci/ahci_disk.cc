@@ -108,7 +108,11 @@ AhciDisk::AhciDisk() {
 
   ata_handlers_[0xE7] =          // FLUSH_CACHE
   ata_handlers_[0xEA] = [=] () { // FLUSH_CACHE_EXT
-    image_->Flush();
+    io_async_ = true;
+    image_->Flush([this](ssize_t ret) {
+      regs_.status &= ~ATA_SR_BSY;
+      io_complete_();
+    });
   };
 
   ata_handlers_[0xF5] = [=] () { // SECURITY_FREEZE_LOCK
@@ -199,24 +203,32 @@ void AhciDisk::WriteLba() {
 }
 
 void AhciDisk::Ata_ReadWriteSectors(bool is_write) {
+  io_async_ = true;
   size_t vec_index = 0;
   size_t position = io_.lba_block * geometry_.sector_size;
-  size_t remain_bytes = io_.lba_count * geometry_.sector_size;
+  size_t total_bytes = io_.lba_count * geometry_.sector_size;
+  size_t remain_bytes = total_bytes;
   while (remain_bytes > 0 && vec_index < io_.vector.size()) {
-    auto iov = io_.vector[vec_index];
-  
+    auto &iov = io_.vector[vec_index];
     auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
+
+    auto complete_block = [this, total_bytes, length](ssize_t ret) {
+      io_.nbytes += length;
+      if (io_.nbytes == (ssize_t)total_bytes) {
+        WriteLba();
+        regs_.status &= ~ATA_SR_BSY;
+        io_complete_();
+      }
+    };
     if (is_write) {
-      image_->Write(iov.iov_base, position, length);
+      image_->Write(iov.iov_base, position, length, complete_block);
     } else {
-      image_->Read(iov.iov_base, position, length);
+      image_->Read(iov.iov_base, position, length, complete_block);
     }
     position += length;
     remain_bytes -= length;
-    io_.nbytes += length;
     ++vec_index;
   }
-  WriteLba();
 }
 
 void AhciDisk::Ata_Trim() {
@@ -230,7 +242,8 @@ void AhciDisk::Ata_Trim() {
         return;
       }
       if (count) {
-        image_->Trim(block * geometry_.sector_size, count * geometry_.sector_size);
+        image_->Trim(block * geometry_.sector_size, count * geometry_.sector_size, [](ssize_t ret) {
+        });
       }
     }
   }

@@ -96,8 +96,8 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
     auto &vq = queues_[3 + id * 2];
     VirtElement element;
   
-    while (PopQueue(vq, element)) {
-      for (auto &iov : element.vector) {
+    while (auto element = PopQueue(vq)) {
+      for (auto &iov : element->vector) {
         port->OnMessage((uint8_t*)iov.iov_base, iov.iov_len);
       }
       PushQueue(vq, element);
@@ -118,8 +118,8 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
     auto &vq = queues_[3];
     VirtElement element;
   
-    while (PopQueue(vq, element)) {
-      for (auto &iov : element.vector) {
+    while (auto element = PopQueue(vq)) {
+      for (auto &iov : element->vector) {
         virtio_console_control* vcc = (virtio_console_control*)iov.iov_base;
         HandleConsoleControl(vcc);
       }
@@ -131,18 +131,18 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
   void WriteBuffer(VirtQueue& vq, void* buffer, size_t size) {
     size_t offset = 0;
     while (offset < size) {
-      VirtElement element;
-      if (!PopQueue(vq, element)) {
+      auto element = PopQueue(vq);
+      if (!element) {
         break;
       }
 
       size_t remain_bytes = size - offset;
-      for (auto &iov : element.vector) {
+      for (auto &iov : element->vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
         memcpy(iov.iov_base, (uint8_t*)buffer + offset, bytes);
         offset += bytes;
         remain_bytes -= bytes;
-        element.length += bytes;
+        element->length += bytes;
       }
 
       PushQueue(vq, element);

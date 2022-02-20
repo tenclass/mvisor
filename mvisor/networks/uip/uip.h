@@ -54,7 +54,7 @@ struct Ipv4Packet {
   tcphdr*       tcp;
   void*         data;
   size_t        data_length;
-  IoCallback    Release;
+  VoidCallback  Release;
 };
 
 class Ipv4Socket {

@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "logger.h"
+#include "device_manager.h"
 
 class RawImage : public DiskImage {
  private:
@@ -38,8 +39,9 @@ class RawImage : public DiskImage {
 
   virtual ~RawImage() {
     if (fd_ != -1) {
-      Flush();
-      close(fd_);
+      Flush([=](long ret) {
+        close(fd_);
+      });
     }
   }
 
@@ -60,28 +62,27 @@ class RawImage : public DiskImage {
     total_blocks_ = st.st_size / block_size_;
   }
 
-  ssize_t Read(void *buffer, off_t position, size_t length) {
-    return pread(fd_, buffer, length, position);
+  void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
+    auto io = device_->manager()->io();
+    io->Read(fd_, buffer, length, position, callback);
   }
 
-  ssize_t Write(void *buffer, off_t position, size_t length) {
+  void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
     if (readonly_) {
-      return 0;
+      callback(0);
+    } else {
+      auto io = device_->manager()->io();
+      io->Write(fd_, buffer, length, position, callback);
     }
-    return pwrite(fd_, buffer, length, position);
   }
 
-  void Flush() {
+  void Flush(IoCallback callback) {
     if (readonly_) {
-      return;
+      callback(0);
+    } else {
+      auto io = device_->manager()->io();
+      io->FSync(fd_, 0, callback);
     }
-    int ret = fsync(fd_);
-    if (ret < 0) {
-      MV_PANIC("failed to sync disk image, ret=%d", ret);
-    }
-  }
-
-  void Trim(off_t position, size_t length) {
   }
 
 };

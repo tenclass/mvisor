@@ -68,7 +68,7 @@ class DeviceManager {
   void UnregisterIoHandler(Device* device, const IoResource& io_resource);
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
-  void RegisterIoEvent(Device* device, int fd, uint32_t events, EventsCallback callback);
+  void RegisterIoEvent(Device* device, int fd, uint32_t events, IoCallback callback);
   void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   void UnregisterIoEvent(IoEvent* event);
   void UnregisterIoEvent(Device* device, int fd);

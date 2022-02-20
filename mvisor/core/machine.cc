@@ -67,7 +67,6 @@ Machine::~Machine() {
   for (auto vcpu: vcpus_) {
     delete vcpu;
   }
-  io_thread_->Stop();
 
   delete device_manager_;
   delete memory_manager_;
@@ -191,6 +190,7 @@ void Machine::Quit() {
   for (auto vcpu: vcpus_) {
     vcpu->Kick();
   }
+  io_thread_->Stop();
 }
 
 /* Recover BIOS data and reset all vCPU

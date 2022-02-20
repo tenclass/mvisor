@@ -26,15 +26,15 @@
 #include <unordered_set>
 #include <mutex>
 
-typedef std::function<void(uint)> EventsCallback;
-typedef std::function<void()> IoCallback;
+typedef std::function<void(long)> IoCallback;
+typedef std::function<void()> VoidCallback;
 typedef std::chrono::steady_clock::time_point IoTimePoint;
 
 struct IoTimer {
   bool          permanent;
   int           interval_ms;
   IoTimePoint   next_timepoint;
-  IoCallback    callback;
+  VoidCallback  callback;
 };
 
 enum IoRequestType {
@@ -47,7 +47,7 @@ struct IoRequest {
   enum IoRequestType  type;
   int                 fd;
   uint                poll_mask;
-  EventsCallback      callback;
+  IoCallback          callback;
   bool                removed;
 };
 
@@ -60,17 +60,18 @@ class IoThread {
   void Start();
   void Stop();
 
-  IoRequest* Read(int fd, void* buffer, size_t bytes, off_t offset, EventsCallback callback);
-  IoRequest* Write(int fd, void* buffer, size_t bytes, off_t offset, EventsCallback callback);
-  IoRequest* StartPolling(int fd, uint poll_mask, EventsCallback callback);
+  IoRequest* Read(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback);
+  IoRequest* Write(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback);
+  IoRequest* FSync(int fd, bool data_sync, IoCallback callback);
+  IoRequest* StartPolling(int fd, uint poll_mask, IoCallback callback);
   void ModifyPolling(IoRequest* request, uint poll_mask);
   void StopPolling(IoRequest* request);
   void StopPolling(int fd);
 
-  IoTimer* AddTimer(int interval_ms, bool permanent, IoCallback callback);
+  IoTimer* AddTimer(int interval_ms, bool permanent, VoidCallback callback);
   void RemoveTimer(IoTimer* timer);
   void ModifyTimer(IoTimer* timer, int interval_ms);
-  void Schedule(IoCallback callback);
+  void Schedule(VoidCallback callback);
 
  private:
   void RunLoop();

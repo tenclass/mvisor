@@ -128,14 +128,13 @@ void VirtioPci::ReadIndirectDescriptorTable(VirtElement& element, VRingDescripto
   }
 }
 
-bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
+std::shared_ptr<VirtElement> VirtioPci::PopQueue(VirtQueue& vq) {
   if (vq.available_ring->index == vq.last_available_index) {
-    return false;
+    return nullptr;
   }
-  asm volatile ("lfence": : :"memory");
+  auto element = std::make_shared<VirtElement>();
+  element->Initialize();
 
-  element.Initialize();
-  
   auto item = vq.available_ring->items[vq.last_available_index++ % vq.size];
   if (driver_features_[0] & (1 << VIRTIO_RING_F_EVENT_IDX)) {
     *(uint16_t*)&vq.used_ring->items[vq.size] = vq.last_available_index;
@@ -145,9 +144,9 @@ bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
   while (true) {
     if (descriptor->flags & VRING_DESC_F_INDIRECT) {
       VRingDescriptor* table = (VRingDescriptor*)manager_->TranslateGuestMemory(descriptor->address);
-      ReadIndirectDescriptorTable(element, table);
+      ReadIndirectDescriptorTable(*element, table);
     } else {
-      AddDescriptorToElement(element, descriptor);
+      AddDescriptorToElement(*element, descriptor);
     }
     if ((descriptor->flags & VRING_DESC_F_NEXT) == 0) {
       break;
@@ -155,18 +154,19 @@ bool VirtioPci::PopQueue(VirtQueue& vq, VirtElement& element) {
     descriptor = &vq.descriptor_table[descriptor->next];
   }
 
-  element.id = item;
-  element.length = 0;
-  return true;
+  element->id = item;
+  element->length = 0;
+  return element;
 }
 
-void VirtioPci::PushQueue(VirtQueue& vq, const VirtElement& element) {
+void VirtioPci::PushQueue(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
   auto &item = vq.used_ring->items[vq.used_ring->index % vq.size];
-  item.id = element.id;
-  item.length = element.length;
+  item.id = element->id;
+  item.length = element->length;
 
   /* Make sure other vCPU could see the buffer before we update index. */
   asm volatile ("sfence": : :"memory");
+
   ++vq.used_ring->index;
 }
 

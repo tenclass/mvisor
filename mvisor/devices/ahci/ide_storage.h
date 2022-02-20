@@ -99,7 +99,7 @@ class IdeStorageDevice : public Device {
   void Reset();
   bool IsAvailable();
 
-  virtual void StartCommand();
+  virtual void StartCommand(VoidCallback iocp);
   virtual void AbortCommand();
 
   IdeStorageType  type() { return type_; }
@@ -120,6 +120,8 @@ class IdeStorageDevice : public Device {
   IdeDriveInfo    drive_info_;
   VoidCallback    ata_handlers_[256];
   bool            write_cache_ = true;
+  VoidCallback    io_complete_;
+  bool            io_async_;
 };
 
 

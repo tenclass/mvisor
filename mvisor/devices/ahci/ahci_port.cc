@@ -64,6 +64,7 @@ void AhciPort::Reset() {
   port_control_.task_flie_data = 0x7F;
   port_control_.signature = 0xFFFFFFFF;
   init_d2h_sent_ = false;
+  busy_slot_ = -1;
 
   if (!drive_) {
     return;
@@ -156,27 +157,44 @@ bool AhciPort::HandleCommand(int slot) {
 
   PrepareIoVector(command_table->prdt_entries, command_->prdt_length);
 
-  /* Currently commands are executing synchronized, however, it's easy to do a little work
-   * to implement an async version. 
-   * Set the IDE status register to BUSY, and return immediately.
-   * When data is done, remove BUSY status, then raise an IRQ.
-   */
-  drive_->StartCommand();
-  if (io->nbytes <= 0 || io->dma_status) {
-    UpdateRegisterD2H();
-  } else {
-    UpdateSetupPio();
-  }
+  /* We have only one DMA engine each drive.
+   * when async IO is running by IO thread, we should wait for the slot */
+  drive_->StartCommand([this, io, command_, slot, regs]() {
+    if (io->nbytes <= 0 || io->dma_status) {
+      UpdateRegisterD2H();
+    } else {
+      UpdateSetupPio();
+    }
+    command_->bytes_transferred = io->nbytes;
 
-  command_->bytes_transferred = io->nbytes;
+    if (busy_slot_ != -1) {
+      port_control_.command_issue &= ~(1U << busy_slot_);
+      busy_slot_ = -1;
+      /* Check next command */
+      CheckCommand();
+    }
+  });
+
+  if (regs->status & 0x80) { // BUSY
+    busy_slot_ = slot;
+    return false;
+  }
   return true;
 }
 
 void AhciPort::CheckCommand() {
+  if (busy_slot_ != -1) {
+    return;
+  }
   if ((port_control_.command & PORT_CMD_START) && port_control_.command_issue) {
     for (int slot = 0; (slot < 32) && port_control_.command_issue; slot++) {
-      if ((port_control_.command_issue & (1U << slot)) && HandleCommand(slot)) {
-        port_control_.command_issue &= ~(1U << slot);
+      if (port_control_.command_issue & (1U << slot)) {
+        if (HandleCommand(slot)) {
+          port_control_.command_issue &= ~(1U << slot);
+        } else {
+          /* Stop executing other commands if an async command is running */
+          return;
+        }
       }
     }
   }
@@ -273,14 +291,16 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     /* Check FIS RX and CLB engines */
     CheckEngines();
 
-    /* XXX usually the FIS would be pending on the bus here and
-      issuing deferred until the OS enables FIS receival.
-      Instead, we only submit it once - which works in most
-      cases, but is a hack. */
-    if ((port_control_.command & PORT_CMD_FIS_ON) && !init_d2h_sent_) {
-      UpdateInitD2H();
-    }
-    CheckCommand();
+    manager_->io()->Schedule([this](){
+      /* XXX usually the FIS would be pending on the bus here and
+        issuing deferred until the OS enables FIS receival.
+        Instead, we only submit it once - which works in most
+        cases, but is a hack. */
+      if ((port_control_.command & PORT_CMD_FIS_ON) && !init_d2h_sent_) {
+        UpdateInitD2H();
+      }
+      CheckCommand();
+    });
     break;
   case kAhciPortRegTaskFileData:
   case kAhciPortRegSignature:
@@ -290,6 +310,7 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
   case kAhciPortRegSataControl:
     if (((port_control_.sata_control & AHCI_SCR_SCTL_DET) == 1) &&
         ((value & AHCI_SCR_SCTL_DET) == 0)) {
+      MV_LOG("reset");
       Reset();
     }
     port_control_.sata_control = value;
@@ -303,7 +324,9 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     break;
   case kAhciPortRegCommandIssue:
     port_control_.command_issue |= value;
-    CheckCommand();
+    manager_->io()->Schedule([this](){
+      CheckCommand();
+    });
     break;
   default:
     MV_PANIC("not implemented reg index = %x", reg_index);
@@ -311,6 +334,9 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
 }
 
 void AhciPort::UpdateRegisterD2H() {
+  if(!(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX)) {
+    MV_PANIC("%p %x", rx_fis_, port_control_.command & PORT_CMD_FIS_RX);
+  }
   MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
   auto d2h_fis = &rx_fis_->d2h_fis;
   bzero(d2h_fis, sizeof(*d2h_fis));
@@ -340,6 +366,10 @@ void AhciPort::UpdateRegisterD2H() {
 }
 
 void AhciPort::UpdateSetupPio() {
+  if(!(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX)) {
+    int a = 0;
+    MV_ASSERT(1 / a);
+  }
   MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
   auto pio_fis = &rx_fis_->pio_fis;
   bzero(pio_fis, sizeof(*pio_fis));
