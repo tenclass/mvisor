@@ -76,6 +76,8 @@ class IoThread {
  private:
   void RunLoop();
   int CheckTimers();
+  void FreeIoRequest(IoRequest* request);
+  void WakeUp();
 
   std::thread           thread_;
   Machine*              machine_;
@@ -83,6 +85,7 @@ class IoThread {
   std::recursive_mutex  mutex_;
   std::unordered_set<IoTimer*>    timers_;
   std::unordered_set<IoRequest*>  requests_;
+  int                   event_fd_;
 };
 
 #endif // _MVISOR_IO_THREAD_H

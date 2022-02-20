@@ -25,6 +25,10 @@
 #include <ctime>
 #include <cstring>
 #include <vector>
+#include <thread>
+#include <mutex>
+#include <deque>
+#include <condition_variable>
 #include "lru_cache.h"
 #include "logger.h"
 #include "device_manager.h"
@@ -107,8 +111,6 @@ struct RefcountBlock {
  * or data cluster 
  */
 
-typedef std::function<void()> VoidCallback;
-
 class Qcow2Image : public DiskImage {
  private:
   int fd_ = -1;
@@ -135,8 +137,14 @@ class Qcow2Image : public DiskImage {
   Qcow2Header image_header_;
   std::string backing_filepath_;
   Qcow2Image* backing_file_ = nullptr;
+  bool        is_backing_file_ = false;
 
-  IoThread* io_ = nullptr;
+  std::thread worker_thread_;
+  std::mutex  worker_mutex_;
+  std::condition_variable worker_cv_;
+  std::deque<VoidCallback> worker_queue_;
+
+  IoThread*   io_ = nullptr;
 
   ImageInformation information() {
     return ImageInformation {
@@ -149,11 +157,16 @@ class Qcow2Image : public DiskImage {
     /* Flush caches if dirty */
     l2_cache_.Clear();
     rfb_cache_.Clear();
-
+  
     if (fd_ != -1) {
-      Flush([=](long ret){
-        close(fd_);
-      });
+      Flush();
+      close(fd_);
+      fd_ = -1;
+    }
+
+    if (worker_thread_.joinable()) {
+      worker_cv_.notify_all();
+      worker_thread_.join();
     }
 
     if (copied_cluster_) {
@@ -199,10 +212,35 @@ class Qcow2Image : public DiskImage {
         backing_filepath_ = std::string(dirname(temp)) + "/" + filename;
       }
       backing_file_ = new Qcow2Image();
+      backing_file_->is_backing_file_ = true;
       backing_file_->device_ = device_;
       backing_file_->Initialize(backing_filepath_, true);
     }
     // MV_LOG("open qcow2 %s file size=%ld", path.c_str(), image_size_);
+  
+    if (!is_backing_file_) {
+      worker_thread_ = std::thread(&Qcow2Image::WorkerProcess, this);
+    }
+  }
+
+  void WorkerProcess() {
+    SetThreadName("mvisor-qcow2");
+    
+    while (fd_ != -1) {
+      std::unique_lock<std::mutex> lock(worker_mutex_);
+      worker_cv_.wait(lock, [this]() {
+        return !worker_queue_.empty() || fd_ == -1;
+      });
+
+      if (worker_queue_.empty()) {
+        break;
+      }
+      auto callback = worker_queue_.front();
+      worker_queue_.pop_front();
+      lock.unlock();
+
+      callback();
+    }
   }
 
   void InitializeQcow2Header() {
@@ -256,14 +294,6 @@ class Qcow2Image : public DiskImage {
   ssize_t ReadFile(void* buffer, size_t length, off_t offset) {
     ssize_t ret = pread(fd_, buffer, length, offset);
     return ret;
-  }
-
-  void WriteFileAsync(void* buffer, size_t length, off_t offset, IoCallback callback) {
-    io_->Write(fd_, buffer, length, offset, callback);
-  }
-
-  void ReadFileAsync(void* buffer, size_t length, off_t offset, IoCallback callback) {
-    io_->Read(fd_, buffer, length, offset, callback);
   }
 
   void InitializeL1Table() {
@@ -327,9 +357,6 @@ class Qcow2Image : public DiskImage {
     return block;
   }
 
-  /*
-   * FIXME: This is not asynchronous yet
-   */
   RefcountBlock* GetRefcountBlock(uint64_t cluster_index, uint64_t* rfb_index, bool allocate) {
     uint64_t rft_index = cluster_index / rfb_entries_;
     *rfb_index = cluster_index % rfb_entries_;
@@ -384,9 +411,7 @@ class Qcow2Image : public DiskImage {
     }
   }
 
-  /* free_cluster_index_ is initialized to zero and record last position.
-   * FIXME: This is not asynchronous yet
-   */
+  /* free_cluster_index_ is initialized to zero and record last position. */
   uint64_t AllocateCluster() {
     uint64_t rfb_index;
     uint64_t cluster_index = free_cluster_index_++;
@@ -419,31 +444,28 @@ class Qcow2Image : public DiskImage {
     return table;
   }
 
-  void ReadL2Table(uint64_t l2_offset, std::function<void (L2Table*)> callback) {
+  L2Table* ReadL2Table(uint64_t l2_offset) {
     L2Table* table;
     if (l2_cache_.Get(l2_offset, table)) {
-      return callback(table);
+      return table;
     }
 
     table = NewL2Table(l2_offset);
-    ReadFileAsync(table->entries, l2_entries_ * sizeof(uint64_t), table->offset_in_file, [=](ssize_t ret) {
-      L2Table* t = table;
-      l2_cache_.Put(table->offset_in_file, t);
-      callback(table);
-    });
+    ReadFile(table->entries, l2_entries_ * sizeof(uint64_t), table->offset_in_file);
+
+    l2_cache_.Put(table->offset_in_file, table);
+    return table;
   }
 
-  void GetL2Table(bool is_write, off_t pos, uint64_t length,
-    std::function<void (L2Table* l2_table, uint64_t l2_index, uint64_t offset_in_cluster, uint64_t length)> callback) {
-    uint64_t offset_in_cluster, l2_index;
-    offset_in_cluster = pos % cluster_size_;
-    if (length > cluster_size_ - offset_in_cluster) {
-      length = cluster_size_ - offset_in_cluster;
+  L2Table* GetL2Table(bool is_write, off_t pos, uint64_t* offset_in_cluster, uint64_t* l2_index, size_t* length) {
+    *offset_in_cluster = pos % cluster_size_;
+    if (*length > cluster_size_ - *offset_in_cluster) {
+      *length = cluster_size_ - *offset_in_cluster;
     }
   
     uint64_t cluster_index = pos / cluster_size_;
     uint64_t l1_index = cluster_index / l2_entries_;
-    l2_index = cluster_index % l2_entries_;
+    *l2_index = cluster_index % l2_entries_;
     
     uint64_t l2_offset = be64toh(l1_table_[l1_index]);
     if (l2_offset & QCOW2_OFLAG_COPIED) { /* L2 already allocated, read from current file */
@@ -451,9 +473,7 @@ class Qcow2Image : public DiskImage {
       if (!l2_offset) { /* copied l1 entry must be valid */
         MV_PANIC("l2_offset is not valid");
       }
-      ReadL2Table(l2_offset, [=](auto l2_table) {
-        callback(l2_table, l2_index, offset_in_cluster, length);
-      });
+      return ReadL2Table(l2_offset);
     } else if (is_write) { /* L2 not allocated, but is a write operation */
       MV_ASSERT(l2_offset == 0); /* @XX: l2_offset != 0 if nb_snapshots > 0 ??? */
       l2_offset = AllocateCluster();
@@ -466,145 +486,146 @@ class Qcow2Image : public DiskImage {
 
       l1_table_[l1_index] = htobe64(l2_offset | QCOW2_OFLAG_COPIED);
       l1_table_dirty_ = true;
-      callback(l2_table, l2_index, offset_in_cluster, length);
+      return l2_table;
     } else { /* L2 not allocated, but should read from backing file if possible */
-      callback(nullptr, l2_index, offset_in_cluster, length);
+      return nullptr;
     }
+    return nullptr;
   }
   
   /* The return value is always less than or equal to cluster size */
-  void ReadCluster(void* buffer, off_t pos, size_t length0, bool no_zero, IoCallback callback) {
-    GetL2Table(false, pos, length0, [=] (auto l2_table, uint64_t l2_index, uint64_t offset_in_cluster, uint64_t length) {
-      if (l2_table == nullptr) {
-        if (backing_file_ == nullptr) { /* Reading at unallocated space always return zero??? */
+  ssize_t ReadCluster(void* buffer, off_t pos, size_t length, bool no_zero = false) {
+    uint64_t offset_in_cluster, l2_index;
+    auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
+    if (l2_table == nullptr) {
+      if (backing_file_ == nullptr) { /* Reading at unallocated space always return zero??? */
+        if (no_zero)
+          return -2;
+        bzero(buffer, length);
+        return length;
+      }
+      return backing_file_->ReadCluster(buffer, pos, length);
+    }
+
+    uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
+    if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
+      MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
+    } else {
+      cluster_start &= QCOW2_OFFSET_MASK;
+      if (cluster_start == 0) {
+        if (backing_file_ == nullptr) { /* unallocated means zero */
           if (no_zero)
-            return callback(-2);
+            return -2;
           bzero(buffer, length);
-          return callback(length);
+          return length;
         }
-        return backing_file_->ReadCluster(buffer, pos, length, false, callback);
+        return backing_file_->ReadCluster(buffer, pos, length);
       }
 
-      uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-      if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
-        MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
-      } else {
-        cluster_start &= QCOW2_OFFSET_MASK;
-        if (cluster_start == 0) {
-          if (backing_file_ == nullptr) { /* unallocated means zero */
-            if (no_zero)
-              return callback(-2);
-            bzero(buffer, length);
-            return callback(length);
-          }
-          return backing_file_->ReadCluster(buffer, pos, length, false, callback);
-        }
-
-        ReadFileAsync(buffer, length, cluster_start + offset_in_cluster, [=](ssize_t bytes_read) {
-          if (bytes_read < 0) {
-            return callback(bytes_read);
-          }
-          if ((size_t)bytes_read < length) {
-            /* Reach the end of file??? */
-            bzero((uint8_t*)buffer + bytes_read, length - bytes_read);
-          }
-          callback(length);
-        });
+      ssize_t bytes_read = ReadFile(buffer, length, cluster_start + offset_in_cluster);
+      if (bytes_read < 0) {
+        return bytes_read;
       }
-    });
+      if ((size_t)bytes_read < length) {
+        /* Reach the end of file??? */
+        bzero((uint8_t*)buffer + bytes_read, length - bytes_read);
+      }
+    }
+    return length;
   }
 
   /* The return value is always less than or equal to cluster size */
-  void WriteCluster(void* buffer, off_t pos, size_t length0, IoCallback callback) {
-    GetL2Table(true, pos, length0, [=] (auto l2_table, uint64_t l2_index, uint64_t offset_in_cluster, uint64_t length) {
-      MV_ASSERT(l2_table);
+  ssize_t WriteCluster(void* buffer, off_t pos, size_t length) {
+    uint64_t offset_in_cluster, l2_index;
+    L2Table* l2_table = GetL2Table(true, pos, &offset_in_cluster, &l2_index, &length);
+    MV_ASSERT(l2_table);
 
-      uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-      uint64_t cluster_flags = cluster_start & QCOW2_OFLAGS_MASK;
-      cluster_start &= QCOW2_OFFSET_MASK;
+    uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
+    uint64_t cluster_flags = cluster_start & QCOW2_OFLAGS_MASK;
+    cluster_start &= QCOW2_OFFSET_MASK;
 
-      if (cluster_flags & QCOW2_OFLAG_COPIED) {
-        WriteFileAsync(buffer, length, cluster_start + offset_in_cluster, [=](ssize_t ret) {
-          MV_ASSERT(ret == (ssize_t)length);
-          callback(length);
-        });
-      } else {
-        if (cluster_start) {
-          MV_PANIC("writing to images with snapshots is not supported yet");
-        }
-        cluster_start = AllocateCluster();
-        if (cluster_start == 0) {
-          MV_LOG("failed to allocate cluster");
-          return callback(-1);
-        }
-    
-        l2_table->entries[l2_index] = htobe64(cluster_start | QCOW2_OFLAG_COPIED);
-        l2_table->dirty = true;
-    
-        /* If not writing the whole cluster, we should read the original data from the backing file
-        * Always read the whole cluster without zeroing data if cluster exists in backing file
-        */
-        if (backing_file_ && !(offset_in_cluster == 0 && length == cluster_size_)) {
-          uint8_t* copied_cluster = new uint8_t[cluster_size_];
-          MV_ASSERT(copied_cluster);
-          backing_file_->ReadCluster(copied_cluster, pos - offset_in_cluster, cluster_size_, true, [=](auto bytes) {
-            if (bytes > 0) { // Check if exists
-              MV_ASSERT(bytes == (ssize_t)cluster_size_); // Make sure we have a whole cluster
-              memcpy(copied_cluster + offset_in_cluster, buffer, length);
-              WriteFileAsync(copied_cluster, cluster_size_, cluster_start, [=](ssize_t ret) {
-                MV_ASSERT(ret == (ssize_t)cluster_size_);
-                delete copied_cluster;
-                callback(length);
-              });
-            } else {
-              WriteFileAsync(buffer, length, cluster_start + offset_in_cluster, [=](ssize_t ret) {
-                MV_ASSERT(ret == (ssize_t)length);
-                delete copied_cluster;
-                callback(length);
-              });
-            }
-          });
-        } else {
-          WriteFileAsync(buffer, length, cluster_start + offset_in_cluster, [=](ssize_t ret) {
-            MV_ASSERT(ret == (ssize_t)length);
-            callback(length);
-          });
+    if (cluster_flags & QCOW2_OFLAG_COPIED) {
+      if (WriteFile(buffer, length, cluster_start + offset_in_cluster) != (ssize_t)length) {
+        return -1;
+      }
+    } else {
+      if (cluster_start) {
+        MV_PANIC("writing to images with snapshots is not supported yet");
+      }
+      cluster_start = AllocateCluster();
+      if (cluster_start == 0) {
+        MV_LOG("failed to allocate cluster");
+        return -1;
+      }
+  
+      l2_table->entries[l2_index] = htobe64(cluster_start | QCOW2_OFLAG_COPIED);
+      l2_table->dirty = true;
+  
+      /* If not writing the whole cluster, we should read the original data from the backing file
+       * Always read the whole cluster without zeroing data if cluster exists in backing file
+       */
+      if (backing_file_ && !(offset_in_cluster == 0 && length == cluster_size_)) {
+        auto bytes = backing_file_->ReadCluster(copied_cluster_, pos - offset_in_cluster, cluster_size_, true);
+        if (bytes > 0) { // Check if exists
+          MV_ASSERT(bytes == (ssize_t)cluster_size_); // Make sure we have a whole cluster
+          memcpy(copied_cluster_ + offset_in_cluster, buffer, length);
+          if (WriteFile(copied_cluster_, cluster_size_, cluster_start) != (ssize_t)cluster_size_) {
+            MV_PANIC("failed to copy cluster at pos=0x%lx length=0x%lx", pos, length);
+          }
+          return length; // Always return length of dirty data
         }
       }
-    });
+  
+      if (WriteFile(buffer, length, cluster_start + offset_in_cluster) != (ssize_t)length) {
+        MV_PANIC("failed to write image file pos=0x%lx cluster_start=0x%lx offset=0x%lx length=0x%lx",
+          pos, cluster_start, offset_in_cluster, length);
+        return -1;
+      }
+    }
+
+    return length;
   }
 
-  void HandleIoAsync(void *buffer, off_t position, size_t total_length, ssize_t bytes_rw, bool is_write, IoCallback callback) {
+  ssize_t Read(void *buffer, off_t position, size_t length) {
+    size_t bytes_read = 0;
     uint8_t *ptr = (uint8_t*)buffer;
   
-    if ((uint64_t)position >= image_header_.size) {
-      return callback(bytes_rw);
-    }
+    while (bytes_read < length) {
+      if ((uint64_t)position >= image_header_.size) {
+        return bytes_read;
+      }
 
-    auto io_complete = [=](ssize_t ret) {
+      ssize_t ret = ReadCluster(ptr, position, length - bytes_read);
       if (ret <= 0) {
-        return callback(ret);
+        return ret;
       }
-      if (bytes_rw + ret < (ssize_t)total_length) {
-        return HandleIoAsync((uint8_t*)buffer + ret, position + ret, total_length, bytes_rw + ret, is_write, callback);
-      } else {
-        return callback(bytes_rw + ret);
-      }
-    };
 
-    if (is_write) {
-      WriteCluster(ptr, position, total_length - bytes_rw, io_complete);
-    } else {
-      ReadCluster(ptr, position, total_length - bytes_rw, false, io_complete);
+      bytes_read += ret;
+      ptr += ret;
+      position += ret;
     }
+    return bytes_read;
   }
 
-  void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
-    HandleIoAsync(buffer, position, length, 0, true, callback);
-  }
+  ssize_t Write(void *buffer, off_t position, size_t length) {
+    size_t bytes_written = 0;
+    uint8_t *ptr = (uint8_t*)buffer;
+  
+    while (bytes_written < length) {
+      if (readonly_ || (uint64_t)position >= image_header_.size) {
+        return bytes_written;
+      }
 
-  void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
-    HandleIoAsync(buffer, position, length, 0, false, callback);
+      ssize_t ret = WriteCluster(ptr, position, length - bytes_written);
+      if (ret <= 0) {
+        return ret;
+      }
+
+      bytes_written += ret;
+      ptr += ret;
+      position += ret;
+    }
+    return bytes_written;
   }
 
   void FlushL2Tables () {
@@ -631,9 +652,9 @@ class Qcow2Image : public DiskImage {
     }
   }
 
-  void Flush(IoCallback callback) {
+  int Flush() {
     if (readonly_) {
-      callback(0);
+      return 0;
     }
 
     FlushL2Tables();
@@ -645,62 +666,89 @@ class Qcow2Image : public DiskImage {
       WriteRefcountTable();
     }
 
-    io_->FSync(fd_, 0, [=](long ret) {
-      if (ret < 0) {
-        MV_PANIC("failed to sync disk image, ret=%d", ret);
-      }
-      callback(ret);
-    });
+    return fsync(fd_);
   }
 
-  // /* The return value is always less than or equal to cluster size */
-  // ssize_t TrimCluster(off_t pos, size_t length) {
-  //   uint64_t offset_in_cluster, l2_index;
-  //   auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
-  //   if (l2_table == nullptr) {
-  //     return length;
-  //   }
+  /* The return value is always less than or equal to cluster size */
+  ssize_t TrimCluster(off_t pos, size_t length) {
+    uint64_t offset_in_cluster, l2_index;
+    auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
+    if (l2_table == nullptr) {
+      return length;
+    }
 
-  //   uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-  //   if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
-  //     MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
-  //   } else {
-  //     cluster_start &= QCOW2_OFFSET_MASK;
-  //     if (cluster_start == 0) {
-  //       return length;
-  //     }
+    uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
+    if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
+      MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
+    } else {
+      cluster_start &= QCOW2_OFFSET_MASK;
+      if (cluster_start == 0) {
+        return length;
+      }
 
-  //     FreeCluster(cluster_start); // Set refcount to 0
-  //     l2_table->entries[l2_index] = be64toh(0);
-  //     l2_table->dirty = true;
-  //   }
-  //   return length;
-  // }
+      FreeCluster(cluster_start); // Set refcount to 0
+      l2_table->entries[l2_index] = be64toh(0);
+      l2_table->dirty = true;
+    }
+    return length;
+  }
 
-  // /* The OS use TRIM command to inform us some disk regions are freed
-  //  * To recycle these regions, clear the L2 table entry, and set the refcount to 0
-  //  */
-  // void Trim(off_t position, size_t length, IoCallback callback) {
-  //   /* FIXME: this method crashes the file system */
-  //   return;
+  /* The OS use TRIM command to inform us some disk regions are freed
+   * To recycle these regions, clear the L2 table entry, and set the refcount to 0
+   */
+  void Trim(off_t position, size_t length) {
+    /* FIXME: this method crashes the file system */
+    return;
 
-  //   size_t bytes_trimed = 0;
+    size_t bytes_trimed = 0;
   
-  //   while (bytes_trimed < length) {
-  //     if (readonly_ || (uint64_t)position >= image_header_.size) {
-  //       return;
-  //     }
+    while (bytes_trimed < length) {
+      if (readonly_ || (uint64_t)position >= image_header_.size) {
+        return;
+      }
 
-  //     ssize_t ret = TrimCluster(position, length - bytes_trimed);
-  //     if (ret <= 0) {
-  //       return;
-  //     }
+      ssize_t ret = TrimCluster(position, length - bytes_trimed);
+      if (ret <= 0) {
+        return;
+      }
 
-  //     bytes_trimed += ret;
-  //     position += ret;
-  //   }
-  // }
+      bytes_trimed += ret;
+      position += ret;
+    }
+  }
+  
+  virtual void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
+    std::unique_lock<std::mutex> lock(worker_mutex_);
+    worker_queue_.push_back([=]() {
+      auto ret = Read(buffer, position, length);
+      io_->Schedule([=]() {
+        callback(ret);
+      });
+    });
+    worker_cv_.notify_all();
+  }
 
+  virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
+    std::unique_lock<std::mutex> lock(worker_mutex_);
+    worker_queue_.push_back([=]() {
+      auto ret = Write(buffer, position, length);
+      io_->Schedule([=]() {
+        callback(ret);
+      });
+    });
+    worker_cv_.notify_all();
+  }
+
+  virtual void Flush(IoCallback callback) {
+    std::unique_lock<std::mutex> lock(worker_mutex_);
+    worker_queue_.push_back([=]() {
+      auto ret = Flush();
+      io_->Schedule([=]() {
+        callback(ret);
+      });
+    });
+    worker_cv_.notify_all();
+  }
 };
 
 DECLARE_DISK_IMAGE(Qcow2Image);
