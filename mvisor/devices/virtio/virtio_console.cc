@@ -94,7 +94,6 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
   void OnPortOutput(uint32_t id) {
     auto port = FindPortById(id);
     auto &vq = queues_[3 + id * 2];
-    VirtElement element;
   
     while (auto element = PopQueue(vq)) {
       for (auto &iov : element->vector) {
@@ -116,7 +115,6 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
 
   void OnControlOutput() {
     auto &vq = queues_[3];
-    VirtElement element;
   
     while (auto element = PopQueue(vq)) {
       for (auto &iov : element->vector) {
@@ -182,7 +180,10 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
 
   void HandleConsoleControl(virtio_console_control* vcc) {
     if (vcc->event == VIRTIO_CONSOLE_DEVICE_READY) {
-      MV_ASSERT(vcc->value == 1); /* 1 means success */
+      if (vcc->value != 1) { /* 1 means success */
+        MV_LOG("failed to initialize virtio console ret=0x%x", vcc->value);
+        return;
+      }
       
       for (auto &port : console_ports_) {
         SendControlEvent(port, VIRTIO_CONSOLE_PORT_ADD, 1);
@@ -190,7 +191,10 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
       return;
     }
 
-    MV_ASSERT(vcc->id >= 1 && vcc->id <= console_ports_.size());
+    if (vcc->id < 1 || vcc->id > console_ports_.size()) {
+      MV_LOG("invalid vcc id=%d", vcc->id);
+      return;
+    }
     auto port = FindPortById(vcc->id);
     switch (vcc->event)
     {

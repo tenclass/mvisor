@@ -22,7 +22,7 @@ run: all
 	time $(EXECUTABLE)
 
 debug: all
-	gdb $(EXECUTABLE)
+	gdb -ex run $(EXECUTABLE)
 
 image:
 	qemu-img create -f qcow2 -F qcow2 -b /data/win10.qcow2 /data/hd.qcow2

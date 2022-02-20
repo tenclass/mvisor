@@ -123,7 +123,7 @@ class VirtioBlock : public VirtioPci {
     }
   }
 
-  void BlockIoAsync(std::shared_ptr<VirtElement> element, size_t position, bool is_write, VoidCallback callback) {
+  void BlockIoAsync(VirtElement* element, size_t position, bool is_write, VoidCallback callback) {
     auto vector(element->vector);
     for (auto &iov : vector) {
       void* buffer = iov.iov_base;
@@ -150,7 +150,7 @@ class VirtioBlock : public VirtioPci {
     }
   }
 
-  void HandleCommand(VirtQueue& vq, std::shared_ptr<VirtElement> element, VoidCallback callback) {
+  void HandleCommand(VirtQueue& vq, VirtElement* element, VoidCallback callback) {
     auto &vector = element->vector;
     /* Read block header */
     virtio_blk_outhdr* request = (virtio_blk_outhdr*)vector.front().iov_base;

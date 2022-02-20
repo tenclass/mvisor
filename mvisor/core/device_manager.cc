@@ -243,14 +243,15 @@ void DeviceManager::UnregisterIoEvent(IoEvent* event) {
 }
 
 void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
+  mutex_.lock();
   auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
     return e->device == device && e->address == address &&
       ((type == kIoResourceTypePio) == !!(e->flags & KVM_IOEVENTFD_FLAG_PIO));
   });
   MV_ASSERT(it != ioevents_.end());
-  UnregisterIoEvent(*it);
+  auto event = *it;
+  mutex_.unlock();
+  UnregisterIoEvent(event);
 }
 
 /* IO ports may overlap like MMIO addresses.

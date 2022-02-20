@@ -334,9 +334,6 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
 }
 
 void AhciPort::UpdateRegisterD2H() {
-  if(!(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX)) {
-    MV_PANIC("%p %x", rx_fis_, port_control_.command & PORT_CMD_FIS_RX);
-  }
   MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
   auto d2h_fis = &rx_fis_->d2h_fis;
   bzero(d2h_fis, sizeof(*d2h_fis));
@@ -366,10 +363,6 @@ void AhciPort::UpdateRegisterD2H() {
 }
 
 void AhciPort::UpdateSetupPio() {
-  if(!(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX)) {
-    int a = 0;
-    MV_ASSERT(1 / a);
-  }
   MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
   auto pio_fis = &rx_fis_->pio_fis;
   bzero(pio_fis, sizeof(*pio_fis));

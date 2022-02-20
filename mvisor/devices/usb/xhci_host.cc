@@ -974,13 +974,15 @@ class XhciHost : public PciDevice {
   }
 
   void TerminateAllTransfers(XhciEndpoint* endpoint, TRBCCode report) {
-    for (auto transfer : endpoint->transfers) {
+    auto copied(endpoint->transfers);
+    for (auto transfer : copied) {
       TerminateTransfer(transfer, report);
       FreeTransfer(transfer);
     }
   }
 
   void FreeTransfer(XhciTransfer* transfer) {
+    transfer->packet = nullptr;
     if (transfer->endpoint->transfers.erase(transfer)) {
       delete transfer;
     }

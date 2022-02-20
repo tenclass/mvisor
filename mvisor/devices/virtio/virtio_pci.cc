@@ -128,11 +128,13 @@ void VirtioPci::ReadIndirectDescriptorTable(VirtElement& element, VRingDescripto
   }
 }
 
-std::shared_ptr<VirtElement> VirtioPci::PopQueue(VirtQueue& vq) {
+VirtElement* VirtioPci::PopQueue(VirtQueue& vq) {
   if (vq.available_ring->index == vq.last_available_index) {
     return nullptr;
   }
-  auto element = std::make_shared<VirtElement>();
+  asm volatile ("mfence": : :"memory");
+
+  auto element = new VirtElement;
   element->Initialize();
 
   auto item = vq.available_ring->items[vq.last_available_index++ % vq.size];
@@ -159,7 +161,7 @@ std::shared_ptr<VirtElement> VirtioPci::PopQueue(VirtQueue& vq) {
   return element;
 }
 
-void VirtioPci::PushQueue(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
+void VirtioPci::PushQueue(VirtQueue& vq, VirtElement* element) {
   auto &item = vq.used_ring->items[vq.used_ring->index % vq.size];
   item.id = element->id;
   item.length = element->length;
@@ -168,6 +170,8 @@ void VirtioPci::PushQueue(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
   asm volatile ("sfence": : :"memory");
 
   ++vq.used_ring->index;
+
+  delete element;
 }
 
 void VirtioPci::NotifyQueue(VirtQueue& vq) {
@@ -313,8 +317,16 @@ void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size)
 void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size) {
   uint16_t queue = offset / 4;
   MV_ASSERT(queue < queues_.size());
-  auto vq = queues_[queue];
-  vq.notification_callback();
+  auto &vq = queues_[queue];
+  if (vq.enabled) {
+    if (use_ioevent_) {
+      vq.notification_callback();
+    } else {
+      manager_->io()->Schedule(vq.notification_callback);
+    }
+  } else {
+    MV_LOG("queue %u is not enabled", queue);
+  }
 }
 
 void VirtioPci::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {

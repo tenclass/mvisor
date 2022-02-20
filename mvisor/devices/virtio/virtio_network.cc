@@ -20,8 +20,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <set>
-#include "device_interface.h"
 #include "linux/virtio_net.h"
+#include "device_interface.h"
 #include "logger.h"
 
 #define DEFAULT_QUEUE_SIZE 256
@@ -118,6 +118,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioNetwork::OnReceive, this, 0));
     AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioNetwork::OnTransmit, this, 1));
     AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioNetwork::OnControl, this, 2));
+
+    backend_->Reset();
   }
 
   void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
@@ -151,7 +153,6 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
   void OnControl(int queue_index) {
     auto &vq = queues_[queue_index];
-    VirtElement element;
   
     while (auto element = PopQueue(vq)) {
       HandleControl(vq, element);
@@ -198,7 +199,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     return true;
   }
 
-  void HandleTransmit(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
+  void HandleTransmit(VirtQueue& vq, VirtElement* element) {
     auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 2);
     
@@ -211,7 +212,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
   }
 
-  void HandleControl(VirtQueue& vq, std::shared_ptr<VirtElement> element) {
+  void HandleControl(VirtQueue& vq, VirtElement* element) {
     auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 3);
 

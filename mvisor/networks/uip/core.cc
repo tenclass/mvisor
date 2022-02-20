@@ -56,7 +56,6 @@ class Uip : public Object, public NetworkBackendInterface {
   uint32_t guest_ip_;
   std::list<TcpSocket*> tcp_sockets_;
   std::list<UdpSocket*> udp_sockets_;
-  std::recursive_mutex mutex_;
   IoTimer* timer_ = nullptr;
   Device* real_device_ = nullptr;
   std::vector<Ipv4Packet*> queued_packets_;
@@ -94,8 +93,23 @@ class Uip : public Object, public NetworkBackendInterface {
     });
   }
 
+  virtual void Reset() {
+    for (auto p : queued_packets_) {
+      p->Release();
+    }
+    queued_packets_.clear();
+    
+    for (auto it = udp_sockets_.begin(); it != udp_sockets_.end(); it++) {
+      delete *it;
+    }
+    udp_sockets_.clear();
+    for (auto it = tcp_sockets_.begin(); it != tcp_sockets_.end(); it++) {
+      delete *it;
+    }
+    tcp_sockets_.clear();
+  }
+
   void OnTimer() {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
     for (auto it = tcp_sockets_.begin(); it != tcp_sockets_.end();) {
       if (!(*it)->IsActive()) {
         delete *it;
@@ -249,7 +263,6 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   TcpSocket* LookupTcpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
     for (auto socket : tcp_sockets_) {
       if (socket->Equals(sip, dip, sport, dport)) {
         return socket;
@@ -272,7 +285,6 @@ class Uip : public Object, public NetworkBackendInterface {
     if (tcp->syn) {
       if (socket == nullptr) {
         socket = new RedirectTcpSocket(this, eth, ip, tcp);
-        std::lock_guard<std::recursive_mutex> lock(mutex_);
         tcp_sockets_.push_back(socket);
       }
       return;
@@ -335,7 +347,6 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   UdpSocket* LookupUdpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
     for (auto socket : udp_sockets_) {
       if (socket->Equals(sip, dip, sport, dport)) {
         return socket;
@@ -367,7 +378,6 @@ class Uip : public Object, public NetworkBackendInterface {
       } else {
         socket = new RedirectUdpSocket(this, eth, ip, udp);
       }
-      std::lock_guard<std::recursive_mutex> lock(mutex_);
       udp_sockets_.push_back(socket);
     }
 

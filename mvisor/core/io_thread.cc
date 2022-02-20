@@ -53,6 +53,7 @@ void IoThread::Stop() {
 
 void IoThread::RunLoop() {
   SetThreadName("mvisor-iothread");
+  signal(SIGPIPE, SIG_IGN);
 
   struct __kernel_timespec timeout = {
     .tv_sec = 0,
