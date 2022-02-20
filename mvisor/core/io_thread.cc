@@ -25,7 +25,7 @@
 #include "poll.h"
 #include "machine.h"
 
-#define MAX_ENTRIES 1024
+#define MAX_ENTRIES 256
 
 IoThread::IoThread(Machine* machine) : machine_(machine) {
   int ret = io_uring_queue_init(MAX_ENTRIES, &ring_, 0);
