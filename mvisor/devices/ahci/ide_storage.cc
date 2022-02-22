@@ -89,6 +89,11 @@ bool IdeStorageDevice::IsAvailable() {
    }
 }
 
+void IdeStorageDevice::CompleteCommand() {
+  regs_.status &= ~ATA_SR_BSY;
+  io_complete_();
+}
+
 void IdeStorageDevice::StartCommand(VoidCallback iocp) {
   MV_ASSERT(IsAvailable());
 
@@ -111,8 +116,7 @@ void IdeStorageDevice::StartCommand(VoidCallback iocp) {
   if (handler) {
     handler();
     if (!io_async_) {
-      regs_.status &= ~ATA_SR_BSY;
-      io_complete_();
+      CompleteCommand();
     }
   } else {
     MV_PANIC("unknown command 0x%x", regs_.command);

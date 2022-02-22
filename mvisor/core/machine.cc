@@ -229,3 +229,12 @@ Object* Machine::LookupObjectByClass(std::string name) {
   return nullptr;
 }
 
+std::vector<Object*> Machine::LookupObjects(std::function<bool (Object*)> compare) {
+  std::vector<Object*> result;
+  for (auto it = objects_.begin(); it != objects_.end(); it++) {
+    if (compare(it->second)) {
+      result.push_back(it->second);
+    }
+  }
+  return result;
+}

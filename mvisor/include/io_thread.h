@@ -35,6 +35,7 @@ struct IoTimer {
   int           interval_ms;
   IoTimePoint   next_timepoint;
   VoidCallback  callback;
+  bool          removed;
 };
 
 enum IoRequestType {

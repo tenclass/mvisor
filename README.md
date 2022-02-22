@@ -46,7 +46,7 @@ Feb 2022
 8. SfAgent
 9. VFIO
 10. Samba
-11. XHCI ✅ / USB 3.0
+11. XHCI ✅ / USB Tablet ✅
 
 Milestone 3: Migration
 Mar 2022
@@ -62,16 +62,16 @@ For CentOS 8,
 
 ```
 yum install -y liburing-devel SDL2-devel yaml-cpp-devel gcc-c++
-make -j 8
+make -j8
 ```
 
 An ISO image file is needed to install OS. Modify config/default.yaml to configure image path.
 
-Guest tools:
+Virtio is recommended:
 
-<a href="https://www.spice-space.org/download/windows/spice-guest-tools/spice-guest-tools-latest.exe">Downlaod spice guest tools</a>
+<a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Downlaod Virtio Guest Tools</a>
 
 ## Screenshot
 
-<img src="./docs/win10.jpg" width="640">
+<img src="./docs/multimedia.jpg" width="640">
 

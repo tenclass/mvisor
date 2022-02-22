@@ -444,13 +444,13 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
     }
   }
 
-  void QueueMouseEvent(uint8_t button_state, int rel_x, int rel_y, int rel_z) {
+  void QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) {
     if (mouse_disable_streaming_) {
       return;
     }
   
     std::lock_guard<std::mutex> lock(mutex_);
-    uint8_t state = mouse_button_state_ = button_state;
+    uint8_t state = mouse_button_state_ = (uint8_t)button_state;
     rel_y = -rel_y;
     state |= 8; // Always 1
     if (rel_x < 0) {
@@ -465,7 +465,7 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
     PushMouse4(data);
   }
 
-  bool CanAcceptInput() {
+  bool InputAcceptable() {
     return !keyboard_disable_scanning_ && !mouse_disable_streaming_;
   }
 };

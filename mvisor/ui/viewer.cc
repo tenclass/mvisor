@@ -60,8 +60,8 @@ void Viewer::CreateWindow() {
   uint16_t w, h, bpp;
   display_->GetDisplayMode(&w, &h, &bpp);
   MV_ASSERT(w && h && bpp);
-  width_ = w;
-  height_ = h;
+  pointer_state_.screen_width = width_ = w;
+  pointer_state_.screen_height = height_ = h;
   bpp_ = bpp;
   int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
   window_ = SDL_CreateWindow("MVisor", x, y, width_, height_, SDL_WINDOW_RESIZABLE);
@@ -254,6 +254,16 @@ void Viewer::Render() {
   }
 }
 
+
+PointerInputInterface* Viewer::GetActivePointer() {
+  for (auto pointer : pointers_) {
+    if (pointer->InputAcceptable()) {
+      return pointer;
+    }
+  }
+  return nullptr;
+}
+
 void Viewer::LookupDevices() {
   keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2Keyboard"));
   spice_agent_ = dynamic_cast<SpiceAgentInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
@@ -261,8 +271,10 @@ void Viewer::LookupDevices() {
   if (display_ == nullptr) {
     display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Vga"));
   }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
+    pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));
+  }
   MV_ASSERT(keyboard_ && display_);
-  MV_ASSERT(spice_agent_);
 
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
@@ -312,6 +324,9 @@ int Viewer::MainLoop() {
 void Viewer::HandleEvent(const SDL_Event& event) {
   std::lock_guard<std::mutex> lock(mutex_);
   uint8_t transcoded[10] = { 0 };
+  /* if we dont check the pointer changes, it would have 1000 pointer events per second */
+  bool should_update_pointer = false;
+
   switch (event.type)
   {
   case SDL_KEYDOWN:
@@ -331,47 +346,38 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   case SDL_MOUSEWHEEL: {
     int x, y;
     SDL_GetMouseState(&x, &y);
-    if (event.wheel.y > 0) {
-      spice_agent_->QueuePointerEvent(mouse_buttons_ | (1 << SPICE_MOUSE_BUTTON_UP), x, y);
-      spice_agent_->QueuePointerEvent(mouse_buttons_, x, y);
-    } else if (event.wheel.y < 0) {
-      spice_agent_->QueuePointerEvent(mouse_buttons_ | (1 << SPICE_MOUSE_BUTTON_DOWN), x, y);
-      spice_agent_->QueuePointerEvent(mouse_buttons_, x, y);
+    auto pointer = GetActivePointer();
+    if (pointer) {
+      pointer_state_.x = x;
+      pointer_state_.y = y;
+      pointer_state_.z = event.wheel.y;
+      pointer->QueuePointerEvent(pointer_state_);
     }
     break;
   }
   case SDL_MOUSEBUTTONDOWN:
-    /* If pointer device is not available, try to grab input and use PS/2 input */
-    if (!grab_input_ && spice_agent_ && !spice_agent_->CanAcceptInput()) {
-      grab_input_ = true;
-      SDL_SetWindowGrab(window_, SDL_TRUE);
-      SDL_ShowCursor(SDL_DISABLE);
-      UpdateCaption();
-    }
-    /* fall through */
   case SDL_MOUSEBUTTONUP:
     if (event.button.state) {
-      mouse_buttons_ |= (1 << event.button.button);
+      pointer_state_.buttons |= (1 << event.button.button);
     } else {
-      mouse_buttons_ &= ~(1 << event.button.button);
+      pointer_state_.buttons &= ~(1 << event.button.button);
     }
+    should_update_pointer = true;
     /* fall through */
-  case SDL_MOUSEMOTION:
-    if (spice_agent_ && spice_agent_->CanAcceptInput()) {
+  case SDL_MOUSEMOTION: {
+    auto pointer = GetActivePointer();
+    if (pointer) {
       int x, y;
       SDL_GetMouseState(&x, &y);
-      spice_agent_->QueuePointerEvent(mouse_buttons_, x, y);
-    } else if (grab_input_) {
-      /* swap the middle button and right button bit of input state */
-      uint8_t ps2_state = ((mouse_buttons_ & 2) >> 1) | (mouse_buttons_ & 4) | ((mouse_buttons_ & 8) >> 2);
-      if (event.type == SDL_MOUSEMOTION) {
-        /* multiply by 2 to prevent host mouse go out of window */
-        keyboard_->QueueMouseEvent(ps2_state, event.motion.xrel * 2, event.motion.yrel * 2, 0);
-      } else {
-        keyboard_->QueueMouseEvent(ps2_state, 0, 0, 0);
+      if (should_update_pointer || pointer_state_.x != x || pointer_state_.y != y) {
+        pointer_state_.x = x;
+        pointer_state_.y = y;
+        pointer_state_.z = 0;
+        pointer->QueuePointerEvent(pointer_state_);
       }
     }
     break;
+  }
   case SDL_WINDOWEVENT:
     switch (event.window.event)
     {

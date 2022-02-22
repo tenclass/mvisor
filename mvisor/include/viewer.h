@@ -60,12 +60,14 @@ class Viewer {
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayCursorUpdate* cursor_update);
   void HandleEvent(const SDL_Event& event);
+  PointerInputInterface* GetActivePointer();
 
   Machine* machine_;
   DeviceManager* device_manager_;
   DisplayInterface* display_;
   KeyboardInputInterface* keyboard_;
   SpiceAgentInterface* spice_agent_;
+  std::vector<PointerInputInterface*> pointers_;
 
   SDL_Window* window_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;
@@ -84,7 +86,7 @@ class Viewer {
   uint16_t bpp_;
 
   bool grab_input_ = false;
-  uint32_t mouse_buttons_ = 0;
+  PointerEvent pointer_state_ = { 0 };
   PendingResize pending_resize_;
 };
 

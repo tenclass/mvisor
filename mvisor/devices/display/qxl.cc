@@ -435,8 +435,6 @@ class Qxl : public Vga {
       QXLCopy* copy = &drawable->u.copy;
       MV_ASSERT(drawable->effect == QXL_EFFECT_OPAQUE);
       MV_ASSERT(drawable->clip.type == SPICE_CLIP_TYPE_NONE);
-      MV_ASSERT(drawable->self_bitmap == 1);
-      MV_ASSERT(drawable->self_bitmap_area.left == drawable->bbox.left && drawable->self_bitmap_area.right == drawable->bbox.right);
       MV_ASSERT(copy->src_area.top == 0 && copy->src_area.left == 0);
       MV_ASSERT(copy->rop_descriptor == SPICE_ROPD_OP_PUT);
       QXLImage* image = (QXLImage*)GetMemSlotAddress(copy->src_bitmap);

@@ -21,6 +21,8 @@
 #include <cstring>
 #include "usb_descriptor.h"
 #include "usb.h"
+#include "device_interface.h"
+#include "device_manager.h"
 
 enum {
   STR_MANUFACTURER = 1,
@@ -130,17 +132,13 @@ static const uint8_t hid_report_desc[] = {
   0xc0,		/* End Collection */
 };
 
-struct PointerEvent {
-  int x;
-  int y;
-  int z;
-  int buttons; 
-};
-
-class UsbTablet : public UsbHid {
+class UsbTablet : public UsbHid, public PointerInputInterface {
  private:
+  std::mutex mutex_;
   std::deque<PointerEvent> queue_;
   uint idle_;
+  IoTimer*  timer_;
+  uint max_queue_size_ = 16;
 
  public:
   UsbTablet() {
@@ -173,14 +171,49 @@ class UsbTablet : public UsbHid {
     }
   }
 
-  virtual int OnInputData(uint8_t* data, int length) {
-    if (queue_.size() == 0) {
+  virtual int OnInputData(uint endpoint_address, uint8_t* data, int length) {
+    std::unique_lock<std::mutex> lock(mutex_);
+    if (queue_.empty()) {
       return USB_RET_NAK;
     }
 
-    MV_PANIC("send data");
-    return 0;
+    auto event = queue_.front();
+    queue_.pop_front();
+    lock.unlock();
+    
+    MV_ASSERT(length >= 6);
+    bzero(data, 6);
+    data[0] = event.buttons;
+    data[1] = event.x & 0xFF;
+    data[2] = event.x >> 8;
+    data[3] = event.y & 0xFF;
+    data[4] = event.y >> 8;
+    data[5] = event.z;
+    return length;
   }
+
+  /* This interface function is called by the UI thread, so use a mutex */
+  virtual void QueuePointerEvent(PointerEvent event) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    /* SPICE buttons to PS/2 buttons */
+    event.buttons = ((event.buttons & 2) ? 1 : 0) | ((event.buttons & 4) ? 4 : 0) | ((event.buttons & 8) ? 2 : 0);
+    event.x = event.x * 0x8000 / event.screen_width;
+    event.y = event.y * 0x8000 / event.screen_height;
+    queue_.push_back(event);
+    while (queue_.size() > max_queue_size_) {
+      queue_.pop_front();
+    }
+
+    manager_->io()->Schedule([=]() {
+      NotifyEndpoint(0x81);
+    });
+  }
+
+  virtual bool InputAcceptable() {
+    return configured();
+  }
+
 };
 
 DECLARE_DEVICE(UsbTablet);

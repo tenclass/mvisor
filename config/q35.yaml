@@ -40,6 +40,7 @@ objects:
     debug: No
 
   - class: ahci-host
+    debug: No
     children:
       - ahci-cdrom
       - ahci-disk
@@ -48,6 +49,9 @@ objects:
     debug: No
     children:
       - usb-tablet
+    
+  - class: usb-tablet
+    debug: No
   
   - class: qxl
     rom: ../share/vgabios-qxl.bin

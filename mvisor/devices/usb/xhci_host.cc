@@ -40,7 +40,7 @@ struct XhciRing {
 };
 
 struct XhciTransfer;
-struct XhciEndpoint {
+struct XhciEndpointContext {
   uint      id;
   uint      slot_id;
   EPType    type;
@@ -54,13 +54,14 @@ struct XhciEndpoint {
   uint      kick_active;
   uint64_t  context_address;
   std::set<XhciTransfer*> transfers;
+  uint      endpoint_address;
 };
 
 struct XhciSlot {
   bool        enabled;
   bool        addressed;
   uint64_t    context_address;
-  XhciEndpoint* endpoints[31];
+  XhciEndpointContext* endpoints[31];
   UsbDevice*  device;
   int         interrupt_vector;
 };
@@ -76,7 +77,7 @@ struct XhciEvent {
 };
 
 struct XhciTransfer {
-  XhciEndpoint* endpoint;
+  XhciEndpointContext* endpoint;
   TRBCCode      status;
   uint          stream_id;
   bool          completed;
@@ -751,6 +752,9 @@ class XhciHost : public PciDevice {
           set_field(&sc, new_pls, PORTSC_PLS);
         }
         break;
+      case PLS_RESUME:
+        /* windows does this for some reason, don't spam stderr */
+        break;
       default:
         MV_PANIC("ignore PLS write old=0x%x new=0x%x", old_pls, new_pls);
         break;
@@ -794,13 +798,14 @@ class XhciHost : public PciDevice {
 
   /* ======================== Endpoint Functions ======================= */
 
-  XhciEndpoint* CreateEndpoint(uint slot_id, uint endpoint_id, uint32_t* context) {
-    auto endpoint = new XhciEndpoint { 0 };
+  XhciEndpointContext* CreateEndpointContext(uint slot_id, uint endpoint_id, uint32_t* context) {
+    auto endpoint = new XhciEndpointContext { 0 };
     endpoint->id = endpoint_id;
     endpoint->slot_id = slot_id;
 
     uint64_t dequee_pointer = ((uint64_t)context[3] << 32) | (context[2] & ~0xF);
     endpoint->type = (EPType)((context[1] >> EP_TYPE_SHIFT) & EP_TYPE_MASK);
+    endpoint->endpoint_address = ((endpoint->type >> 2) ? 0x80 : 0) | endpoint_id / 2;
     endpoint->max_packet_size = context[1] >> 16;
     endpoint->max_packet_size *= 1 + ((context[1] >> 8) & 0xFF);
     endpoint->max_pstreams = (context[0] >> 10) & max_pstreams_mask_;
@@ -826,12 +831,12 @@ class XhciHost : public PciDevice {
       DisableEndpoint(slot_id, endpoint_id);
     }
 
-    XhciEndpoint* endpoint = CreateEndpoint(slot_id, endpoint_id, context);
-    slot.endpoints[endpoint_id - 1] = endpoint;
+    XhciEndpointContext* endpoint = CreateEndpointContext(slot_id, endpoint_id, context);
     if (debug_) {
-      MV_LOG("endpoint %d.%d type=%d, max packet size=%d", endpoint_id / 2, endpoint_id % 2,
-        endpoint->type, endpoint->max_packet_size);
+      MV_LOG("endpoint %d.%d type=%d, max packet size=%d interval=%d", endpoint_id / 2, endpoint_id % 2,
+        endpoint->type, endpoint->max_packet_size, endpoint->interval);
     }
+    slot.endpoints[endpoint_id - 1] = endpoint;
     endpoint->state = EP_RUNNING;
     context[0] &= ~EP_STATE_MASK;
     context[0] |= EP_RUNNING;
@@ -930,9 +935,10 @@ class XhciHost : public PciDevice {
     endpoint->ring.consumer_cycle_bit = transfer->trbs[0].cycle_bit;
 
     SetEndpointState(endpoint, EP_HALTED);
+    MV_LOG("%s stalled endpoint %d", transfer->device->name(), endpoint->endpoint_address);
   }
 
-  void SetEndpointState(XhciEndpoint* endpoint, uint32_t state) {
+  void SetEndpointState(XhciEndpointContext* endpoint, uint32_t state) {
     uint32_t* context = (uint32_t*)manager_->TranslateGuestMemory(
       endpoint->context_address);
     context[0] &= ~EP_STATE_MASK;
@@ -949,7 +955,7 @@ class XhciHost : public PciDevice {
 
   /* ======================== Transfer Functions ======================= */
 
-  XhciTransfer* CreateTransfer(XhciEndpoint* endpoint, uint stream_id, int length) {
+  XhciTransfer* CreateTransfer(XhciEndpointContext* endpoint, uint stream_id, int length) {
     auto transfer = new XhciTransfer;
     transfer->completed = false;
     transfer->endpoint = endpoint;
@@ -963,17 +969,14 @@ class XhciHost : public PciDevice {
   }
 
   void TerminateTransfer(XhciTransfer* transfer, TRBCCode report) {
+    MV_ASSERT(!transfer->completed);
     if (report) {
       transfer->status = report;
       ReportTransfer(transfer);
     }
-    if (transfer->packet) {
-      transfer->packet->Release();
-    }
-    transfer->packet = nullptr;
   }
 
-  void TerminateAllTransfers(XhciEndpoint* endpoint, TRBCCode report) {
+  void TerminateAllTransfers(XhciEndpointContext* endpoint, TRBCCode report) {
     auto copied(endpoint->transfers);
     for (auto transfer : copied) {
       TerminateTransfer(transfer, report);
@@ -982,6 +985,9 @@ class XhciHost : public PciDevice {
   }
 
   void FreeTransfer(XhciTransfer* transfer) {
+    if (transfer->packet) {
+      transfer->packet->Release();
+    }
     transfer->packet = nullptr;
     if (transfer->endpoint->transfers.erase(transfer)) {
       delete transfer;
@@ -1063,10 +1069,13 @@ class XhciHost : public PciDevice {
   }
 
   void CompleteTransfer(XhciTransfer* transfer) {
-    MV_ASSERT(!transfer->completed);
+    MV_ASSERT(transfer && !transfer->completed);
     transfer->completed = true;
 
-    switch (transfer->packet->status)
+    auto packet = transfer->packet;
+    MV_ASSERT(packet);
+
+    switch (packet->status)
     {
     case USB_RET_SUCCESS:
       transfer->status = CC_SUCCESS;
@@ -1082,7 +1091,7 @@ class XhciHost : public PciDevice {
       transfer->status = CC_BABBLE_DETECTED;
       break;
     default:
-      MV_PANIC("Unknown packet status=%d", transfer->packet->status);
+      MV_PANIC("Unknown packet %p status=0x%x", packet, packet->status);
       break;
     }
 
@@ -1097,9 +1106,9 @@ class XhciHost : public PciDevice {
   }
 
   bool SetupTransfer(XhciTransfer* transfer) {
-    int direction = transfer->in_direction ? USB_TOKEN_IN : USB_TOKEN_OUT;
-    transfer->packet = transfer->device->CreatePacket(direction, transfer->stream_id,
-        transfer->trbs[0].address, [=]() {
+    auto packet = transfer->device->CreatePacket(transfer->endpoint->endpoint_address,
+      transfer->stream_id, transfer->trbs[0].address, [=]()
+    {
       CompleteTransfer(transfer);
       FreeTransfer(transfer);
     });
@@ -1122,13 +1131,14 @@ class XhciHost : public PciDevice {
           MV_ASSERT(chunk == 8 && !transfer->in_direction);
           address = trb.address;
         }
-        transfer->packet->iov.push_back(iovec {
+        packet->iov.push_back(iovec {
           .iov_base = manager_->TranslateGuestMemory(address),
           .iov_len = chunk
         });
-        transfer->packet->size += chunk;
+        packet->size += chunk;
       }
     }
+    transfer->packet = packet;
     return true;
   }
 

@@ -44,6 +44,7 @@ class Machine {
   void Reset();
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
+  std::vector<Object*> LookupObjects(std::function<bool (Object*)> compare);
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }

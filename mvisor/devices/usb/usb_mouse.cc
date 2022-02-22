@@ -1,5 +1,5 @@
 /* 
- * MVisor USB Tablet
+ * MVisor USB Mouse
  * Copyright (C) 2022 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -21,6 +21,7 @@
 #include <cstring>
 #include "usb_descriptor.h"
 #include "usb.h"
+#include "device_interface.h"
 
 enum {
   STR_MANUFACTURER = 1,
@@ -122,16 +123,10 @@ static const uint8_t hid_report_desc[] = {
   0xc0,		/* End Collection */
 };
 
-struct MouseEvent {
-  int dx;
-  int dy;
-  int dz;
-  int buttons; 
-};
 
 class UsbMouse : public UsbHid {
  private:
-  std::deque<MouseEvent> queue_;
+  std::deque<PointerEvent> queue_;
   uint protocol_;
   uint idle_;
 
@@ -169,12 +164,11 @@ class UsbMouse : public UsbHid {
     }
   }
 
-  virtual int OnInputData(uint8_t* data, int length) {
+  virtual int OnInputData(uint endpoint_address, uint8_t* data, int length) {
     if (queue_.size() == 0) {
       return USB_RET_NAK;
     }
 
-    MV_PANIC("send data");
     return 0;
   }
 };

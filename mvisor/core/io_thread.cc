@@ -81,7 +81,7 @@ void IoThread::RunLoop() {
     timeout.tv_nsec = next_timeout_ms * 1000000;
     int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &timeout);
     if (ret < 0) {
-      if (ret == -ETIME) {
+      if (ret == -ETIME || ret == -EAGAIN) {
         continue;
       }
       MV_PANIC("failed in io_uring_wait_cqe_timeout, ret=%d", ret);
@@ -244,9 +244,7 @@ IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callba
 }
 
 void IoThread::RemoveTimer(IoTimer* timer) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  timers_.erase(timer);
-  delete timer;
+  timer->removed = true;
 }
 
 void IoThread::ModifyTimer(IoTimer* timer, int interval_ms) {
@@ -261,15 +259,22 @@ int IoThread::CheckTimers() {
   std::vector<IoTimer*> triggered;
 
   mutex_.lock();
-  for (auto timer : timers_) {
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
-    if (delta_ms <= 0) {
-      triggered.push_back(timer);
-      timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
-      delta_ms = timer->interval_ms;
-    }
-    if (delta_ms < min_timeout_ms) {
-      min_timeout_ms = delta_ms;
+  for (auto it = timers_.begin(); it != timers_.end();) {
+    auto timer = *it;
+    if (timer->removed) {
+      it = timers_.erase(it);
+      delete timer;
+    } else {
+      auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
+      if (delta_ms <= 0) {
+        triggered.push_back(timer);
+        timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
+        delta_ms = timer->interval_ms;
+      }
+      if (delta_ms < min_timeout_ms) {
+        min_timeout_ms = delta_ms;
+      }
+      ++it;
     }
   }
   mutex_.unlock();
@@ -277,7 +282,7 @@ int IoThread::CheckTimers() {
   for (auto timer : triggered) {
     timer->callback();
     if (!timer->permanent) {
-      RemoveTimer(timer);
+      timer->removed = true;
       continue;
     }
   }

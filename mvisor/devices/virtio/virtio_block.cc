@@ -48,7 +48,6 @@ class VirtioBlock : public VirtioPci {
       // (1UL << VIRTIO_BLK_F_TOPOLOGY) |
       (1UL << VIRTIO_BLK_F_WCE) |
       (1UL << VIRTIO_BLK_F_MQ) |
-      // FIXME: DISCARD & WRITE_ZERO needs latest guest drivers
       (1UL << VIRTIO_BLK_F_DISCARD) |
       (1UL << VIRTIO_BLK_F_WRITE_ZEROES);
     bzero(&block_config_, sizeof(block_config_));
@@ -123,22 +122,22 @@ class VirtioBlock : public VirtioPci {
     }
   }
 
-  void BlockIoAsync(VirtElement* element, size_t position, bool is_write, VoidCallback callback) {
+  void BlockIoAsync(VirtElement* element, size_t position, bool is_write, IoCallback callback) {
     auto vector(element->vector);
     for (auto &iov : vector) {
       void* buffer = iov.iov_base;
       size_t length = iov.iov_len;
 
-      auto io_complete = [=](ssize_t bytes) {
-        if (!is_write && bytes != (ssize_t)length) {
-          MV_PANIC("failed read bytes=%lx pos=%lx length=%lx", bytes, position, length);
+      auto io_complete = [=](auto ret) {
+        if (!is_write && ret != (ssize_t)length) {
+          MV_PANIC("failed IO ret=%lx pos=%lx length=%lx", ret, position, length);
         }
         if (!is_write) {
           element->length += length;
         }
         element->vector.pop_back();
         if (element->vector.empty()) {
-          callback();
+          callback(ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR);
         }
       };
       if (is_write) {
@@ -167,20 +166,24 @@ class VirtioBlock : public VirtioPci {
     switch (request->type)
     {
     case VIRTIO_BLK_T_IN: {
-      *status = 0;
       size_t position = request->sector * block_config_.blk_size;
-      BlockIoAsync(element, position, false, callback);
+      BlockIoAsync(element, position, false, [callback, status](auto ret) {
+        *status = ret;
+        callback();
+      });
       break;
     }
     case VIRTIO_BLK_T_OUT: {
-      *status = 0;
       size_t position = request->sector * block_config_.blk_size;
-      BlockIoAsync(element, position, true, callback);
+      BlockIoAsync(element, position, true, [callback, status](auto ret) {
+        *status = ret;
+        callback();
+      });
       break;
     }
     case VIRTIO_BLK_T_FLUSH:
-      *status = 0;
-      image_->Flush([callback](ssize_t ret) {
+      image_->Flush([callback, status](ssize_t ret) {
+        *status = ret == 0 ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });
       break;
@@ -191,8 +194,20 @@ class VirtioBlock : public VirtioPci {
 
       strcpy((char*)buffer, "virtio-block");
       element->length += iov.iov_len;
-      *status = 0;
+      *status = VIRTIO_BLK_S_OK;
       callback();
+      break;
+    }
+    case VIRTIO_BLK_T_DISCARD: {
+      auto &iov = vector.front();
+      auto discard = (virtio_blk_discard_write_zeroes*)iov.iov_base;
+      MV_ASSERT(iov.iov_len == sizeof(*discard));
+      size_t position = discard->sector * block_config_.blk_size;
+      size_t length = discard->num_sectors * block_config_.blk_size;
+      image_->Discard(position, length, [status, callback, length](auto ret) {
+        *status = ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
+        callback();
+      });
       break;
     }
     default:

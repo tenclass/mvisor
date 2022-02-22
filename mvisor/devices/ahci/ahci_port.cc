@@ -43,6 +43,7 @@ static inline int is_native_command_queueing(uint8_t ata_cmd)
 AhciPort::AhciPort(DeviceManager* manager, AhciHost* host, int index)
   : manager_(manager), host_(host), port_index_(index)
 {
+  bzero(&port_control_, sizeof(port_control_));
 }
 
 AhciPort::~AhciPort() {
@@ -53,6 +54,10 @@ void AhciPort::AttachDevice(IdeStorageDevice* device) {
 }
 
 void AhciPort::Reset() {
+  if (drive_->debug()) {
+    MV_LOG("reset, command issue=0x%x", port_control_.command_issue);
+  }
+  port_control_.command_issue = 0;
   port_control_.irq_status = 0;
   port_control_.irq_mask = 0;
   port_control_.sata_control = 0;
@@ -119,8 +124,9 @@ bool AhciPort::HandleCommand(int slot) {
   AhciFisRegH2D* fis = (AhciFisRegH2D*)command_table->command_fis;
 
   if (fis->fis_type != kAhciFisTypeRegH2D) {
-    MV_PANIC("unknown fis type 0x%x", fis->fis_type);
-    return false;
+    MV_LOG("unknown fis type 0x%x", fis->fis_type);
+    /* done handling the command */
+    return true;
   }
 
   if (!fis->is_command) {
@@ -310,7 +316,6 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
   case kAhciPortRegSataControl:
     if (((port_control_.sata_control & AHCI_SCR_SCTL_DET) == 1) &&
         ((value & AHCI_SCR_SCTL_DET) == 0)) {
-      MV_LOG("reset");
       Reset();
     }
     port_control_.sata_control = value;

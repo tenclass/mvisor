@@ -322,12 +322,29 @@ void RedirectTcpSocket::OnRemoteConnected() {
   seq_host_ += 1;
 }
 
+bool RedirectTcpSocket::UpdateGuestAck(tcphdr* tcp) {
+  if (TcpSocket::UpdateGuestAck(tcp)) {
+    if (window_size_ > 0 && polling_request_ && polling_request_->poll_mask == 0) {
+      auto device = dynamic_cast<Device*>(backend_->device());
+      auto io = device->manager()->io();
+      io->ModifyPolling(polling_request_, POLLIN);
+    }
+    return true;
+  }
+  return false;
+}
+
 void RedirectTcpSocket::OnRemoteDataAvailable() {
+  auto device = dynamic_cast<Device*>(backend_->device());
+  auto io = device->manager()->io();
+
   int available = (int)(window_size_ - (seq_host_ - guest_acked_));
   if (available > UIP_MAX_TCP_PAYLOAD) {
     available = UIP_MAX_TCP_PAYLOAD;
   }
   if (available <= 0) {
+    /* disable receiving packets now */
+    io->ModifyPolling(polling_request_, 0);
     return;
   }
   auto packet = AllocatePacket(false);
@@ -335,12 +352,7 @@ void RedirectTcpSocket::OnRemoteDataAvailable() {
     if (debug_) {
       MV_LOG("TCP fd=%d failed to allocate packet", fd_);
     }
-    auto device = dynamic_cast<Device*>(backend_->device());
-    auto io = device->manager()->io();
     io->ModifyPolling(polling_request_, 0);
-    io->AddTimer(10, false, [io, this]() {
-      io->ModifyPolling(polling_request_, POLLIN);
-    });
     active_time_ = time(nullptr);
     return;
   }

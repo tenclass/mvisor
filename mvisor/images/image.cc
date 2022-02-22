@@ -49,6 +49,6 @@ void DiskImage::Connect() {
   }
 }
 
-void DiskImage::Trim(off_t position, size_t length, IoCallback callback) {
+void DiskImage::Discard(off_t position, size_t length, IoCallback callback) {
   callback(0);
 }

@@ -80,12 +80,12 @@ class Ipv4Socket {
 class TcpSocket : public Ipv4Socket {
  public:
   TcpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, tcphdr* tcp);
-  bool UpdateGuestAck(tcphdr* tcp);
    
   inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
   }
   virtual void OnDataFromGuest(void* data, size_t length) = 0;
+  virtual bool UpdateGuestAck(tcphdr* tcp);
 
  protected:
   virtual Ipv4Packet* AllocatePacket(bool urgent);
@@ -136,6 +136,7 @@ class RedirectTcpSocket : public TcpSocket {
   bool IsConnected() { return connected_; }
   virtual bool IsActive();
   virtual void OnRemoteDataAvailable();
+  virtual bool UpdateGuestAck(tcphdr* tcp);
 
  protected:
   void InitializeRedirect();

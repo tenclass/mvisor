@@ -55,7 +55,7 @@ AhciDisk::AhciDisk() {
       io_.lba_mode = kIdeLbaMode28;
       io_.dma_status = 1;
       ReadLba();
-      Ata_Trim();
+      Ata_TrimAsync();
     } else {
       AbortCommand();
       MV_PANIC("unknown data set management command=0x%x", regs_.feature0);
@@ -89,7 +89,7 @@ AhciDisk::AhciDisk() {
       MV_LOG("read 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
     }
     MV_ASSERT(io_.lba_count);
-    Ata_ReadWriteSectors(false);
+    Ata_ReadWriteSectorsAsync(false);
   };
 
   ata_handlers_[0xCA] = [=] () { // ATA_CMD_WRITE_DMA
@@ -100,7 +100,7 @@ AhciDisk::AhciDisk() {
       MV_LOG("write 0x%lx sectors at 0x%lx", io_.lba_count, io_.lba_block);
     }
     MV_ASSERT(io_.lba_count);
-    Ata_ReadWriteSectors(true);
+    Ata_ReadWriteSectorsAsync(true);
   };
 
   ata_handlers_[0xE0] = [=] () { // STANDBYNOW1
@@ -110,8 +110,7 @@ AhciDisk::AhciDisk() {
   ata_handlers_[0xEA] = [=] () { // FLUSH_CACHE_EXT
     io_async_ = true;
     image_->Flush([this](ssize_t ret) {
-      regs_.status &= ~ATA_SR_BSY;
-      io_complete_();
+      CompleteCommand();
     });
   };
 
@@ -202,7 +201,7 @@ void AhciDisk::WriteLba() {
   }
 }
 
-void AhciDisk::Ata_ReadWriteSectors(bool is_write) {
+void AhciDisk::Ata_ReadWriteSectorsAsync(bool is_write) {
   io_async_ = true;
   size_t vec_index = 0;
   size_t position = io_.lba_block * geometry_.sector_size;
@@ -216,8 +215,7 @@ void AhciDisk::Ata_ReadWriteSectors(bool is_write) {
       io_.nbytes += length;
       if (io_.nbytes == (ssize_t)total_bytes) {
         WriteLba();
-        regs_.status &= ~ATA_SR_BSY;
-        io_complete_();
+        CompleteCommand();
       }
     };
     if (is_write) {
@@ -231,21 +229,43 @@ void AhciDisk::Ata_ReadWriteSectors(bool is_write) {
   }
 }
 
-void AhciDisk::Ata_Trim() {
-  for (auto vec : io_.vector) {
-    for (size_t i = 0; i < vec.iov_len / sizeof(uint64_t); i++) {
-      uint64_t value = ((uint64_t*)vec.iov_base)[i];
+void AhciDisk::Ata_TrimAsync() {
+  io_async_ = true;
+  size_t total_bytes = 0;
+  struct Chunk {
+    size_t position;
+    size_t length;
+  };
+  std::vector<Chunk> chunks;
+  for (auto &iov : io_.vector) {
+    for (size_t i = 0; i < iov.iov_len / sizeof(uint64_t); i++) {
+      uint64_t value = ((uint64_t*)iov.iov_base)[i];
       size_t block = value & 0x0000FFFFFFFFFFFF;
       size_t count = value >> 48;
+      if (count == 0) {
+        continue;
+      }
       if (block + count >= geometry_.total_sectors) {
         AbortCommand();
         return;
       }
-      if (count) {
-        image_->Trim(block * geometry_.sector_size, count * geometry_.sector_size, [](ssize_t ret) {
-        });
-      }
+      size_t length = count * geometry_.sector_size;
+      chunks.push_back(Chunk {
+        .position = block * geometry_.sector_size,
+        .length = length
+      });
+      total_bytes += length;
     }
+  }
+  io_.nbytes = 0;
+  for (auto chunk : chunks) {
+    image_->Discard(chunk.position, chunk.length, [this, total_bytes, chunk](ssize_t ret) {
+      io_.nbytes += chunk.length;
+      if (io_.nbytes == (ssize_t)total_bytes) {
+        WriteLba();
+        CompleteCommand();
+      }
+    });
   }
 }
 

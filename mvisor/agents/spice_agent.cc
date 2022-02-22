@@ -28,13 +28,16 @@
 #include "logger.h"
 #include "device_interface.h"
 #include "spice/vd_agent.h"
+#include "spice/enums.h"
 
 using namespace std::chrono;
 
 /* Limit send mouse frequency */
 const auto kSendMouseInterval = milliseconds(20);
 
-class SpiceAgent : public Object, public SerialPortInterface, public SpiceAgentInterface {
+class SpiceAgent : public Object, public SerialPortInterface,
+  public SpiceAgentInterface, public PointerInputInterface
+{
  private:
   bool                      pending_resize_event_;
   VDAgentMouseState         last_mouse_state_;
@@ -108,14 +111,7 @@ class SpiceAgent : public Object, public SerialPortInterface, public SpiceAgentI
     delete buffer;
   }
 
-  bool CanAcceptInput() {
-    return ready_;
-  }
-
-  void QueuePointerEvent(uint32_t buttons, uint32_t x, uint32_t y) {
-    if (!ready_) {
-      return;
-    }
+  void QueueEvent(uint buttons, int x, int y) {
     steady_clock::time_point now = steady_clock::now();
     if (last_mouse_state_.buttons == buttons && now - last_send_mouse_time_ < kSendMouseInterval) {
       return;
@@ -128,7 +124,26 @@ class SpiceAgent : public Object, public SerialPortInterface, public SpiceAgentI
     SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_MOUSE_STATE, &last_mouse_state_, sizeof(last_mouse_state_));
   }
 
-  void Resize(uint32_t width, uint32_t height) {
+  virtual bool InputAcceptable() {
+    return ready_;
+  }
+
+  virtual void QueuePointerEvent(PointerEvent event) {
+    if (!ready_) {
+      return;
+    }
+    if (event.z > 0) {
+      QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_UP), event.x, event.y);
+      QueueEvent(event.buttons, event.x, event.y);
+    } else if (event.z < 0) {
+      QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_DOWN), event.x, event.y);
+      QueueEvent(event.buttons, event.x, event.y);
+    } else {
+      QueueEvent(event.buttons, event.x, event.y);
+    }
+  }
+
+  virtual void Resize(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
     if (!ready_) {

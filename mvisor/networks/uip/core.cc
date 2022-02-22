@@ -140,8 +140,17 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
-  virtual void OnFrameFromGuest(std::deque<struct iovec>& vector) {
-    ParseEthPacket(vector, (struct ethhdr*)vector[0].iov_base);
+  virtual void OnFrameFromGuest(void* frame, size_t length) {
+    ParseEthPacket((struct ethhdr*)frame);
+  }
+
+  bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
+    // fill eth headers
+    ethhdr* eth = (ethhdr*)buffer;
+    eth->h_proto = htons(protocol);
+    memcpy(eth->h_dest, guest_mac_.data, sizeof(eth->h_dest));
+    memcpy(eth->h_source, router_mac_.data, sizeof(eth->h_source));
+    return device_->WriteBuffer(buffer, size);
   }
 
   virtual bool OnPacketFromHost(Ipv4Packet* packet) {
@@ -173,17 +182,7 @@ class Uip : public Object, public NetworkBackendInterface {
     return packet;
   }
 
-  bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
-    // fill eth headers
-    ethhdr* eth = (ethhdr*)buffer;
-    eth->h_proto = htons(protocol);
-    memcpy(eth->h_dest, guest_mac_.data, sizeof(eth->h_dest));
-    memcpy(eth->h_source, router_mac_.data, sizeof(eth->h_source));
-  
-    return device_->WriteBuffer(buffer, size);
-  }
-
-  void ParseEthPacket(std::deque<struct iovec>& vector, ethhdr* eth) {
+  void ParseEthPacket(ethhdr* eth) {
     if (memcmp(eth->h_dest, router_mac_.data, ETH_ALEN) != 0 &&
       memcmp(eth->h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", ETH_ALEN) != 0) {
       // ignore packets to other ethernet addresses
@@ -194,10 +193,10 @@ class Uip : public Object, public NetworkBackendInterface {
     switch (protocol)
     {
     case ETH_P_IP:
-      ParseIpPacket(vector, eth, (struct iphdr*)&eth[1]);
+      ParseIpPacket(eth, (struct iphdr*)&eth[1]);
       break;
     case ETH_P_ARP:
-      ParseArpPacket(vector, eth, (ArpMessage*)vector[1].iov_base);
+      ParseArpPacket(eth, (ArpMessage*)&eth[1]);
       break;
     case ETH_P_IPV6:
       // ignore IPv6
@@ -213,7 +212,7 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
-  void ParseArpPacket(std::deque<struct iovec>& vector, ethhdr* eth, ArpMessage* arp) {
+  void ParseArpPacket(ethhdr* eth, ArpMessage* arp) {
     if (ntohs(arp->ar_op) == 1) { // ARP request
       uint32_t dip = ntohl(arp->ar_tip);
       if (dip == router_ip_) {
@@ -236,27 +235,23 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
-  void ParseIpPacket(std::deque<struct iovec>& vector, ethhdr* eth, iphdr* ip) {
+  void ParseIpPacket(ethhdr* eth, iphdr* ip) {
     switch (ip->protocol)
     {
     case 0x06: { // TCP
-      struct tcphdr* tcp_header = (struct tcphdr*)vector[1].iov_base;
-      ParseTcpPacket(vector, eth, ip, tcp_header);
+      ParseTcpPacket(eth, ip, (struct tcphdr*)((uint8_t*)ip + ip->ihl * 4));
       break;
     }
     case 0x11: { // UDP
-      struct udphdr* udp_header = (struct udphdr*)vector[1].iov_base;
-      ParseUdpPacket(vector, eth, ip, udp_header);
+      ParseUdpPacket(eth, ip, (struct udphdr*)((uint8_t*)ip + ip->ihl * 4));
       break;
     }
     default:
       if (real_device_->debug()) {
         MV_LOG("==================Not UDP or TCP===================");
-        for (auto &vec : vector) {
-          DumpHex(vec.iov_base, vec.iov_len);
-        }
-        MV_LOG("vector size=%lu", vector.size());
-        MV_PANIC("ip packet protocol=%d", ip->protocol);
+        MV_LOG("ip packet protocol=%d", ip->protocol);
+        DumpHex(eth, sizeof(*eth));
+        DumpHex(ip, ntohs(ip->tot_len));
       }
       break;
     }
@@ -271,7 +266,7 @@ class Uip : public Object, public NetworkBackendInterface {
     return nullptr;
   }
 
-  void ParseTcpPacket(std::deque<struct iovec>& vector, ethhdr* eth, iphdr* ip, tcphdr* tcp) {
+  void ParseTcpPacket(ethhdr* eth, iphdr* ip, tcphdr* tcp) {
     uint32_t sip = ntohl(ip->saddr);
     uint32_t dip = ntohl(ip->daddr);
     uint16_t sport = ntohs(tcp->source);
@@ -324,26 +319,8 @@ class Uip : public Object, public NetworkBackendInterface {
     }
 
     // Send out TCP data to remote host
-    if (vector.size() == 2) {
-      uint8_t* data = (uint8_t*)tcp + tcp->doff * 4;
-      socket->OnDataFromGuest(data, payload_length);
-    } else if (vector.size() == 3) {
-      socket->OnDataFromGuest(vector[2].iov_base, vector[2].iov_len);
-    } else if (vector.size() > 3) {
-      vector.pop_front();
-      vector.pop_front();
-      size_t length = 0;
-      for (auto &iov : vector)
-        length += iov.iov_len;
-      uint8_t* data = new uint8_t[length];
-      uint8_t* ptr = data;
-      for (auto &iov : vector) {
-        memcpy(ptr, iov.iov_base, iov.iov_len);
-        ptr += iov.iov_len;
-      }
-      socket->OnDataFromGuest(data, length);
-      delete[] data;
-    }
+    uint8_t* data = (uint8_t*)tcp + tcp->doff * 4;
+    socket->OnDataFromGuest(data, payload_length);
   }
 
   UdpSocket* LookupUdpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
@@ -355,7 +332,7 @@ class Uip : public Object, public NetworkBackendInterface {
     return nullptr;
   }
 
-  void ParseUdpPacket(std::deque<struct iovec>& vector, ethhdr* eth, iphdr* ip, udphdr* udp) {
+  void ParseUdpPacket(ethhdr* eth, iphdr* ip, udphdr* udp) {
     uint32_t sip = ntohl(ip->saddr);
     uint32_t dip = ntohl(ip->daddr);
     uint16_t sport = ntohs(udp->source);
@@ -382,13 +359,7 @@ class Uip : public Object, public NetworkBackendInterface {
     }
 
     MV_ASSERT(socket);
-    if (vector.size() == 2) {
-      socket->OnDataFromGuest((void*)&udp[1], ntohs(udp->len));
-    } else if (vector.size() == 3) {
-      socket->OnDataFromGuest(vector[2].iov_base, vector[2].iov_len);
-    } else {
-      MV_PANIC("Invalid vector size = %lu", vector.size());
-    }
+    socket->OnDataFromGuest((void*)&udp[1], ntohs(udp->len) - sizeof(*udp));
   }
 
 };

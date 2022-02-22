@@ -19,40 +19,66 @@
 #include "usb_device.h"
 #include <cstring>
 #include "usb.h"
+#include "device_manager.h"
 
-UsbPacket* UsbDevice::CreatePacket(uint direction, uint stream_id, uint64_t id, VoidCallback on_complete) {
+void UsbDevice::Reset() {
+  configuration_value_ = 0;
+  config_ = nullptr;
+  speed_ = kUsbSpeedHigh;
+
+  /* remove all endpoints */
+  for (auto endpoint : endpoints_) {
+    if (endpoint->timer) {
+      manager_->io()->RemoveTimer(endpoint->timer);
+    }
+  }
+  endpoints_.clear();
+}
+
+UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete) {
   auto packet = new UsbPacket {
-    .direction = direction,
+    .endpoint_address = endpoint_address,
     .stream_id = stream_id,
     .id = id,
     .status = USB_RET_SUCCESS,
     .size = 0,
     .OnComplete = on_complete
   };
-  packet->Release = [packet]() {
+  if (endpoint_address & 0xF) {
+    packet->endpoint = FindEndpoint(endpoint_address);
+    MV_ASSERT(packet->endpoint);
+  }
+  /* called by XHCI controller */
+  packet->Release = [=]() {
+    auto endpoint = packet->endpoint;
+    if (endpoint) {
+      auto it = endpoint->tokens.find(packet);
+      if (it != endpoint->tokens.end()) {
+        endpoint->tokens.erase(it);
+      }
+    }
     delete packet;
   };
   return packet;
 }
 
-void UsbDevice::HandlePacket(UsbPacket* packet) {
-  packet->status = USB_RET_SUCCESS;
-
-  if (packet->control_parameter) {
-    OnControlPacket(packet);
-  } else {
-    OnDataPacket(packet);
-  }
-
-  if (packet->status == USB_RET_NAK) {
-    // Handle the packet later
-    if (debug_) {
-      MV_LOG("NAK packet id=0x%lx", packet->id);
+bool UsbDevice::HandlePacket(UsbPacket* packet) {
+  if (packet->endpoint_address & 0xF) { // data endpoints
+    auto endpoint = packet->endpoint;
+    if (endpoint->type == kUsbEndpointIsochronous || endpoint->type == kUsbEndpointInterrupt) {
+      packet->status = USB_RET_NAK;
+      endpoint->tokens.insert(packet);
+      NotifyEndpoint(endpoint->address);
+      return false;
+    } else {
+      MV_PANIC("not impemented endpoint type=%d", endpoint->type);
     }
-    return;
+  } else { // control
+    OnControlPacket(packet);
   }
+
   packet->OnComplete();
-  packet->Release();
+  return true;
 }
 
 void UsbDevice::OnControlPacket(UsbPacket* packet) {
@@ -63,42 +89,73 @@ void UsbDevice::OnControlPacket(UsbPacket* packet) {
 
   uint setup_len = (setup_buf[7] << 8) | setup_buf[6];
   if (debug_) {
-    MV_LOG("control dir=0x%x request=0x%x value=0x%x index=0x%x setup_len=0x%x",
-      packet->direction, request, value, index, setup_len);
+    MV_LOG("control ep=0x%x request=0x%x value=0x%x index=0x%x setup_len=0x%x",
+      packet->endpoint_address, request, value, index, setup_len);
   }
   
   uint8_t buffer[setup_len];
-  if (packet->direction == USB_TOKEN_OUT && setup_len) {
+  if (packet->endpoint_address == 0x00 && setup_len) {
     CopyPacketData(packet, buffer, setup_len);
   }
 
+  packet->status = USB_RET_SUCCESS;
   int ret = OnControl(request, value, index, buffer, setup_len);
   if (ret < 0) {
     packet->status = ret;
     return;
   }
 
-  if (packet->direction == USB_TOKEN_IN) {
+  if (packet->endpoint_address == 0x80) {
     CopyPacketData(packet, buffer, ret);
   }
 }
 
 void UsbDevice::OnDataPacket(UsbPacket* packet) {
   uint8_t buffer[packet->size];
-  if (packet->direction == USB_TOKEN_OUT) {
+  packet->status = USB_RET_SUCCESS;
+
+  if (packet->endpoint_address & 0x80) { // IN
+    int ret = OnInputData(packet->endpoint_address, buffer, packet->size);
+    if (ret < 0) {
+      packet->status = ret;
+    } else {
+      CopyPacketData(packet, buffer, ret);
+    }
+  } else { // OUT
     CopyPacketData(packet, buffer, packet->size);
-    int ret = OnOutputData(buffer, packet->size);
+    int ret = OnOutputData(packet->endpoint_address, buffer, packet->size);
     if (ret < 0) {
       packet->status = ret;
-      return;
     }
-  } else if (packet->direction == USB_TOKEN_IN) {
-    int ret = OnInputData(buffer, packet->size);
-    if (ret < 0) {
-      packet->status = ret;
-      return;
+  }
+}
+
+void UsbDevice::NotifyEndpoint(uint endpoint_address) {
+  auto endpoint = FindEndpoint(endpoint_address);
+  if (endpoint) {
+    auto timer_callback = [this, endpoint]() {
+      if (endpoint->tokens.empty()) {
+        /* wait for next tick */
+        return;
+      }
+      auto it = endpoint->tokens.begin();
+      auto packet = *it;
+      endpoint->tokens.erase(it);
+      OnDataPacket(packet);
+      if (packet->status == USB_RET_NAK) {
+        manager_->io()->RemoveTimer(endpoint->timer);
+        endpoint->timer = nullptr;
+        endpoint->tokens.insert(packet);
+      } else {
+        packet->OnComplete();
+      }
+    };
+  
+    if (!endpoint->timer) {
+      endpoint->timer = manager_->io()->AddTimer(20, true, timer_callback);
     }
-    CopyPacketData(packet, buffer, ret);
+  } else {
+    MV_PANIC("endpoint not found 0x%x", endpoint_address);
   }
 }
 
@@ -112,7 +169,7 @@ void UsbDevice::CopyPacketData(UsbPacket* packet, uint8_t* data, int length) {
     if (copy > v.iov_len) {
       copy = v.iov_len;
     }
-    if (packet->direction == USB_TOKEN_IN) {
+    if (packet->endpoint_address & 0x80) {
       memcpy(v.iov_base, ptr, copy);
     } else {
       memcpy(ptr, v.iov_base, copy);
@@ -125,13 +182,11 @@ void UsbDevice::CopyPacketData(UsbPacket* packet, uint8_t* data, int length) {
   packet->content_length += length;
 }
 
-int UsbDevice::OnInputData(uint8_t* data, int length) {
-  MV_PANIC("not implemented");
+int UsbDevice::OnInputData(uint endpoint_address, uint8_t* data, int length) {
   return USB_RET_STALL;
 }
 
-int UsbDevice::OnOutputData(uint8_t* data, int length) {
-  MV_PANIC("not implemented");
+int UsbDevice::OnOutputData(uint endpoint_address, uint8_t* data, int length) {
   return USB_RET_STALL;
 }
 
@@ -309,15 +364,30 @@ int UsbDevice::GetStatus(uint8_t* data, int length) {
 }
 
 int UsbDevice::SetConfiguration(uint value) {
+  /* delete all endpoints */
+  Reset();
+
   if (value == 0) {
-    configuration_ = 0;
-    config_ = nullptr;
-  } else {
-    for (int i = 0; i < device_descriptor_->bNumConfigurations; i++) {
-      auto c = &device_descriptor_->configurations[i];
-      if (c->bConfigurationValue == value) {
-        config_ = c;
-        configuration_ = value;
+    return 0;
+  }
+
+  for (uint i = 0; i < device_descriptor_->bNumConfigurations; i++) {
+    auto c = &device_descriptor_->configurations[i];
+    if (c->bConfigurationValue == value) {
+      config_ = c;
+      configuration_value_ = value;
+      /* initialize interfaces */
+      for (uint j = 0; j < config_->bNumInterfaces; j++) {
+        auto interface = &config_->interfaces[j];
+        for (uint k = 0; k < interface->bNumEndpoints; k++) {
+          auto desc = &interface->endpoints[k];
+          /* create endpoint */
+          endpoints_.push_back(new UsbEndpoint {
+            .address = desc->bEndpointAddress,
+            .type = UsbEndpointType(desc->bmAttributes & 3),
+            .interface = j
+          });
+        }
       }
     }
   }
@@ -328,3 +398,13 @@ int UsbDevice::SetInterface(uint index, uint value) {
   MV_PANIC("not impl");
   return USB_RET_STALL;
 }
+
+UsbEndpoint* UsbDevice::FindEndpoint(uint address) {
+  for (auto endpoint : endpoints_) {
+    if (endpoint->address == address) {
+      return endpoint;
+    }
+  }
+  return nullptr;
+}
+

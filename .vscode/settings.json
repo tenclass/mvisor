@@ -59,6 +59,8 @@
         "condition_variable": "cpp",
         "stdint.h": "c",
         "stddef.h": "c",
-        "variant": "cpp"
+        "variant": "cpp",
+        "future": "cpp",
+        "csignal": "cpp"
     }
 }

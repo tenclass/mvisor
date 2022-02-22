@@ -101,6 +101,7 @@ class IdeStorageDevice : public Device {
 
   virtual void StartCommand(VoidCallback iocp);
   virtual void AbortCommand();
+  virtual void CompleteCommand();
 
   IdeStorageType  type() { return type_; }
   IdeIo*          io() { return &io_; }
@@ -134,7 +135,7 @@ class AhciCdrom : public IdeStorageDevice {
   void ParseCommandPacket();
   void Atapi_IdentifyData();
   void Atapi_Inquiry();
-  void Atapi_ReadSectors();
+  void Atapi_ReadSectorsAsync();
   void Atapi_TableOfContent();
   void Atapi_ModeSense();
   void Atapi_RequestSense();
@@ -168,8 +169,8 @@ class AhciDisk : public IdeStorageDevice {
   void WriteLba();
   void InitializeGeometry();
   void Ata_IdentifyDevice();
-  void Ata_ReadWriteSectors(bool is_write);
-  void Ata_Trim();
+  void Ata_ReadWriteSectorsAsync(bool is_write);
+  void Ata_TrimAsync();
 
   DiskGeometry geometry_;
   int multiple_sectors_;

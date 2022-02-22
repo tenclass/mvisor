@@ -193,22 +193,32 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       }
 
       PushQueue(vq, element);
-      NotifyQueue(vq);
       MV_ASSERT(offset == size);
     }
+    NotifyQueue(vq);
     return true;
   }
 
   void HandleTransmit(VirtQueue& vq, VirtElement* element) {
     auto &vector = element->vector;
-    MV_ASSERT(vector.size() >= 2);
-    
-    virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)vector.front().iov_base;
-    vector.pop_front();
-
+    MV_ASSERT(vector.size() >= 1);
+    auto &front = vector.front();
+    virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)front.iov_base;
     MV_ASSERT(header->gso_type == VIRTIO_NET_HDR_GSO_NONE);
-    if (backend_) {
-      backend_->OnFrameFromGuest(vector);
+
+    if (vector.size() == 1) {
+      backend_->OnFrameFromGuest(&header[1], element->size - sizeof(*header));
+    } else {
+      /* merge buffers into one piece */
+      auto frame = new uint8_t[element->size];
+      size_t copied = 0;
+      for (auto &v : vector) {
+        memcpy(frame + copied, v.iov_base, v.iov_len);
+        copied += v.iov_len;
+      }
+      MV_ASSERT(copied == element->size);
+      backend_->OnFrameFromGuest(frame + sizeof(*header), element->size - sizeof(*header));
+      delete frame;
     }
   }
 

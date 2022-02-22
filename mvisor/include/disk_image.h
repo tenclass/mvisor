@@ -27,6 +27,14 @@
 
 typedef std::function<void(ssize_t ret)> IoCallback;
 
+enum ImageIoType {
+  kImageIoInformation,
+  kImageIoRead,
+  kImageIoWrite,
+  kImageIoDiscard,
+  kImageIoFlush
+};
+
 struct ImageInformation {
   /* Disk size is block_size * total_blocks */
   size_t block_size;
@@ -51,7 +59,7 @@ class DiskImage : public Object {
   virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) = 0;
   virtual void Flush(IoCallback callback) = 0;
   /* Optional */
-  virtual void Trim(off_t position, size_t length, IoCallback callback);
+  virtual void Discard(off_t position, size_t length, IoCallback callback);
 
  protected:
   bool initialized_ = false;

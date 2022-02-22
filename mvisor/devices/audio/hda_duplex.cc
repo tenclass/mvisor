@@ -273,7 +273,9 @@ class HdaDuplex : public Device, public HdaCodecInterface {
       callback(0);
       break;
     default:
-      MV_LOG("unhandled verb 0x%x payload=0x%x", verb, payload);
+      if (debug_) {
+        MV_LOG("unhandled verb 0x%x payload=0x%x", verb, payload);
+      }
       callback(0);
       break;
     }

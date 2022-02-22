@@ -137,7 +137,7 @@ AhciCdrom::AhciCdrom()
     CBD_RW_DATA10* p = (CBD_RW_DATA10*)io_.atapi_command;
     io_.lba_block = be32toh(p->lba);
     io_.lba_count = be16toh(p->count);
-    Atapi_ReadSectors();
+    Atapi_ReadSectorsAsync();
   };
   
   atapi_handlers_[0x2B] = [=] () { // seek
@@ -206,7 +206,7 @@ void AhciCdrom::ParseCommandPacket() {
   }
 }
 
-void AhciCdrom::Atapi_ReadSectors() {
+void AhciCdrom::Atapi_ReadSectorsAsync() {
   io_async_ = true;
   size_t vec_index = 0;
   size_t position = io_.lba_block * track_size_;
@@ -220,8 +220,7 @@ void AhciCdrom::Atapi_ReadSectors() {
     image_->Read(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
       io_.nbytes += length;
       if (io_.nbytes == (ssize_t)total_bytes) {
-        regs_.status &= ~ATA_SR_BSY;
-        io_complete_();
+        CompleteCommand();
       }
     });
     position += length;

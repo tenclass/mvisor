@@ -586,46 +586,69 @@ class Qcow2Image : public DiskImage {
     return length;
   }
 
-  ssize_t Read(void *buffer, off_t position, size_t length) {
-    size_t bytes_read = 0;
-    uint8_t *ptr = (uint8_t*)buffer;
-  
-    while (bytes_read < length) {
-      if ((uint64_t)position >= image_header_.size) {
-        return bytes_read;
-      }
-
-      ssize_t ret = ReadCluster(ptr, position, length - bytes_read);
-      if (ret <= 0) {
-        return ret;
-      }
-
-      bytes_read += ret;
-      ptr += ret;
-      position += ret;
+  /* The OS use DISCARD command to inform us some disk regions are freed
+   * To recycle these regions, clear the L2 table entry, and set the refcount to 0
+   * The return value is always less than or equal to cluster size */
+  ssize_t DiscardCluster(off_t pos, size_t length) {
+    uint64_t offset_in_cluster, l2_index;
+    auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
+    if (l2_table == nullptr) {
+      return length;
     }
-    return bytes_read;
+
+    if (offset_in_cluster > 0 || length < cluster_size_) {
+      // MV_LOG("do nothing, not aligned to 64k pos=0x%lx length=0x%lx", pos, length);
+      return length;
+    }
+
+    uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
+    if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
+      MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
+    } else {
+      cluster_start &= QCOW2_OFFSET_MASK;
+      if (cluster_start == 0) {
+        return length;
+      }
+
+      FreeCluster(cluster_start); // Set refcount to 0
+      l2_table->entries[l2_index] = be64toh(0);
+      l2_table->dirty = true;
+    }
+    return length;
   }
 
-  ssize_t Write(void *buffer, off_t position, size_t length) {
-    size_t bytes_written = 0;
+  ssize_t BlockIo(void *buffer, off_t position, size_t length, ImageIoType type) {
+    size_t offset = 0;
     uint8_t *ptr = (uint8_t*)buffer;
   
-    while (bytes_written < length) {
-      if (readonly_ || (uint64_t)position >= image_header_.size) {
-        return bytes_written;
+    while (offset < length) {
+      if ((uint64_t)position >= image_header_.size) {
+        return offset;
       }
 
-      ssize_t ret = WriteCluster(ptr, position, length - bytes_written);
+      ssize_t ret;
+      switch (type) {
+      case kImageIoRead:
+        ret = ReadCluster(ptr, position, length - offset);
+        break;
+      case kImageIoWrite:
+        ret = WriteCluster(ptr, position, length - offset);
+        break;
+      case kImageIoDiscard:
+        ret = DiscardCluster(position, length - offset);
+        break;
+      default:
+        MV_PANIC("invalid type");
+      }
       if (ret <= 0) {
         return ret;
       }
 
-      bytes_written += ret;
+      offset += ret;
       ptr += ret;
       position += ret;
     }
-    return bytes_written;
+    return offset;
   }
 
   void FlushL2Tables () {
@@ -668,73 +691,38 @@ class Qcow2Image : public DiskImage {
 
     return fsync(fd_);
   }
-
-  /* The return value is always less than or equal to cluster size */
-  ssize_t TrimCluster(off_t pos, size_t length) {
-    uint64_t offset_in_cluster, l2_index;
-    auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
-    if (l2_table == nullptr) {
-      return length;
-    }
-
-    uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-    if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
-      MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
-    } else {
-      cluster_start &= QCOW2_OFFSET_MASK;
-      if (cluster_start == 0) {
-        return length;
-      }
-
-      FreeCluster(cluster_start); // Set refcount to 0
-      l2_table->entries[l2_index] = be64toh(0);
-      l2_table->dirty = true;
-    }
-    return length;
-  }
-
-  /* The OS use TRIM command to inform us some disk regions are freed
-   * To recycle these regions, clear the L2 table entry, and set the refcount to 0
-   */
-  void Trim(off_t position, size_t length) {
-    /* FIXME: this method crashes the file system */
-    return;
-
-    size_t bytes_trimed = 0;
-  
-    while (bytes_trimed < length) {
-      if (readonly_ || (uint64_t)position >= image_header_.size) {
-        return;
-      }
-
-      ssize_t ret = TrimCluster(position, length - bytes_trimed);
-      if (ret <= 0) {
-        return;
-      }
-
-      bytes_trimed += ret;
-      position += ret;
-    }
-  }
   
   virtual void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
     std::unique_lock<std::mutex> lock(worker_mutex_);
     worker_queue_.push_back([=]() {
-      auto ret = Read(buffer, position, length);
-      io_->Schedule([=]() {
-        callback(ret);
-      });
+      auto ret = BlockIo(buffer, position, length, kImageIoRead);
+      io_->Schedule([=]() { callback(ret); });
     });
     worker_cv_.notify_all();
   }
 
   virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
+    if (readonly_) {
+      return callback(0);
+    }
+  
     std::unique_lock<std::mutex> lock(worker_mutex_);
     worker_queue_.push_back([=]() {
-      auto ret = Write(buffer, position, length);
-      io_->Schedule([=]() {
-        callback(ret);
-      });
+      auto ret = BlockIo(buffer, position, length, kImageIoWrite);
+      io_->Schedule([=]() { callback(ret); });
+    });
+    worker_cv_.notify_all();
+  }
+
+  virtual void Discard(off_t position, size_t length, IoCallback callback) {
+    if (readonly_) {
+      return callback(0);
+    }
+  
+    std::unique_lock<std::mutex> lock(worker_mutex_);
+    worker_queue_.push_back([=]() {
+      auto ret = BlockIo(nullptr, position, length, kImageIoDiscard);
+      io_->Schedule([=]() { callback(ret); });
     });
     worker_cv_.notify_all();
   }

@@ -27,6 +27,7 @@
 #include <chrono>
 #include <linux/kvm.h>
 #include <sys/prctl.h>
+#include <csignal>
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...)
 {
@@ -51,6 +52,7 @@ void Log(LogType type, const char* file, int line, const char* function, const c
     if (errno != 0) {
       fprintf(stderr, "errno=%d, %s\n", errno, strerror(errno));
     }
+    std::raise(SIGINT);
     exit(1);
   }
 }

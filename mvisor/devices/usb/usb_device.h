@@ -22,8 +22,9 @@
 #include "device.h"
 #include "usb_descriptor.h"
 #include <sys/uio.h>
+#include <set>
+#include "io_thread.h"
 
-#define USB_MAX_ENDPOINTS  15
 #define USB_MAX_INTERFACES 16
 
 enum UsbSpeed {
@@ -33,12 +34,27 @@ enum UsbSpeed {
   kUsbSpeedSuper
 };
 
-struct UsbEndpoint {
+enum UsbEndpointType {
+  kUsbEndpointControl,
+  kUsbEndpointIsochronous,
+  kUsbEndpointBulk,
+  kUsbEndpointInterrupt
+};
 
+struct UsbPacket;
+struct UsbEndpoint {
+  uint                    address;
+  UsbEndpointType         type;
+  std::set<UsbPacket*>    tokens;
+  uint                    interface;
+  uint                    interval;
+  /* for interrupt/isoch endpoints */
+  IoTimer*                timer;
 };
 
 struct UsbPacket {
-  uint      direction;
+  UsbEndpoint*  endpoint;
+  uint      endpoint_address;
   uint      stream_id;
   uint64_t  id;
   int       status;
@@ -55,19 +71,20 @@ struct UsbPacket {
 class UsbDevice : public Device {
  public:
   int speed() { return speed_; }
-  UsbPacket* CreatePacket(uint direction, uint stream_id, uint64_t id, VoidCallback on_complete);
-  void HandlePacket(UsbPacket* packet);
+  bool configured() { return configuration_value_ > 0; }
+  UsbPacket* CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete);
+  bool HandlePacket(UsbPacket* packet);
   void CancelPacket(UsbPacket* packet);
+  virtual void Reset();
 
  protected:
-  int speed_ = kUsbSpeedHigh;
+  int speed_;
   UsbEndpoint control_endpoint_;
-  UsbEndpoint in_endpoints_[USB_MAX_ENDPOINTS];
-  UsbEndpoint out_endpoints_[USB_MAX_ENDPOINTS];
+  std::vector<UsbEndpoint*> endpoints_;
   const UsbDeviceDescriptor* device_descriptor_ = nullptr;
   const UsbStringsDescriptor* strings_descriptor_ = nullptr;
   const UsbConfigurationDescriptor* config_ = nullptr;
-  uint8_t configuration_ = 0;
+  uint8_t configuration_value_ = 0;
   bool remote_wakeup_ = false;
   int alternate_settings_[16] = { 0 };
 
@@ -78,8 +95,11 @@ class UsbDevice : public Device {
   virtual void OnDataPacket(UsbPacket* packet);
 
   virtual int OnControl(uint request, uint value, uint index, uint8_t* data, int length);
-  virtual int OnInputData(uint8_t* data, int length);
-  virtual int OnOutputData(uint8_t* data, int length);
+  virtual int OnInputData(uint endpoint_address, uint8_t* data, int length);
+  virtual int OnOutputData(uint endpoint_address, uint8_t* data, int length);
+
+  UsbEndpoint* FindEndpoint(uint endpoint_address);
+  virtual void NotifyEndpoint(uint endpoint_address);
 
  private:
   void CopyPacketData(UsbPacket* packet, uint8_t* data, int length);

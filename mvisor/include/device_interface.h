@@ -28,14 +28,26 @@
 class KeyboardInputInterface {
  public:
   virtual void QueueKeyboardEvent(uint8_t scancode[10]) = 0;
-  virtual void QueueMouseEvent(uint8_t button_state, int rel_x, int rel_y, int rel_z) = 0;
-  virtual bool CanAcceptInput() = 0;
+  virtual void QueueMouseEvent(uint buttons, int rel_x, int rel_y, int rel_z) = 0;
+  virtual bool InputAcceptable() = 0;
+};
+
+struct PointerEvent {
+  uint buttons; 
+  int x;
+  int y;
+  int z;
+  uint screen_width;
+  uint screen_height;
+};
+class PointerInputInterface {
+ public:
+  virtual void QueuePointerEvent(PointerEvent event) = 0;
+  virtual bool InputAcceptable() = 0;
 };
 
 class SpiceAgentInterface {
  public:
-  virtual void QueuePointerEvent(uint32_t buttons, uint32_t x, uint32_t y) = 0;
-  virtual bool CanAcceptInput() = 0;
   virtual void Resize(uint32_t width, uint32_t height) = 0;
 };
 
@@ -146,7 +158,7 @@ class NetworkBackendInterface {
  public:
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) = 0;
   virtual void Reset() = 0;
-  virtual void OnFrameFromGuest(std::deque<struct iovec>& vector) = 0;
+  virtual void OnFrameFromGuest(void* frame, size_t length) = 0;
   virtual bool OnPacketFromHost(Ipv4Packet* packet) = 0;
   virtual Ipv4Packet* AllocatePacket(bool urgent) = 0;
   virtual void OnReceiveAvailable() = 0;
