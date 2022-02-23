@@ -96,8 +96,8 @@ void DiskImage::ReadAsync(void *buffer, off_t position, size_t length, IoCallbac
     auto ret = Read(buffer, position, length);
     io_->Schedule([=]() { callback(ret); });
   });
-  worker_cv_.notify_all();
   worker_mutex_.unlock();
+  worker_cv_.notify_all();
 }
 
 void DiskImage::WriteAsync(void *buffer, off_t position, size_t length, IoCallback callback) {
@@ -110,8 +110,8 @@ void DiskImage::WriteAsync(void *buffer, off_t position, size_t length, IoCallba
     auto ret = Write(buffer, position, length);
     io_->Schedule([=]() { callback(ret); });
   });
-  worker_cv_.notify_all();
   worker_mutex_.unlock();
+  worker_cv_.notify_all();
 }
 
 void DiskImage::DiscardAsync(off_t position, size_t length, IoCallback callback) {
@@ -124,8 +124,8 @@ void DiskImage::DiscardAsync(off_t position, size_t length, IoCallback callback)
     auto ret = Discard(position, length);
     io_->Schedule([=]() { callback(ret); });
   });
-  worker_cv_.notify_all();
   worker_mutex_.unlock();
+  worker_cv_.notify_all();
 }
 
 void DiskImage::FlushAsync(IoCallback callback) {
@@ -136,6 +136,6 @@ void DiskImage::FlushAsync(IoCallback callback) {
       callback(ret);
     });
   });
-  worker_cv_.notify_all();
   worker_mutex_.unlock();
+  worker_cv_.notify_all();
 }
