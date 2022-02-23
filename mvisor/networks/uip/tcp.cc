@@ -276,6 +276,8 @@ void RedirectTcpSocket::InitializeRedirect() {
   MV_ASSERT(ret < 0 && errno == EINPROGRESS);
   polling_request_ = io_->StartPolling(fd_, POLLOUT, [this](auto events) {
     io_->CancelRequest(polling_request_);
+    polling_request_ = nullptr;
+  
     if (events & POLLOUT) {
       auto packet = AllocatePacket(true);
       if (packet) {

@@ -94,6 +94,9 @@ void IoThread::RunLoop() {
       void* data = io_uring_cqe_get_data(cqe);
       auto result = cqe->res;
       io_uring_cqe_seen(&ring_, cqe);
+      
+      /* IO thread is working */
+      busy_ = true;
       mutex_.unlock();
 
       if (data) {
@@ -126,21 +129,15 @@ void IoThread::RunLoop() {
           }
         }
       }
+
+      /* IO thread finished */
+      mutex_.lock();
+      busy_ = false;
+      mutex_.unlock();
     } else if (ret < 0) {
       if (ret != -ETIME && ret != -EAGAIN) {
         MV_PANIC("failed in io_uring_wait_cqe_timeout, ret=%d", ret);
       }
-    }
-
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
-    while (!pending_requests_.empty()) {
-      auto request = pending_requests_.front();
-      pending_requests_.pop_front();
-      requests_.insert(request);
-      auto sqe = io_uring_get_sqe(&ring_);
-      MV_ASSERT(sqe);
-      request->input(sqe);
-      io_uring_sqe_set_data(sqe, request);
     }
   }
 }
@@ -156,7 +153,16 @@ void IoThread::FreeIoRequest(IoRequest* request) {
 
 void IoThread::SubmitRequest(IoRequest* request) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  pending_requests_.push_back(request);
+  requests_.insert(request);
+  auto sqe = io_uring_get_sqe(&ring_);
+  MV_ASSERT(sqe);
+  request->input(sqe);
+  io_uring_sqe_set_data(sqe, request);
+
+  /* If caller is not IO thread, submit the item */
+  if (!busy_) {
+    io_uring_submit(&ring_);
+  }
 }
 
 IoRequest* IoThread::Read(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback) {

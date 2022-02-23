@@ -144,13 +144,14 @@ void RedirectUdpSocket::InitializeRedirect() {
 void RedirectUdpSocket::StartReceiving() {
   auto packet = AllocatePacket(false);
   if (packet == nullptr) {
-    if (debug_) {
-      MV_LOG("UDP fd=%d failed to allocate packet, retry later", fd_, this);
-    }
+    /* FIXME: This code is not elegantly */
     wait_timer_ = io_->AddTimer(10, false, [this]() {
       wait_timer_ = nullptr;
       StartReceiving();
     });
+    if (debug_) {
+      MV_LOG("UDP fd=%d failed to allocate packet, retry later", fd_, this);
+    }
     return;
   }
 

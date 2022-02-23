@@ -105,7 +105,7 @@ class IoThread {
   std::unordered_set<IoTimer*>    timers_;
   std::unordered_set<IoRequest*>  requests_;
   int                   event_fd_;
-  std::deque<IoRequest*>          pending_requests_;
+  bool                  busy_ = false;
 };
 
 #endif // _MVISOR_IO_THREAD_H
