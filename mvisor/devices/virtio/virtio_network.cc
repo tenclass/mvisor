@@ -163,6 +163,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
   virtual bool WriteBuffer(void* buffer, size_t size) {
     VirtQueue& vq = queues_[0];
+    MV_ASSERT(vq.enabled);
+  
     size_t offset = 0;
     while (offset < size) {
       auto element = PopQueue(vq);
@@ -206,20 +208,13 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)front.iov_base;
     MV_ASSERT(header->gso_type == VIRTIO_NET_HDR_GSO_NONE);
 
-    if (vector.size() == 1) {
-      backend_->OnFrameFromGuest(&header[1], element->size - sizeof(*header));
+    if (front.iov_len == sizeof(*header)) {
+      vector.pop_front();
     } else {
-      /* merge buffers into one piece */
-      auto frame = new uint8_t[element->size];
-      size_t copied = 0;
-      for (auto &v : vector) {
-        memcpy(frame + copied, v.iov_base, v.iov_len);
-        copied += v.iov_len;
-      }
-      MV_ASSERT(copied == element->size);
-      backend_->OnFrameFromGuest(frame + sizeof(*header), element->size - sizeof(*header));
-      delete frame;
+      front.iov_base = &header[1];
+      front.iov_len -= sizeof(*header);
     }
+    backend_->OnFrameFromGuest(vector);
   }
 
   void HandleControl(VirtQueue& vq, VirtElement* element) {

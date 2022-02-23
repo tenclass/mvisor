@@ -67,9 +67,16 @@ void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t rou
   }
 }
 
+bool DhcpServiceUdpSocket::IsActive() {
+  // Kill timedout
+  if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
+    return false;
+  }
+  return true;
+}
 
-void DhcpServiceUdpSocket::OnDataFromGuest(void* data, size_t length) {
-  DhcpMessage* dhcp = (DhcpMessage*)data;
+void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
+  DhcpMessage* dhcp = (DhcpMessage*)packet->data;
 
   std::string reply;
   if (dhcp->option[2] == 1 && dhcp->option[0] == 53) { // Discover
@@ -77,26 +84,28 @@ void DhcpServiceUdpSocket::OnDataFromGuest(void* data, size_t length) {
   } else if (dhcp->option[2] == 3 && dhcp->option[0] == 53) { // Request
     reply = CreateDhcpResponse(dhcp, 5);
   } else {
-    DumpHex(data, length);
+    DumpHex(dhcp, packet->data_length);
     MV_PANIC("unknown dhcp packet");
     return;
   }
 
   // Build UDP reply message
-  auto packet = AllocatePacket(false);
-  if (packet == nullptr) {
+  auto reply_packet = AllocatePacket(false);
+  if (reply_packet == nullptr) {
     return;
   }
-  packet->data_length = reply.size();
-  memcpy(packet->data, reply.data(), packet->data_length);
+  reply_packet->data_length = reply.size();
+  memcpy(reply_packet->data, reply.data(), reply_packet->data_length);
 
   // DHCP message uses special IPs
   uint32_t sip = sip_, dip = dip_;
   sip_ = 0xFFFFFFFF;
   dip_ = router_ip_;
-  OnDataFromHost(packet);
+  OnDataFromHost(reply_packet);
   sip_ = sip;
   dip_ = dip;
+
+  active_time_ = time(nullptr);
 }
 
 size_t DhcpServiceUdpSocket::FillDhcpOptions(uint8_t* option, int dhcp_type) {

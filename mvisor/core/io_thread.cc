@@ -21,6 +21,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <sys/eventfd.h>
+#include <arpa/inet.h>
 #include "logger.h"
 #include "poll.h"
 #include "machine.h"
@@ -48,12 +49,17 @@ IoThread::~IoThread() {
 
 
 void IoThread::Start() {
+
   thread_ = std::thread(&IoThread::RunLoop, this);
 
   StartPolling(event_fd_, POLLIN, [this](auto ret) {
     uint64_t tmp;
     read(event_fd_, &tmp, sizeof(tmp));
   });
+
+  auto sqe = io_uring_get_sqe(&ring_);
+  MV_ASSERT(sqe);
+  io_uring_prep_nop(sqe);
 }
 
 void IoThread::Stop() {
@@ -80,36 +86,58 @@ void IoThread::RunLoop() {
     int next_timeout_ms = CheckTimers();
     timeout.tv_nsec = next_timeout_ms * 1000000;
     int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &timeout);
-    if (ret < 0) {
-      if (ret == -ETIME || ret == -EAGAIN) {
-        continue;
-      }
-      MV_PANIC("failed in io_uring_wait_cqe_timeout, ret=%d", ret);
-    }
     
-    void* data = io_uring_cqe_get_data(cqe);
-    if (data) {
-      auto request = reinterpret_cast<IoRequest*>(data);
-      if (request->removed) {
-        FreeIoRequest(request);
-      } else {
-        request->callback(cqe->res);
-        if (request->type == kIoRequestPoll) {
-          /* keep polling */
-          std::lock_guard<std::recursive_mutex> lock(mutex_);
-          auto sqe = io_uring_get_sqe(&ring_);
-          MV_ASSERT(sqe);
-          io_uring_prep_poll_add(sqe, request->fd, request->poll_mask);
-          io_uring_sqe_set_data(sqe, request);
-        } else {
-          /* if not poll, delete the request object */
+    if (ret == 0) {
+      mutex_.lock();
+      void* data = io_uring_cqe_get_data(cqe);
+      auto result = cqe->res;
+      io_uring_cqe_seen(&ring_, cqe);
+      mutex_.unlock();
+
+      if (data) {
+        auto request = reinterpret_cast<IoRequest*>(data);
+        if (request->removed) {
           FreeIoRequest(request);
+        } else {
+          auto start_time = std::chrono::steady_clock::now();
+          request->callback(result);
+          if (machine_->debug()) {
+            auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - start_time).count();
+            if (cost_us >= 1000) {
+              MV_LOG("%s SLOW fd=%d type=%d res=%d cost=%.3lfms", request->callback.target_type().name(),
+                request->fd, request->type, result, double(cost_us) / 1000.0);
+            }
+          }
+          if (request->type == kIoRequestPoll) {
+            /* keep polling */
+            std::lock_guard<std::recursive_mutex> lock(mutex_);
+            auto sqe = io_uring_get_sqe(&ring_);
+            MV_ASSERT(sqe);
+            io_uring_prep_poll_add(sqe, request->fd, request->poll_mask);
+            io_uring_sqe_set_data(sqe, request);
+          } else {
+            /* if not poll, delete the request object */
+            FreeIoRequest(request);
+          }
         }
+      }
+    } else if (ret < 0) {
+      if (ret != -ETIME && ret != -EAGAIN) {
+        MV_PANIC("failed in io_uring_wait_cqe_timeout, ret=%d", ret);
       }
     }
 
     std::lock_guard<std::recursive_mutex> lock(mutex_);
-    io_uring_cqe_seen(&ring_, cqe);
+    while (!pending_requests_.empty()) {
+      auto request = pending_requests_.front();
+      pending_requests_.pop_front();
+      requests_.insert(request);
+      auto sqe = io_uring_get_sqe(&ring_);
+      MV_ASSERT(sqe);
+      request->input(sqe);
+      io_uring_sqe_set_data(sqe, request);
+    }
   }
 }
 
@@ -121,77 +149,75 @@ void IoThread::FreeIoRequest(IoRequest* request) {
   }
 }
 
-IoRequest* IoThread::Read(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback) {
+
+void IoThread::SubmitRequest(IoRequest* request) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
+  pending_requests_.push_back(request);
+}
 
-  IoRequest* r = new IoRequest {
-    .type = kIoRequestRead,
-    .fd = fd,
-    .callback = callback
+IoRequest* IoThread::Read(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback) {
+  IoRequest* request = new IoRequest { .type = kIoRequestRead, .fd = fd, .callback = callback };
+  request->input = [=](auto sqe) {
+    io_uring_prep_read(sqe, fd, buffer, bytes, offset);
   };
-  requests_.insert(r);
-
-  auto sqe = io_uring_get_sqe(&ring_);
-  MV_ASSERT(sqe);
-  io_uring_prep_read(sqe, fd, buffer, bytes, offset);
-  io_uring_sqe_set_data(sqe, r);
-  io_uring_submit(&ring_);
-  return r;
+  SubmitRequest(request);
+  return request;
 }
 
 IoRequest* IoThread::Write(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
-  IoRequest* r = new IoRequest {
-    .type = kIoRequestWrite,
-    .fd = fd,
-    .callback = callback
+  IoRequest* request = new IoRequest { .type = kIoRequestWrite, .fd = fd, .callback = callback };
+  request->input = [=](auto sqe) {
+    io_uring_prep_write(sqe, fd, buffer, bytes, offset);
   };
-  requests_.insert(r);
+  SubmitRequest(request);
+  return request;
+}
 
-  auto sqe = io_uring_get_sqe(&ring_);
-  MV_ASSERT(sqe);
-  io_uring_prep_write(sqe, fd, buffer, bytes, offset);
-  io_uring_sqe_set_data(sqe, r);
-  io_uring_submit(&ring_);
-  return r;
+IoRequest* IoThread::Connect(int fd, struct sockaddr_in address, IoCallback callback) {
+  IoRequest* request = new IoRequest { .type = kIoRequestConnect, .fd = fd, .callback = callback };
+  request->input = [=](auto sqe) {
+    io_uring_prep_connect(sqe, fd, (struct sockaddr*)&address, sizeof(address));
+  };
+  SubmitRequest(request);
+  return request;
+}
+
+IoRequest* IoThread::Send(int fd, void* buffer, size_t bytes, int flags, IoCallback callback) {
+  IoRequest* request = new IoRequest { .type = kIoRequestSend, .fd = fd, .callback = callback };
+  request->input = [=](auto sqe) {
+    io_uring_prep_send(sqe, fd, buffer, bytes, flags);
+  };
+  SubmitRequest(request);
+  return request;
+}
+
+IoRequest* IoThread::Receive(int fd, void* buffer, size_t bytes, int flags, IoCallback callback) {
+  IoRequest* request = new IoRequest { .type = kIoRequestReceive, .fd = fd, .callback = callback };
+  request->input = [=](auto sqe) {
+    io_uring_prep_recv(sqe, fd, buffer, bytes, flags);
+  };
+  SubmitRequest(request);
+  return request;
 }
 
 IoRequest* IoThread::FSync(int fd, bool data_sync, IoCallback callback) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
-  IoRequest* r = new IoRequest {
-    .type = kIoRequestWrite,
-    .fd = fd,
-    .callback = callback
+  IoRequest* request = new IoRequest { .type = kIoRequestFSync, .fd = fd, .callback = callback };
+  request->input = [=](auto sqe) {
+    io_uring_prep_fsync(sqe, fd, data_sync ? IORING_FSYNC_DATASYNC : 0);
   };
-  requests_.insert(r);
-
-  auto sqe = io_uring_get_sqe(&ring_);
-  MV_ASSERT(sqe);
-  io_uring_prep_fsync(sqe, fd, data_sync ? IORING_FSYNC_DATASYNC : 0);
-  io_uring_sqe_set_data(sqe, r);
-  io_uring_submit(&ring_);
-  return r;
+  SubmitRequest(request);
+  return request;
 }
 
 IoRequest* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
-  IoRequest* r = new IoRequest {
-    .type = kIoRequestPoll,
-    .fd = fd,
-    .poll_mask = poll_mask,
-    .callback = callback
+  IoRequest* request = new IoRequest {
+    .type = kIoRequestPoll, .fd = fd, .poll_mask = poll_mask, .callback = callback
   };
-  requests_.insert(r);
-
-  auto sqe = io_uring_get_sqe(&ring_);
-  MV_ASSERT(sqe);
-  io_uring_prep_poll_add(sqe, fd, poll_mask);
-  io_uring_sqe_set_data(sqe, r);
-  io_uring_submit(&ring_);
-  return r;
+  request->input = [=](auto sqe) {
+    io_uring_prep_poll_add(sqe, fd, poll_mask);
+  };
+  SubmitRequest(request);
+  return request;
 }
 
 void IoThread::ModifyPolling(IoRequest* request, uint poll_mask) {
@@ -202,28 +228,27 @@ void IoThread::ModifyPolling(IoRequest* request, uint poll_mask) {
   request->poll_mask = poll_mask;
 }
 
-void IoThread::StopPolling(IoRequest* request) {
+void IoThread::CancelRequest(IoRequest* request) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   MV_ASSERT(requests_.find(request) != requests_.end());
-  MV_ASSERT(request->type == kIoRequestPoll);
 
   request->removed = true;
-  auto sqe = io_uring_get_sqe(&ring_);
-  MV_ASSERT(sqe);
-  io_uring_prep_poll_remove(sqe, (void*)request);
-  io_uring_submit(&ring_);
+  if (request->type == kIoRequestPoll) {
+    auto sqe = io_uring_get_sqe(&ring_);
+    MV_ASSERT(sqe);
+    io_uring_prep_poll_remove(sqe, (void*)request);
+    io_uring_submit(&ring_);
+  }
 }
 
-void IoThread::StopPolling(int fd) {
+void IoThread::CancelRequest(int fd) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   for (auto r : requests_) {
-    if (r->type == kIoRequestPoll && r->fd == fd) {
-      StopPolling(r);
-      return;
+    if (r->fd == fd) {
+      CancelRequest(r);
     }
   }
-  MV_PANIC("not found fd=%d", fd);
 }
 
 IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callback) {

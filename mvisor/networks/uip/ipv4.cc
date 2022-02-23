@@ -19,27 +19,25 @@
 #include "uip.h"
 #include <arpa/inet.h>
 #include "logger.h"
+#include "device_manager.h"
 
 
-Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip) :
+Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
   backend_(backend) {
+  auto ip = packet->ip;
   sip_ = ntohl(ip->saddr);
   dip_ = ntohl(ip->daddr);
-  closed_ = false;
   debug_ = false;
   active_time_ = time(nullptr);
-}
 
-bool Ipv4Socket::IsActive() {
-  return !closed_;
+  auto device = dynamic_cast<Device*>(backend_->device());
+  io_ = device->manager()->io();
+  debug_ = device->debug();
+  MV_ASSERT(io_);
 }
 
 Ipv4Packet* Ipv4Socket::AllocatePacket(bool urgent) {
   return backend_->AllocatePacket(urgent);
-}
-
-void Ipv4Socket::OnRemoteDataAvailable() {
-  MV_PANIC("not implemented");
 }
 
 uint16_t Ipv4Socket::CalculateChecksum(uint8_t* addr, uint16_t count) {

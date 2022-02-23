@@ -140,8 +140,18 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
-  virtual void OnFrameFromGuest(void* frame, size_t length) {
-    ParseEthPacket((struct ethhdr*)frame);
+  virtual void OnFrameFromGuest(std::deque<iovec>& vector) {
+    auto packet = new Ipv4Packet;
+    packet->Release = [packet]() {
+      delete packet;
+    };
+    size_t copied = 0;
+    for (auto &v : vector) {
+      memcpy(packet->buffer + copied, v.iov_base, v.iov_len);
+      copied += v.iov_len;
+    }
+    packet->eth = (ethhdr*)packet->buffer;
+    ParseEthPacket(packet);
   }
 
   bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
@@ -182,7 +192,8 @@ class Uip : public Object, public NetworkBackendInterface {
     return packet;
   }
 
-  void ParseEthPacket(ethhdr* eth) {
+  void ParseEthPacket(Ipv4Packet* packet) {
+    auto eth = packet->eth;
     if (memcmp(eth->h_dest, router_mac_.data, ETH_ALEN) != 0 &&
       memcmp(eth->h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", ETH_ALEN) != 0) {
       // ignore packets to other ethernet addresses
@@ -193,7 +204,8 @@ class Uip : public Object, public NetworkBackendInterface {
     switch (protocol)
     {
     case ETH_P_IP:
-      ParseIpPacket(eth, (struct iphdr*)&eth[1]);
+      packet->ip = (struct iphdr*)&eth[1];
+      ParseIpPacket(packet);
       break;
     case ETH_P_ARP:
       ParseArpPacket(eth, (ArpMessage*)&eth[1]);
@@ -235,22 +247,24 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
-  void ParseIpPacket(ethhdr* eth, iphdr* ip) {
+  void ParseIpPacket(Ipv4Packet* packet) {
+    auto ip = packet->ip;
     switch (ip->protocol)
     {
     case 0x06: { // TCP
-      ParseTcpPacket(eth, ip, (struct tcphdr*)((uint8_t*)ip + ip->ihl * 4));
+      packet->tcp = (struct tcphdr*)((uint8_t*)ip + ip->ihl * 4);
+      ParseTcpPacket(packet);
       break;
     }
     case 0x11: { // UDP
-      ParseUdpPacket(eth, ip, (struct udphdr*)((uint8_t*)ip + ip->ihl * 4));
+      packet->udp = (struct udphdr*)((uint8_t*)ip + ip->ihl * 4);
+      ParseUdpPacket(packet);
       break;
     }
     default:
       if (real_device_->debug()) {
         MV_LOG("==================Not UDP or TCP===================");
         MV_LOG("ip packet protocol=%d", ip->protocol);
-        DumpHex(eth, sizeof(*eth));
         DumpHex(ip, ntohs(ip->tot_len));
       }
       break;
@@ -266,7 +280,9 @@ class Uip : public Object, public NetworkBackendInterface {
     return nullptr;
   }
 
-  void ParseTcpPacket(ethhdr* eth, iphdr* ip, tcphdr* tcp) {
+  void ParseTcpPacket(Ipv4Packet* packet) {
+    auto ip = packet->ip;
+    auto tcp = packet->tcp;
     uint32_t sip = ntohl(ip->saddr);
     uint32_t dip = ntohl(ip->daddr);
     uint16_t sport = ntohs(tcp->source);
@@ -279,7 +295,7 @@ class Uip : public Object, public NetworkBackendInterface {
     // Guest is trying to start a TCP session
     if (tcp->syn) {
       if (socket == nullptr) {
-        socket = new RedirectTcpSocket(this, eth, ip, tcp);
+        socket = new RedirectTcpSocket(this, packet);
         tcp_sockets_.push_back(socket);
       }
       return;
@@ -304,23 +320,19 @@ class Uip : public Object, public NetworkBackendInterface {
       return;
     }
 
+    // If send window buffer is full, try again when new guest ack comes
     if (!socket->UpdateGuestAck(tcp)) {
       return;
     }
 
-    // If send window buffer is full, try again when new guest ack comes
-    if (socket->IsGuestOverflow()) {
-      socket->OnRemoteDataAvailable();
-    }
-
-    size_t payload_length = ntohs(ip->tot_len) - ip->ihl * 4 - tcp->doff * 4;
-    if (payload_length == 0) {
+    // Send out TCP data to remote host
+    packet->data = (uint8_t*)tcp + tcp->doff * 4;
+    packet->data_offset = 0;
+    packet->data_length = ntohs(ip->tot_len) - ip->ihl * 4 - tcp->doff * 4;
+    if (packet->data_length == 0) {
       return;
     }
-
-    // Send out TCP data to remote host
-    uint8_t* data = (uint8_t*)tcp + tcp->doff * 4;
-    socket->OnDataFromGuest(data, payload_length);
+    socket->OnPacketFromGuest(packet);
   }
 
   UdpSocket* LookupUdpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
@@ -332,7 +344,9 @@ class Uip : public Object, public NetworkBackendInterface {
     return nullptr;
   }
 
-  void ParseUdpPacket(ethhdr* eth, iphdr* ip, udphdr* udp) {
+  void ParseUdpPacket(Ipv4Packet* packet) {
+    auto ip = packet->ip;
+    auto udp = packet->udp;
     uint32_t sip = ntohl(ip->saddr);
     uint32_t dip = ntohl(ip->daddr);
     uint16_t sport = ntohs(udp->source);
@@ -343,7 +357,7 @@ class Uip : public Object, public NetworkBackendInterface {
       // Check if it's UDP broadcast
       if (dip == 0xFFFFFFFF || (dip & router_subnet_mask_) == (router_ip_ & router_subnet_mask_)) {
         if (dport == 67) {
-          auto dhcp = new DhcpServiceUdpSocket(this, eth, ip, udp);
+          auto dhcp = new DhcpServiceUdpSocket(this, packet);
           dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_, guest_ip_);
           socket = dhcp;
         } else {
@@ -353,13 +367,16 @@ class Uip : public Object, public NetworkBackendInterface {
           return;
         }
       } else {
-        socket = new RedirectUdpSocket(this, eth, ip, udp);
+        socket = new RedirectUdpSocket(this, packet);
       }
       udp_sockets_.push_back(socket);
     }
 
     MV_ASSERT(socket);
-    socket->OnDataFromGuest((void*)&udp[1], ntohs(udp->len) - sizeof(*udp));
+    packet->data = &udp[1];
+    packet->data_offset = 0;
+    packet->data_length = ntohs(udp->len) - sizeof(*udp);
+    socket->OnPacketFromGuest(packet);
   }
 
 };

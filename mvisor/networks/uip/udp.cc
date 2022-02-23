@@ -25,8 +25,9 @@
 #include "device_manager.h"
 
 
-UdpSocket::UdpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, udphdr* udp) :
-  Ipv4Socket(backend, eth, ip) {
+UdpSocket::UdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
+  Ipv4Socket(backend, packet) {
+  auto udp = packet->udp;
   sport_ = ntohs(udp->source);
   dport_ = ntohs(udp->dest);
 }
@@ -93,18 +94,17 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
   udp->check = CalculateUdpChecksum(packet);
 
   backend_->OnPacketFromHost(packet);
-
-  active_time_ = time(nullptr);
 }
 
 RedirectUdpSocket::~RedirectUdpSocket() {
   if (fd_ >= 0) {
+    if (io_)
+      io_->CancelRequest(fd_);
     close(fd_);
     fd_ = -1;
   }
-  if (polling_request_) {
-    auto device = dynamic_cast<Device*>(backend_->device());
-    device->manager()->io()->StopPolling(polling_request_);
+  if (io_ && wait_timer_) {
+    io_->RemoveTimer(wait_timer_);
   }
 }
 
@@ -113,58 +113,18 @@ bool RedirectUdpSocket::IsActive() {
   if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
     return false;
   }
-  return UdpSocket::IsActive();
+  return true;
 }
 
 void RedirectUdpSocket::InitializeRedirect() {
   fd_ = socket(AF_INET, SOCK_DGRAM, 0);
   MV_ASSERT(fd_ >= 0);
 
+#ifdef UIP_SET_NONBLOCK
   // Set non-blocking
-  int flags = fcntl(fd_, F_GETFL, 0);
-  flags |= O_NONBLOCK;
-  fcntl(fd_, F_SETFL, flags);
+  fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK);
+#endif
 
-  auto device = dynamic_cast<Device*>(backend_->device());
-  polling_request_ = device->manager()->io()->StartPolling(fd_, POLLIN, [=](uint events) {
-    if (events & POLLIN) {
-      OnRemoteDataAvailable();
-    }
-  });
-
-  debug_ = device->debug();
-  if (debug_) {
-    MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
-  }
-}
-
-void RedirectUdpSocket::OnRemoteDataAvailable() {
-  auto packet = AllocatePacket(false);
-  if (packet == nullptr) {
-    if (debug_) {
-      MV_LOG("UDP fd=%d failed to allocate packet", fd_, this);
-    }
-    auto device = dynamic_cast<Device*>(backend_->device());
-    auto io = device->manager()->io();
-    io->ModifyPolling(polling_request_, 0);
-    io->AddTimer(10, false, [io, this]() {
-      io->ModifyPolling(polling_request_, POLLIN);
-    });
-    active_time_ = time(nullptr);
-    return;
-  }
-
-  int ret = recvfrom(fd_, packet->data, UIP_MAX_UDP_PAYLOAD, 0, nullptr, nullptr);
-  if (ret < 0) {
-    packet->Release();
-    return;
-  }
-  
-  packet->data_length = ret;
-  OnDataFromHost(packet);
-}
-
-void RedirectUdpSocket::OnDataFromGuest(void* data, size_t length) {
   sockaddr_in daddr = {
     .sin_family = AF_INET,
     .sin_port = htons(dport_),
@@ -172,11 +132,50 @@ void RedirectUdpSocket::OnDataFromGuest(void* data, size_t length) {
       .s_addr = htonl(dip_)
     }
   };
-  int ret = sendto(fd_, data, length, 0, (struct sockaddr*)&daddr, sizeof(daddr));
-  if (ret != (int)length) {
+  int ret = connect(fd_, (struct sockaddr*)&daddr, sizeof(daddr));
+  MV_ASSERT(ret == 0);
+  StartReceiving();
+
+  if (debug_) {
+    MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
+  }
+}
+
+void RedirectUdpSocket::StartReceiving() {
+  auto packet = AllocatePacket(false);
+  if (packet == nullptr) {
+    if (debug_) {
+      MV_LOG("UDP fd=%d failed to allocate packet, retry later", fd_, this);
+    }
+    wait_timer_ = io_->AddTimer(10, false, [this]() {
+      wait_timer_ = nullptr;
+      StartReceiving();
+    });
+    return;
+  }
+
+  io_->Receive(fd_, packet->data, UIP_MAX_UDP_PAYLOAD, 0, [=](auto ret) {
     if (ret < 0) {
+      packet->Release();
       return;
     }
-    MV_PANIC("failed to send all UDP data, length=%lu, ret=%d", length, ret);
-  }
+    
+    packet->data_length = ret;
+    OnDataFromHost(packet);
+    StartReceiving();
+    active_time_ = time(nullptr);
+  });
+}
+
+void RedirectUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
+  io_->Send(fd_, packet->data, packet->data_length, 0, [=](auto ret) {
+    packet->Release();
+    if (ret != (int)packet->data_length) {
+      if (ret < 0) {
+        return;
+      }
+      MV_PANIC("failed to send all UDP data, length=%lu, ret=%d", packet->data_length, ret);
+    }
+    active_time_ = time(nullptr);
+  });
 }

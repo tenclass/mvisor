@@ -219,7 +219,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
 
 void DeviceManager::UnregisterIoEvent(IoEvent* event) {
   if (event->request) {
-    io()->StopPolling(event->request);
+    io()->CancelRequest(event->request);
   }
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -290,7 +290,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
         if ((!ioeventfd && cost_us >= 1000) || (ioeventfd && cost_us >= 10000)) {
-          MV_LOG("%s slow %sio %s port=0x%x size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "event " : "",
+          MV_LOG("%s SLOW %sio %s port=0x%x size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "EVENT " : "",
             is_write ? "out" : "in", port, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
       }
@@ -343,7 +343,7 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
         if ((!ioeventfd && cost_us >= 1000) || (ioeventfd && cost_us >= 10000)) {
-          MV_LOG("%s slow %smmio %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "event " : "",
+          MV_LOG("%s SLOW %smmio %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "EVENT " : "",
             is_write ? "out" : "in", base, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
       }

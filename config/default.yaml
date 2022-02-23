@@ -3,15 +3,15 @@ base: q35.yaml
 
 machine:
   memory: 8G
-  vcpu: 8
-  debug: Yes
+  vcpu: 4
+  debug: No
 
 objects:
-  - class: ahci-cdrom
-    image: /data/virtio.iso
+  # - class: ahci-cdrom
+  #   image: /data/virtio.iso
   
-  - class: ahci-disk
-    image: /data/empty.qcow2
+  # - class: ahci-disk
+  #   image: /data/empty.qcow2
 
   - class: virtio-block
     image: /data/hd.qcow2

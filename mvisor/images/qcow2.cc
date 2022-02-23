@@ -693,12 +693,13 @@ class Qcow2Image : public DiskImage {
   }
   
   virtual void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
-    std::unique_lock<std::mutex> lock(worker_mutex_);
-    worker_queue_.push_back([=]() {
+    worker_mutex_.lock();
+    worker_queue_.push_back([this, buffer, position, length, callback]() {
       auto ret = BlockIo(buffer, position, length, kImageIoRead);
       io_->Schedule([=]() { callback(ret); });
     });
     worker_cv_.notify_all();
+    worker_mutex_.unlock();
   }
 
   virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
@@ -706,12 +707,13 @@ class Qcow2Image : public DiskImage {
       return callback(0);
     }
   
-    std::unique_lock<std::mutex> lock(worker_mutex_);
-    worker_queue_.push_back([=]() {
+    worker_mutex_.lock();
+    worker_queue_.push_back([this, buffer, position, length, callback]() {
       auto ret = BlockIo(buffer, position, length, kImageIoWrite);
       io_->Schedule([=]() { callback(ret); });
     });
     worker_cv_.notify_all();
+    worker_mutex_.unlock();
   }
 
   virtual void Discard(off_t position, size_t length, IoCallback callback) {
@@ -719,23 +721,25 @@ class Qcow2Image : public DiskImage {
       return callback(0);
     }
   
-    std::unique_lock<std::mutex> lock(worker_mutex_);
-    worker_queue_.push_back([=]() {
+    worker_mutex_.lock();
+    worker_queue_.push_back([this, position, length, callback]() {
       auto ret = BlockIo(nullptr, position, length, kImageIoDiscard);
       io_->Schedule([=]() { callback(ret); });
     });
     worker_cv_.notify_all();
+    worker_mutex_.unlock();
   }
 
   virtual void Flush(IoCallback callback) {
-    std::unique_lock<std::mutex> lock(worker_mutex_);
-    worker_queue_.push_back([=]() {
+    worker_mutex_.lock();
+    worker_queue_.push_back([this, callback]() {
       auto ret = Flush();
       io_->Schedule([=]() {
         callback(ret);
       });
     });
     worker_cv_.notify_all();
+    worker_mutex_.unlock();
   }
 };
 
