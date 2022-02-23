@@ -217,7 +217,7 @@ void AhciCdrom::Atapi_ReadSectorsAsync() {
   
     auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
     
-    image_->Read(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
+    image_->ReadAsync(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
       io_.nbytes += length;
       if (io_.nbytes == (ssize_t)total_bytes) {
         CompleteCommand();

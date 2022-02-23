@@ -21,16 +21,16 @@
 
 #include <deque>
 #include <unordered_set>
+#include <unordered_map>
 #include <thread>
 #include <functional>
 #include <chrono>
 #include <mutex>
 #include <sys/socket.h>
-#include <liburing.h>
+#include <sys/epoll.h>
 
 typedef std::function<void()> VoidCallback;
 typedef std::function<void(long)> IoCallback;
-typedef std::function<void (io_uring_sqe* sqe)> InputCallback;
 typedef std::chrono::steady_clock::time_point IoTimePoint;
 
 struct IoTimer {
@@ -41,23 +41,10 @@ struct IoTimer {
   bool          removed;
 };
 
-enum IoRequestType {
-  kIoRequestPoll,
-  kIoRequestRead,
-  kIoRequestWrite,
-  kIoRequestFSync,
-  kIoRequestConnect,
-  kIoRequestSend,
-  kIoRequestReceive
-};
-
-struct IoRequest {
-  enum IoRequestType  type;
-  int                 fd;
-  uint                poll_mask;
-  IoCallback          callback;
-  bool                removed;
-  InputCallback       input;
+struct EpollEvent {
+  int           fd;
+  IoCallback    callback;
+  epoll_event   event;
 };
 
 class Machine;
@@ -69,21 +56,10 @@ class IoThread {
   void Start();
   void Stop();
 
-  /* Async file IO */
-  IoRequest* Read(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback);
-  IoRequest* Write(int fd, void* buffer, size_t bytes, off_t offset, IoCallback callback);
-  IoRequest* FSync(int fd, bool data_sync, IoCallback callback);
-
-  /* Async socket IO */
-  IoRequest* Connect(int fd, struct sockaddr_in address, IoCallback callback);
-  IoRequest* Send(int fd, void* buffer, size_t bytes, int flags, IoCallback callback);
-  IoRequest* Receive(int fd, void* buffer, size_t bytes, int flags, IoCallback callback);
-
   /* Async event polling */
-  IoRequest* StartPolling(int fd, uint poll_mask, IoCallback callback);
-  void ModifyPolling(IoRequest* request, uint poll_mask);
-  void CancelRequest(IoRequest* request);
-  void CancelRequest(int fd);
+  EpollEvent* StartPolling(int fd, uint poll_mask, IoCallback callback);
+  void ModifyPolling(int fd, uint poll_mask);
+  void StopPolling(int fd);
 
   /* Timer events handled by IO thread */
   IoTimer* AddTimer(int interval_ms, bool permanent, VoidCallback callback);
@@ -94,18 +70,15 @@ class IoThread {
  private:
   void RunLoop();
   int  CheckTimers();
-  void FreeIoRequest(IoRequest* request);
   void WakeUp();
-  void SubmitRequest(IoRequest* request);
 
   std::thread           thread_;
   Machine*              machine_;
-  struct io_uring       ring_;
   std::recursive_mutex  mutex_;
-  std::unordered_set<IoTimer*>    timers_;
-  std::unordered_set<IoRequest*>  requests_;
+  std::unordered_set<IoTimer*>          timers_;
+  std::unordered_map<int, EpollEvent*>  epoll_events_;
   int                   event_fd_;
-  bool                  busy_ = false;
+  int                   epoll_fd_;
 };
 
 #endif // _MVISOR_IO_THREAD_H

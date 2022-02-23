@@ -51,7 +51,6 @@ struct IoEvent {
   uint64_t        datamatch;
   uint32_t        flags;
   int             fd;
-  IoRequest*      request;
 };
 
 class Machine;

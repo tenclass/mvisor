@@ -39,9 +39,8 @@ class RawImage : public DiskImage {
 
   virtual ~RawImage() {
     if (fd_ != -1) {
-      Flush([=](long ret) {
-        close(fd_);
-      });
+      Flush();
+      close(fd_);
     }
   }
 
@@ -62,26 +61,23 @@ class RawImage : public DiskImage {
     total_blocks_ = st.st_size / block_size_;
   }
 
-  void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
-    auto io = device_->manager()->io();
-    io->Read(fd_, buffer, length, position, callback);
+  ssize_t Read(void *buffer, off_t position, size_t length) {
+    return pread(fd_, buffer, length, position);
   }
 
-  void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
+  ssize_t Write(void *buffer, off_t position, size_t length) {
     if (readonly_) {
-      callback(0);
+      return 0;
     } else {
-      auto io = device_->manager()->io();
-      io->Write(fd_, buffer, length, position, callback);
+      return pwrite(fd_, buffer, length, position);
     }
   }
 
-  void Flush(IoCallback callback) {
+  ssize_t Flush() {
     if (readonly_) {
-      callback(0);
+      return 0;
     } else {
-      auto io = device_->manager()->io();
-      io->FSync(fd_, 0, callback);
+      return fsync(fd_);
     }
   }
 

@@ -23,7 +23,6 @@
 #include <sys/ioctl.h>
 #include <sys/eventfd.h>
 #include <signal.h>
-#include <poll.h>
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
@@ -198,7 +197,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
     MV_PANIC("failed to register io event, ret=%d", ret);
   }
 
-  event->request = io()->StartPolling(event->fd, POLLIN, [event, this](int events) {
+  io()->StartPolling(event->fd, EPOLLIN, [event, this](int events) {
     uint64_t tmp;
     read(event->fd, &tmp, sizeof(tmp));
     if (event->type == kIoEventMmio) {
@@ -218,9 +217,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
 }
 
 void DeviceManager::UnregisterIoEvent(IoEvent* event) {
-  if (event->request) {
-    io()->CancelRequest(event->request);
-  }
+  io()->StopPolling(event->fd);
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 

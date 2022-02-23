@@ -20,7 +20,6 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <poll.h>
 #include "logger.h"
 
 
@@ -200,9 +199,12 @@ RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packe
 }
 
 RedirectTcpSocket::~RedirectTcpSocket() {
+  for (auto packet : send_queue_) {
+    packet->Release();
+  }
+
   if (fd_ > 0) {
-    if (io_)
-      io_->CancelRequest(fd_);
+    io_->StopPolling(fd_);
     close(fd_);
     fd_ = -1;
   }
@@ -221,9 +223,6 @@ void RedirectTcpSocket::Shutdown(int how) {
     return;
 
   if (how == SHUT_WR) { // Guest sent FIN
-    if (debug_) {
-      MV_LOG("shutdown SHUT_WR TCP %d %x:%u -> %x:%u, errno=%d", fd_, sip_, sport_, dip_, dport_, errno);
-    }
     if (!write_done_) {
       shutdown(fd_, how);
       write_done_ = true;
@@ -235,9 +234,6 @@ void RedirectTcpSocket::Shutdown(int how) {
       }
     }
   } else if (how == SHUT_RD) {
-    if (debug_) {
-      MV_LOG("shutdown SHUT_RD TCP %d %x:%u -> %x:%u, errno=%d", fd_, sip_, sport_, dip_, dport_, errno);
-    }
     if (!read_done_) {
       read_done_ = true;
 
@@ -248,20 +244,19 @@ void RedirectTcpSocket::Shutdown(int how) {
       seq_host_ += 1;
     }
   }
+
+  if (debug_) {
+    MV_LOG("TCP fd=%d shutdown %s %x:%u -> %x:%u", fd_, how == SHUT_WR ? "WRITE" : "READ",
+      sip_, sport_, dip_, dport_);
+  }
 }
 
 void RedirectTcpSocket::InitializeRedirect() {
   fd_ = socket(AF_INET, SOCK_STREAM, 0);
   MV_ASSERT(fd_ >= 0);
 
-#ifdef UIP_SET_NONBLOCK
   // Set non-blocking
   MV_ASSERT(fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK) != -1);
-#endif
-
-  read_done_ = false;
-  write_done_ = false;
-  receiving_ = false;
 
   sockaddr_in daddr = {
     .sin_family = AF_INET,
@@ -271,21 +266,20 @@ void RedirectTcpSocket::InitializeRedirect() {
     }
   };
   
-  /* FIXME: io_->Connect causes 350ms delay in kernel mode syscalls randomly */
-  int ret = connect(fd_, (sockaddr*)&daddr, sizeof(daddr));
+  auto ret = connect(fd_, (sockaddr*)&daddr, sizeof(daddr));
   MV_ASSERT(ret < 0 && errno == EINPROGRESS);
-  polling_request_ = io_->StartPolling(fd_, POLLOUT, [this](auto events) {
-    io_->CancelRequest(polling_request_);
-    polling_request_ = nullptr;
+  io_->StartPolling(fd_, EPOLLOUT | EPOLLIN | EPOLLET, [this](auto events) {
+    can_read_ = events & EPOLLIN;
+    can_write_ = events & EPOLLOUT;
   
-    if (events & POLLOUT) {
-      auto packet = AllocatePacket(true);
-      if (packet) {
-        OnDataFromHost(packet, TCP_FLAG_SYN | TCP_FLAG_ACK);
-      }
-      seq_host_ += 1;
-    } else {
-      Shutdown(SHUT_RD);
+    if (!connected_ && can_write_) {
+      OnRemoteConnected();
+    }
+    if (can_write()) {
+      StartWriting();
+    }
+    if (can_read()) {
+      StartReading();
     }
   });
 
@@ -294,10 +288,20 @@ void RedirectTcpSocket::InitializeRedirect() {
   }
 }
 
+void RedirectTcpSocket::OnRemoteConnected() {
+  MV_ASSERT(!connected_);
+  connected_ = true;
+  auto packet = AllocatePacket(true);
+  if (packet) {
+    OnDataFromHost(packet, TCP_FLAG_SYN | TCP_FLAG_ACK);
+  }
+  seq_host_ += 1;
+}
+
 bool RedirectTcpSocket::UpdateGuestAck(tcphdr* tcp) {
   if (TcpSocket::UpdateGuestAck(tcp)) {
-    if (!read_done_ && !receiving_) {
-      StartReceiving();
+    if (can_read()) {
+      StartReading();
     }
     return true;
   }
@@ -305,61 +309,58 @@ bool RedirectTcpSocket::UpdateGuestAck(tcphdr* tcp) {
 }
 
 /* If receive operation is controlled, retry when a guest ACK comes */
-void RedirectTcpSocket::StartReceiving() {
-  if (read_done_ || fd_ == -1) {
-    return;
-  }
-  receiving_ = true;
-
-  /* Check if controlled by TCP window */
-  int available = (int)(window_size_ - (seq_host_ - guest_acked_));
-  if (available > UIP_MAX_TCP_PAYLOAD) {
-    available = UIP_MAX_TCP_PAYLOAD;
-  }
-  if (available <= 0) {
-    receiving_ = false;
-    return;
-  }
-
-  /* Check if virtio buffer is full */
-  auto packet = AllocatePacket(false);
-  if (packet == nullptr) {
-    if (debug_) {
-      MV_LOG("TCP fd=%d failed to allocate packet", fd_);
+void RedirectTcpSocket::StartReading() {
+  while (can_read()) {
+    /* Check if controlled by TCP window */
+    int available = (int)(window_size_ - (seq_host_ - guest_acked_));
+    if (available > UIP_MAX_TCP_PAYLOAD) {
+      available = UIP_MAX_TCP_PAYLOAD;
     }
-    receiving_ = false;
-    return;
-  }
+    if (available <= 0) {
+      return;
+    }
 
-  io_->Receive(fd_, packet->data, available, 0, [=](auto ret) {
+    /* Check if virtio buffer is full */
+    auto packet = AllocatePacket(false);
+    if (packet == nullptr) {
+      if (debug_) {
+        MV_LOG("TCP fd=%d failed to allocate packet", fd_);
+      }
+      return;
+    }
+
+    int ret = recv(fd_, packet->data, available, 0);
     if (ret <= 0) {
-      MV_ASSERT(ret != -EAGAIN);
-      Shutdown(SHUT_RD);
       packet->Release();
+      if (ret < 0 && errno == EAGAIN) {
+        can_read_ = false;
+        return;
+      }
+      Shutdown(SHUT_RD);
     } else {
       packet->data_length = ret;
       OnDataFromHost(packet, TCP_FLAG_ACK);
       seq_host_ += packet->data_length;
-  
-      StartReceiving();
       active_time_ = time(nullptr);
     }
-  });
+  }
 }
 
-void RedirectTcpSocket::StartSending() {
-  sending_ = true;
+void RedirectTcpSocket::StartWriting() {
+  while (can_write()) {
+    /* Check if no data to send */
+    if (send_queue_.empty()) {
+      return;
+    }
 
-  /* Check if no data to send */
-  if (send_queue_.empty()) {
-    sending_ = false;
-    return;
-  }
-
-  auto packet = send_queue_.front();
-  auto length = packet->data_length - packet->data_offset;
-  io_->Send(fd_, (uint8_t*)packet->data + packet->data_offset, length, MSG_NOSIGNAL, [=](auto ret) {
+    auto packet = send_queue_.front();
+    auto length = packet->data_length - packet->data_offset;
+    int ret = send(fd_, (uint8_t*)packet->data + packet->data_offset, length, MSG_NOSIGNAL);
     if (ret < 0) {
+      if (errno == EAGAIN) {
+        can_write_ = false;
+        return;
+      }
       if (debug_) {
         MV_LOG("ERROR TCP %d %x:%u -> %x:%u is already closed. length=%d ret=%d",
           fd_, sip_, sport_, dip_, dport_, length, ret);
@@ -371,18 +372,16 @@ void RedirectTcpSocket::StartSending() {
     if (packet->data_offset == packet->data_length) {
       packet->Release();
       send_queue_.pop_front();
-      StartSending();
     }
     active_time_ = time(nullptr);
-  });
-
+  }
 }
 
 void RedirectTcpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
-  if (write_done_ || fd_ == -1) {
+  if (fd_ == -1 || write_done_) {
+    packet->Release();
     return;
   }
-
   send_queue_.push_back(packet);
 
   ack_host_ += packet->data_length;
@@ -391,7 +390,7 @@ void RedirectTcpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
     OnDataFromHost(ack_packet, TCP_FLAG_ACK);
   }
 
-  if (!sending_) {
-    StartSending();
+  if (can_write()) {
+    StartWriting();
   }
 }

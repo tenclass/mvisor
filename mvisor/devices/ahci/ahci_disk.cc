@@ -109,7 +109,7 @@ AhciDisk::AhciDisk() {
   ata_handlers_[0xE7] =          // FLUSH_CACHE
   ata_handlers_[0xEA] = [=] () { // FLUSH_CACHE_EXT
     io_async_ = true;
-    image_->Flush([this](ssize_t ret) {
+    image_->FlushAsync([this](ssize_t ret) {
       CompleteCommand();
     });
   };
@@ -219,9 +219,9 @@ void AhciDisk::Ata_ReadWriteSectorsAsync(bool is_write) {
       }
     };
     if (is_write) {
-      image_->Write(iov.iov_base, position, length, complete_block);
+      image_->WriteAsync(iov.iov_base, position, length, complete_block);
     } else {
-      image_->Read(iov.iov_base, position, length, complete_block);
+      image_->ReadAsync(iov.iov_base, position, length, complete_block);
     }
     position += length;
     remain_bytes -= length;
@@ -259,7 +259,7 @@ void AhciDisk::Ata_TrimAsync() {
   }
   io_.nbytes = 0;
   for (auto chunk : chunks) {
-    image_->Discard(chunk.position, chunk.length, [this, total_bytes, chunk](ssize_t ret) {
+    image_->DiscardAsync(chunk.position, chunk.length, [this, total_bytes, chunk](ssize_t ret) {
       io_.nbytes += chunk.length;
       if (io_.nbytes == (ssize_t)total_bytes) {
         WriteLba();

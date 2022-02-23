@@ -85,7 +85,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
     reply = CreateDhcpResponse(dhcp, 5);
   } else {
     DumpHex(dhcp, packet->data_length);
-    MV_PANIC("unknown dhcp packet");
+    MV_LOG("unknown dhcp packet option[0]=%x option[2]=%x", dhcp->option[0], dhcp->option[2]);
     return;
   }
 

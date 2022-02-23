@@ -25,13 +25,8 @@
 #include <ctime>
 #include <cstring>
 #include <vector>
-#include <thread>
-#include <mutex>
-#include <deque>
-#include <condition_variable>
 #include "lru_cache.h"
 #include "logger.h"
-#include "device_manager.h"
 
 #define QCOW2_OFLAG_COPIED        (1UL << 63)
 #define QCOW2_OFLAG_COMPRESSED    (1UL << 62)
@@ -139,13 +134,6 @@ class Qcow2Image : public DiskImage {
   Qcow2Image* backing_file_ = nullptr;
   bool        is_backing_file_ = false;
 
-  std::thread worker_thread_;
-  std::mutex  worker_mutex_;
-  std::condition_variable worker_cv_;
-  std::deque<VoidCallback> worker_queue_;
-
-  IoThread*   io_ = nullptr;
-
   ImageInformation information() {
     return ImageInformation {
       .block_size = 1UL << block_size_shift_,
@@ -164,11 +152,6 @@ class Qcow2Image : public DiskImage {
       fd_ = -1;
     }
 
-    if (worker_thread_.joinable()) {
-      worker_cv_.notify_all();
-      worker_thread_.join();
-    }
-
     if (copied_cluster_) {
       delete[] copied_cluster_;
     }
@@ -179,8 +162,6 @@ class Qcow2Image : public DiskImage {
   }
 
   void Initialize(const std::string& path, bool readonly) {
-    MV_ASSERT(device_);
-    io_ = device_->manager()->io();
     readonly_ = readonly;
 
     if (readonly) {
@@ -217,30 +198,6 @@ class Qcow2Image : public DiskImage {
       backing_file_->Initialize(backing_filepath_, true);
     }
     // MV_LOG("open qcow2 %s file size=%ld", path.c_str(), image_size_);
-  
-    if (!is_backing_file_) {
-      worker_thread_ = std::thread(&Qcow2Image::WorkerProcess, this);
-    }
-  }
-
-  void WorkerProcess() {
-    SetThreadName("mvisor-qcow2");
-    
-    while (fd_ != -1) {
-      std::unique_lock<std::mutex> lock(worker_mutex_);
-      worker_cv_.wait(lock, [this]() {
-        return !worker_queue_.empty() || fd_ == -1;
-      });
-
-      if (worker_queue_.empty()) {
-        break;
-      }
-      auto callback = worker_queue_.front();
-      worker_queue_.pop_front();
-      lock.unlock();
-
-      callback();
-    }
   }
 
   void InitializeQcow2Header() {
@@ -675,7 +632,19 @@ class Qcow2Image : public DiskImage {
     }
   }
 
-  int Flush() {
+  ssize_t Read(void *buffer, off_t position, size_t length) {
+    return BlockIo(buffer, position, length, kImageIoRead);
+  }
+
+  ssize_t Write(void *buffer, off_t position, size_t length) {
+    return BlockIo(buffer, position, length, kImageIoWrite);
+  }
+
+  ssize_t Discard(off_t position, size_t length) {
+    return BlockIo(nullptr, position, length, kImageIoDiscard);
+  }
+
+  ssize_t Flush() {
     if (readonly_) {
       return 0;
     }
@@ -690,56 +659,6 @@ class Qcow2Image : public DiskImage {
     }
 
     return fsync(fd_);
-  }
-  
-  virtual void Read(void *buffer, off_t position, size_t length, IoCallback callback) {
-    worker_mutex_.lock();
-    worker_queue_.push_back([this, buffer, position, length, callback]() {
-      auto ret = BlockIo(buffer, position, length, kImageIoRead);
-      io_->Schedule([=]() { callback(ret); });
-    });
-    worker_cv_.notify_all();
-    worker_mutex_.unlock();
-  }
-
-  virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) {
-    if (readonly_) {
-      return callback(0);
-    }
-  
-    worker_mutex_.lock();
-    worker_queue_.push_back([this, buffer, position, length, callback]() {
-      auto ret = BlockIo(buffer, position, length, kImageIoWrite);
-      io_->Schedule([=]() { callback(ret); });
-    });
-    worker_cv_.notify_all();
-    worker_mutex_.unlock();
-  }
-
-  virtual void Discard(off_t position, size_t length, IoCallback callback) {
-    if (readonly_) {
-      return callback(0);
-    }
-  
-    worker_mutex_.lock();
-    worker_queue_.push_back([this, position, length, callback]() {
-      auto ret = BlockIo(nullptr, position, length, kImageIoDiscard);
-      io_->Schedule([=]() { callback(ret); });
-    });
-    worker_cv_.notify_all();
-    worker_mutex_.unlock();
-  }
-
-  virtual void Flush(IoCallback callback) {
-    worker_mutex_.lock();
-    worker_queue_.push_back([this, callback]() {
-      auto ret = Flush();
-      io_->Schedule([=]() {
-        callback(ret);
-      });
-    });
-    worker_cv_.notify_all();
-    worker_mutex_.unlock();
   }
 };
 

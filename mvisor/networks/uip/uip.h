@@ -29,8 +29,6 @@
 #include <ctime>
 #include "io_thread.h"
 
-#define UIP_SET_NONBLOCK
-
 #define UIP_MAX_BUFFER_SIZE (64*1024 + 16)
 #define UIP_MAX_UDP_PAYLOAD (64*1024 - 20 - 8)
 #define UIP_MAX_TCP_PAYLOAD (64*1024 - 144)
@@ -140,16 +138,20 @@ class RedirectTcpSocket : public TcpSocket {
 
  protected:
   void InitializeRedirect();
-  void StartReceiving();
-  void StartSending();
+  void StartReading();
+  void StartWriting();
+  void OnRemoteConnected();
 
-  bool write_done_;
-  bool read_done_;
-  int  fd_;
-  bool receiving_ = false;
-  bool sending_ = false;
+  bool can_read() { return fd_ != -1 && connected_ && !read_done_ && can_read_; }
+  bool can_write() { return fd_ != -1 && connected_ && !write_done_ && can_write_; }
+
+  bool write_done_ = false;
+  bool read_done_ = false;
+  int  fd_ = -1;
+  bool can_read_ = false;
+  bool can_write_ = false;
   std::deque<Ipv4Packet*> send_queue_;
-  IoRequest*              polling_request_;
+  bool connected_ = false;
 };
 
 class Device;
@@ -166,8 +168,7 @@ class RedirectUdpSocket : public UdpSocket {
 
  protected:
   void InitializeRedirect();
-  void StartReceiving();
-  void StartSending();
+  void StartReading();
 
   int fd_;
   IoTimer*  wait_timer_ = nullptr;

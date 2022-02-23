@@ -141,9 +141,9 @@ class VirtioBlock : public VirtioPci {
         }
       };
       if (is_write) {
-        image_->Write(buffer, position, length, io_complete);
+        image_->WriteAsync(buffer, position, length, io_complete);
       } else {
-        image_->Read(buffer, position, length, io_complete);
+        image_->ReadAsync(buffer, position, length, io_complete);
       }
       position += length;
     }
@@ -182,7 +182,7 @@ class VirtioBlock : public VirtioPci {
       break;
     }
     case VIRTIO_BLK_T_FLUSH:
-      image_->Flush([callback, status](ssize_t ret) {
+      image_->FlushAsync([callback, status](ssize_t ret) {
         *status = ret == 0 ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });
@@ -204,7 +204,7 @@ class VirtioBlock : public VirtioPci {
       MV_ASSERT(iov.iov_len == sizeof(*discard));
       size_t position = discard->sector * block_config_.blk_size;
       size_t length = discard->num_sectors * block_config_.blk_size;
-      image_->Discard(position, length, [status, callback, length](auto ret) {
+      image_->DiscardAsync(position, length, [status, callback, length](auto ret) {
         *status = ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });

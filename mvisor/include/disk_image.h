@@ -21,9 +21,14 @@
 
 #include <string>
 #include <functional>
+#include <thread>
+#include <mutex>
+#include <deque>
+#include <condition_variable>
 
 #include "utilities.h"
 #include "object.h"
+#include "io_thread.h"
 
 typedef std::function<void(ssize_t ret)> IoCallback;
 
@@ -53,20 +58,38 @@ class DiskImage : public Object {
 
   /* Always use this static method to create a DiskImage */
 
-  /* Interfaces for a image format to implement */
+  /* Interface for a image format to implement */
   virtual ImageInformation information() = 0;
-  virtual void Read(void *buffer, off_t position, size_t length, IoCallback callback) = 0;
-  virtual void Write(void *buffer, off_t position, size_t length, IoCallback callback) = 0;
-  virtual void Flush(IoCallback callback) = 0;
+  virtual ssize_t Read(void *buffer, off_t position, size_t length) = 0;
+  virtual ssize_t Write(void *buffer, off_t position, size_t length) = 0;
+  virtual ssize_t Flush() = 0;
   /* Optional */
-  virtual void Discard(off_t position, size_t length, IoCallback callback);
+  virtual ssize_t Discard(off_t position, size_t length);
+
+  /* Interface for user */
+  virtual void ReadAsync(void *buffer, off_t position, size_t length, IoCallback callback);
+  virtual void WriteAsync(void *buffer, off_t position, size_t length, IoCallback callback);
+  virtual void DiscardAsync(off_t position, size_t length, IoCallback callback);
+  virtual void FlushAsync(IoCallback callback);
 
  protected:
-  bool initialized_ = false;
-  bool readonly_ = false;
-  Device* device_ = nullptr;
+  bool        initialized_ = false;
+  bool        readonly_ = false;
+  Device*     device_ = nullptr;
+  IoThread*   io_ = nullptr;
 
   virtual void Initialize(const std::string& path, bool readonly) = 0;
+  virtual void Finalize();
+
+ private:
+  /* Worker thread to implemente Async IO */
+  std::thread worker_thread_;
+  std::mutex  worker_mutex_;
+  std::condition_variable   worker_cv_;
+  std::deque<VoidCallback>  worker_queue_;
+  bool        finalized_ = false;
+
+  void WorkerProcess();
 };
 
 
