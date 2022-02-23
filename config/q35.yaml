@@ -67,4 +67,4 @@ objects:
   - class: virtio-network
     backend: uip
     mac: 00:50:00:11:22:33
-
+    debug: No

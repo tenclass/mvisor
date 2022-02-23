@@ -219,7 +219,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
 
 void DeviceManager::UnregisterIoEvent(IoEvent* event) {
   if (event->request) {
-    io()->StopPolling(event->request);
+    io()->CancelRequest(event->request);
   }
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -248,7 +248,10 @@ void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint6
     return e->device == device && e->address == address &&
       ((type == kIoResourceTypePio) == !!(e->flags & KVM_IOEVENTFD_FLAG_PIO));
   });
-  MV_ASSERT(it != ioevents_.end());
+  if (it == ioevents_.end()) {
+    mutex_.unlock();
+    return;
+  }
   auto event = *it;
   mutex_.unlock();
   UnregisterIoEvent(event);
@@ -289,8 +292,8 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       if (machine_->debug()) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
-        if ((!ioeventfd && cost_us >= 1000) || (ioeventfd && cost_us >= 10000)) {
-          MV_LOG("%s slow %sio %s port=0x%x size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "event " : "",
+        if (!ioeventfd && cost_us >= 10000) {
+          MV_LOG("%s SLOW IO %s port=0x%x size=%u data=%lx cost=%.3lfms", device->name(),
             is_write ? "out" : "in", port, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
       }
@@ -342,16 +345,20 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
       if (machine_->debug()) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
-        if ((!ioeventfd && cost_us >= 1000) || (ioeventfd && cost_us >= 10000)) {
-          MV_LOG("%s slow %smmio %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(), ioeventfd ? "event " : "",
+        if (!ioeventfd && cost_us >= 10000) {
+          MV_LOG("%s SLOW MMIO %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(),
             is_write ? "out" : "in", base, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
       }
       return;
     }
   }
-  MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
-    is_write ? "write" : "read", base, size, *(uint64_t*)data);
+
+  mutex_.unlock();
+  if (machine_->debug()) {
+    MV_LOG("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
+      is_write ? "write" : "read", base, size, *(uint64_t*)data);
+  }
 }
 
 /* Get the host memory address of a guest physical address */

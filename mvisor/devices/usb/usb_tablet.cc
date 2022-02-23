@@ -205,7 +205,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
       queue_.pop_front();
     }
 
-    manager_->io()->Schedule([=]() {
+    manager_->io()->Schedule([this]() {
       NotifyEndpoint(0x81);
     });
   }

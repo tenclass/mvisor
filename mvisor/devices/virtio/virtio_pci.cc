@@ -218,6 +218,7 @@ void VirtioPci::AddQueue(uint16_t queue_size, VoidCallback callback) {
 
 void VirtioPci::EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t avail_gpa, uint64_t used_gpa) {
   auto &vq = queues_[queue_index];
+  MV_ASSERT(!vq.enabled);
   vq.descriptor_table = (VRingDescriptor*)manager_->TranslateGuestMemory(desc_gpa);
   vq.available_ring = (VRingAvailable*)manager_->TranslateGuestMemory(avail_gpa);
   vq.used_ring = (VRingUsed*)manager_->TranslateGuestMemory(used_gpa);
@@ -325,7 +326,7 @@ void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size)
       manager_->io()->Schedule(vq.notification_callback);
     }
   } else {
-    MV_LOG("queue %u is not enabled", queue);
+    MV_LOG("%s queue %u is not enabled", name_, queue);
   }
 }
 

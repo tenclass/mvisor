@@ -471,9 +471,16 @@ class XhciHost : public PciDevice {
       operational_regs_.configure = data[0];
       break;
     case offsetof(XhciOperationalRegisters, command_ring_control):
-      MV_ASSERT((data[0] & 0B110) == 0); // stop or abort not supported yet
-      memcpy(&operational_regs_.command_ring_control, data, size);
-      SetupRing(command_ring_, operational_regs_.command_ring_control & ~0x3F);
+      if (data[0] & (CRCR_CA|CRCR_CS) && (data[0] & CRCR_CRR)) {
+        XhciEvent event = { ER_COMMAND_COMPLETE, CC_COMMAND_RING_STOPPED };
+        data[0] &= ~CRCR_CRR;
+        PushEvent(0, event);
+        memcpy(&operational_regs_.command_ring_control, data, size);
+      } else {
+        memcpy(&operational_regs_.command_ring_control, data, size);
+        SetupRing(command_ring_, operational_regs_.command_ring_control & ~0x3F);
+      }
+      operational_regs_.command_ring_control &= ~(CRCR_CA | CRCR_CS);
       break;
     case offsetof(XhciOperationalRegisters, device_notification_control):
     case offsetof(XhciOperationalRegisters, context_base_array_pointer):

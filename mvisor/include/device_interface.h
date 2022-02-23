@@ -158,7 +158,7 @@ class NetworkBackendInterface {
  public:
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) = 0;
   virtual void Reset() = 0;
-  virtual void OnFrameFromGuest(void* frame, size_t length) = 0;
+  virtual void OnFrameFromGuest(std::deque<iovec>& vector) = 0;
   virtual bool OnPacketFromHost(Ipv4Packet* packet) = 0;
   virtual Ipv4Packet* AllocatePacket(bool urgent) = 0;
   virtual void OnReceiveAvailable() = 0;

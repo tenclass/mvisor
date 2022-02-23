@@ -29,6 +29,8 @@
 #include <ctime>
 #include "io_thread.h"
 
+#define UIP_SET_NONBLOCK
+
 #define UIP_MAX_BUFFER_SIZE (64*1024 + 16)
 #define UIP_MAX_UDP_PAYLOAD (64*1024 - 20 - 8)
 #define UIP_MAX_TCP_PAYLOAD (64*1024 - 144)
@@ -54,15 +56,16 @@ struct Ipv4Packet {
   tcphdr*       tcp;
   void*         data;
   size_t        data_length;
+  size_t        data_offset;
   VoidCallback  Release;
 };
 
 class Ipv4Socket {
  public:
-  Ipv4Socket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip);
+  Ipv4Socket(NetworkBackendInterface* backend, Ipv4Packet* packet);
   virtual ~Ipv4Socket() {}
-  virtual bool IsActive();
-  virtual void OnRemoteDataAvailable();
+  virtual bool IsActive() = 0;
+  virtual void OnPacketFromGuest(Ipv4Packet* packet) = 0;
   
  protected:
   virtual Ipv4Packet* AllocatePacket(bool urgent);
@@ -74,17 +77,18 @@ class Ipv4Socket {
   bool closed_;
   time_t active_time_;
   bool debug_;
+
+  IoThread*   io_ = nullptr;
 };
 
 
 class TcpSocket : public Ipv4Socket {
  public:
-  TcpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, tcphdr* tcp);
+  TcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
    
   inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
   }
-  virtual void OnDataFromGuest(void* data, size_t length) = 0;
   virtual bool UpdateGuestAck(tcphdr* tcp);
 
  protected:
@@ -110,12 +114,11 @@ class TcpSocket : public Ipv4Socket {
 
 class UdpSocket : public Ipv4Socket {
  public:
-  UdpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, udphdr* udp);
+  UdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
 
   inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
   }
-  virtual void OnDataFromGuest(void* data, size_t length) = 0;
 
  protected:
   virtual Ipv4Packet* AllocatePacket(bool urgent);
@@ -128,59 +131,62 @@ class UdpSocket : public Ipv4Socket {
 
 class RedirectTcpSocket : public TcpSocket {
  public:
-  RedirectTcpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, tcphdr* tcp);
+  RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
   virtual ~RedirectTcpSocket();
   void Shutdown(int how);
-  void OnDataFromGuest(void* data, size_t length);
-  bool IsGuestOverflow() { return guest_overflow_; }
-  bool IsConnected() { return connected_; }
+  virtual void OnPacketFromGuest(Ipv4Packet* packet);
   virtual bool IsActive();
-  virtual void OnRemoteDataAvailable();
   virtual bool UpdateGuestAck(tcphdr* tcp);
 
  protected:
   void InitializeRedirect();
-  void OnRemoteConnected();
+  void StartReceiving();
+  void StartSending();
 
   bool write_done_;
   bool read_done_;
-  int fd_;
-  bool connected_;
-  bool guest_overflow_;
-  IoRequest* polling_request_ = nullptr;
+  int  fd_;
+  bool receiving_ = false;
+  bool sending_ = false;
+  std::deque<Ipv4Packet*> send_queue_;
+  IoRequest*              polling_request_;
 };
 
 class Device;
 class DeviceManager;
 class RedirectUdpSocket : public UdpSocket {
  public:
-  RedirectUdpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, udphdr* udp) :
-    UdpSocket(backend, eth, ip, udp) {
+  RedirectUdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
+    UdpSocket(backend, packet) {
     InitializeRedirect();
   }
   virtual ~RedirectUdpSocket();
-  void InitializeRedirect();
-  void OnDataFromGuest(void* data, size_t length);
+  virtual void OnPacketFromGuest(Ipv4Packet* packet);
   virtual bool IsActive();
-  virtual void OnRemoteDataAvailable();
 
  protected:
+  void InitializeRedirect();
+  void StartReceiving();
+  void StartSending();
+
   int fd_;
-  IoRequest* polling_request_ = nullptr;
+  IoTimer*  wait_timer_ = nullptr;
 };
 
 struct DhcpMessage;
 class DhcpServiceUdpSocket : public UdpSocket {
  public:
-  DhcpServiceUdpSocket(NetworkBackendInterface* backend, ethhdr* eth, iphdr* ip, udphdr* udp) :
-    UdpSocket(backend, eth, ip, udp) {
+  DhcpServiceUdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
+    UdpSocket(backend, packet) {
   }
   void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask, uint32_t guest_ip);
-  void OnDataFromGuest(void* data, size_t length);
+  virtual void OnPacketFromGuest(Ipv4Packet* packet);
+  virtual bool IsActive();
+
+ private:
   std::string CreateDhcpResponse(DhcpMessage* request, int dhcp_type);
   size_t FillDhcpOptions(uint8_t* option, int dhcp_type);
 
- private:
   std::vector<uint32_t> nameservers_;
   MacAddress router_mac_;
   uint32_t subnet_mask_;
