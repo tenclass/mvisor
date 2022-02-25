@@ -1,5 +1,5 @@
 /* 
- * MVisor
+ * MVisor QCOW2 Disk Image
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -36,10 +36,10 @@
 #define REFCOUNT_CACHE_ITEMS      128
 #define L2_CACHE_ITEMS            128
 
-inline void be32_to_cpus(uint32_t* x) {
+static inline void be32_to_cpus(uint32_t* x) {
   *x = be32toh(*x);
 }
-inline void be64_to_cpus(uint64_t* x) {
+static inline void be64_to_cpus(uint64_t* x) {
   *x = be64toh(*x);
 }
 

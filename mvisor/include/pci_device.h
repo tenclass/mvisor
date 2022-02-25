@@ -22,6 +22,8 @@
 #include <linux/pci_regs.h>
 #include "device.h"
 
+#define _MB(x) (x * (1 << 20))
+
 /*
  * PCI Configuration Mechanism #1 I/O ports. See Section 3.7.4.1.
  * ("Configuration Mechanism #1") of the PCI Local Bus Specification 2.1 for
@@ -203,6 +205,7 @@ class PciDevice : public Device {
   uint8_t bus() { return 0; }
   uint8_t devfn() { return devfn_; }
   const PciConfigHeader& pci_header() { return pci_header_; }
+  const PciBarInfo& pci_bar(uint8_t index) { return pci_bars_[index]; }
 
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
@@ -210,18 +213,18 @@ class PciDevice : public Device {
   virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
   void WritePciCommand(uint16_t command);
   void WritePciBar(uint8_t index, uint32_t value);
-
- protected:
-  friend class DeviceManager;
   // PCI devices may override these members to handle bar regsiter events
   virtual bool ActivatePciBar(uint8_t index);
   virtual bool DeactivatePciBar(uint8_t index);
+
+ protected:
+  friend class DeviceManager;
 
   bool ActivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   void UpdateRomMapAddress(uint32_t address);
   void LoadRomFile(const char* path);
-  void AddPciBar(uint8_t index, uint32_t size, IoResourceType type);
+  void AddPciBar(uint8_t index, uint32_t size, IoResourceType type, bool is_64bit = false);
   uint8_t* AddCapability(uint8_t cap, const uint8_t* data, uint8_t length);
   void AddMsiCapability();
   void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);

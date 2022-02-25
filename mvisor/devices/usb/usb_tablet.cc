@@ -166,7 +166,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
       idle_ = uint8_t(value >> 8);
       return 0;
     default:
-      MV_PANIC("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
+      MV_LOG("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
       return USB_RET_STALL;
     }
   }

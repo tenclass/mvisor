@@ -5,7 +5,7 @@
 1. A minimal hypervisor based on KVM and x86 (replace QEMU)
 2. A limited number of emulated devices (support plugins in later version)
 3. Linux and Windows as guest VMs
-4. VFIO (espectially vGPU) and migration
+4. VFIO (especially vGPU) and migration
 5. Extremely stable and high performance
 
 
@@ -36,7 +36,7 @@ Nov 2021
 Milestone 2: Multimedia & Networking
 Feb 2022
 
-1. VirtIO (Console ✅ / Block ✅ / Net ✅ / Balloon)
+1. Virtio (Console ✅ / Block ✅ / Net ✅ / Balloon)
 2. SpiceAgent ✅
 3. QemuGuestAgent
 4. Qxl ✅
@@ -44,7 +44,7 @@ Feb 2022
 6. Tap network
 7. User network ✅
 8. SfAgent
-9. VFIO
+9. VFIO (IN PROGRESS)
 10. Samba
 11. XHCI ✅ / USB Tablet ✅
 

@@ -243,7 +243,7 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
 }
 
 /* Call this function in device constructor */
-void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
+void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type, bool is_64bit) {
   auto &bar = pci_bars_[index];
   MV_ASSERT(bar.size == 0 && pci_header_.bars[index] == 0);
   bar.size = size;
@@ -260,6 +260,8 @@ void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
     bar.special_bits = 8; // Prefetchable
   }
   pci_header_.bars[index] |= bar.special_bits;
+  /* FIXME: not supported 64bit BAR yet */
+  MV_ASSERT(!is_64bit);
 }
 
 /* Called when an bar is activate by guest BIOS or OS */

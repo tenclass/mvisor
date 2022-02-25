@@ -82,7 +82,7 @@ void IoThread::RunLoop() {
     int next_timeout_ms = CheckTimers();
     int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, next_timeout_ms);
     if (nfds < 0) {
-      MV_PANIC("nfds=%d", nfds);
+      break;
     }
     
     for (int i = 0; i < nfds; i++) {
@@ -101,6 +101,8 @@ void IoThread::RunLoop() {
       }
     }
   }
+
+  if (machine_->debug()) MV_LOG("mvisor-iothread ended");
 }
 
 EpollEvent* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) {

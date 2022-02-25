@@ -67,13 +67,9 @@ class Qxl : public Vga {
   Qxl() {
     pci_header_.vendor_id = 0x1B36;
     pci_header_.device_id = 0x0100;
-
-    AddPciBar(1, 8 << 20, kIoResourceTypeRam);      /* QXL VRAM32 8MB */
-    AddPciBar(2, 8192, kIoResourceTypeRam);         /* QXL ROM */
-    AddPciBar(3, 32, kIoResourceTypePio);           /* QXL PIO */
     
     /* Bar 1: 8MB */
-    qxl_vram32_size_ = 8 << 20;
+    qxl_vram32_size_ = _MB(8);
     qxl_vram32_base_ = (uint8_t*)valloc(qxl_vram32_size_);
     pci_bars_[1].host_memory = qxl_vram32_base_;
 
@@ -81,7 +77,17 @@ class Qxl : public Vga {
     qxl_rom_size_ = 8192;
     qxl_rom_base_ = valloc(qxl_rom_size_);
     pci_bars_[2].host_memory = qxl_rom_base_;
+
+    AddPciBar(1, qxl_vram32_size_, kIoResourceTypeRam); /* QXL VRAM32 8MB */
+    AddPciBar(2, 8192, kIoResourceTypeRam);             /* QXL ROM */
+    AddPciBar(3, 32, kIoResourceTypePio);               /* QXL PIO */
     
+  }
+
+  virtual ~Qxl() {
+    if (qxl_vram32_base_) {
+      free(qxl_vram32_base_);
+    }
   }
 
   virtual bool ActivatePciBar(uint8_t index) {

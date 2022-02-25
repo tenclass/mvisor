@@ -55,8 +55,8 @@ Vga::Vga() {
   
 
   /* Bar 0: 256MB VRAM (default total) */
-  vga_mem_size_ = 16 << 20;
-  vram_size_ = 256 << 20;
+  vga_mem_size_ = _MB(16);
+  vram_size_ = _MB(256);
 
   AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* vgamem */
   /* FIXME: bar 2 should be implemented for stdvga if Qxl is not enabled??? */
@@ -89,6 +89,7 @@ void Vga::Reset() {
   vbe_index_ = 0;
 
   vram_map_select_ = vram_base_;
+  vram_read_select_ = vram_base_;
   width_ = 0;
   height_ = 0;
   bpp_ = 0;

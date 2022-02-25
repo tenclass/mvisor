@@ -243,7 +243,7 @@ int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, in
 
   case VendorDeviceRequest | 'Q':
   case VendorInterfaceRequest | 'Q':
-    MV_PANIC("not implemented");
+    /* FIXME: MOS */
     break;
 
   }
