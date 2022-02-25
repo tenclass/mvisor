@@ -56,13 +56,13 @@ std::string Configuration::FindPath(std::string path) const {
     }
   }
   /* Path not found */
-  MV_PANIC("path not found %s", path.c_str());
+  MV_PANIC("Path not found %s", path.c_str());
   return path;
 }
 
 bool Configuration::Load(std::string path) {
   if (!machine_->objects_.empty()) {
-    MV_PANIC("machine already loaded");
+    MV_PANIC("Machine already loaded");
     return false;
   }
   return LoadFile(path);
@@ -139,7 +139,7 @@ void Configuration::LoadObjects(YAML::Node objects_node) {
     for (auto it2 = node.begin(); it2 != node.end(); it2++) {
       string key = it2->first.as<string>();
       auto value = it2->second;
-      if (key == "name" || key == "class" || key == "children") {
+      if (key == "name" || key == "class" || key == "children" || key == "parent") {
         continue;
       }
       if (key == "debug") {
@@ -162,7 +162,7 @@ void Configuration::LoadObjects(YAML::Node objects_node) {
         (*object)[key] = string_value;
         continue;
       } catch (const YAML::BadConversion& e) { }
-      MV_PANIC("invalid type of key %s in object %s", key.c_str(), name.c_str());
+      MV_PANIC("Object %s has invalid key %s", name.c_str(), key.c_str());
     }
   }
   
@@ -182,6 +182,19 @@ void Configuration::LoadObjects(YAML::Node objects_node) {
           object = objects_it->second;
         }
         node_object.object->AddChild(object);
+      }
+    }
+  }
+
+  /* Add to parent */
+  for (auto &node_object : v) {
+    if (node_object.node["parent"]) {
+      auto parent = node_object.node["parent"].as<string>();
+      auto objects_it = objects.find(parent);
+      if (objects_it == objects.end()) {
+        MV_PANIC("Object %s has invalid parent value %s", node_object.object->name(), parent.c_str());
+      } else {
+        objects_it->second->AddChild(node_object.object);
       }
     }
   }
