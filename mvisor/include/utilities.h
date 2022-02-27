@@ -19,6 +19,8 @@
 #ifndef _MVISOR_UTILITY_H
 #define _MVISOR_UTILITY_H
 
+#include <unistd.h>
+
 class Object;
 typedef Object* (*ClassCreator) (void);
 
@@ -29,7 +31,6 @@ struct ClassItem {
   ClassCreator create;
 };
 
-#include "logger.h"
 /* Initialize device classes and add to device management for later use */
 void register_class(int type, const char* name, const char* source_path, ClassCreator create);
 Object* realize_class(const char* name);
@@ -50,5 +51,13 @@ static void __attribute__ ((constructor)) __init__##cb(void) \
 #define DECLARE_NETWORK(classname)      __register_class(classname, 3)
 #define DECLARE_DISK_IMAGE(classname)   __register_class(classname, 4)
 #define DECLARE_AGENT(classname)        __register_class(classname, 5)
+
+/* Close fd and set to -1 */
+static inline void safe_close(int *fd) {
+  if (*fd > 0) {
+    close(*fd);
+    *fd = -1;
+  }
+}
 
 #endif // _MVISOR_UTILITY_H

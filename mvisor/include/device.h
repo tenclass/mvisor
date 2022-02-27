@@ -32,11 +32,15 @@ enum IoResourceType {
   kIoResourceTypeRam
 };
 
+struct MemoryRegion;
 struct IoResource {
-  IoResourceType type;
-  uint64_t base;
-  uint64_t length;
-  const char* name;
+  IoResourceType      type;
+  uint64_t            base;
+  uint64_t            length;
+  const char*         name;
+  bool                enabled;
+  void*               host_memory;
+  const MemoryRegion* mapped_region;
 };
 
 class DeviceManager;
@@ -55,8 +59,10 @@ class Device : public Object {
   DeviceManager* manager() { return manager_; }
  protected:
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
+  void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, void* host_memory, const char* name);
   void RemoveIoResource(IoResourceType type, const char* name);
   void RemoveIoResource(IoResourceType type, uint64_t base);
+  void SetIoResourceEnabled(IoResource& ir, bool enabled);
 
   friend class DeviceManager;
   DeviceManager* manager_;

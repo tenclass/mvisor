@@ -15,3 +15,9 @@ objects:
 
   - class: virtio-block
     image: /data/hd.qcow2
+
+  # - name: nvidia-vgpu
+  #   class: vfio-pci
+  #   parent: pci-host
+  #   debug: No
+  #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b

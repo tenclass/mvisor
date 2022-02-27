@@ -20,7 +20,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <set>
-#include "linux/virtio_net.h"
+#include "linuz/virtio_net.h"
 #include "device_interface.h"
 #include "logger.h"
 

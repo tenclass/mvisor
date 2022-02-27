@@ -28,6 +28,7 @@
 #include "device.h"
 #include "hda_internal.h"
 #include "device_manager.h"
+#include "logger.h"
 
 #define HDA_TIMER_INTERVAL_MS (10) // 10ms
 #define HDA_STREAM_BUFFER_SIZE 8192

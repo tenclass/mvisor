@@ -19,21 +19,55 @@
 #include <cstdio>
 #include <string>
 #include <unistd.h>
+#include <uuid/uuid.h>
+#include <getopt.h>
 
 #include "machine.h"
 #include "viewer.h"
 
 using namespace std;
 
+/* For vfio mdev, -uuid xxx is necessary */
+void IntializeArguments(int argc, char* argv[]) {
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-uuid") == 0) {
+      /* Found uuid */
+      return;
+    }
+  }
+
+  char uuid_string[40];
+  uuid_t uuid;
+  uuid_generate(uuid);
+  uuid_unparse(uuid, uuid_string);
+
+  char* new_argv[argc + 3];
+  for (int i = 0; i < argc; i++) {
+    new_argv[i] = argv[i];
+  }
+  new_argv[argc] = (char*)"-uuid";
+  new_argv[argc + 1] = uuid_string;
+  new_argv[argc + 2] = nullptr;
+  execv("/proc/self/exe", new_argv);
+  perror("Failed to restart process with uuid");
+  exit(1);
+}
+
 void print_help() {
   printf("mvisor -f [config_path]\n");
 }
 
+static struct option long_options[] = {
+  { "uuid", required_argument, 0, 0 }
+};
+
 int main(int argc, char* argv[])
 {
+  IntializeArguments(argc, argv);
+
   std::string config_path = "../config/default.yaml";
-  int option;
-  while ((option = getopt(argc, argv, "f:h")) != -1) {
+  int option, option_index = 0;
+  while ((option = getopt_long_only(argc, argv, "f:h", long_options, &option_index)) != -1) {
     switch (option)
     {
     case 'f':
@@ -43,8 +77,7 @@ int main(int argc, char* argv[])
       print_help();
       return 0;
     case '?':
-      fprintf(stderr, "Unknown option: %c\n", (char)optopt);
-      return -1;
+      break;
     }
   }
 

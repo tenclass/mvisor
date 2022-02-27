@@ -76,15 +76,20 @@ void Device::Disconnect() {
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name) {
+  AddIoResource(type, base, length, nullptr, name);
+}
+
+void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, void* host_memory, const char* name) {
   IoResource io_resource = {
     .type = type,
     .base = base,
     .length = length,
-    .name = name
+    .name = name,
+    .host_memory = host_memory
   };
-  io_resources_.push_back(std::move(io_resource));
+  io_resources_.push_back(io_resource);
   if (connected_) {
-    manager_->RegisterIoHandler(this, io_resource);
+    SetIoResourceEnabled(io_resource, true);
   }
 }
 
@@ -96,7 +101,7 @@ void Device::RemoveIoResource(IoResourceType type, const char* name) {
         )
       ) {
       if (connected_) {
-        manager_->UnregisterIoHandler(this, *it);
+        SetIoResourceEnabled(*it, false);
       }
       io_resources_.erase(it);
       break;
@@ -108,11 +113,37 @@ void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
     if (it->type == type && it->base == base) {
       if (connected_) {
-        manager_->UnregisterIoHandler(this, *it);
+        SetIoResourceEnabled(*it, false);
       }
       io_resources_.erase(it);
       break;
     }
+  }
+}
+
+void Device::SetIoResourceEnabled(IoResource& ir, bool enabled) {
+  if (enabled) {
+    MV_ASSERT(!ir.enabled);
+    if (ir.type == kIoResourceTypeRam) {
+      MV_ASSERT(ir.host_memory);
+      auto mm = manager_->machine()->memory_manager();
+      ir.mapped_region = mm->Map(ir.base, ir.length, ir.host_memory, kMemoryTypeRam, ir.name);
+    } else {
+      manager_->RegisterIoHandler(this, ir);
+    }
+    ir.enabled = true;
+  } else {
+    if (!ir.enabled) {
+      return;
+    }
+    if (ir.type == kIoResourceTypeRam) {
+      MV_ASSERT(ir.mapped_region);
+      auto mm = manager_->machine()->memory_manager();
+      mm->Unmap(&ir.mapped_region);
+    } else {
+      manager_->UnregisterIoHandler(this, ir);
+    }
+    ir.enabled = false;
   }
 }
 

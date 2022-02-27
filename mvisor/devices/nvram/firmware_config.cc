@@ -168,13 +168,13 @@ class FirmwareConfig : public Device {
   }
 
   void InitializeE820Table() {
-    MemoryManager* memory = manager_->machine()->memory_manager();
+    MemoryManager* mm = manager_->machine()->memory_manager();
     std::vector<e820_entry> entries;
-    for (auto region : memory->regions()) {
+    for (auto slot : mm->GetMemoryFlatView()) {
       e820_entry entry;
-      entry.address = region->gpa;
-      entry.length = region->size;
-      if (region->type == kMemoryTypeRam) {
+      entry.address = slot->begin;
+      entry.length = slot->end - slot->begin;
+      if (slot->region->type == kMemoryTypeRam) {
         entry.type = E820_RAM;
       } else {
         entry.type = E820_RESERVED;

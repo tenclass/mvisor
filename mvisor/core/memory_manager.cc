@@ -83,9 +83,9 @@ void MemoryManager::InitializeSystemRam() {
 
 /* Don't call this funciton, use Map and Unmap */
 void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
-  std::unordered_set<KvmSlot*> pending_slots;
+  std::unordered_set<MemorySlot*> pending_slots;
 
-  KvmSlot* slot = new KvmSlot;
+  MemorySlot* slot = new MemorySlot;
   slot->slot = get_new_slot_id();
   slot->region = region;
   slot->begin = region->gpa;
@@ -97,19 +97,19 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   // Maybe later we should support region priorities
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end() && it->second->begin < slot->end; ) {
     if (it->second->begin < slot->end && slot->begin < it->second->end) {
-      KvmSlot *hit = it->second;
-      KvmSlot *left = nullptr, *right = nullptr;
+      MemorySlot *hit = it->second;
+      MemorySlot *left = nullptr, *right = nullptr;
   
       // Collision found, split the slot
       if (hit->begin < slot->begin) {
         // Left collision
-        left = new KvmSlot(*hit);
+        left = new MemorySlot(*hit);
         left->end = slot->begin;
         left->slot = get_new_slot_id();
       }
       if (slot->end < hit->end) {
         // Right collision
-        right = new KvmSlot(*hit);
+        right = new MemorySlot(*hit);
         right->begin = slot->end;
         right->hva = reinterpret_cast<uint64_t>(right->region->host) + (right->begin - right->region->gpa);
         right->slot = get_new_slot_id();
@@ -134,6 +134,10 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
           kvm_set_user_memory_region(machine_->vm_fd_, hit->slot, hit->begin,
             0, hit->hva, hit->region->flags);
         }
+        // tell listeners we removed a slot
+        for (auto listener : listeners_) {
+          listener->callback(hit, true);
+        }
       }
       delete hit;
     } else {
@@ -149,6 +153,10 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
     if (slot->region->type == kMemoryTypeRam) {
       kvm_set_user_memory_region(machine_->vm_fd_, slot->slot, slot->begin,
         slot->end - slot->begin, slot->hva, slot->region->flags);
+      // tell listeners we have new slots
+      for (auto listener : listeners_) {
+        listener->callback(slot, false);
+      }
     }
   }
 }
@@ -173,7 +181,7 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
 
 /* TODO: should merge the slots after unmap */
 void MemoryManager::Unmap(const MemoryRegion** pregion) {
-  MemoryRegion* region = (MemoryRegion*)*pregion;
+  auto region = (MemoryRegion*)*pregion;
   if (machine_->debug_)
     MV_LOG("unmap region %s gpa=0x%lx size=%lx type=%x", region->name,
       region->gpa, region->size, region->type);
@@ -194,9 +202,10 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
   }
 
   // Remove region
-  regions_.erase(region);
-  delete region;
-  *pregion = nullptr;
+  if (regions_.erase(region)) {
+    delete region;
+    *pregion = nullptr;
+  }
 }
 
 /* Since slots is a flat view without overlaps,
@@ -210,7 +219,7 @@ void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
   }
   MV_ASSERT(it != kvm_slots_.end());
 
-  KvmSlot* slot = it->second;
+  MemorySlot* slot = it->second;
   if (gpa >= slot->begin && gpa < slot->end) {
     uint64_t address = slot->hva + gpa - slot->begin;
     return reinterpret_cast<void*>(address);
@@ -232,9 +241,32 @@ void MemoryManager::PrintMemoryScope() {
   static const char* type_strings[] = { "reserved", "ram", "device" };
   MV_LOG("%lu memory slots", kvm_slots_.size());
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
-    KvmSlot* slot = it->second;
+    MemorySlot* slot = it->second;
     MV_LOG("memory slot=%d %016lx-%016lx hva=%016lx %10s %10s",
       slot->slot, slot->begin, slot->end, slot->hva, type_strings[slot->region->type],
       slot->region->name);
+  }
+}
+
+std::vector<const MemorySlot*> MemoryManager::GetMemoryFlatView() {
+  std::vector<const MemorySlot*> slots;
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
+    slots.push_back(it->second);
+  }
+  return slots;
+}
+
+const MemoryListener* MemoryManager::RegisterMemoryListener(MemoryListenerCallback callback) {
+  auto listener = new MemoryListener {
+    .callback = callback
+  };
+  listeners_.insert(listener);
+  return listener;
+}
+
+void MemoryManager::UnregisterMemoryListener(const MemoryListener** plistener) {
+  if (listeners_.erase(*plistener)) {
+    delete *plistener;
+    *plistener = nullptr;
   }
 }

@@ -21,6 +21,7 @@
 
 #include <linux/pci_regs.h>
 #include "device.h"
+#include "logger.h"
 
 #define _MB(x) (x * (1 << 20))
 
@@ -160,7 +161,6 @@ struct PciConfigHeader {
   };
 };
 
-class MemoryRegion;
 struct PciBarInfo {
   IoResourceType        type;
   uint32_t              size;
@@ -169,7 +169,6 @@ struct PciBarInfo {
   uint32_t              special_bits;
   bool                  active;
   void*                 host_memory;
-  const MemoryRegion*   mapped_region;
 };
 
 struct PciRomBarInfo {
@@ -182,7 +181,8 @@ struct PciRomBarInfo {
  * Undefined for ranges that wrap around 0. */
 static inline uint64_t range_get_last(uint64_t offset, uint64_t len)
 {
-    return offset + len - 1;
+  MV_ASSERT(len > 0);
+  return offset + len - 1;
 }
 
 /* Check whether 2 given ranges overlap.
@@ -224,7 +224,7 @@ class PciDevice : public Device {
   bool DeactivatePciBarsWithinRegion(uint32_t base, uint32_t size);
   void UpdateRomMapAddress(uint32_t address);
   void LoadRomFile(const char* path);
-  void AddPciBar(uint8_t index, uint32_t size, IoResourceType type, bool is_64bit = false);
+  void AddPciBar(uint8_t index, uint32_t size, IoResourceType type);
   uint8_t* AddCapability(uint8_t cap, const uint8_t* data, uint8_t length);
   void AddMsiCapability();
   void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);

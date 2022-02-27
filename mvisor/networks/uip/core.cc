@@ -31,6 +31,7 @@
 #include "device.h"
 #include "pci_device.h"
 #include "device_manager.h"
+#include "logger.h"
 
 struct ArpMessage {
   uint16_t    ar_hrd;    /* format of hardware address  */

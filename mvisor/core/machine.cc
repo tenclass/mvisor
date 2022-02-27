@@ -45,6 +45,7 @@ Machine::Machine(std::string config_path) {
 
   memory_manager_ = new MemoryManager(this);
 
+  LoadBiosFile();
   CreateArchRelated();
   CreateVcpu();
 
@@ -53,10 +54,10 @@ Machine::Machine(std::string config_path) {
   if (!root) {
     MV_PANIC("failed to find system-root device");
   }
+  /* Initialize IO thread before devices */
   io_thread_ = new IoThread(this);
+  /* Initialize device manager, connect and reset all devices */
   device_manager_ = new DeviceManager(this, root);
-
-  LoadBiosFile();
 }
 
 /* Free VM resources */

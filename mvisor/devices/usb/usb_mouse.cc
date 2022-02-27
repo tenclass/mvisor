@@ -22,6 +22,7 @@
 #include "usb_descriptor.h"
 #include "usb.h"
 #include "device_interface.h"
+#include "logger.h"
 
 enum {
   STR_MANUFACTURER = 1,

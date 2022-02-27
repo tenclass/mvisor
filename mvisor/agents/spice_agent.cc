@@ -125,7 +125,9 @@ class SpiceAgent : public Object, public SerialPortInterface,
   }
 
   virtual bool InputAcceptable() {
-    return ready_;
+    return false;
+    // FIXME: pointer not working when dual monitors
+    // return ready_;
   }
 
   virtual void QueuePointerEvent(PointerEvent event) {

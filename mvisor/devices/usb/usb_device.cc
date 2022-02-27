@@ -19,6 +19,7 @@
 #include "usb_device.h"
 #include <cstring>
 #include "usb.h"
+#include "logger.h"
 #include "device_manager.h"
 
 void UsbDevice::Reset() {

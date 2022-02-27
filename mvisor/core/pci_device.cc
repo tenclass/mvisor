@@ -77,17 +77,17 @@ uint8_t* PciDevice::AddCapability(uint8_t cap, const uint8_t* data, uint8_t leng
   pci_header_.capability = next_capability_offset_;
 
   next_capability_offset_ += 2 + length;
-  pci_header_.status |= 0x10; /* Has capability */
+  pci_header_.status |= PCI_STATUS_CAP_LIST; /* Has capability */
   return ptr;
 }
 
 void PciDevice::AddMsiCapability() {
-  MsiCapability64 cap64 = { 0 };
-  cap64.control = 0x80;
+  MsiCapability64 cap64 = { .control = PCI_MSI_FLAGS_64BIT };
   msi_config_.is_64bit = true;
   msi_config_.offset = next_capability_offset_;
   msi_config_.length = sizeof(cap64);
-  msi_config_.msi64 = (MsiCapability64*)AddCapability(0x05, (uint8_t*)&cap64.control, msi_config_.length - 2);
+  msi_config_.msi64 = (MsiCapability64*)AddCapability(PCI_CAP_ID_MSI,
+    (uint8_t*)&cap64.control, msi_config_.length - 2);
 }
 
 void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size) {
@@ -106,7 +106,8 @@ void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t spa
   cap.control = table_size - 1;
   cap.table_offset = bar | space_offset;
   cap.pba_offset = bar | (space_offset + space_size / 2);
-  msi_config_.msix = (MsiXCapability*)AddCapability(0x11, (uint8_t*)&cap.control, msi_config_.length - 2);
+  msi_config_.msix = (MsiXCapability*)AddCapability(PCI_CAP_ID_MSIX,
+    (uint8_t*)&cap.control, msi_config_.length - 2);
 }
 
 void PciDevice::SignalMsi(int vector) {
@@ -190,12 +191,12 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
 
   memcpy(pci_header_.data + offset, data, length);
 
-  if (offset >= msi_config_.offset && offset < msi_config_.offset + msi_config_.length) {
-    /* Toggle MSI/MSI-X */
+  /* Toggle MSI/MSI-X control */
+  if (ranges_overlap(offset, length, msi_config_.offset + PCI_MSI_FLAGS, 1)) {
     if (msi_config_.is_msix) {
-      msi_config_.enabled = msi_config_.msix->control & 0x8000;
+      msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
     } else {
-      msi_config_.enabled = msi_config_.msi64->control & 1;
+      msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
     }
   }
 }
@@ -243,9 +244,9 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
 }
 
 /* Call this function in device constructor */
-void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type, bool is_64bit) {
+void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
   auto &bar = pci_bars_[index];
-  MV_ASSERT(bar.size == 0 && pci_header_.bars[index] == 0);
+  MV_ASSERT(bar.size == 0);
   bar.size = size;
   bar.active = false;
   bar.type = type;
@@ -257,11 +258,9 @@ void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type, boo
     bar.special_bits = 0;
   } else if (type == kIoResourceTypeRam) {
     bar.address_mask = PCI_BASE_ADDRESS_MEM_MASK;
-    bar.special_bits = 8; // Prefetchable
+    bar.special_bits = PCI_BASE_ADDRESS_MEM_PREFETCH;
   }
   pci_header_.bars[index] |= bar.special_bits;
-  /* FIXME: not supported 64bit BAR yet */
-  MV_ASSERT(!is_64bit);
 }
 
 /* Called when an bar is activate by guest BIOS or OS */
@@ -269,14 +268,12 @@ bool PciDevice::ActivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
 
   if (bar.type == kIoResourceTypePio) {
-    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "PCI BAR IO");
+    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "pci-bar-io");
   } else if (bar.type == kIoResourceTypeMmio) {
-    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "PCI BAR MMIO");
+    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "pci-bar-mmio");
   } else if (bar.type == kIoResourceTypeRam) {
-    MV_ASSERT(bar.host_memory != nullptr && bar.mapped_region == nullptr);
-    auto mm = manager_->machine()->memory_manager();
-    bar.mapped_region = mm->Map(bar.address, bar.size, bar.host_memory,
-      kMemoryTypeRam, "PCI BAR RAM");
+    MV_ASSERT(bar.host_memory != nullptr);
+    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, bar.host_memory, "pci-bar-ram");
   }
   bar.active = true;
   return true;
@@ -290,9 +287,7 @@ bool PciDevice::DeactivatePciBar(uint8_t index) {
   } else if (bar.type == kIoResourceTypeMmio) {
     RemoveIoResource(kIoResourceTypeMmio, bar.address);
   } else if (bar.type == kIoResourceTypeRam) {
-    MV_ASSERT(bar.mapped_region != nullptr);
-    auto mm = manager_->machine()->memory_manager();
-    mm->Unmap(&bar.mapped_region);
+    RemoveIoResource(kIoResourceTypeRam, bar.address);
   }
   bar.active = false;
   return true;

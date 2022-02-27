@@ -19,7 +19,7 @@
 #include "virtio_pci.h"
 #include <cstring>
 #include <cmath>
-#include "linux/virtio_blk.h"
+#include "linuz/virtio_blk.h"
 #include "logger.h"
 #include "disk_image.h"
 #include "machine.h"

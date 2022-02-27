@@ -44,7 +44,7 @@ Feb 2022
 6. Tap network
 7. User network ✅
 8. SfAgent
-9. VFIO (IN PROGRESS)
+9. VFIO ✅
 10. Samba
 11. XHCI ✅ / USB Tablet ✅
 
@@ -61,7 +61,7 @@ Apr 2022
 For CentOS 8,
 
 ```
-yum install -y SDL2-devel yaml-cpp-devel gcc-c++
+yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel
 make -j8
 ```
 

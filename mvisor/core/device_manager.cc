@@ -136,7 +136,7 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resou
       .device = device
     });
   } else if (io_resource.type == kIoResourceTypeMmio) {
-    // Map the memory to type Device, access these regions will cause MMIO access fault
+    // Map the memory to type Device. Accessing these regions will cause MMIO access fault
     const MemoryRegion* region = machine_->memory_manager()->Map(io_resource.base, io_resource.length,
       nullptr, kMemoryTypeDevice, io_resource.name);
 

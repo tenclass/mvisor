@@ -21,6 +21,8 @@
 
 #include <map>
 #include <set>
+#include <vector>
+#include <functional>
 
 enum MemoryType {
   kMemoryTypeReserved = 0,
@@ -37,12 +39,17 @@ struct MemoryRegion {
   char name[20];
 };
 
-struct KvmSlot {
+struct MemorySlot {
   uint64_t begin;
   uint64_t end;
   uint32_t slot;
   uint64_t hva;
   MemoryRegion* region;
+};
+
+typedef std::function<void (const MemorySlot* slot, bool unmap)> MemoryListenerCallback;
+struct MemoryListener {
+  MemoryListenerCallback callback;
 };
 
 class Machine;
@@ -57,6 +64,9 @@ class MemoryManager {
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
   uint64_t HostToGuestAddress(void* host);
+  std::vector<const MemorySlot*> GetMemoryFlatView();
+  const MemoryListener* RegisterMemoryListener(MemoryListenerCallback callback);
+  void UnregisterMemoryListener(const MemoryListener** plistener);
 
   const std::set<MemoryRegion*>& regions() const { return regions_; }
 
@@ -65,9 +75,10 @@ class MemoryManager {
   void AddMemoryRegion(MemoryRegion* region);
 
   const Machine* machine_;
-  std::set<MemoryRegion*> regions_;
-  std::map<uint64_t, KvmSlot*> kvm_slots_;
   void* ram_host_;
+  std::set<MemoryRegion*> regions_;
+  std::map<uint64_t, MemorySlot*> kvm_slots_;
+  std::set<const MemoryListener*> listeners_;
 };
 
 #endif // _MVISOR_MM_H

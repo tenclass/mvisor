@@ -30,8 +30,8 @@
 
 struct MemoryRegion;
 struct IoHandler {
-  IoResource io_resource;
-  Device* device;
+  IoResource          io_resource;
+  Device*             device;
   const MemoryRegion* memory_region;
 };
 

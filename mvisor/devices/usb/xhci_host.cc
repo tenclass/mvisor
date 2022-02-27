@@ -27,6 +27,7 @@
 #include "device_manager.h"
 #include "xhci_internal.h"
 #include "usb.h"
+#include "logger.h"
 
 struct UsbPortState {
   uint        id;

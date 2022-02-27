@@ -17,6 +17,7 @@
  */
 
 #include "device.h"
+#include "logger.h"
 
 /* The speaker is part of PIT. We use KVM in-kernel PIT, the speaker could be
  * implemented or dummied in userspace.
