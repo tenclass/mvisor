@@ -126,7 +126,7 @@ class Qxl : public Vga {
     QXLModes* modes = (QXLModes*)(rom + 1);
     rom->magic = QXL_ROM_MAGIC;
     rom->id = 0;
-    rom->log_level = 1; /* Guest debug on */
+    rom->log_level = 0; /* Guest debug */
     rom->modes_offset = sizeof(QXLRom);
 
     rom->slot_gen_bits = MEMSLOT_GENERATION_BITS;

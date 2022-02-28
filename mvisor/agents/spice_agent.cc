@@ -43,12 +43,14 @@ class SpiceAgent : public Object, public SerialPortInterface,
   VDAgentMouseState         last_mouse_state_;
   steady_clock::time_point  last_send_mouse_time_;
   uint32_t                  width_, height_;
+  int                       num_monitors_;
 
  public:
   SpiceAgent() {
     strcpy(port_name_, "com.redhat.spice.0");
     pending_resize_event_ = false;
     last_send_mouse_time_ = steady_clock::now();
+    num_monitors_ = 2;
   }
 
   void OnMessage(uint8_t* data, size_t size) {
@@ -69,10 +71,29 @@ class SpiceAgent : public Object, public SerialPortInterface,
     writable_ = true;
   }
 
+  void SendMonitorConfig() {
+    size_t buffer_size = sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig) * num_monitors_;
+    uint8_t buffer[buffer_size] = { 0 };
+    auto config = (VDAgentMonitorsConfig*)buffer;
+    config->num_of_monitors = num_monitors_;
+    config->flags = VD_AGENT_CONFIG_MONITORS_FLAG_PHYSICAL_SIZE;
+  
+    for (int i = 0; i < num_monitors_; i++) {
+      auto &mon = config->monitors[i];
+      mon.depth = 32;
+      mon.width = 1024;
+      mon.height = 768;
+    }
+    SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, buffer, buffer_size);
+  }
+
   void HandleAgentMessage(VDAgentMessage* message) {
     switch (message->type)
     {
     case VD_AGENT_ANNOUNCE_CAPABILITIES: {
+      /* control the initial resolution when OS started */
+      // SendMonitorConfig();
+
       /* ui effects & color depth */
       uint8_t display_config[8] = { 0 };
       SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, display_config, sizeof(display_config));
@@ -85,9 +106,14 @@ class SpiceAgent : public Object, public SerialPortInterface,
       }
       break;
     }
-    case VD_AGENT_REPLY:
+    case VD_AGENT_REPLY: {
       /* Handle reply of monitor config and display config */ 
+      auto reply = (VDAgentReply*)message->data;
+      if (reply->error != VD_AGENT_SUCCESS) {
+        MV_LOG("agent reply type=%u error=%u", reply->type, reply->error);
+      }
       break;
+    }
     default:
       MV_LOG("Unhandled agent message type=0x%x", message->type);
       DumpHex(message, sizeof(*message) + message->size);
@@ -125,9 +151,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
   }
 
   virtual bool InputAcceptable() {
-    return false;
-    // FIXME: pointer not working when dual monitors
-    // return ready_;
+    return ready_;
   }
 
   virtual void QueuePointerEvent(PointerEvent event) {
