@@ -33,6 +33,7 @@ VfioPci::VfioPci() {
   devfn_ = PCI_MAKE_DEVFN(7, 0);
   for (auto &interrupt : interrupts_) {
     interrupt.event_fd = -1;
+    interrupt.gsi = -1;
   }
 }
 
@@ -52,7 +53,6 @@ void VfioPci::Connect() {
   SetupVfioContainer();
   SetupVfioDevice();
   SetupPciConfiguration();
-  SetupPciInterrupts();
   SetupGfxPlane();
   SetupDmaMaps();
 }
@@ -63,8 +63,11 @@ void VfioPci::Disconnect() {
     mm->UnregisterMemoryListener(&memory_listener_);
   }
   for (auto &interrupt : interrupts_) {
+    if (interrupt.gsi > 0) {
+      manager_->UpdateMsiRoute(interrupt.gsi, 0, 0, -1);
+    }
     if (interrupt.event_fd > 0) {
-      manager_->io()->StopPolling(interrupt.event_fd);
+      // manager_->io()->StopPolling(interrupt.event_fd);
       safe_close(&interrupt.event_fd);
     }
   }
@@ -99,7 +102,6 @@ void VfioPci::SetupPciConfiguration() {
   /* Multifunction is not supported yet */
   pci_header_.header_type &= ~PCI_MULTI_FUNCTION;
   MV_ASSERT(pci_header_.header_type == PCI_HEADER_TYPE_NORMAL);
-  pci_header_.class_code = 0x030200;
 
   /* Setup bars */
   for (uint8_t i = 0; i < VFIO_PCI_ROM_REGION_INDEX; i++) {
@@ -141,6 +143,7 @@ void VfioPci::SetupPciConfiguration() {
         MV_PANIC("FIXME: not implemented vfio msix");
         break;
       case PCI_CAP_ID_VNDR:
+        /* ignore vendor specific data */
         break;
       default:
         MV_LOG("unhandled capability=0x%x", cap->type);
@@ -469,34 +472,38 @@ void VfioPci::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_
   PciDevice::Read(ir, offset, data, size);
 }
 
-void VfioPci::SetupPciInterrupts() {
+void VfioPci::UpdateMsiRoutes() {
+  /* FIXME: only 64bit MSI is implemented now */
   MV_ASSERT(!msi_config_.is_msix);
   MV_ASSERT(msi_config_.is_64bit);
-  uint nr_vectors = 1 << ((msi_config_.msi64->control & PCI_MSI_FLAGS_QSIZE) >> 4);
-  MV_ASSERT(nr_vectors == 1);
 
-  /* FIXME: should use irq fd */
-  for (uint vector = 0; vector < nr_vectors; vector++) {
-    auto &interrupt = interrupts_[vector];
-    interrupt.event_fd = eventfd(0, 0);
-    MV_ASSERT(interrupt.event_fd != -1);
-    manager_->io()->StartPolling(interrupt.event_fd, EPOLLIN, [this, vector](auto events) {
-      auto &interrupt = interrupts_[vector];
-      uint64_t tmp;
-      read(interrupt.event_fd, &tmp, sizeof(tmp));
-      SignalMsi(vector);
-    });
-  }
-}
-
-void VfioPci::UpdateMsiRoutes() {
   msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
   uint nr_vectors = 1 << ((msi_config_.msi64->control & PCI_MSI_FLAGS_QSIZE) >> 4);
+
+  /* FIXME: nr_vectors > 1 not tested yet */
   MV_ASSERT(nr_vectors == 1);
 
   for (uint vector = 0; vector < nr_vectors; vector++) {
     auto &interrupt = interrupts_[vector];
-    int event_fd = msi_config_.enabled ? interrupt.event_fd : -1;
+    auto msi = msi_config_.msi64;
+    if (interrupt.event_fd == -1) {
+      interrupt.event_fd = eventfd(0, 0);
+    }
+    auto address = ((uint64_t)msi->address1 << 32) | msi->address0;
+
+    if (msi_config_.enabled) {
+      if (interrupt.gsi == -1) {
+        interrupt.gsi = manager_->AddMsiRoute(address, msi->data, interrupt.event_fd);
+      } else {
+        manager_->UpdateMsiRoute(interrupt.gsi, address, msi->data, interrupt.event_fd);
+      }
+    } else {
+      if (interrupt.gsi != -1) {
+        manager_->UpdateMsiRoute(interrupt.gsi, 0, 0, interrupt.event_fd);
+        interrupt.gsi = -1;
+      }
+    }
+  
     uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int)];
     auto irq_set = (vfio_irq_set*)buffer;
     irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
@@ -504,6 +511,7 @@ void VfioPci::UpdateMsiRoutes() {
     irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
     irq_set->start = vector;
     irq_set->count = 1;
+    int event_fd = msi_config_.enabled ? interrupt.event_fd : -1;
     memcpy(irq_set->data, &event_fd, sizeof(int));
 
     auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);

@@ -46,6 +46,7 @@ struct VfioRegion {
 
 struct VfioInterrupt {
   int       event_fd;
+  int       gsi;
 };
 
 class VfioPci : public PciDevice {

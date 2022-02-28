@@ -23,6 +23,7 @@
 #include <string>
 #include <deque>
 #include <mutex>
+#include <vector>
 #include <thread>
 #include "pci_device.h"
 #include "device.h"
@@ -67,10 +68,8 @@ class DeviceManager {
   void UnregisterIoHandler(Device* device, const IoResource* resource);
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
-  void RegisterIoEvent(Device* device, int fd, uint32_t events, IoCallback callback);
   void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   void UnregisterIoEvent(IoEvent* event);
-  void UnregisterIoEvent(Device* device, int fd);
 
   void PrintDevices();
   Device* LookupDeviceByName(const std::string name);
@@ -82,12 +81,19 @@ class DeviceManager {
 
   void* TranslateGuestMemory(uint64_t gpa);
   
+  /* IRQ / MSIs all are GSIs */
   void SetIrq(uint32_t irq, uint32_t level);
   void SignalMsi(uint64_t address, uint32_t data);
+  int AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd = -1);
+  void UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd = -1);
 
   inline Machine* machine() { return machine_; }
   inline Device* root() { return root_; }
   IoThread* io();
+
+ private:
+  void SetupGsiRoutingTable();
+  void UpdateGsiRoutingTable();
 
  private:
   Machine*                machine_;
@@ -97,6 +103,8 @@ class DeviceManager {
   std::deque<IoHandler*>  pio_handlers_;
   std::set<IoEvent*>      ioevents_;
   std::recursive_mutex    mutex_;
+  std::vector<kvm_irq_routing_entry>  gsi_routing_table_;
+  int                     next_gsi_ = 0;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

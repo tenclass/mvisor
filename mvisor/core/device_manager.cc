@@ -46,6 +46,10 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
   machine_(machine), root_(root)
 {
   root_->manager_ = this;
+  
+  /* Initialize GSI routing table */
+  SetupGsiRoutingTable();
+
   /* Call Connect() on all devices and do the initialization
    * 1. reset device status
    * 2. register IO handlers
@@ -377,15 +381,133 @@ void DeviceManager::SetIrq(uint32_t irq, uint32_t level) {
   }
 }
 
+/* It seems we can signal MSI without seting up routing table */
 void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
   struct kvm_msi msi = {
     .address_lo = (uint32_t)(address),
     .address_hi = (uint32_t)(address >> 32),
     .data = data
   };
-  int ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
+  auto ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
   if (ret != 1) {
     MV_PANIC("KVM_SIGNAL_MSI ret=%d", ret);
   }
 }
 
+/* Since we cannot read routing table from KVM, we keep a copy and update to KVM if changed */
+void DeviceManager::UpdateGsiRoutingTable() {
+  uint8_t buffer[sizeof(kvm_irq_routing) + sizeof(kvm_irq_routing_entry) * gsi_routing_table_.size()];
+  auto table = (kvm_irq_routing*)buffer;
+
+  mutex_.lock();
+  table->nr = gsi_routing_table_.size();
+  table->flags = 0;
+  std::copy(gsi_routing_table_.begin(), gsi_routing_table_.end(), table->entries);
+  mutex_.unlock();
+
+  auto ret = ioctl(machine_->vm_fd_, KVM_SET_GSI_ROUTING, table);
+  if (ret) {
+    MV_PANIC("KVM_SET_GSI_ROUTING ret=%d", ret);
+  }
+}
+
+/* Although KVM has initialized GSI routing table, we still need to do it again */
+void DeviceManager::SetupGsiRoutingTable() {
+  auto add_irq_routing = [this](uint gsi, uint chip, uint pin) {
+    kvm_irq_routing_entry entry = {
+      .gsi = gsi,
+      .type = KVM_IRQ_ROUTING_IRQCHIP,
+      .u = { .irqchip = { .irqchip = chip, .pin = pin } }
+    };
+    gsi_routing_table_.push_back(entry);
+  };
+
+  /* 8259A Master */
+  for (uint i = 0; i < 8; i++) {
+    if (i != 2) {
+      add_irq_routing(i, 0, i);
+    }
+  }
+
+  /* 8259A Slave */
+  for (uint i = 0; i < 8; i++) {
+    add_irq_routing(8 + i, 1, i);
+  }
+
+  /* IOAPIC */
+  for (uint i = 0; i < 24; i++) {
+    if (i == 0) {
+      add_irq_routing(i, 2, 2);
+    } else if (i != 2) {
+      add_irq_routing(i, 2, i);
+    }
+  }
+
+  next_gsi_ = 24;
+  UpdateGsiRoutingTable();
+}
+
+/* This GSI is currently used with IRQ fd */
+int DeviceManager::AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd) {
+  auto gsi = next_gsi_++;
+
+  kvm_irq_routing_entry entry = {
+    .gsi = (uint)gsi,
+    .type = KVM_IRQ_ROUTING_MSI,
+    .u = { .msi = {
+      .address_lo = (uint32_t)address,
+      .address_hi = (uint32_t)(address >> 32),
+      .data = data
+    } }
+  };
+
+  mutex_.lock();
+  gsi_routing_table_.push_back(entry);
+  mutex_.unlock();
+
+  UpdateGsiRoutingTable();
+  if (trigger_fd != -1) {
+    kvm_irqfd irqfd = { .fd = (uint)trigger_fd, .gsi = (uint)gsi };
+    if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
+      MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
+    }
+  }
+  return gsi;
+}
+
+/* Setting the address to 0 to remove a MSI route */
+void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd) {
+  mutex_.lock();
+  auto it = std::find_if(gsi_routing_table_.begin(), gsi_routing_table_.end(), [gsi](auto &entry) {
+    return entry.gsi == (uint)gsi;
+  });
+
+  if (it == gsi_routing_table_.end()) {
+    MV_PANIC("not found gsi=%d", gsi);
+  } else if (address == 0) {
+    /* deassign the irqfd and remove from table */
+    if (trigger_fd != -1) {
+      kvm_irqfd irqfd = { .fd = (uint)trigger_fd, .gsi = (uint)gsi, .flags = KVM_IRQFD_FLAG_DEASSIGN };
+      if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
+        MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
+      }
+    }
+    gsi_routing_table_.erase(it);
+  } else {
+    /* update entry and irqfd */
+    it->u.msi = (kvm_irq_routing_msi) {
+      .address_lo = (uint32_t)address,
+      .address_hi = (uint32_t)(address >> 32),
+      .data = data
+    };
+    if (trigger_fd != -1) {
+      kvm_irqfd irqfd = { .fd = (uint)trigger_fd, .gsi = (uint)gsi };
+      if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
+        MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
+      }
+    }
+  }
+  mutex_.unlock();
+  
+  UpdateGsiRoutingTable();
+}
