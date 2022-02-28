@@ -29,19 +29,19 @@ class PcSpeaker : public Device {
 
  public:
   PcSpeaker () {
-    AddIoResource(kIoResourceTypePio, 0x61, 1, "PcSpeaker Controller");
+    AddIoResource(kIoResourceTypePio, 0x61, 1, "PC Speaker");
   }
 
   void Reset() {
     state_ = 0;
   }
 
-  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
     /* FIXME: this might be incorrect */
     data[0] = state_;
   }
 
-  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
     state_ = data[0];
     MV_LOG("speaker %s, state=0x%x", (state_ & 1) ? "enabled" : "disabled", state_);
   }

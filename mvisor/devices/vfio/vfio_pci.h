@@ -58,8 +58,8 @@ class VfioPci : public PciDevice {
   virtual bool ActivatePciBar(uint8_t index);
   virtual bool DeactivatePciBar(uint8_t index);
   
-  virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
-  virtual void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
 
@@ -74,8 +74,8 @@ class VfioPci : public PciDevice {
   void UpdateMsiRoutes();
   void MapDmaPages(const MemorySlot* slot);
   void UnmapDmaPages(const MemorySlot* slot);
-  bool MapBarRegion(uint8_t index);
-  bool UnmapBarRegion(uint8_t index);
+  void MapBarRegion(uint8_t index);
+  void UnmapBarRegion(uint8_t index);
   ssize_t ReadRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length);
   ssize_t WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length);
 

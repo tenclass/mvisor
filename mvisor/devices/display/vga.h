@@ -93,8 +93,8 @@ class Vga : public PciDevice, public DisplayInterface {
   virtual void Reset();
   virtual void Connect();
   virtual void Disconnect();
-  virtual void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
-  virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
 
   virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp);
 

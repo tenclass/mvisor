@@ -98,18 +98,18 @@ class Ich9Lpc : public PciDevice {
     uint8_t acpi_control = *(uint8_t*)(pci_header_.data + ICH9_LPC_ACPI_CTRL);
     if (acpi_control & ICH9_LPC_ACPI_CTRL_ACPI_EN) {
       pm_io_base &= ICH9_LPC_PMBASE_BASE_ADDRESS_MASK;
-      AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "PM IO");
+      AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "LPC PM");
     } else {
-      RemoveIoResource(kIoResourceTypePio, "PM IO");
+      RemoveIoResource(kIoResourceTypePio, "LPC PM");
     }
   }
 
   void UpdateRootComplexRegisterBLock() {
     uint32_t rcrb = *(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA);
     if (rcrb & ICH9_LPC_RCBA_EN) {
-      AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "RCBA");
+      AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "LPC RCRB");
     } else {
-      RemoveIoResource(kIoResourceTypeMmio, "RCBA");
+      RemoveIoResource(kIoResourceTypeMmio, "LPC RCRB");
     }
   }
 
@@ -126,7 +126,7 @@ class Ich9Lpc : public PciDevice {
     pci_header_.subsys_vendor_id = 0x1af4;
     pci_header_.subsys_id = 0x1100;
 
-    AddIoResource(kIoResourceTypePio, 0xB2, 2, "APM IO");
+    AddIoResource(kIoResourceTypePio, 0xB2, 2, "LPC APM");
   }
 
   void Reset() {
@@ -164,8 +164,8 @@ class Ich9Lpc : public PciDevice {
     }
   }
 
-  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir.base == 0xB2) { // APM IO
+  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (ir->base == 0xB2) { // APM IO
       if (offset == 0) {
         *data = apm_control_;
       } else {
@@ -199,12 +199,12 @@ class Ich9Lpc : public PciDevice {
         MV_PANIC("not supported");
       }
     } else {
-      MV_PANIC("not supported read at 0x%x", ir.base + offset);
+      MV_PANIC("not supported read at 0x%x", ir->base + offset);
     }
   }
 
-  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir.base == 0xB2) { // APM IO
+  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (ir->base == 0xB2) { // APM IO
       if (offset == 0) {
         apm_control_ = *data;
         if (apm_control_ == 2) { // Enable ACPI
@@ -245,7 +245,7 @@ class Ich9Lpc : public PciDevice {
       }
     } else {
       MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-        name_, ir.base, offset, size, *(uint64_t*)data);
+        name_, ir->base, offset, size, *(uint64_t*)data);
     }
   }
 

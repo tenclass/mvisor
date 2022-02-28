@@ -174,10 +174,7 @@ void VfioPci::MapDmaPages(const MemorySlot* slot) {
     .size = slot->end - slot->begin
   };
   if (ioctl(container_fd_, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
-    MV_PANIC("failed to map 0x%lx-0x%lx", slot->begin, slot->end);
-  }
-  if (debug_) {
-    MV_LOG("map dma 0x%lx-0x%lx", slot->begin, slot->end);
+    MV_PANIC("failed to map vaddr=0x%lx size=0x%lx", dma_map.iova, dma_map.size);
   }
 }
 
@@ -187,9 +184,8 @@ void VfioPci::UnmapDmaPages(const MemorySlot* slot) {
     .iova = slot->begin,
     .size = slot->end - slot->begin
   };
-  ioctl(container_fd_, VFIO_IOMMU_UNMAP_DMA, &dma_ummap);
-  if (debug_) {
-    MV_LOG("unmap dma 0x%lx-0x%lx", slot->begin, slot->end);
+  if (ioctl(container_fd_, VFIO_IOMMU_UNMAP_DMA, &dma_ummap) < 0) {
+    MV_PANIC("failed to unmap vaddr=0x%lx size=0x%lx", dma_ummap.iova, dma_ummap.size);
   }
 }
 
@@ -198,14 +194,14 @@ void VfioPci::SetupDmaMaps() {
 
   /* Map all current slots */
   for (auto slot : mm->GetMemoryFlatView()) {
-    if (slot->region->type == kMemoryTypeRam) {
+    if (slot->type == kMemoryTypeRam) {
       MapDmaPages(slot);
     }
   }
 
   /* Add memory listener to keep DMA maps synchronized */
   memory_listener_ = mm->RegisterMemoryListener([this](auto slot, bool unmap) {
-    if (slot->region->type == kMemoryTypeRam) {
+    if (slot->type == kMemoryTypeRam) {
       if (unmap) {
         UnmapDmaPages(slot);
       } else {
@@ -374,7 +370,7 @@ void VfioPci::SetupVfioDevice() {
   }
 }
 
-bool VfioPci::MapBarRegion(uint8_t index) {
+void VfioPci::MapBarRegion(uint8_t index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   int protect = 0;
@@ -384,22 +380,21 @@ bool VfioPci::MapBarRegion(uint8_t index) {
     protect |= PROT_WRITE;
   if (region.mmap_areas.empty()) {
     bar.host_memory = mmap(nullptr, region.size, protect, MAP_SHARED, device_fd_, region.offset);
-    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, bar.host_memory, "vfio-bar-ram");
+    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, bar.host_memory, "VFIO BAR RAM");
   } else {
     /* The MMIO region is overlapped by the mmap areas */
-    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "vfio-bar-mmio");
+    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "VFIO BAR MMIO");
     for (auto &area : region.mmap_areas) {
       area.mmap = mmap(nullptr, area.size, protect, MAP_SHARED, device_fd_, region.offset + area.offset);
       if (area.mmap == MAP_FAILED) {
         MV_PANIC("failed to map region %d, area offset=0x%lx size=0x%lx", index, area.offset, area.size);
       }
-      AddIoResource(kIoResourceTypeRam, bar.address + area.offset, area.size, area.mmap, "vfio-bar-ram");
+      AddIoResource(kIoResourceTypeRam, bar.address + area.offset, area.size, area.mmap, "VFIO BAR RAM");
     }
   }
-  return true;
 }
 
-bool VfioPci::UnmapBarRegion(uint8_t index) {
+void VfioPci::UnmapBarRegion(uint8_t index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.mmap_areas.empty()) {
@@ -407,27 +402,36 @@ bool VfioPci::UnmapBarRegion(uint8_t index) {
     munmap(bar.host_memory, region.size);
   } else {
     for (auto &area : region.mmap_areas) {
-      RemoveIoResource(kIoResourceTypeRam, region.offset + area.offset);
+      RemoveIoResource(kIoResourceTypeRam, bar.address + area.offset);
       munmap(area.mmap, area.size);
     }
     RemoveIoResource(kIoResourceTypeMmio, bar.address);
   }
-  return true;
 }
 
 bool VfioPci::ActivatePciBar(uint8_t index) {
+  auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-    return MapBarRegion(index);
+    MV_ASSERT(!bar.active);
+    MV_LOG("ActivatePciBar %d 0x%lx", index, bar.address);
+    MapBarRegion(index);
+    bar.active = true;
+    return true;
   }
 
   return PciDevice::ActivatePciBar(index);
 }
 
 bool VfioPci::DeactivatePciBar(uint8_t index) {
+  auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-    return UnmapBarRegion(index);
+    MV_ASSERT(bar.active);
+    MV_LOG("DeactivatePciBar %d 0x%lx", index, bar.address);
+    UnmapBarRegion(index);
+    bar.active = false;
+    return true;
   }
   return PciDevice::DeactivatePciBar(index);
 }
@@ -445,9 +449,9 @@ ssize_t VfioPci::WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint
   return pwrite(device_fd_, data, length, region.offset + offset);
 }
 
-void VfioPci::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void VfioPci::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
-    if (pci_bars_[i].address == ir.base) {
+    if (pci_bars_[i].address == ir->base) {
       WriteRegion(i, offset, data, size);
       return;
     }
@@ -455,9 +459,9 @@ void VfioPci::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32
   PciDevice::Write(ir, offset, data, size);
 }
 
-void VfioPci::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void VfioPci::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
-    if (pci_bars_[i].address == ir.base) {
+    if (pci_bars_[i].address == ir->base) {
       ReadRegion(i, offset, data, size);
       return;
     }

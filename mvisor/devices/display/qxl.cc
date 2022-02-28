@@ -179,8 +179,8 @@ class Qxl : public Vga {
     ring->items[prod].el = 0;
   }
 
-  virtual void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir.base == pci_bars_[3].address) {
+  virtual void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (ir->base == pci_bars_[3].address) {
       switch (offset)
       {
       case QXL_IO_NOTIFY_CMD:

@@ -80,79 +80,78 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, void* host_memory, const char* name) {
-  IoResource io_resource = {
+  auto ir = new IoResource {
     .type = type,
     .base = base,
     .length = length,
     .name = name,
     .host_memory = host_memory
   };
-  io_resources_.push_back(io_resource);
+  io_resources_.push_back(ir);
   if (connected_) {
-    SetIoResourceEnabled(io_resource, true);
+    SetIoResourceEnabled(ir, true);
   }
 }
 
 void Device::RemoveIoResource(IoResourceType type, const char* name) {
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
-    if (it->type == type &&
-        (it->name == name ||
-          (name && it->name && strcmp(it->name, name) == 0)
-        )
+    auto ir = *it;
+    if (ir->type == type &&
+        (ir->name == name || (name && ir->name && strcmp(ir->name, name) == 0))
       ) {
       if (connected_) {
-        SetIoResourceEnabled(*it, false);
+        SetIoResourceEnabled(ir, false);
       }
       io_resources_.erase(it);
-      break;
+      return;
     }
   }
 }
 
 void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
-    if (it->type == type && it->base == base) {
+    auto ir = *it;
+    if (ir->type == type && ir->base == base) {
       if (connected_) {
-        SetIoResourceEnabled(*it, false);
+        SetIoResourceEnabled(ir, false);
       }
       io_resources_.erase(it);
-      break;
+      return;
     }
   }
+  MV_PANIC("not found type=%d base=0x%lx", type, base);
 }
 
-void Device::SetIoResourceEnabled(IoResource& ir, bool enabled) {
+void Device::SetIoResourceEnabled(IoResource* ir, bool enabled) {
   if (enabled) {
-    MV_ASSERT(!ir.enabled);
-    if (ir.type == kIoResourceTypeRam) {
-      MV_ASSERT(ir.host_memory);
+    MV_ASSERT(!ir->enabled);
+    if (ir->type == kIoResourceTypeRam) {
+      MV_ASSERT(ir->host_memory);
       auto mm = manager_->machine()->memory_manager();
-      ir.mapped_region = mm->Map(ir.base, ir.length, ir.host_memory, kMemoryTypeRam, ir.name);
+      ir->mapped_region = mm->Map(ir->base, ir->length, ir->host_memory, kMemoryTypeRam, ir->name);
     } else {
       manager_->RegisterIoHandler(this, ir);
     }
-    ir.enabled = true;
+    ir->enabled = true;
   } else {
-    if (!ir.enabled) {
-      return;
-    }
-    if (ir.type == kIoResourceTypeRam) {
-      MV_ASSERT(ir.mapped_region);
+    MV_ASSERT(ir->enabled);
+    if (ir->type == kIoResourceTypeRam) {
+      MV_ASSERT(ir->mapped_region);
       auto mm = manager_->machine()->memory_manager();
-      mm->Unmap(&ir.mapped_region);
+      mm->Unmap(&ir->mapped_region);
     } else {
       manager_->UnregisterIoHandler(this, ir);
     }
-    ir.enabled = false;
+    ir->enabled = false;
   }
 }
 
-void Device::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void Device::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d",
-    name_, ir.base, offset, size);
+    name_, ir->base, offset, size);
 }
 
-void Device::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void Device::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-    name_, ir.base, offset, size, *(uint64_t*)data);
+    name_, ir->base, offset, size, *(uint64_t*)data);
 }

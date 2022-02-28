@@ -123,8 +123,8 @@ void Machine::LoadBiosFile() {
   bios_data_ = valloc(bios_size_);
   memcpy(bios_data_, bios_backup_, bios_size_);
   // Map BIOS file to memory
-  memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
-  memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "seabios");
+  memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
+  memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
 }
 
 
@@ -151,7 +151,7 @@ void Machine::CreateArchRelated() {
   }
   
   /* Map these addresses as reserved so the guest never touch it */
-  memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved, "ept+tss");
+  memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved, "EPT+TSS");
 
   // Use Kvm in-kernel IRQChip
   if (ioctl(vm_fd_, KVM_CREATE_IRQCHIP) < 0) {

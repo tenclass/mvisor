@@ -30,7 +30,7 @@
 
 struct MemoryRegion;
 struct IoHandler {
-  IoResource          io_resource;
+  const IoResource*   resource;
   Device*             device;
   const MemoryRegion* memory_region;
 };
@@ -63,8 +63,8 @@ class DeviceManager {
   void UnregisterDevice(Device* device);
   void ResetDevices();
 
-  void RegisterIoHandler(Device* device, const IoResource& io_resource);
-  void UnregisterIoHandler(Device* device, const IoResource& io_resource);
+  void RegisterIoHandler(Device* device, const IoResource* resource);
+  void UnregisterIoHandler(Device* device, const IoResource* resource);
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
   void RegisterIoEvent(Device* device, int fd, uint32_t events, IoCallback callback);

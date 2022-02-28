@@ -74,16 +74,16 @@ void DeviceManager::ResetDevices() {
 void DeviceManager::PrintDevices() {
   for (auto device : registered_devices_) {
     MV_LOG("Device: %s", device->name());
-    for (auto &ir : device->io_resources()) {
-      switch (ir.type)
+    for (auto ir : device->io_resources()) {
+      switch (ir->type)
       {
       case kIoResourceTypePio:
-        MV_LOG("\tIO port 0x%lx-0x%lx", ir.base, ir.base + ir.length - 1);
+        MV_LOG("\tIO   port    0x%lx-0x%lx %d", ir->base, ir->base + ir->length - 1, ir->enabled);
         break;
       case kIoResourceTypeMmio:
-        MV_LOG("\tMMIO address 0x%016lx-0x016%lx", ir.base, ir.base + ir.length - 1);
+        MV_LOG("\tMMIO address 0x%016lx-0x016%lx %d", ir->base, ir->base + ir->length - 1, ir->enabled);
       case kIoResourceTypeRam:
-        MV_LOG("\tRAM address 0x%016lx-0x016%lx", ir.base, ir.base + ir.length - 1);
+        MV_LOG("\tRAM  address 0x%016lx-0x016%lx %d", ir->base, ir->base + ir->length - 1, ir->enabled);
         break;
       }
     }
@@ -128,39 +128,39 @@ void DeviceManager::UnregisterDevice(Device* device) {
 }
 
 
-void DeviceManager::RegisterIoHandler(Device* device, const IoResource& io_resource) {
+void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  if (io_resource.type == kIoResourceTypePio) {
+  if (resource->type == kIoResourceTypePio) {
     pio_handlers_.push_back(new IoHandler {
-      .io_resource = io_resource,
+      .resource = resource,
       .device = device
     });
-  } else if (io_resource.type == kIoResourceTypeMmio) {
+  } else if (resource->type == kIoResourceTypeMmio) {
     // Map the memory to type Device. Accessing these regions will cause MMIO access fault
-    const MemoryRegion* region = machine_->memory_manager()->Map(io_resource.base, io_resource.length,
-      nullptr, kMemoryTypeDevice, io_resource.name);
+    const MemoryRegion* region = machine_->memory_manager()->Map(resource->base, resource->length,
+      nullptr, kMemoryTypeDevice, resource->name);
 
     mmio_handlers_.push_back(new IoHandler {
-      .io_resource = io_resource,
+      .resource = resource,
       .device = device,
       .memory_region = region
     });
   }
 }
 
-void DeviceManager::UnregisterIoHandler(Device* device, const IoResource& io_resource) {
+void DeviceManager::UnregisterIoHandler(Device* device, const IoResource* resource) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  if (io_resource.type == kIoResourceTypePio) {
+  if (resource->type == kIoResourceTypePio) {
     for (auto it = pio_handlers_.begin(); it != pio_handlers_.end(); it++) {
-      if ((*it)->device == device && (*it)->io_resource.base == io_resource.base) {
+      if ((*it)->device == device && (*it)->resource->base == resource->base) {
         delete *it;
         pio_handlers_.erase(it);
         break;
       }
     }
-  } else if (io_resource.type == kIoResourceTypeMmio) {
+  } else if (resource->type == kIoResourceTypeMmio) {
     for (auto it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++) {
-      if ((*it)->device == device && (*it)->io_resource.base == io_resource.base) {
+      if ((*it)->device == device && (*it)->resource->base == resource->base) {
         delete *it;
         mmio_handlers_.erase(it);
         break;
@@ -264,8 +264,8 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
 
   mutex_.lock();
   for (it = pio_handlers_.begin(); it != pio_handlers_.end(); it++, it_count++) {
-    auto &resource = (*it)->io_resource;
-    if (port >= resource.base && port < resource.base + resource.length) {
+    auto resource = (*it)->resource;
+    if (port >= resource->base && port < resource->base + resource->length) {
       Device* device = (*it)->device;
       if (it_count >= 3) {
         // Move to the front for faster access next time
@@ -279,9 +279,9 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       uint8_t* ptr = data;
       for (uint32_t i = 0; i < count; i++) {
         if (is_write) {
-          device->Write(resource, port - resource.base, ptr, size);
+          device->Write(resource, port - resource->base, ptr, size);
         } else {
-          device->Read(resource, port - resource.base, ptr, size);
+          device->Read(resource, port - resource->base, ptr, size);
         }
         ptr += size;
       }
@@ -320,8 +320,8 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
 
   mutex_.lock();
   for (it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++, it_count++) {
-    auto &resource = (*it)->io_resource;
-    if (base >= resource.base && base < resource.base + resource.length) {
+    auto resource = (*it)->resource;
+    if (base >= resource->base && base < resource->base + resource->length) {
       Device* device = (*it)->device;
 
       if (it_count >= 3) {
@@ -334,9 +334,9 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
 
       auto start_time = std::chrono::steady_clock::now();
       if (is_write) {
-        device->Write(resource, base - resource.base, data, size);
+        device->Write(resource, base - resource->base, data, size);
       } else {
-        device->Read(resource, base - resource.base, data, size);
+        device->Read(resource, base - resource->base, data, size);
       }
 
       if (machine_->debug()) {

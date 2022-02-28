@@ -121,8 +121,8 @@ void AhciHost::CheckIrq() {
   }
 }
 
-void AhciHost::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_ASSERT(size == 4 && ir.type == kIoResourceTypeMmio);
+void AhciHost::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  MV_ASSERT(size == 4 && ir->type == kIoResourceTypeMmio);
 
   if (offset >= 0x100) {
     int port = (offset - 0x100) >> 7;
@@ -134,8 +134,8 @@ void AhciHost::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32
   }
 }
 
-void AhciHost::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_ASSERT(size == 4 && ir.type == kIoResourceTypeMmio);
+void AhciHost::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  MV_ASSERT(size == 4 && ir->type == kIoResourceTypeMmio);
   uint32_t value = *(uint32_t*)data;
   
   if (offset >= 0x100) {
@@ -158,7 +158,7 @@ void AhciHost::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
       break;
     default:
       MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-        name_, ir.base, offset, size, value);
+        name_, ir->base, offset, size, value);
     }
   }
 }

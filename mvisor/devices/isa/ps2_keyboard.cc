@@ -395,11 +395,11 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
     AddIoResource(kIoResourceTypePio, 0x64, 1, "PS2 Command");
   }
 
-  void Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
     std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
 
-    switch (ir.base)
+    switch (ir->base)
     {
     case 0x64: // command port
       status_ &= ~STATUS_TIMEOUT;
@@ -414,21 +414,21 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
       break;
     }
     if (debug_) {
-      MV_LOG("read %x %x", ir.base, *data);
+      MV_LOG("read %x %x", ir->base, *data);
     }
   }
 
 
-  void Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
     std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
     if (debug_) {
-      MV_LOG("write %x %x", ir.base, *data);
+      MV_LOG("write %x %x", ir->base, *data);
     }
 
-    if (ir.base == 0x64) { // command port
+    if (ir->base == 0x64) { // command port
       WriteCommandPort(*data);
-    } else if (ir.base == 0x60) { // data port
+    } else if (ir->base == 0x60) { // data port
       WriteDataPort(*data);
     }
   }

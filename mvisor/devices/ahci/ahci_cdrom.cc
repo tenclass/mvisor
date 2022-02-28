@@ -84,7 +84,7 @@ AhciCdrom::AhciCdrom()
 
   drive_info_.world_wide_name = rand();
   sprintf(drive_info_.serial, "TC%05ld", drive_info_.world_wide_name);
-  sprintf(drive_info_.model, "NUWA DVD-ROM");
+  sprintf(drive_info_.model, "DVD-ROM");
   sprintf(drive_info_.version, "1.0");
 
   /* ATA command handlers */
@@ -323,7 +323,7 @@ void AhciCdrom::Atapi_Inquiry() {
   buf[5] = 0;    /* reserved */
   buf[6] = 0;    /* reserved */
   buf[7] = 0;    /* reserved */
-  padstr8(buf + 8, 8, "TENCLASS");
+  padstr8(buf + 8, 8, "Tenclass");
   padstr8(buf + 16, 16, drive_info_.model);
   padstr8(buf + 32, 4, drive_info_.version);
   io_.nbytes = size > 36 ? 36 : size;

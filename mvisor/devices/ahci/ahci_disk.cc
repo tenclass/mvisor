@@ -45,7 +45,7 @@ AhciDisk::AhciDisk() {
 
   drive_info_.world_wide_name = rand();
   sprintf(drive_info_.serial, "TC%05ld", drive_info_.world_wide_name);
-  sprintf(drive_info_.model, "TENCLASS HARDDISK");
+  sprintf(drive_info_.model, "Tenclass Disk");
   sprintf(drive_info_.version, "1.0");
 
   multiple_sectors_ = 16;

@@ -128,8 +128,8 @@ void PciDevice::SignalMsi(int vector) {
   }
 }
 
-void PciDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address &&
+void PciDevice::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (msi_config_.is_msix && ir->base == pci_bars_[msi_config_.msix_bar].address &&
     offset >= msi_config_.msix_space_offset &&
     offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
   ) {
@@ -141,8 +141,8 @@ void PciDevice::Read(const IoResource& ir, uint64_t offset, uint8_t* data, uint3
   }
 }
 
-void PciDevice::Write(const IoResource& ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && ir.base == pci_bars_[msi_config_.msix_bar].address &&
+void PciDevice::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (msi_config_.is_msix && ir->base == pci_bars_[msi_config_.msix_bar].address &&
     offset >= msi_config_.msix_space_offset &&
     offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
   ) {
@@ -266,14 +266,16 @@ void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
 /* Called when an bar is activate by guest BIOS or OS */
 bool PciDevice::ActivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
+  if (bar.active)
+    return true;
 
   if (bar.type == kIoResourceTypePio) {
-    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "pci-bar-io");
+    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "pci-bar-mmio");
+    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "PCI BAR MMIO");
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr);
-    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, bar.host_memory, "pci-bar-ram");
+    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, bar.host_memory, "PCI BAR RAM");
   }
   bar.active = true;
   return true;
@@ -282,6 +284,9 @@ bool PciDevice::ActivatePciBar(uint8_t index) {
 /* Release resources when resetting the bar address */
 bool PciDevice::DeactivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
+  if (!bar.active)
+    return true;
+
   if (bar.type == kIoResourceTypePio) {
     RemoveIoResource(kIoResourceTypePio, bar.address);
   } else if (bar.type == kIoResourceTypeMmio) {
