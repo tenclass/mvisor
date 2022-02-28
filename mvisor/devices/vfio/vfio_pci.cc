@@ -452,24 +452,24 @@ ssize_t VfioPci::WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint
   return pwrite(device_fd_, data, length, region.offset + offset);
 }
 
-void VfioPci::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
-    if (pci_bars_[i].address == ir->base) {
+    if (pci_bars_[i].address == resource->base) {
       WriteRegion(i, offset, data, size);
       return;
     }
   }
-  PciDevice::Write(ir, offset, data, size);
+  PciDevice::Write(resource, offset, data, size);
 }
 
-void VfioPci::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+void VfioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
-    if (pci_bars_[i].address == ir->base) {
+    if (pci_bars_[i].address == resource->base) {
       ReadRegion(i, offset, data, size);
       return;
     }
   }
-  PciDevice::Read(ir, offset, data, size);
+  PciDevice::Read(resource, offset, data, size);
 }
 
 void VfioPci::UpdateMsiRoutes() {

@@ -164,8 +164,8 @@ class Ich9Lpc : public PciDevice {
     }
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == 0xB2) { // APM IO
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == 0xB2) { // APM IO
       if (offset == 0) {
         *data = apm_control_;
       } else {
@@ -199,12 +199,12 @@ class Ich9Lpc : public PciDevice {
         MV_PANIC("not supported");
       }
     } else {
-      MV_PANIC("not supported read at 0x%x", ir->base + offset);
+      MV_PANIC("not supported read at 0x%x", resource->base + offset);
     }
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == 0xB2) { // APM IO
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == 0xB2) { // APM IO
       if (offset == 0) {
         apm_control_ = *data;
         if (apm_control_ == 2) { // Enable ACPI
@@ -245,7 +245,7 @@ class Ich9Lpc : public PciDevice {
       }
     } else {
       MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-        name_, ir->base, offset, size, *(uint64_t*)data);
+        name_, resource->base, offset, size, *(uint64_t*)data);
     }
   }
 

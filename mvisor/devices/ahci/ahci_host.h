@@ -51,8 +51,8 @@ class AhciHost : public PciDevice {
   ~AhciHost();
 
   void Connect();
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   void CheckIrq();
   void Reset();
 

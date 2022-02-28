@@ -1375,8 +1375,8 @@ class XhciHost : public PciDevice {
     });
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == pci_bars_[0].address && offset < 0x3000) {
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == pci_bars_[0].address && offset < 0x3000) {
       if (offset < capability_regs_.capability_length) {
         memcpy(data, (uint8_t*)&capability_regs_ + offset, size);
       } else if (offset < capability_regs_.capability_length + 0x400ULL) {
@@ -1392,12 +1392,12 @@ class XhciHost : public PciDevice {
       //   MV_LOG("Read offset=0x%lx size=%u data=0x%lx", offset, size, *(uint64_t*)data);
       // }
     } else {
-      PciDevice::Read(ir, offset, data, size);
+      PciDevice::Read(resource, offset, data, size);
     }
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == pci_bars_[0].address && offset < 0x3000) {
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == pci_bars_[0].address && offset < 0x3000) {
       std::lock_guard<std::mutex> lock(mutex_);
       // if (debug_) {
       //   MV_LOG("Write offset=0x%lx size=%u data=0x%lx", offset, size, *(uint64_t*)data);
@@ -1410,10 +1410,10 @@ class XhciHost : public PciDevice {
       } else if (offset < 0x2000) {
         WriteRuntimeRegs(offset - 0x1000, data, size);
       } else if (offset < 0x3000) {
-        WriteDoorbellRegs(ir->base + offset, offset - 0x2000, data, size);
+        WriteDoorbellRegs(resource->base + offset, offset - 0x2000, data, size);
       }
     } else {
-      PciDevice::Write(ir, offset, data, size);
+      PciDevice::Write(resource, offset, data, size);
     }
   }
 };

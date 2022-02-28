@@ -83,12 +83,12 @@ class PciHost : public PciDevice {
     }
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == MCH_CONFIG_ADDR) {
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == MCH_CONFIG_ADDR) {
       uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
       memcpy(pointer, data, size);
     
-    } else if (ir->base == MCH_CONFIG_DATA) {
+    } else if (resource->base == MCH_CONFIG_DATA) {
       MV_ASSERT(size <= 4);
       
       PciDevice* pci_device = manager_->LookupPciDevice(0, pci_config_address_.devfn);
@@ -100,10 +100,10 @@ class PciHost : public PciDevice {
         MV_LOG("failed to lookup pci devfn 0x%02x", pci_config_address_.devfn);
       }
     
-    } else if (pcie_xbar_base_ && ir->base == pcie_xbar_base_) {
-      uint8_t devfn = PCIE_MMCFG_DEVFN(ir->base + offset);
+    } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
+      uint8_t devfn = PCIE_MMCFG_DEVFN(resource->base + offset);
       PciDevice* pci_device = manager_->LookupPciDevice(0, devfn);
-      uint64_t address = PCIE_MMCFG_CONFOFFSET(ir->base + offset);
+      uint64_t address = PCIE_MMCFG_CONFOFFSET(resource->base + offset);
       if (pci_device) {
         pci_device->WritePciConfigSpace(address, data, size);
       } else {
@@ -112,16 +112,16 @@ class PciHost : public PciDevice {
     
     } else {
       MV_PANIC("not implemented base=0x%lx offset=0x%lx data=0x%x size=%x",
-        ir->base, offset, *(uint32_t*)data, size);
+        resource->base, offset, *(uint32_t*)data, size);
     }
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == MCH_CONFIG_ADDR) {
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == MCH_CONFIG_ADDR) {
       uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
       memcpy(data, pointer, size);
     
-    } else if (ir->base == MCH_CONFIG_DATA) {
+    } else if (resource->base == MCH_CONFIG_DATA) {
       if (size > 4)
         size = 4;
       
@@ -134,10 +134,10 @@ class PciHost : public PciDevice {
         memset(data, 0xff, size);
       }
     
-    } else if (pcie_xbar_base_ && ir->base == pcie_xbar_base_) {
-      uint8_t devfn = PCIE_MMCFG_DEVFN(ir->base + offset);
+    } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
+      uint8_t devfn = PCIE_MMCFG_DEVFN(resource->base + offset);
       PciDevice* pci_device = manager_->LookupPciDevice(0, devfn);
-      uint64_t address = PCIE_MMCFG_CONFOFFSET(ir->base + offset);
+      uint64_t address = PCIE_MMCFG_CONFOFFSET(resource->base + offset);
       if (pci_device) {
         pci_device->ReadPciConfigSpace(address, data, size);
       } else {
@@ -146,7 +146,7 @@ class PciHost : public PciDevice {
     
     } else {
       MV_PANIC("not implemented base=0x%lx offset=0x%lx data=0x%x size=%x",
-        ir->base, offset, *(uint32_t*)data, size);
+        resource->base, offset, *(uint32_t*)data, size);
     }
   }
 

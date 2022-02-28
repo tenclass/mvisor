@@ -330,8 +330,8 @@ void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size)
   }
 }
 
-void VirtioPci::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (ir->base == pci_bars_[4].address) {
+void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (resource->base == pci_bars_[4].address) {
     if (offset < 0x1000) { /* Common config */
       WriteCommonConfig(offset, data, size);
     } else if (offset < 0x2000) { /* ISR Status */
@@ -341,13 +341,13 @@ void VirtioPci::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint
       WriteNotification(offset - 0x3000, data, size);
     }
   } else {
-    PciDevice::Write(ir, offset, data, size);
+    PciDevice::Write(resource, offset, data, size);
   }
-  // MV_LOG("Write at base=0x%lx offset=0x%lx data=0x%lx size=%x", ir->base, offset, *(uint64_t*)data, size);
+  // MV_LOG("Write at base=0x%lx offset=0x%lx data=0x%lx size=%x", resource->base, offset, *(uint64_t*)data, size);
 }
 
-void VirtioPci::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (ir->base == pci_bars_[4].address) {
+void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (resource->base == pci_bars_[4].address) {
     if (offset < 0x1000) { /* Common config */
       ReadCommonConfig(offset, data, size);
     } else if (offset < 0x2000) { /* ISR Status */
@@ -359,8 +359,8 @@ void VirtioPci::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint3
     } else if (offset < 0x4000) { /* Notification */
     }
   } else {
-    PciDevice::Read(ir, offset, data, size);
+    PciDevice::Read(resource, offset, data, size);
   }
-  // MV_LOG("read at base=0x%lx offset=0x%lx data=0x%lx size=%x", ir->base, offset, *(uint64_t*)data, size);
+  // MV_LOG("read at base=0x%lx offset=0x%lx data=0x%lx size=%x", resource->base, offset, *(uint64_t*)data, size);
 }
 

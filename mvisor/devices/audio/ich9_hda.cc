@@ -136,8 +136,8 @@ class Ich9Hda : public PciDevice {
     }
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    MV_ASSERT(ir->base == pci_bars_[0].address);
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_ASSERT(resource->base == pci_bars_[0].address);
     
     // Make memory 0x2000-0x4000 and 0x0000-0x2000 same data
     if (offset >= 0x2000) {
@@ -152,8 +152,8 @@ class Ich9Hda : public PciDevice {
     // MV_LOG("read %s at 0x%lx size=%x ret=0x%x", name_, offset, size, *(uint32_t*)data);
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    MV_ASSERT(ir->base == pci_bars_[0].address);
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_ASSERT(resource->base == pci_bars_[0].address);
     MV_ASSERT(offset >= 0 && (offset + size) <= sizeof(regs_));
     // MV_LOG("write %s at 0x%lx size=%x ret=0x%x", name_, offset, size, *(uint32_t*)data);
 

@@ -78,16 +78,16 @@ void DeviceManager::ResetDevices() {
 void DeviceManager::PrintDevices() {
   for (auto device : registered_devices_) {
     MV_LOG("Device: %s", device->name());
-    for (auto ir : device->io_resources()) {
-      switch (ir->type)
+    for (auto resource : device->io_resources()) {
+      switch (resource->type)
       {
       case kIoResourceTypePio:
-        MV_LOG("\tIO   port    0x%lx-0x%lx %d", ir->base, ir->base + ir->length - 1, ir->enabled);
+        MV_LOG("\tIO   port    0x%lx-0x%lx %d", resource->base, resource->base + resource->length - 1, resource->enabled);
         break;
       case kIoResourceTypeMmio:
-        MV_LOG("\tMMIO address 0x%016lx-0x016%lx %d", ir->base, ir->base + ir->length - 1, ir->enabled);
+        MV_LOG("\tMMIO address 0x%016lx-0x016%lx %d", resource->base, resource->base + resource->length - 1, resource->enabled);
       case kIoResourceTypeRam:
-        MV_LOG("\tRAM  address 0x%016lx-0x016%lx %d", ir->base, ir->base + ir->length - 1, ir->enabled);
+        MV_LOG("\tRAM  address 0x%016lx-0x016%lx %d", resource->base, resource->base + resource->length - 1, resource->enabled);
         break;
       }
     }

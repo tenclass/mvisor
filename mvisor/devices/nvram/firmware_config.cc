@@ -197,11 +197,11 @@ class FirmwareConfig : public Device {
     Device::Connect();
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == FW_CFG_IO_BASE && size == 2) {
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == FW_CFG_IO_BASE && size == 2) {
       current_index_ = *(uint16_t*)data;
       current_offset_ = 0;
-    } else if (ir->base == FW_CFG_DMA_IO_BASE) {
+    } else if (resource->base == FW_CFG_DMA_IO_BASE) {
       if (size == 4) {
         if (offset == 0) { // High 32bit address
           dma_address_ = be32toh(*(uint32_t*)data);
@@ -216,12 +216,12 @@ class FirmwareConfig : public Device {
       }
     } else {
       MV_PANIC("not implemented Write for %s base=0x%lx offset=0x%lx size=%d",
-        name_, ir->base, offset, size);
+        name_, resource->base, offset, size);
     }
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (ir->base == FW_CFG_IO_BASE && offset == 1) {
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    if (resource->base == FW_CFG_IO_BASE && offset == 1) {
       auto it = config_.find(current_index_);
       if (it == config_.end()) {
         MV_PANIC("config entry %d not found", current_index_);

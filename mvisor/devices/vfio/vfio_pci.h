@@ -59,8 +59,8 @@ class VfioPci : public PciDevice {
   virtual bool ActivatePciBar(uint8_t index);
   virtual bool DeactivatePciBar(uint8_t index);
   
-  virtual void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
-  virtual void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
 

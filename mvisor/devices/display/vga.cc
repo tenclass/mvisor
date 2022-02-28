@@ -155,33 +155,33 @@ const uint8_t* Vga::GetPallete() const {
   return pallete_;
 }
 
-void Vga::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  uint64_t port = ir->base + offset;
+void Vga::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  uint64_t port = resource->base + offset;
 
-  if (ir->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MMIO_BASE) {
     memcpy(data, vram_read_select_ + offset, size);
-  } else if (ir->base == VGA_PIO_BASE) {
+  } else if (resource->base == VGA_PIO_BASE) {
     VgaReadPort(port, data, size);
-  } else if (ir->base == VBE_PIO_BASE) {
+  } else if (resource->base == VBE_PIO_BASE) {
     MV_ASSERT(size == 2);
     VbeReadPort(port, (uint16_t*)data);
   } else {
     MV_PANIC("unhandled read at base=0x%lx offset=0x%lx data=0x%lx size=%x",
-      ir->base, offset, *(uint64_t*)data, size);
+      resource->base, offset, *(uint64_t*)data, size);
   }
 }
 
-void Vga::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  uint64_t port = ir->base + offset;
-  if (ir->base == VGA_MMIO_BASE) {
+void Vga::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  uint64_t port = resource->base + offset;
+  if (resource->base == VGA_MMIO_BASE) {
     memcpy(vram_read_select_ + offset, data, size);
-  } else if (ir->base == VGA_PIO_BASE) {
+  } else if (resource->base == VGA_PIO_BASE) {
     VgaWritePort(port, data, size);
-  } else if (ir->base == VBE_PIO_BASE) {
+  } else if (resource->base == VBE_PIO_BASE) {
     VbeWritePort(port, *(uint16_t*)data);
   } else {
     MV_PANIC("unhandled write at base=0x%lx offset=0x%lx data=0x%lx size=%x",
-      ir->base, offset, *(uint64_t*)data, size);
+      resource->base, offset, *(uint64_t*)data, size);
   }
 }
 

@@ -83,21 +83,21 @@ class DummyDevice : public Device {
     AddIoResource(kIoResourceTypeMmio, 0xFED00000, 0x400, "HPET");
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     // Do nothing
     if (manager_->machine()->debug()) {
       MV_LOG("%s ignore %s write base=0x%lx offset=0x%lx data=0x%lx size=%d",
-        ir->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
-        ir->name, ir->base, offset, *(uint64_t*)data, size);
+        resource->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
+        resource->name, resource->base, offset, *(uint64_t*)data, size);
     }
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     // Do nothing
     /*
     MV_LOG("%s ignore %s read base=0x%lx offset=0x%lx size=%d",
-      ir->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
-      ir->name, ir->base, offset, size);
+      resource->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
+      resource->name, resource->base, offset, size);
     */
     memset(data, 0xFF, size);
   }

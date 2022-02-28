@@ -128,8 +128,8 @@ void PciDevice::SignalMsi(int vector) {
   }
 }
 
-void PciDevice::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && ir->base == pci_bars_[msi_config_.msix_bar].address &&
+void PciDevice::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (msi_config_.is_msix && resource->base == pci_bars_[msi_config_.msix_bar].address &&
     offset >= msi_config_.msix_space_offset &&
     offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
   ) {
@@ -137,12 +137,12 @@ void PciDevice::Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint3
     MV_ASSERT(offset + size <= sizeof(MsiXTableEntry) * msi_config_.msix_table_size);
     memcpy(data, (uint8_t*)msi_config_.msix_table + offset, size);
   } else {
-    Device::Read(ir, offset, data, size);
+    Device::Read(resource, offset, data, size);
   }
 }
 
-void PciDevice::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && ir->base == pci_bars_[msi_config_.msix_bar].address &&
+void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (msi_config_.is_msix && resource->base == pci_bars_[msi_config_.msix_bar].address &&
     offset >= msi_config_.msix_space_offset &&
     offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
   ) {
@@ -150,7 +150,7 @@ void PciDevice::Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint
     MV_ASSERT(offset + size <= sizeof(MsiXTableEntry) * msi_config_.msix_table_size);
     memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
   } else {
-    Device::Write(ir, offset, data, size);
+    Device::Write(resource, offset, data, size);
   }
 }
 

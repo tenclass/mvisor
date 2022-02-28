@@ -51,8 +51,8 @@ class Device : public Object {
 
   virtual void Connect();
   virtual void Disconnect();
-  virtual void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
-  virtual void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Reset();
 
   const std::list<IoResource*>& io_resources() const { return io_resources_; }
@@ -62,7 +62,7 @@ class Device : public Object {
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, void* host_memory, const char* name);
   void RemoveIoResource(IoResourceType type, const char* name);
   void RemoveIoResource(IoResourceType type, uint64_t base);
-  void SetIoResourceEnabled(IoResource* ir, bool enabled);
+  void SetIoResourceEnabled(IoResource* resource, bool enabled);
 
   friend class DeviceManager;
   DeviceManager* manager_;

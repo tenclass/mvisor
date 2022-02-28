@@ -74,7 +74,7 @@ class Cmos : public Device {
     bzero(cmos_data_, sizeof(cmos_data_));
   }
 
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (offset == 0) {
       *data = 0xFF;
       return;
@@ -127,7 +127,7 @@ class Cmos : public Device {
     }
   }
 
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size) {
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (offset == 0) { /* index register */
       uint8_t value = *data;
       cmos_index_  = value & ~(1UL << 7);

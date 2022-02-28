@@ -126,8 +126,8 @@ class VirtioPci : public PciDevice {
   void WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteNotification(uint64_t offset, uint8_t* data, uint32_t size);
   void EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t avail_gpa, uint64_t used_gpa);
-  void Read(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
-  void Write(const IoResource* ir, uint64_t offset, uint8_t* data, uint32_t size);
+  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
 
  protected: 
   void PrintQueue(VirtQueue& vq);
