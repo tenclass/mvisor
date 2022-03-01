@@ -148,8 +148,7 @@ class Qcow2Image : public DiskImage {
   
     if (fd_ != -1) {
       Flush();
-      close(fd_);
-      fd_ = -1;
+      safe_close(&fd_);
     }
 
     if (copied_cluster_) {

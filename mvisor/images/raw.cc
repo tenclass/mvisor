@@ -40,7 +40,7 @@ class RawImage : public DiskImage {
   virtual ~RawImage() {
     if (fd_ != -1) {
       Flush();
-      close(fd_);
+      safe_close(&fd_);
     }
   }
 

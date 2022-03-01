@@ -67,7 +67,7 @@ void PciDevice::LoadRomFile(const char* path) {
   pci_rom_.size = (st.st_size / PAGE_SIZE + 1) * PAGE_SIZE;
   pci_rom_.data = valloc(pci_rom_.size);
   read(fd, pci_rom_.data, st.st_size);
-  close(fd);
+  safe_close(&fd);
 }
 
 uint8_t* PciDevice::AddCapability(uint8_t cap, const uint8_t* data, uint8_t length) {

@@ -21,7 +21,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "logger.h"
-
+#include "utilities.h"
 
 RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
   TcpSocket(backend, packet) {
@@ -36,8 +36,7 @@ RedirectTcpSocket::~RedirectTcpSocket() {
 
   if (fd_ > 0) {
     io_->StopPolling(fd_);
-    close(fd_);
-    fd_ = -1;
+    safe_close(&fd_);
   }
 }
 

@@ -79,9 +79,9 @@ Machine::~Machine() {
   }
 
   if (vm_fd_ > 0)
-    close(vm_fd_);
+    safe_close(&vm_fd_);
   if (kvm_fd_ > 0)
-    close(kvm_fd_);
+    safe_close(&kvm_fd_);
   if (bios_data_)
     free(bios_data_);
   if (bios_backup_)
@@ -118,7 +118,7 @@ void Machine::LoadBiosFile() {
   bios_size_ = st.st_size;
   bios_backup_ = malloc(bios_size_);
   read(fd, bios_backup_, bios_size_);
-  close(fd);
+  safe_close(&fd);
 
   bios_data_ = valloc(bios_size_);
   memcpy(bios_data_, bios_backup_, bios_size_);

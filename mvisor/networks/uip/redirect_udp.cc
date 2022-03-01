@@ -21,12 +21,12 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include "logger.h"
+#include "utilities.h"
 
 RedirectUdpSocket::~RedirectUdpSocket() {
   if (fd_ >= 0) {
     io_->StopPolling(fd_);
-    close(fd_);
-    fd_ = -1;
+    safe_close(&fd_);
   }
   if (io_ && wait_timer_) {
     io_->RemoveTimer(wait_timer_);

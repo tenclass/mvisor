@@ -60,7 +60,7 @@ Vcpu::~Vcpu() {
     thread_.join();
   }
   if (fd_ > 0)
-    close(fd_);
+    safe_close(&fd_);
   if (kvm_run_)
     munmap(kvm_run_, machine_->kvm_vcpu_mmap_size_);
 }

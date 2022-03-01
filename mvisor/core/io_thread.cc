@@ -40,10 +40,10 @@ IoThread::~IoThread() {
   }
 
   if (event_fd_ > 0) {
-    close(event_fd_);
+    safe_close(&event_fd_);
   }
   if (epoll_fd_ > 0) {
-    close(epoll_fd_);
+    safe_close(&epoll_fd_);
   }
 }
 
@@ -121,6 +121,10 @@ EpollEvent* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) 
   }
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (epoll_events_.find(fd) != epoll_events_.end()) {
+    MV_PANIC("repeated polling fd=%d, mask=0x%x, callback=%s",
+      fd, poll_mask, callback.target_type().name());
+  }
   epoll_events_[fd] = event;
   return event;
 }

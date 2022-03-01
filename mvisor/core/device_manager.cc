@@ -240,6 +240,7 @@ void DeviceManager::UnregisterIoEvent(IoEvent* event) {
   }
 
   ioevents_.erase(event);
+  safe_close(&event->fd);
   delete event;
 }
 
