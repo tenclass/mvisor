@@ -943,7 +943,9 @@ class XhciHost : public PciDevice {
     endpoint->ring.consumer_cycle_bit = transfer->trbs[0].cycle_bit;
 
     SetEndpointState(endpoint, EP_HALTED);
-    MV_LOG("%s stalled endpoint 0x%x", transfer->device->name(), endpoint->endpoint_address);
+    if (debug_) {
+      MV_LOG("%s stalled endpoint 0x%x", transfer->device->name(), endpoint->endpoint_address);
+    }
   }
 
   void SetEndpointState(XhciEndpointContext* endpoint, uint32_t state) {

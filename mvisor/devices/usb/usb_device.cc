@@ -194,10 +194,6 @@ int UsbDevice::OnOutputData(uint endpoint_address, uint8_t* data, int length) {
 int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, int length) {
   switch (request)
   {
-  case DeviceOutRequest | USB_REQ_SET_ADDRESS:
-    MV_PANIC("set address to %d", value);
-    return 0;
-
   case DeviceRequest | USB_REQ_GET_DESCRIPTOR:
     return GetDescriptor(value, data, length);
   
@@ -244,10 +240,9 @@ int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, in
 
   case VendorDeviceRequest | 'Q':
   case VendorInterfaceRequest | 'Q':
-    /* FIXME: MOS */
-    break;
-
+    return GetMicrosoftOsDescriptor(index, data, length);
   }
+  MV_LOG("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
   return USB_RET_STALL;
 }
 
@@ -258,8 +253,10 @@ void UsbDevice::SetupDescriptor(const UsbDeviceDescriptor* device_desc,
 }
 
 int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
-  if (length < 4)
+  if (length < 4) {
+    MV_LOG("length too short, index=0x%x length=%d", index, length);
     return USB_RET_IOERROR;
+  }
   
   if (index == 0) {
     data[0] = 4;
@@ -271,7 +268,8 @@ int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
 
   const char* str = (*strings_descriptor_)[index];
   if (str == nullptr) {
-    return 0;
+    MV_LOG("invalid string index=0x%x length=%d", index, length);
+    return USB_RET_STALL;
   }
   int bLength = strlen(str) * 2 + 2;
   data[0] = bLength;
@@ -396,7 +394,7 @@ int UsbDevice::SetConfiguration(uint value) {
 }
 
 int UsbDevice::SetInterface(uint index, uint value) {
-  MV_PANIC("not impl");
+  MV_PANIC("not implemented");
   return USB_RET_STALL;
 }
 
@@ -407,5 +405,16 @@ UsbEndpoint* UsbDevice::FindEndpoint(uint address) {
     }
   }
   return nullptr;
+}
+
+/* 
+ * Not implemented yet. Maybe cellphones use this feature.
+ * https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/microsoft-defined-usb-descriptors 
+ */
+int UsbDevice::GetMicrosoftOsDescriptor(uint index, uint8_t* data, int length) {
+  if (debug_) {
+    MV_LOG("unhandled MsOsd index=%d length=%d", index, length);
+  }
+  return USB_RET_STALL;
 }
 

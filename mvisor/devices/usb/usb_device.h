@@ -109,6 +109,7 @@ class UsbDevice : public Device {
   int GetStatus(uint8_t* data, int length);
   int SetConfiguration(uint value);
   int SetInterface(uint index, uint value);
+  int GetMicrosoftOsDescriptor(uint index, uint8_t* data, int length);
 };
 
 #endif // _MVISOR_DEVICES_USB_USB_DEVICE_H

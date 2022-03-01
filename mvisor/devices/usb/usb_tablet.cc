@@ -138,7 +138,6 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
   std::mutex mutex_;
   std::deque<PointerEvent> queue_;
   uint idle_;
-  IoTimer*  timer_;
   uint max_queue_size_ = 16;
 
  public:
@@ -147,11 +146,6 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
   }
 
   virtual int OnControl(uint request, uint value, uint index, uint8_t* data, int length) {
-    int ret = UsbHid::OnControl(request, value, index, data, length);
-    if (ret >= 0) {
-      return ret;
-    }
-  
     switch (request)
     {
     /* hid specific requests */
@@ -167,8 +161,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
       idle_ = uint8_t(value >> 8);
       return 0;
     default:
-      MV_LOG("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
-      return USB_RET_STALL;
+      return UsbHid::OnControl(request, value, index, data, length);
     }
   }
 
