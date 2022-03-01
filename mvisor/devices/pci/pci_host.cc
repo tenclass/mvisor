@@ -21,11 +21,11 @@
 #include "device_manager.h"
 #include "pci_device.h"
 
-#define MCH_CONFIG_ADDR            0xCF8
-#define MCH_CONFIG_DATA            0xCFC
+#define MCH_CONFIG_ADDR             0xCF8
+#define MCH_CONFIG_DATA             0xCFC
 
-#define MCH_PCIEXBAR 0x60
-#define MCH_PCIEXBAR_SIZE 0x04
+#define MCH_PCIEXBAR                0x60
+#define MCH_PCIEXBAR_SIZE           0x04
 
 /*
  * PCI express ECAM (Enhanced Configuration Address Mapping) format.
@@ -91,23 +91,26 @@ class PciHost : public PciDevice {
     } else if (resource->base == MCH_CONFIG_DATA) {
       MV_ASSERT(size <= 4);
       
-      PciDevice* pci_device = manager_->LookupPciDevice(0, pci_config_address_.devfn);
+      PciDevice* pci_device = manager_->LookupPciDevice(pci_config_address_.bus,
+        pci_config_address_.devfn);
       if (pci_device) {
         pci_config_address_.reg_offset = offset;
         pci_device->WritePciConfigSpace(
           pci_config_address_.data & PCI_DEVICE_CONFIG_MASK, data, size);
       } else {
-        MV_LOG("failed to lookup pci devfn 0x%02x", pci_config_address_.devfn);
+        MV_LOG("failed to lookup pci bus=0x%x devfn=0x%02x",
+          pci_config_address_.bus, pci_config_address_.devfn);
       }
     
     } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
+      uint8_t bus = PCIE_MMCFG_BUS(resource->base + offset);
       uint8_t devfn = PCIE_MMCFG_DEVFN(resource->base + offset);
-      PciDevice* pci_device = manager_->LookupPciDevice(0, devfn);
+      PciDevice* pci_device = manager_->LookupPciDevice(bus, devfn);
       uint64_t address = PCIE_MMCFG_CONFOFFSET(resource->base + offset);
       if (pci_device) {
         pci_device->WritePciConfigSpace(address, data, size);
       } else {
-        MV_LOG("failed to lookup pci devfn 0x%02x", devfn);
+        MV_LOG("failed to lookup pci bus=0x%x devfn=0x%02x", bus, devfn);
       }
     
     } else {
@@ -125,7 +128,8 @@ class PciHost : public PciDevice {
       if (size > 4)
         size = 4;
       
-      PciDevice* pci_device = manager_->LookupPciDevice(0, pci_config_address_.devfn);
+      PciDevice* pci_device = manager_->LookupPciDevice(pci_config_address_.bus,
+        pci_config_address_.devfn);
       if (pci_device) {
         pci_config_address_.reg_offset = offset;
         pci_device->ReadPciConfigSpace(
@@ -135,8 +139,9 @@ class PciHost : public PciDevice {
       }
     
     } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
+      uint8_t bus = PCIE_MMCFG_BUS(resource->base + offset);
       uint8_t devfn = PCIE_MMCFG_DEVFN(resource->base + offset);
-      PciDevice* pci_device = manager_->LookupPciDevice(0, devfn);
+      PciDevice* pci_device = manager_->LookupPciDevice(bus, devfn);
       uint64_t address = PCIE_MMCFG_CONFOFFSET(resource->base + offset);
       if (pci_device) {
         pci_device->ReadPciConfigSpace(address, data, size);

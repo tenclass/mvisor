@@ -202,7 +202,7 @@ class PciDevice : public Device {
   virtual ~PciDevice();
   virtual void Disconnect();
 
-  uint8_t bus() { return 0; }
+  uint8_t bus() { return bus_; }
   uint8_t devfn() { return devfn_; }
   const PciConfigHeader& pci_header() { return pci_header_; }
   const PciBarInfo& pci_bar(uint8_t index) { return pci_bars_[index]; }
@@ -231,6 +231,7 @@ class PciDevice : public Device {
   void SignalMsi(int vector = 0);
 
   uint8_t devfn_;
+  uint8_t bus_;
   PciConfigHeader pci_header_;
   PciBarInfo pci_bars_[PCI_BAR_NUMS];
   PciRomBarInfo pci_rom_;

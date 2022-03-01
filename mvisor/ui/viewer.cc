@@ -204,6 +204,7 @@ void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
 void Viewer::Render() {
   if (requested_update_window_) {
     requested_update_window_ = false;
+
     DestroyWindow();
     CreateWindow();
     for (auto partial : partials_) {
@@ -211,6 +212,7 @@ void Viewer::Render() {
     }
     partials_.clear();
   }
+
   bool redraw = false;
   while (!cursor_updates_.empty()) {
     mutex_.lock();

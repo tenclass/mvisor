@@ -9,10 +9,11 @@ objects:
   - class: system-root
     children:
       - pci-host
+      - pci-hotplug
       - firmware-config
       - dummy-device
       - debug-console
-      
+
   - class: pci-host
     children:
       - ich9-lpc

@@ -85,12 +85,12 @@ static uint64_t acpi_get_clock(uint64_t now)
 
 class Ich9Lpc : public PciDevice {
  private:
-  uint8_t acpi_gpe_regs_[16];
-  uint16_t acpi_control_;
-  uint8_t apm_control_;
-  uint8_t apm_state_;
-  uint16_t acpi_pm_event_status_;
-  uint16_t acpi_pm_event_enable_;
+  uint8_t   acpi_gpe_regs_[16];
+  uint16_t  acpi_control_;
+  uint8_t   apm_control_;
+  uint8_t   apm_state_;
+  uint16_t  acpi_pm_event_status_;
+  uint16_t  acpi_pm_event_enable_;
 
 
   void UpdatePmBaseSci() {
@@ -123,7 +123,7 @@ class Ich9Lpc : public PciDevice {
     pci_header_.class_code = 0x060100;
     pci_header_.revision_id = 2;
     pci_header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
-    pci_header_.subsys_vendor_id = 0x1af4;
+    pci_header_.subsys_vendor_id = 0x1AF4;
     pci_header_.subsys_id = 0x1100;
 
     AddIoResource(kIoResourceTypePio, 0xB2, 2, "LPC APM");

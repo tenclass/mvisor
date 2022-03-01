@@ -26,6 +26,7 @@
 
 
 PciDevice::PciDevice() {
+  bus_ = 0;
   devfn_ = 0;
   bzero(&pci_header_, sizeof(pci_header_));
   bzero(&pci_bars_, sizeof(pci_bars_));

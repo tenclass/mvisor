@@ -106,7 +106,7 @@ Device* DeviceManager::LookupDeviceByName(const std::string name) {
 PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
   for (auto device : registered_devices_) {
     PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
-    if (pci_device && pci_device->devfn_ == devfn) {
+    if (pci_device && pci_device->bus_ == bus && pci_device->devfn_ == devfn) {
       return pci_device;
     }
   }
