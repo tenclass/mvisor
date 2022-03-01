@@ -95,8 +95,10 @@ class SpiceAgent : public Object, public SerialPortInterface,
       // SendMonitorConfig();
 
       /* ui effects & color depth */
-      uint8_t display_config[8] = { 0 };
-      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, display_config, sizeof(display_config));
+      VDAgentDisplayConfig display_config = {
+        .flags = VD_AGENT_DISPLAY_CONFIG_FLAG_DISABLE_ANIMATION
+      };
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, &display_config, sizeof(display_config));
 
       uint32_t max_clipboard = 0x06400000;
       SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MAX_CLIPBOARD, &max_clipboard, sizeof(max_clipboard));
