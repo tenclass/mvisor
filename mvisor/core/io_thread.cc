@@ -33,7 +33,7 @@ IoThread::IoThread(Machine* machine) : machine_(machine) {
 }
 
 IoThread::~IoThread() {
-  WakeUp();
+  Kick();
 
   if (thread_.joinable()) {
     thread_.join();
@@ -61,10 +61,10 @@ void IoThread::Start() {
 void IoThread::Stop() {
   /* Just wakeup the thread and found machine is stopped */
   MV_ASSERT(!machine_->IsValid());
-  WakeUp();
+  Kick();
 }
 
-void IoThread::WakeUp() {
+void IoThread::Kick() {
   if (event_fd_ > 0) {
     uint64_t tmp = 1;
     write(event_fd_, &tmp, sizeof(tmp));
@@ -77,9 +77,16 @@ void IoThread::RunLoop() {
 
   struct epoll_event events[MAX_ENTRIES];
 
-  while (machine_->IsValid()) {
+  while (true) {
     /* Execute timer events and calculate the next timeout */
     int next_timeout_ms = CheckTimers();
+    /* Check paused state before sleep */
+    while(machine_->IsPaused()) {
+      machine_->WaitToResume();
+    }
+    if (!machine_->IsValid()) {
+      break;
+    }
     int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, next_timeout_ms);
     if (nfds < 0) {
       break;
@@ -168,7 +175,7 @@ IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callba
   timers_.insert(timer);
 
   /* Wakeup io thread and recalculate the timeout */
-  WakeUp();
+  Kick();
 
   return timer;
 }

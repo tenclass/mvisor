@@ -460,7 +460,7 @@ void Vga::RenderGraphicsMode() {
     .data = vram_map_select_,
     .size = size_t(partial->stride * partial->height)
   });
-  partial->release = [partial]() {
+  partial->Release = [partial]() {
     delete partial;
   };
   NotifyDisplayRender(partial);
@@ -479,7 +479,7 @@ void Vga::RenderTextMode() {
     .data = buffer,
     .size = size_t(partial->stride * partial->height)
   });
-  partial->release = [partial]() {
+  partial->Release = [partial]() {
     delete[] partial->vector[0].data;
     delete partial;
   };

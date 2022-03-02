@@ -174,12 +174,11 @@ void Machine::CreateVcpu() {
 
 
 /* Start vCPU threads and IO thread */
-int Machine::Run() {
+void Machine::Run() {
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }
   io_thread_->Start();
-  return 0;
 }
 
 /* Maybe there are lots of things to do before quiting a VM */
@@ -187,6 +186,9 @@ void Machine::Quit() {
   if (!valid_)
     return;
   valid_ = false;
+
+  /* If paused, threads are waiting to resume */
+  wait_to_resume_.notify_all();
 
   for (auto vcpu: vcpus_) {
     vcpu->Kick();
@@ -238,4 +240,73 @@ std::vector<Object*> Machine::LookupObjects(std::function<bool (Object*)> compar
     }
   }
   return result;
+}
+
+/* Resume from paused state */
+void Machine::Resume() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  MV_ASSERT(paused_);
+  MV_ASSERT(wait_count_ == 0);
+  paused_ = false;
+
+  /* Restore clock */
+  kvm_clock_data clock_data = { .clock = saved_clock_ };
+  if (ioctl(vm_fd_, KVM_SET_CLOCK, &clock_data) < 0) {
+    MV_PANIC("failed to restore clock");
+  }
+
+  /* Resume threads */
+  wait_to_resume_.notify_all();
+
+  /* Here all the threads are running, broadcast messages */
+  for (auto &callback : state_change_listeners_) {
+    callback();
+  }
+}
+
+/* Currently this method can only be called from UI threads */
+void Machine::Pause() {
+  /* Mark paused state and wait for vCPU threads and IO thread to stop */
+  std::unique_lock<std::mutex> lock(mutex_);
+  if (!valid_ || paused_)
+    return;
+  paused_ = true;
+  wait_count_ = num_vcpus_ + 1;
+  for (auto vcpu : vcpus_) {
+    vcpu->Kick();
+  }
+  io_thread_->Kick();
+
+  wait_to_pause_condition_.wait(lock, [this]() {
+    return wait_count_ == 0;
+  });
+
+  /* Save clock */
+  kvm_clock_data clock_data = { 0 };
+  if (ioctl(vm_fd_, KVM_GET_CLOCK, &clock_data) < 0) {
+    MV_PANIC("failed to save clock");
+  }
+  saved_clock_ = clock_data.clock;
+
+  /* Here all the threads are stopped, broadcast messages */
+  for (auto &callback : state_change_listeners_) {
+    callback();
+  }
+}
+
+/* vCPU threads and IO threads call this method to sleep */
+void Machine::WaitToResume() {
+  std::unique_lock<std::mutex> lock(mutex_);  
+  MV_ASSERT(wait_count_ > 0);
+  wait_count_--;
+  wait_to_pause_condition_.notify_all();
+  wait_to_resume_.wait(lock, [this]() {
+    return !IsPaused();
+  });
+}
+
+
+void Machine::RegisterStateChangeListener(VoidCallback callback) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_change_listeners_.push_back(callback);
 }

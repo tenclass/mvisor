@@ -207,7 +207,13 @@ void Vcpu::Process() {
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 
-  for (; machine_->valid_;) {
+  while (true) {
+    while (machine_->IsPaused()) {
+      machine_->WaitToResume();
+    }
+    if (!machine_->IsValid()) {
+      break;
+    }
     int ret = ioctl(fd_, KVM_RUN, 0);
     if (ret < 0 && errno != EINTR) {
       if (errno == EAGAIN) {

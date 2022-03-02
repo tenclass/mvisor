@@ -55,6 +55,7 @@ class IoThread {
   ~IoThread();
   void Start();
   void Stop();
+  void Kick();
 
   /* Async event polling */
   EpollEvent* StartPolling(int fd, uint poll_mask, IoCallback callback);
@@ -70,7 +71,6 @@ class IoThread {
  private:
   void RunLoop();
   int  CheckTimers();
-  void WakeUp();
 
   std::thread           thread_;
   Machine*              machine_;

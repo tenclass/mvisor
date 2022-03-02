@@ -70,7 +70,7 @@ struct DisplayPartialBitmap {
   int         x;
   int         y;
   bool        flip;
-  ReleaseDisplayResourceCallback  release;
+  ReleaseDisplayResourceCallback  Release;
 };
 struct DisplayCursorUpdate {
   CursorUpdateCommand   command;
@@ -92,7 +92,7 @@ struct DisplayCursorUpdate {
       size_t    size;
     } set;
   };
-  ReleaseDisplayResourceCallback release;
+  ReleaseDisplayResourceCallback Release;
 };
 
 typedef std::function <void(void)> DisplayChangeListener;

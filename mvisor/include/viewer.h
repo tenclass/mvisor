@@ -85,7 +85,6 @@ class Viewer {
   uint16_t height_;
   uint16_t bpp_;
 
-  bool grab_input_ = false;
   PointerEvent pointer_state_ = { 0 };
   PendingResize pending_resize_;
 };

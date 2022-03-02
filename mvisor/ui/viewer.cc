@@ -106,11 +106,7 @@ void Viewer::CreateWindow() {
 
 void Viewer::UpdateCaption() {
   char title[100];
-  if (grab_input_) {
-    sprintf(title, "MVisor - Press [ESC] to release mouse");
-  } else {
-    sprintf(title, "MVisor - A mini x86 hypervisor - %dx%dx%d", width_, height_, bpp_);
-  }
+  sprintf(title, "MVisor - A mini x86 hypervisor - %dx%dx%d", width_, height_, bpp_);
   SDL_SetWindowTitle(window_, title);
 }
 
@@ -164,9 +160,7 @@ void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
       SDL_FreeCursor(cursor_);
       cursor_ = nullptr;
     }
-    if (!grab_input_) {
-      SDL_ShowCursor(SDL_ENABLE);
-    }
+    SDL_ShowCursor(SDL_ENABLE);
     auto set = cursor_update->set;
     uint32_t stride = SPICE_ALIGN(set.width, 8) >> 3;
     if (set.type == SPICE_CURSOR_TYPE_MONO) {
@@ -208,7 +202,7 @@ void Viewer::Render() {
     DestroyWindow();
     CreateWindow();
     for (auto partial : partials_) {
-      partial->release();
+      partial->Release();
     }
     partials_.clear();
   }
@@ -220,10 +214,7 @@ void Viewer::Render() {
     cursor_updates_.pop_front();
     mutex_.unlock();
     RenderCursor(cursor_update);
-    cursor_update->release();
-    if (grab_input_) {
-      redraw = true;
-    }
+    cursor_update->Release();
   }
   if (screen_texture_ && !partials_.empty()) {
     while (!partials_.empty()) {
@@ -236,22 +227,13 @@ void Viewer::Render() {
       } else {
         RenderPartial(partial);
       }
-      partial->release();
+      partial->Release();
     }
     redraw = true;
   }
 
   if (redraw) {
     SDL_RenderCopy(renderer_, screen_texture_, nullptr, nullptr);
-    if (grab_input_) {
-      SDL_Rect rect = {
-        .x = server_cursor_.x,
-        .y = server_cursor_.y,
-        .w = server_cursor_.width,
-        .h = server_cursor_.height
-      };
-      SDL_RenderCopy(renderer_, server_cursor_.texture, nullptr, &rect);
-    }
     SDL_RenderPresent(renderer_);
   }
 }
@@ -332,15 +314,18 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   switch (event.type)
   {
   case SDL_KEYDOWN:
-  case SDL_KEYUP:
-    /* Type ESCAPE to exit mouse grab mode */
-    if (grab_input_ && event.key.keysym.sym == SDLK_ESCAPE) {
-      grab_input_ = false;
-      SDL_SetWindowGrab(window_, SDL_FALSE);
-      SDL_ShowCursor(SDL_ENABLE);
-      UpdateCaption();
-      break;
+    if (event.key.keysym.sym == SDLK_p) {
+      if (machine_->IsPaused()) {
+        MV_LOG("resume now");
+        machine_->Resume();
+        MV_LOG("resumed");
+      } else {
+        MV_LOG("pause now");
+        machine_->Pause();
+        MV_LOG("paused");
+      }
     }
+  case SDL_KEYUP:
     if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
       keyboard_->QueueKeyboardEvent(transcoded);
     }

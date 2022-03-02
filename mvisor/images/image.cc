@@ -71,7 +71,7 @@ void DiskImage::Finalize() {
 
 
 void DiskImage::WorkerProcess() {
-  SetThreadName("mvisor-qcow2");
+  SetThreadName("mvisor-disk");
   
   while (!finalized_) {
     std::unique_lock<std::mutex> lock(worker_mutex_);

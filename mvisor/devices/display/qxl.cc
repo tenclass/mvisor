@@ -454,7 +454,7 @@ class Qxl : public Vga {
       partial->stride = bitmap->stride;
       partial->flip = !(bitmap->flags & QXL_BITMAP_TOP_DOWN);
       GetMemSlotChunkedData(bitmap->data, partial->vector);
-      partial->release = [=]() {
+      partial->Release = [=]() {
         ReleaseGuestResource(&drawable->release_info);
         delete partial;
       };
@@ -475,7 +475,7 @@ class Qxl : public Vga {
         .data = data,
         .size = size
       });
-      partial->release = [=]() {
+      partial->Release = [=]() {
         ReleaseGuestResource(&drawable->release_info);
         delete data;
         delete partial;
@@ -496,7 +496,7 @@ class Qxl : public Vga {
     {
     case QXL_CURSOR_HIDE:
       update->command = kDisplayCursorUpdateHide;
-      update->release = [=]() {
+      update->Release = [=]() {
         ReleaseGuestResource(&cursor->release_info);
         delete update;
       };
@@ -505,7 +505,7 @@ class Qxl : public Vga {
       update->command = kDisplayCursorUpdateMove;
       update->move.x = cursor->u.position.x;
       update->move.y = cursor->u.position.y;
-      update->release = [=]() {
+      update->Release = [=]() {
         ReleaseGuestResource(&cursor->release_info);
         delete update;
       };
@@ -523,7 +523,7 @@ class Qxl : public Vga {
       update->set.hotspot_x = shape->header.hot_spot_x;
       update->set.hotspot_y = shape->header.hot_spot_y;
       GetMemSlotLinearizedData(&shape->chunk, &update->set.data, &update->set.size);
-      update->release = [=]() {
+      update->Release = [=]() {
         ReleaseGuestResource(&cursor->release_info);
         delete[] update->set.data;
         delete update;

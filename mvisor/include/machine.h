@@ -24,6 +24,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <mutex>
+#include <condition_variable>
 #include <map>
 #include <signal.h>
 #include "object.h"
@@ -33,18 +35,25 @@
 #include "device_manager.h"
 #include "configuration.h"
 
+
 class Machine {
  public:
   Machine(std::string config_path);
   ~Machine();
 
-  int Run();
+  void Run();
   void Quit();
-  bool IsValid() { return valid_; }
   void Reset();
+  void Pause();
+  void Resume();
+  bool IsValid() { return valid_; }
+  bool IsPaused() { return valid_ && paused_; }
+  void WaitToResume();
+
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
   std::vector<Object*> LookupObjects(std::function<bool (Object*)> compare);
+  void RegisterStateChangeListener(VoidCallback callback);
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
@@ -54,6 +63,7 @@ class Machine {
   inline bool debug() { return debug_; }
 
  private:
+  friend class IoThread;
   friend class Vcpu;
   friend class MemoryManager;
   friend class DeviceManager;
@@ -65,6 +75,7 @@ class Machine {
   void LoadBiosFile();
 
   bool valid_ = true;
+  bool paused_ = false;
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;
@@ -87,6 +98,13 @@ class Machine {
 
   std::map<std::string, Object*> objects_;
   bool debug_ = false;
+
+  std::mutex mutex_;
+  std::condition_variable wait_to_resume_;
+  std::condition_variable wait_to_pause_condition_;
+  uint wait_count_ = 0;
+  std::vector<VoidCallback> state_change_listeners_;
+  uint64_t saved_clock_;
 };
 
 #endif // MVISOR_MACHINE_H
