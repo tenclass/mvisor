@@ -410,7 +410,7 @@ void Vga::UpdateDisplayMode() {
 }
 
 void Vga::NotifyDisplayModeChange() {
-  for (auto listener : display_change_listerners_) {
+  for (auto &listener : display_change_listerners_) {
     listener();
   }
 }
@@ -426,13 +426,13 @@ void Vga::RegisterDisplayRenderer(DisplayRenderCallback draw_callback,
 }
 
 void Vga::NotifyDisplayRender(DisplayPartialBitmap* partial) {
-  for (auto renderer : display_render_callbacks_) {
+  for (auto &renderer : display_render_callbacks_) {
     renderer(partial);
   }
 }
 
 void Vga::NotifyDisplayCursorUpdate(DisplayCursorUpdate* update) {
-  for (auto callback : display_cursor_callbacks_) {
+  for (auto &callback : display_cursor_callbacks_) {
     callback(update);
   }
 }

@@ -187,7 +187,7 @@ void AhciCdrom::Connect() {
 void AhciCdrom::SetError(int sense_key, int asc) {
   regs_.error = sense_key << 4;
   regs_.status = ATA_SR_DRDY | ATA_SR_ERR;
-  regs_.count0 |= (regs_.count0 & ~7);
+  regs_.count0 = (regs_.count0 & ~7) | ATA_CB_SC_P_CD | ATA_CB_SC_P_IO;
   sense_key_ = sense_key;
   asc_ = asc;
 }

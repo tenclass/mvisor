@@ -318,6 +318,14 @@ class HdaDuplex : public Device, public HdaCodecInterface {
       std::chrono::steady_clock::now() - stream->start_time).count();
     int next_interval = written_ms - started_ms;
     if (next_interval < 0) {
+      /* If we cannot catch up, reset timer */
+      if (next_interval < -20) {
+        if (debug_) {
+          MV_LOG("reset timer, interval=%dms", next_interval);
+        }
+        stream->position = 0;
+        stream->start_time = std::chrono::steady_clock::now();
+      }
       next_interval = 1;
     }
 

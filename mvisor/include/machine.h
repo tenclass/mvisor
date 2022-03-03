@@ -104,7 +104,6 @@ class Machine {
   std::condition_variable wait_to_pause_condition_;
   uint wait_count_ = 0;
   std::vector<VoidCallback> state_change_listeners_;
-  uint64_t saved_clock_;
 };
 
 #endif // MVISOR_MACHINE_H

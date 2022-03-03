@@ -81,12 +81,12 @@ void IdeStorageDevice::Connect() {
   }
 }
 
+/* Windows checks CD-Rom status every second. It wastes CPU cycles.
+ * We return false if image is not inserted but OS cannot detect the device at all.
+ * Maybe we should support IDE hotplug?
+ */
 bool IdeStorageDevice::IsAvailable() {
-   if (type_ == kIdeStorageTypeCdrom) {
-     return true;
-   } else {
-     return image_ != nullptr;
-   }
+  return image_ != nullptr;
 }
 
 void IdeStorageDevice::CompleteCommand() {

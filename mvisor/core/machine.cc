@@ -249,12 +249,6 @@ void Machine::Resume() {
   MV_ASSERT(wait_count_ == 0);
   paused_ = false;
 
-  /* Restore clock */
-  kvm_clock_data clock_data = { .clock = saved_clock_ };
-  if (ioctl(vm_fd_, KVM_SET_CLOCK, &clock_data) < 0) {
-    MV_PANIC("failed to restore clock");
-  }
-
   /* Resume threads */
   wait_to_resume_.notify_all();
 
@@ -280,13 +274,6 @@ void Machine::Pause() {
   wait_to_pause_condition_.wait(lock, [this]() {
     return wait_count_ == 0;
   });
-
-  /* Save clock */
-  kvm_clock_data clock_data = { 0 };
-  if (ioctl(vm_fd_, KVM_GET_CLOCK, &clock_data) < 0) {
-    MV_PANIC("failed to save clock");
-  }
-  saved_clock_ = clock_data.clock;
 
   /* Here all the threads are stopped, broadcast messages */
   for (auto &callback : state_change_listeners_) {

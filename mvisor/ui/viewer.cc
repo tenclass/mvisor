@@ -314,15 +314,11 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   switch (event.type)
   {
   case SDL_KEYDOWN:
-    if (event.key.keysym.sym == SDLK_p) {
+    if (event.key.keysym.sym == SDLK_PAUSE) {
       if (machine_->IsPaused()) {
-        MV_LOG("resume now");
         machine_->Resume();
-        MV_LOG("resumed");
       } else {
-        MV_LOG("pause now");
         machine_->Pause();
-        MV_LOG("paused");
       }
     }
   case SDL_KEYUP:

@@ -149,7 +149,7 @@ class FirmwareConfig : public Device {
   void InitializeFileDir() {
     fw_cfg_files dir;
     int index = 0;
-    for (auto item : files_) {
+    for (auto &item : files_) {
       auto cfg_file = &dir.files[index];
       strncpy(cfg_file->name, item.first.c_str(), item.first.size());
       cfg_file->size = htobe32(item.second.size());
