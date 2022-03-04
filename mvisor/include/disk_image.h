@@ -75,10 +75,12 @@ class DiskImage : public Object {
  protected:
   bool        initialized_ = false;
   bool        readonly_ = false;
+  bool        snapshot_ = false;
   Device*     device_ = nullptr;
   IoThread*   io_ = nullptr;
+  std::string filepath_;
 
-  virtual void Initialize(const std::string& path, bool readonly) = 0;
+  virtual void Initialize() = 0;
   virtual void Finalize();
 
  private:

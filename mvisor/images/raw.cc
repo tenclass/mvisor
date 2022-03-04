@@ -44,16 +44,14 @@ class RawImage : public DiskImage {
     }
   }
 
-  void Initialize(const std::string& path, bool readonly) {
-    readonly_ = readonly;
-
-    if (readonly) {
-      fd_ = open(path.c_str(), O_RDONLY);
+  void Initialize() {
+    if (readonly_) {
+      fd_ = open(filepath_.c_str(), O_RDONLY);
     } else {
-      fd_ = open(path.c_str(), O_RDWR);
+      fd_ = open(filepath_.c_str(), O_RDWR);
     }
     if (fd_ < 0)
-      MV_PANIC("disk file not found: %s", path.c_str());
+      MV_PANIC("disk file not found: %s", filepath_.c_str());
 
     struct stat st;
     fstat(fd_, &st);

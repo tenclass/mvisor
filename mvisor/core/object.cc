@@ -53,3 +53,11 @@ void Object::AddChild(Object* object) {
     children_.push_back(object);
   }
 }
+
+void Object::RemoveChild(Object* object) {
+  object->parent_ = nullptr;
+  auto it = std::find(children_.begin(), children_.end(), object);
+  if (it != children_.end()) {
+    children_.erase(it);
+  }
+}

@@ -36,6 +36,7 @@ class Object {
   virtual ~Object();
 
   virtual void AddChild(Object* device);
+  virtual void RemoveChild(Object* object);
 
   const char* name() { return name_; }
   const char* classname() { return classname_; }

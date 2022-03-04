@@ -17,9 +17,11 @@
  */
 
 #include "disk_image.h"
+#include <cstdlib>
 #include "logger.h"
 #include "utilities.h"
 #include "device_manager.h"
+#include "qcow2.h"
 
 DiskImage::DiskImage() {
 }
@@ -35,12 +37,21 @@ DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly) {
   DiskImage* image;
   if (path.find(".qcow2") != std::string::npos) {
     image = dynamic_cast<DiskImage*>(Object::Create("qcow2-image"));
+    if (std::get<bool>((*device)["snapshot"])) {
+      image->snapshot_ = true;
+      std::string backing_filepath = path;
+      path = std::tmpnam(nullptr);
+      path += ".qcow2";
+      Qcow2Image::CreateImageWithBackingFile(path, backing_filepath);
+    }
   } else {
     image = dynamic_cast<DiskImage*>(Object::Create("raw-image"));
   }
   MV_ASSERT(image);
+  image->filepath_ = path;
+  image->readonly_ = readonly;
   image->device_ = device;
-  image->Initialize(path, readonly);
+  image->Initialize();
   
   image->io_ = device->manager()->io();
   image->worker_thread_ = std::thread(&DiskImage::WorkerProcess, image);
@@ -51,8 +62,8 @@ void DiskImage::Connect() {
   if (!initialized_) {
     initialized_ = true;
     std::string path = std::get<std::string>(key_values_["path"]);
-    bool readonly = std::get<bool>(key_values_["readonly"]);
-    Initialize(path, readonly);
+    readonly_ = std::get<bool>(key_values_["readonly"]);
+    Initialize();
   }
 }
 
@@ -66,6 +77,10 @@ void DiskImage::Finalize() {
   if (worker_thread_.joinable()) {
     worker_cv_.notify_all();
     worker_thread_.join();
+  }
+
+  if (snapshot_) {
+    remove(filepath_.c_str());
   }
 }
 
