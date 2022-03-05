@@ -57,7 +57,7 @@ class Object {
   std::map<std::string, Value> key_values_;
 
   /* Object topology */
-  Object* parent_;
+  Object* parent_ = nullptr;
   std::vector<Object*> children_;
 };
 
