@@ -37,7 +37,8 @@ DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly) {
   DiskImage* image;
   if (path.find(".qcow2") != std::string::npos) {
     image = dynamic_cast<DiskImage*>(Object::Create("qcow2-image"));
-    if (std::get<bool>((*device)["snapshot"])) {
+    /* If snapshot is on, create a new image and the original one is readonly */
+    if (device->has_key("snapshot") && std::get<bool>((*device)["snapshot"])) {
       image->snapshot_ = true;
       std::string backing_filepath = path;
       path = std::tmpnam(nullptr);
