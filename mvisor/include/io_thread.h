@@ -50,7 +50,7 @@ struct EpollEvent {
 
 class Machine;
 class DiskImage;
-
+class MigrationWriter;
 class IoThread {
  public:
   IoThread(Machine* machine);
@@ -75,6 +75,7 @@ class IoThread {
   void UnregisterDiskImage(DiskImage* image);
   void FlushDiskImages();
   bool CanPauseNow();
+  bool SaveDiskImage(MigrationWriter* writer);
 
  private:
   void RunLoop();

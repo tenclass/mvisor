@@ -41,6 +41,7 @@ class MigrationWriter {
   void WriteProtobuf(std::string tag, const Message& message);
   void WriteMemoryPages(std::string tag, void* pages, size_t size, uint64_t base);
 
+  inline std::string base_path() { return base_path_; }
  private:
   void BeginWrite(std::string& tag);
   void EndWrite(std::string& tag);

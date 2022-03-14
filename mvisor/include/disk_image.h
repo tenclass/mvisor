@@ -54,8 +54,11 @@ class DiskImage : public Object {
   DiskImage();
   virtual ~DiskImage();
   virtual void Connect();
-  bool readonly() { return readonly_; }
+
   bool busy();
+  inline bool readonly() { return readonly_; }
+  inline const std::string& filepath() const { return filepath_; }
+  inline Device* deivce() { return device_; }
 
   /* Always use this static method to create a DiskImage */
 

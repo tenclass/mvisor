@@ -310,8 +310,6 @@ void Machine::Save(std::string path) {
   MV_LOG("start saving");
 
   MigrationWriter writer(path);
-  /* Save configuration */
-  config_->Save(path + "/configuration.yaml");
   /* Save vcpu states */
   for (auto vcpu : vcpus_) {
     vcpu->SaveState(&writer);
@@ -320,6 +318,10 @@ void Machine::Save(std::string path) {
   device_manager_->SaveState(&writer);
   /* Save system RAM */
   memory_manager_->SaveState(&writer);
+  /* Save disk images */
+  io_thread_->SaveDiskImage(&writer);
+  /* Save configuration after saving disk images (paths might changed) */
+  config_->Save(path + "/configuration.yaml");
   MV_LOG("done saving");
 }
 

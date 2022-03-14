@@ -256,13 +256,13 @@ bool Configuration::Save(std::string path) {
       switch (value.index())
       {
       case 0:
-        node[it->first] = std::get<std::string>(it->second);
-        break;
-      case 1:
         node[it->first] = std::get<bool>(it->second);
         break;
-      case 2:
+      case 1:
         node[it->first] = std::get<uint64_t>(it->second);
+        break;
+      case 2:
+        node[it->first] = std::get<std::string>(it->second);
         break;
       }
     }

@@ -24,6 +24,8 @@
 #include <sys/eventfd.h>
 #include <arpa/inet.h>
 
+#include <filesystem>
+
 #include "logger.h"
 #include "machine.h"
 #include "disk_image.h"
@@ -249,7 +251,6 @@ void IoThread::FlushDiskImages() {
 
   for (auto image : disk_images_) {
     image->FlushAsync([](auto ret) {
-      MV_LOG("flush done");
     });
   }
 }
@@ -271,5 +272,20 @@ bool IoThread::CanPauseNow() {
     }
   }
 
+  return true;
+}
+
+/* Make sure call Flush() before save disk images */
+bool IoThread::SaveDiskImage(MigrationWriter* writer) {
+  for (auto image : disk_images_) {
+    auto& device = *image->deivce();
+    writer->SetPrefix(device.name());
+    auto new_path = writer->base_path() + "/" + device.name() + "/disk.qcow2";
+    if (std::filesystem::exists(new_path)) {
+      std::filesystem::remove(new_path);
+    }
+    std::filesystem::copy_file(image->filepath(), new_path);
+    device["image"] = new_path;
+  }
   return true;
 }
