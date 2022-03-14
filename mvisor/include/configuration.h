@@ -37,6 +37,7 @@ class Configuration {
 
   inline bool snapshot() const { return snapshot_; }
   inline const std::string& path() const { return path_; }
+  inline const std::string& bios_path() const { return bios_path_; }
 
  private:
   void InitializePaths();
@@ -50,6 +51,7 @@ class Configuration {
   std::set<std::string> directories_;
   bool        snapshot_;
   std::string path_;
+  std::string bios_path_;
 };
 
 #endif // _MVISOR_CONFIG_H

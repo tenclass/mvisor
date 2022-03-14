@@ -28,7 +28,7 @@ $(shell mkdir -p $(dir $(MV_OBJECTS)))
 run: all
 	time $(EXECUTABLE)
 
-vmload: all
+load: all
 	$(EXECUTABLE) -f /tmp/save/configuration.yaml
 
 debug: all

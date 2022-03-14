@@ -93,6 +93,7 @@ class Ich9Lpc : public PciDevice {
   bool          initialized_rcrb_ = false;
 
   void UpdatePmBaseSci() {
+    /* PM IO base should be 0xB000 */
     uint32_t pm_io_base = *(uint32_t*)(pci_header_.data + ICH9_LPC_PMBASE);
     uint8_t acpi_control = *(uint8_t*)(pci_header_.data + ICH9_LPC_ACPI_CTRL);
     if (acpi_control & ICH9_LPC_ACPI_CTRL_ACPI_EN) {
@@ -146,12 +147,15 @@ class Ich9Lpc : public PciDevice {
   }
 
   bool LoadState(MigrationReader* reader) {
+    if (!PciDevice::LoadState(reader)) {
+      return false;
+    }
     if (!reader->ReadProtobuf("LPC", state_)) {
       return false;
     }
     UpdatePmBaseSci();
     UpdateRootComplexRegisterBLock();
-    return PciDevice::LoadState(reader);
+    return true;
   }
 
   void Reset() {

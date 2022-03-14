@@ -21,7 +21,6 @@
 
 #include <linux/kvm.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
@@ -50,7 +49,6 @@ Machine::Machine(std::string config_path) {
 
   memory_manager_ = new MemoryManager(this);
 
-  LoadBiosFile();
   CreateArchRelated();
 
   /* Currently, a Q35 chipset mother board is implemented */
@@ -88,10 +86,6 @@ Machine::~Machine() {
     safe_close(&vm_fd_);
   if (kvm_fd_ > 0)
     safe_close(&kvm_fd_);
-  if (bios_data_)
-    free(bios_data_);
-  if (bios_backup_)
-    free(bios_backup_);
 }
 
 void Machine::InitializeKvm() {
@@ -111,26 +105,6 @@ void Machine::InitializeKvm() {
   // Create vm so that we can map userspace memory
   vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
   MV_ASSERT(vm_fd_ > 0);
-}
-
-/* SeaBIOS is loaded into the end of 1MB and the end of 4GB */
-void Machine::LoadBiosFile() {
-  // Read BIOS data from path to bios_data
-  int fd = open(bios_path_.c_str(), O_RDONLY);
-  MV_ASSERT(fd > 0);
-  struct stat st;
-  fstat(fd, &st);
-
-  bios_size_ = st.st_size;
-  bios_backup_ = malloc(bios_size_);
-  read(fd, bios_backup_, bios_size_);
-  safe_close(&fd);
-
-  bios_data_ = valloc(bios_size_);
-  memcpy(bios_data_, bios_backup_, bios_size_);
-  // Map BIOS file to memory
-  memory_manager_->Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
-  memory_manager_->Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
 }
 
 
@@ -201,7 +175,7 @@ void Machine::Quit() {
  * FIXME: vCPU 0 sometimes hangs (CPU 100%) after reset
  */
 void Machine::Reset() {
-  memcpy(bios_data_, bios_backup_, bios_size_);
+  memory_manager_->ResetBios();
   device_manager_->ResetDevices();
 
   if (debug_) {

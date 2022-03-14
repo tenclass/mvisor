@@ -74,7 +74,6 @@ class Machine {
   void InitializeKvm();
   void CreateArchRelated();
   void CreateVcpu();
-  void LoadBiosFile();
 
   bool valid_ = true;
   bool paused_ = true;
@@ -89,11 +88,6 @@ class Machine {
   DeviceManager* device_manager_;
   Configuration* config_;
   IoThread* io_thread_;
-
-  std::string bios_path_;
-  size_t bios_size_;
-  void* bios_data_ = nullptr;
-  void* bios_backup_ = nullptr;
 
   uint32_t cpuid_version_ = 0;
   uint32_t cpuid_features_ = 0;

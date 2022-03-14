@@ -18,11 +18,17 @@
 
 
 #include "memory_manager.h"
+
+#include <cstring>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <cstring>
+#include <sys/stat.h>
 #include <linux/kvm.h>
+
 #include <unordered_set>
+
 #include "machine.h"
 #include "logger.h"
 
@@ -50,10 +56,15 @@ MemoryManager::MemoryManager(const Machine* machine)
     : machine_(machine) {
 
   InitializeSystemRam();
+  LoadBiosFile();
 }
 
 MemoryManager::~MemoryManager() {
   munmap(ram_host_, machine_->ram_size_);
+  if (bios_data_)
+    free(bios_data_);
+  if (bios_backup_)
+    free(bios_backup_);
 }
 
 
@@ -78,6 +89,30 @@ void MemoryManager::InitializeSystemRam() {
     Map(high_ram_lower_bound, machine_->ram_size_ - low_ram_upper_bound,
       (uint8_t*)ram_host_ + low_ram_upper_bound, kMemoryTypeRam, "System");
   }
+}
+
+/* SeaBIOS is loaded into the end of 1MB and the end of 4GB */
+void MemoryManager::LoadBiosFile() {
+  // Read BIOS data from path to bios_data
+  int fd = open(machine_->config_->bios_path().c_str(), O_RDONLY);
+  MV_ASSERT(fd > 0);  
+  struct stat st;
+  fstat(fd, &st);
+
+  bios_size_ = st.st_size;
+  bios_backup_ = malloc(bios_size_);
+  read(fd, bios_backup_, bios_size_);
+  safe_close(&fd);
+
+  bios_data_ = valloc(bios_size_);
+  memcpy(bios_data_, bios_backup_, bios_size_);
+  // Map BIOS file to memory
+  Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
+  Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
+}
+
+void MemoryManager::ResetBios() {
+  memcpy(bios_data_, bios_backup_, bios_size_);
 }
 
 /* Don't call this funciton, use Map and Unmap */
@@ -296,12 +331,16 @@ void MemoryManager::UnregisterMemoryListener(const MemoryListener** plistener) {
 
 bool MemoryManager::SaveState(MigrationWriter* writer) {
   writer->SetPrefix("memory");
+  writer->WriteRaw("BIOS", bios_data_, bios_size_);
   writer->WriteRaw("RAM", ram_host_, machine_->ram_size_);
   return true;
 }
 
 bool MemoryManager::LoadState(MigrationReader* reader) {
   reader->SetPrefix("memory");
+  if (!reader->ReadRaw("BIOS", bios_data_, bios_size_)) {
+    return false;
+  }
   if (!reader->ReadRaw("RAM", ram_host_, machine_->ram_size_)) {
     return false;
   }

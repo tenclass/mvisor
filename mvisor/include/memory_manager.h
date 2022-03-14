@@ -65,6 +65,7 @@ class MemoryManager {
 
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   void Unmap(const MemoryRegion** region);
+  void ResetBios();
 
   /* Used for migration */
   bool SaveState(MigrationWriter* writer);
@@ -81,6 +82,7 @@ class MemoryManager {
 
  private:
   void InitializeSystemRam();
+  void LoadBiosFile();
   void AddMemoryRegion(MemoryRegion* region);
   void UpdateKvmSlot(MemorySlot* slot, bool remove);
 
@@ -90,6 +92,11 @@ class MemoryManager {
   std::map<uint64_t, MemorySlot*> kvm_slots_;
   std::set<const MemoryListener*> listeners_;
   std::mutex                      mutex_;
+  
+  /* BIOS data */
+  size_t                          bios_size_;
+  void*                           bios_data_ = nullptr;
+  void*                           bios_backup_ = nullptr;
 };
 
 #endif // _MVISOR_MM_H

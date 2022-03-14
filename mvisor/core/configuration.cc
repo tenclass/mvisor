@@ -110,7 +110,7 @@ void Configuration::LoadMachine(const YAML::Node& node) {
     machine_->num_vcpus_ = node["vcpu"].as<uint64_t>();
   }
   if (node["bios"]) {
-    machine_->bios_path_ = FindPath(node["bios"].as<string>());
+    bios_path_ = FindPath(node["bios"].as<string>());
   }
   if (node["debug"]) {
     machine_->debug_ = node["debug"].as<bool>();
@@ -279,6 +279,6 @@ void Configuration::SaveMachine(YAML::Node& node) {
   ss << machine_->ram_size_ / (1UL << 30) << "G";
   node["memory"] = ss.str();
   node["vcpu"] = machine_->num_vcpus_;
-  node["bios"] = machine_->bios_path_;
   node["debug"] = machine_->debug_;
+  node["bios"] = bios_path_;
 }
