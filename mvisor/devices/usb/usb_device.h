@@ -54,18 +54,18 @@ struct UsbEndpoint {
 
 struct UsbPacket {
   UsbEndpoint*  endpoint;
-  uint      endpoint_address;
-  uint      stream_id;
-  uint64_t  id;
-  int       status;
-  size_t    content_length;
-  size_t    size;
+  uint          endpoint_address;
+  uint          stream_id;
+  uint64_t      id;
+  int           status;
+  size_t        content_length;
+  size_t        size;
   std::vector<struct iovec>  iov;
   /* control transfer */
-  uint64_t  control_parameter;
+  uint64_t      control_parameter;
   /* destructor */
-  VoidCallback Release;
-  VoidCallback OnComplete;
+  VoidCallback  Release;
+  VoidCallback  OnComplete;
 };
 
 class UsbDevice : public Device {
@@ -75,18 +75,20 @@ class UsbDevice : public Device {
   UsbPacket* CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete);
   bool HandlePacket(UsbPacket* packet);
   void CancelPacket(UsbPacket* packet);
+
   virtual void Reset();
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
 
  protected:
-  int speed_;
-  UsbEndpoint control_endpoint_;
-  std::vector<UsbEndpoint*> endpoints_;
-  const UsbDeviceDescriptor* device_descriptor_ = nullptr;
-  const UsbStringsDescriptor* strings_descriptor_ = nullptr;
+  int                               speed_;
+  std::vector<UsbEndpoint*>         endpoints_;
+  const UsbDeviceDescriptor*        device_descriptor_ = nullptr;
+  const UsbStringsDescriptor*       strings_descriptor_ = nullptr;
   const UsbConfigurationDescriptor* config_ = nullptr;
-  uint8_t configuration_value_ = 0;
-  bool remote_wakeup_ = false;
-  int alternate_settings_[16] = { 0 };
+  uint8_t                           configuration_value_ = 0;
+  bool                              remote_wakeup_ = false;
+  int                               alternate_settings_[16] = { 0 };
 
   void SetupDescriptor(const UsbDeviceDescriptor*, const UsbStringsDescriptor*);
 

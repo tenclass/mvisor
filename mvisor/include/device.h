@@ -25,6 +25,8 @@
 #include <string>
 #include <list>
 #include "vcpu.h"
+#include "migration.h"
+
 
 enum IoResourceType {
   kIoResourceTypePio,
@@ -54,6 +56,9 @@ class Device : public Object {
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Reset();
+
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
 
   const std::list<IoResource*>& io_resources() const { return io_resources_; }
   DeviceManager* manager() { return manager_; }

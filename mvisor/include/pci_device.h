@@ -213,10 +213,14 @@ class PciDevice : public Device {
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   void WritePciCommand(uint16_t command);
   void WritePciBar(uint8_t index, uint32_t value);
-  // PCI devices may override these members to handle bar regsiter events
+
+  /* PCI devices may override these members to handle bar regsiter events */
   virtual bool ActivatePciBar(uint8_t index);
   virtual bool DeactivatePciBar(uint8_t index);
 
+  /* PCI Migration */
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
  protected:
   friend class DeviceManager;
 
@@ -230,13 +234,13 @@ class PciDevice : public Device {
   void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);
   void SignalMsi(int vector = 0);
 
-  uint8_t devfn_;
-  uint8_t bus_;
-  PciConfigHeader pci_header_;
-  PciBarInfo pci_bars_[PCI_BAR_NUMS];
-  PciRomBarInfo pci_rom_;
-  PciMsiConfig msi_config_;
-  uint16_t next_capability_offset_;
+  uint8_t           devfn_;
+  uint8_t           bus_;
+  PciConfigHeader   pci_header_;
+  PciBarInfo        pci_bars_[PCI_BAR_NUMS];
+  PciRomBarInfo     pci_rom_;
+  PciMsiConfig      msi_config_;
+  uint16_t          next_capability_offset_;
 };
 
 #endif // _MVISOR_PCI_DEVICE_H

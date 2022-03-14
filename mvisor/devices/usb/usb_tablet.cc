@@ -137,7 +137,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
  private:
   std::mutex mutex_;
   std::deque<PointerEvent> queue_;
-  uint idle_;
+  uint idle_ = 0;
   uint max_queue_size_ = 16;
 
  public:

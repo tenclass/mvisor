@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+message VirtioConsoleState {
+  message Port {
+    uint32  id    = 1;
+    bool    ready = 2;
+  }
+
+  repeated Port ports = 1;
+}

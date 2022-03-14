@@ -56,6 +56,9 @@ class AhciHost : public PciDevice {
   void CheckIrq();
   void Reset();
 
+  bool SaveState(MigrationWriter* writer);
+  bool LoadState(MigrationReader* reader);
+
  private:
   int num_ports_;
   AHCIHostControlRegs host_control_;

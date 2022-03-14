@@ -35,10 +35,6 @@ void Object::set_classname(const char* classname) {
   strncpy(classname_, classname, OBJECT_MAX_NAME_LENGTH - 1);
 }
 
-void Object::set_debug(bool debug) {
-  debug_ = debug;
-}
-
 Object::Object() {
 
 }

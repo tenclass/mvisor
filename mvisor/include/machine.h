@@ -49,6 +49,8 @@ class Machine {
   bool IsValid() { return valid_; }
   bool IsPaused() { return valid_ && paused_; }
   void WaitToResume();
+  void Save(std::string path);
+  void Load(std::string path);
 
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
@@ -75,7 +77,7 @@ class Machine {
   void LoadBiosFile();
 
   bool valid_ = true;
-  bool paused_ = false;
+  bool paused_ = true;
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;

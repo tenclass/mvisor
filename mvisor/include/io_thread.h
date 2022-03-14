@@ -19,6 +19,9 @@
 #ifndef _MVISOR_IO_THREAD_H
 #define _MVISOR_IO_THREAD_H
 
+#include <sys/socket.h>
+#include <sys/epoll.h>
+
 #include <deque>
 #include <unordered_set>
 #include <unordered_map>
@@ -26,8 +29,6 @@
 #include <functional>
 #include <chrono>
 #include <mutex>
-#include <sys/socket.h>
-#include <sys/epoll.h>
 
 typedef std::function<void()> VoidCallback;
 typedef std::function<void(long)> IoCallback;
@@ -48,6 +49,7 @@ struct EpollEvent {
 };
 
 class Machine;
+class DiskImage;
 
 class IoThread {
  public:
@@ -68,6 +70,12 @@ class IoThread {
   void ModifyTimer(IoTimer* timer, int interval_ms);
   void Schedule(VoidCallback callback);
 
+  /* Disk images */
+  void RegisterDiskImage(DiskImage* image);
+  void UnregisterDiskImage(DiskImage* image);
+  void FlushDiskImages();
+  bool CanPauseNow();
+
  private:
   void RunLoop();
   int  CheckTimers();
@@ -75,10 +83,11 @@ class IoThread {
   std::thread           thread_;
   Machine*              machine_;
   std::recursive_mutex  mutex_;
-  std::unordered_set<IoTimer*>          timers_;
-  std::unordered_map<int, EpollEvent*>  epoll_events_;
   int                   event_fd_;
   int                   epoll_fd_;
+  std::unordered_set<IoTimer*>          timers_;
+  std::unordered_map<int, EpollEvent*>  epoll_events_;
+  std::unordered_set<DiskImage*>        disk_images_;
 };
 
 #endif // _MVISOR_IO_THREAD_H

@@ -26,7 +26,7 @@
 
 #define OBJECT_MAX_NAME_LENGTH 100
 
-typedef std::variant<std::string, bool, uint64_t> Value;
+typedef std::variant<bool, uint64_t, std::string> Value;
 
 class Object {
  public:
@@ -38,19 +38,23 @@ class Object {
   virtual void AddChild(Object* device);
   virtual void RemoveChild(Object* object);
 
-  const char* name() { return name_; }
-  const char* classname() { return classname_; }
-  bool debug() { return debug_; }
-  void set_debug(bool debug);
+  inline uint id() const { return id_; }
+  inline const char* name() const { return name_; }
+  inline const char* classname() const { return classname_; }
+  inline bool debug() const { return debug_; }
+  inline const Object* parent() const { return parent_; }
+  inline const std::vector<Object*>& children() const { return children_; }
+  inline bool has_key(std::string key) const { return key_values_.find(key) != key_values_.end(); }
+  inline Value& operator[](std::string key) { return key_values_[key]; }
+  inline const std::map<std::string, Value>& key_values() const { return key_values_; }
+
+  void set_id(uint id) { id_ = id; }
+  void set_debug(bool debug) { debug_ = debug; }
   void set_name(const char* name);
-  void set_classname(const char* classname);
-  const Object* parent() { return parent_; }
-  const std::vector<Object*>& children() { return children_; }
-  
-  Value& operator[](std::string key) { return key_values_[key]; }
-  bool has_key(std::string key) { return key_values_.find(key) != key_values_.end(); }
+  void set_classname(const char* classname);  
 
  protected:
+  uint id_ = 0;
   bool debug_ = false;
   char name_[OBJECT_MAX_NAME_LENGTH];
   char classname_[OBJECT_MAX_NAME_LENGTH];

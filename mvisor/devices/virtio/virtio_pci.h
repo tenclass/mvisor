@@ -95,6 +95,9 @@ struct VirtQueue {
   VRingAvailable*   available_ring;
   VRingUsed*        used_ring;
   uint16_t          last_available_index;
+  uint64_t          descriptor_table_address;
+  uint64_t          available_ring_address;
+  uint64_t          used_ring_address;
 };
 
 struct VirtElement {
@@ -118,6 +121,8 @@ class VirtioPci : public PciDevice {
   VirtioPci();
   virtual void Disconnect();
   virtual void Reset();
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
 
  private:
   void ReadIndirectDescriptorTable(VirtElement& element, VRingDescriptor* table);
@@ -125,7 +130,7 @@ class VirtioPci : public PciDevice {
   void ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteNotification(uint64_t offset, uint8_t* data, uint32_t size);
-  void EnableQueue(uint16_t queue_index, uint64_t desc_gpa, uint64_t avail_gpa, uint64_t used_gpa);
+  void EnableQueue(uint16_t queue_index);
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
 

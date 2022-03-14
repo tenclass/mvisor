@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+message HdaDuplexState {
+  message Stream {
+    uint32  id          = 1;
+    uint32  channel     = 2;
+    uint32  format      = 3;
+    uint32  gain_left   = 4;
+    uint32  gain_right  = 5;
+    bool    mute_left   = 6;
+    bool    mute_right  = 7;
+  }
+
+  repeated Stream streams = 1;
+}

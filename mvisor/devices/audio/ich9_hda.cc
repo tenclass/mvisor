@@ -17,18 +17,21 @@
  */
 
 #include "ich9_hda.h"
+
 #include <cstring>
 #include <vector>
+
 #include "logger.h"
 #include "pci_device.h"
 #include "device_manager.h"
 #include "hda_codec.h"
 #include "hda_internal.h"
+#include "states/ich9_hda.pb.h"
 
 class Ich9Hda : public PciDevice {
  private:
-  Ich9HdaRegisters regs_;
-  uint32_t rirb_counter_;
+  Ich9HdaRegisters  regs_;
+  uint32_t          rirb_counter_;
   std::vector<HdaCodecInterface*> codecs_;
 
   struct Ich9HdaStreamState {
@@ -97,6 +100,35 @@ class Ich9Hda : public PciDevice {
       regs_.state_change_status |= (1 << i);
     }
     CheckIrqLevel();
+  }
+
+  virtual bool SaveState(MigrationWriter* writer) {
+    Ich9HdaState state;
+    state.set_hda_registers(&regs_, sizeof(regs_));
+    state.set_rirb_counter(rirb_counter_);
+    writer->WriteProtobuf("HDA", state);
+    return PciDevice::SaveState(writer);
+  }
+
+  virtual bool LoadState(MigrationReader* reader) {
+    if (!PciDevice::LoadState(reader)) {
+      return false;
+    }
+    Ich9HdaState state;
+    if (!reader->ReadProtobuf("HDA", state)) {
+      return false;
+    }
+    auto& regs = state.hda_registers();
+    memcpy(&regs_, regs.data(), sizeof(regs_));
+    rirb_counter_ = state.rirb_counter();
+
+    /* When finished loading states, restart stream if started before */
+    manager_->io()->Schedule([this]() {
+      for (uint i = 0; i < 8; i++) {
+        StartStopStream(i);
+      }
+    });
+    return true;
   }
 
   void UpdateInterruptStatus() {
@@ -266,6 +298,30 @@ class Ich9Hda : public PciDevice {
     return entry.length;
   }
 
+  void StartStopStream(uint64_t index) {
+    auto &stream = regs_.streams[index];
+    if (stream.control & 0x02) { // start
+      if (debug_) {
+        MV_LOG("stream[%d] nr=%d start, ring buf %d bytes", index, stream.stream_id, stream.cyclic_buffer_length);
+      }
+      ParseBufferDescriptorList(index);
+
+      for (auto codec : codecs_) {
+        codec->StartStream(stream.stream_id, index >= 4,
+          [index, this](uint8_t* destination, size_t length) -> size_t {
+          return TransferStreamData(index, destination, length);
+        });
+      }
+    } else { // stop
+      if (debug_) {
+        MV_LOG("stream[%d] nr=%d stop", index, stream.stream_id);
+      }
+      for (auto codec : codecs_) {
+        codec->StopStream(stream.stream_id, index >= 4);
+      }
+    }
+  }
+
   void WriteStreamControl(uint64_t index, uint8_t control) {
     auto &stream = regs_.streams[index];
     uint8_t old_control = stream.control;
@@ -278,26 +334,7 @@ class Ich9Hda : public PciDevice {
     }
 
     if ((stream.control & 0x02) != (old_control & 0x02)) {
-      if (stream.control & 0x02) { // start
-        if (debug_) {
-          MV_LOG("stream[%d] nr=%d start, ring buf %d bytes", index, stream.stream_id, stream.cyclic_buffer_length);
-        }
-        ParseBufferDescriptorList(index);
-
-        for (auto codec : codecs_) {
-          codec->StartStream(stream.stream_id, index >= 4,
-            [index, this](uint8_t* destination, size_t length) -> size_t {
-            return TransferStreamData(index, destination, length);
-          });
-        }
-      } else { // stop
-        if (debug_) {
-          MV_LOG("stream[%d] nr=%d stop", index, stream.stream_id);
-        }
-        for (auto codec : codecs_) {
-        codec->StopStream(stream.stream_id, index >= 4);
-        }
-      }
+      StartStopStream(index);
     }
     CheckIrqLevel();
   }

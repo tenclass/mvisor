@@ -130,6 +130,8 @@ class AhciCdrom : public IdeStorageDevice {
  public:
   AhciCdrom();
   virtual void Connect();
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
 
  private:
   void ParseCommandPacket();
@@ -139,13 +141,13 @@ class AhciCdrom : public IdeStorageDevice {
   void Atapi_TableOfContent();
   void Atapi_ModeSense();
   void Atapi_RequestSense();
-  void SetError(int sense_key, int asc);
+  void SetError(uint sense_key, uint asc);
 
-  int sense_key_;
-  int asc_;
-  size_t total_tracks_;
-  size_t track_size_ = 2048; // Cdrom always use 2048 track size
-  size_t image_block_size_;
+  uint    sense_key_;
+  uint    asc_;
+  size_t  total_tracks_;
+  size_t  track_size_ = 2048; // Cdrom always use 2048 track size
+  size_t  image_block_size_;
 
   VoidCallback atapi_handlers_[256];
 };

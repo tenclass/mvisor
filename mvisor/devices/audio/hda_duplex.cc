@@ -17,38 +17,44 @@
  */
 
 #include "hda_codec.h"
+
 #include <cstring>
+#include <cstdio>
+#include <cmath>
+
 #include <string>
 #include <map>
 #include <vector>
 #include <chrono>
 #include <array>
-#include <cstdio>
-#include <cmath>
+
 #include "device.h"
 #include "hda_internal.h"
 #include "device_manager.h"
 #include "logger.h"
+#include "states/hda_duplex.pb.h"
 
 #define HDA_TIMER_INTERVAL_MS (10) // 10ms
 #define HDA_STREAM_BUFFER_SIZE 8192
 
 struct HdaStream {
-  uint32_t id;
-  uint32_t channel;
-  uint32_t format;
-  uint32_t gain_left, gain_right;
-  bool mute_left, mute_right;
-  bool output;
-  bool running;
-  size_t position;
-  uint32_t nchannels;
-  uint32_t frequency;
-  size_t bytes_per_second;
-  IoTimer* timer;
+  uint32_t  id;
+  uint32_t  channel;
+  uint32_t  format;
+  uint32_t  gain_left, gain_right;
+  bool      mute_left, mute_right;
+
+  bool      output;
+  bool      running;
+  size_t    position;
+  uint32_t  nchannels;
+  uint32_t  frequency;
+  size_t    bytes_per_second;
+
+  IoTimer*  timer;
   IoTimePoint start_time;
   TransferCallback transfer_callback;
-  uint8_t buffer[HDA_STREAM_BUFFER_SIZE];
+  uint8_t   buffer[HDA_STREAM_BUFFER_SIZE];
 };
 
 struct HdaNode {
@@ -64,11 +70,11 @@ struct HdaNode {
 
 class HdaDuplex : public Device, public HdaCodecInterface {
  private:
-  uint32_t subsystem_id_;
-  uint32_t pcm_formats_;
-  std::vector<HdaNode> nodes_;
-  std::array<HdaStream, 2> streams_;
-  FILE* fp_output_ = nullptr;
+  uint32_t                  subsystem_id_;
+  uint32_t                  pcm_formats_;
+  std::vector<HdaNode>      nodes_;
+  std::array<HdaStream, 2>  streams_ = { 0 };
+  FILE*                     fp_output_ = nullptr;
 
  public:
   void Connect() {
@@ -87,11 +93,52 @@ class HdaDuplex : public Device, public HdaCodecInterface {
   }
 
   void Reset() {
+    for (auto& stream : streams_) {
+      if (stream.running) {
+        SetStreamRunning(&stream, false);
+      }
+    }
     InitializeCodec();
   }
 
+  bool SaveState(MigrationWriter* writer) {
+    HdaDuplexState state;
+    for (size_t i = 0; i < streams_.size(); i++) {
+      auto s = state.add_streams();
+      s->set_id(streams_[i].id);
+      s->set_channel(streams_[i].channel);
+      s->set_format(streams_[i].format);
+      s->set_gain_left(streams_[i].gain_left);
+      s->set_gain_right(streams_[i].gain_right);
+      s->set_mute_left(streams_[i].mute_left);
+      s->set_mute_right(streams_[i].mute_right);
+    }
+    writer->WriteProtobuf("HDA_DUPLEX_CODEC", state);
+    return Device::SaveState(writer);
+  }
+
+  bool LoadState(MigrationReader* reader) {
+    if (!Device::LoadState(reader))
+      return false;
+    HdaDuplexState state;
+    if (!reader->ReadProtobuf("HDA_DUPLEX_CODEC", state)) {
+      return false;
+    }
+    for (size_t i = 0; i < streams_.size(); i++) {
+      auto& s = state.streams(i);
+      streams_[i].id = s.id();
+      streams_[i].channel = s.channel();
+      streams_[i].format = s.format();
+      streams_[i].gain_left = s.gain_left();
+      streams_[i].gain_right = s.gain_right();
+      streams_[i].mute_left = s.mute_left();
+      streams_[i].mute_right = s.mute_right();
+      SetupStream(&streams_[i]);
+    }
+    return true;
+  }
+
   void InitializeCodec() {
-    bzero(streams_.data(), streams_.size() * sizeof(HdaStream));
     nodes_.clear();
     subsystem_id_ = (0x1AF4 << 16) | 0x21;  // duplex, no mixer
     pcm_formats_ = AC_SUPPCM_BITS_16 | (1 << 6); // 48000 Hz
@@ -354,6 +401,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
       MV_ASSERT(stream->timer);
       manager_->io()->RemoveTimer(stream->timer);
       stream->timer = nullptr;
+      stream->transfer_callback = nullptr;
     }
   }
 

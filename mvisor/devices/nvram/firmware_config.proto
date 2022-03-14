@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message FirmwareConfigState {
+  uint32  current_index      = 1;
+  uint32  current_offset     = 2;
+  uint64  dma_address        = 3;
+}

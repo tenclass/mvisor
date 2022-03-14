@@ -22,7 +22,7 @@
 #include <cstdint>
 #include "ide_storage.h"
 #include "device.h"
-
+#include "states/ahci_host.pb.h"
 
 struct AhciCommandHeader {
   uint8_t     command_fis_length : 5; // in DWORDS, 2 ~ 16
@@ -89,6 +89,10 @@ class AhciPort {
   void Write(uint64_t offset, uint32_t value);
   void Read(uint64_t offset, uint32_t* data);
   void Reset();
+
+  /* Called by AhciHost */
+  void SaveState(AhciHostState_PortState* port_state);
+  void LoadState(const AhciHostState_PortState* port_state);
 
  private:
   void TrigerIrq(int irqbit);

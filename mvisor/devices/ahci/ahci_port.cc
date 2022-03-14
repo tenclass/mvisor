@@ -408,3 +408,46 @@ void AhciPort::TrigerIrq(int irqbit) {
   host_->CheckIrq();
 }
 
+void AhciPort::SaveState(AhciHostState_PortState* port_state) {
+  port_state->set_index(port_index_);
+  port_state->set_busy_slot(busy_slot_);
+  port_state->set_init_d2h_sent(init_d2h_sent_);
+  auto regs = port_state->mutable_registers();
+  regs->set_command_list_base0(port_control_.command_list_base0);
+  regs->set_command_list_base1(port_control_.command_list_base1);
+  regs->set_fis_base0(port_control_.fis_base0);
+  regs->set_fis_base1(port_control_.fis_base1);
+  regs->set_irq_status(port_control_.irq_status);
+  regs->set_irq_mask(port_control_.irq_mask);
+  regs->set_command(port_control_.command);
+  regs->set_task_flie_data(port_control_.task_flie_data);
+  regs->set_signature(port_control_.signature);
+  regs->set_sata_status(port_control_.sata_status);
+  regs->set_sata_control(port_control_.sata_control);
+  regs->set_sata_error(port_control_.sata_error);
+  regs->set_sata_active(port_control_.sata_active);
+}
+
+void AhciPort::LoadState(const AhciHostState_PortState* port_state) {
+  port_index_ = port_state->index();
+  busy_slot_ = port_state->busy_slot();
+  init_d2h_sent_ = port_state->init_d2h_sent();
+  auto &regs = port_state->registers();
+  port_control_.command_list_base0 = regs.command_list_base0();
+  port_control_.command_list_base1 = regs.command_list_base1();
+  port_control_.fis_base0 = regs.fis_base0();
+  port_control_.fis_base1 = regs.fis_base1();
+  port_control_.irq_status = regs.irq_status();
+  port_control_.irq_mask = regs.irq_mask();
+  port_control_.command = regs.command();
+  port_control_.task_flie_data = regs.task_flie_data();
+  port_control_.signature = regs.signature();
+  port_control_.sata_status = regs.sata_status();
+  port_control_.sata_control = regs.sata_control();
+  port_control_.sata_error = regs.sata_error();
+  port_control_.sata_active = regs.sata_active();
+
+  /* Setup command_list_ and fis_rx_ pointers */
+  port_control_.command &= ~(PORT_CMD_LIST_ON | PORT_CMD_FIS_ON);
+  CheckEngines();
+}

@@ -18,12 +18,15 @@
 
 
 #include "io_thread.h"
+
 #include <cstring>
 #include <unistd.h>
 #include <sys/eventfd.h>
 #include <arpa/inet.h>
+
 #include "logger.h"
 #include "machine.h"
+#include "disk_image.h"
 
 #define MAX_ENTRIES 256
 
@@ -81,14 +84,15 @@ void IoThread::RunLoop() {
     /* Execute timer events and calculate the next timeout */
     int next_timeout_ms = CheckTimers();
     /* Check paused state before sleep */
-    while(machine_->IsPaused()) {
+    while(machine_->IsPaused() && CanPauseNow()) {
       machine_->WaitToResume();
     }
     if (!machine_->IsValid()) {
       break;
     }
     int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, next_timeout_ms);
-    if (nfds < 0) {
+    if (nfds < 0 && errno != EINTR) {
+      MV_PANIC("nfds=%d", nfds);
       break;
     }
     
@@ -230,3 +234,42 @@ void IoThread::Schedule(VoidCallback callback) {
   AddTimer(0, false, callback);
 }
 
+void IoThread::RegisterDiskImage(DiskImage* image) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  disk_images_.insert(image);
+}
+
+void IoThread::UnregisterDiskImage(DiskImage* image) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  disk_images_.erase(image);
+}
+
+void IoThread::FlushDiskImages() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+  for (auto image : disk_images_) {
+    image->FlushAsync([](auto ret) {
+      MV_LOG("flush done");
+    });
+  }
+}
+
+bool IoThread::CanPauseNow() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+  /* Drain all disk IO */
+  for (auto image : disk_images_) {
+    if (image->busy()) {
+      return false;
+    }
+  }
+
+  /* Drain all IO schedule jobs */
+  for (auto timer : timers_) {
+    if (timer->interval_ms == 0) {
+      return false;
+    }
+  }
+
+  return true;
+}

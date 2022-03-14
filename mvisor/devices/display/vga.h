@@ -33,23 +33,27 @@ enum DisplayMode {
 
 class Vga : public PciDevice, public DisplayInterface {
  private:
-  uint8_t misc_output_reg_;
-  uint8_t sequence_index_;
-  uint8_t sequence_registers_[256];
-  uint8_t gfx_index_;
-  uint8_t gfx_registers_[256];
-  uint8_t attribute_index_;
-  uint8_t attribute_registers_[0x15];
-  uint16_t pallete_read_index_;
-  uint16_t pallete_write_index_;
-  uint8_t pallete_[256 * 3];
-  uint8_t crtc_index_;
-  uint8_t crtc_registers_[0x19];
-  uint8_t status_registers_[2];
+  struct {
+  uint8_t   misc_output;
+  uint8_t   status[2];
+  uint8_t   sequence_index;
+  uint8_t   sequence[256];
+  uint8_t   gfx_index;
+  uint8_t   gfx[256];
+  uint8_t   attribute_index;
+  uint8_t   attribute[0x15];
+  uint8_t   crtc_index;
+  uint8_t   crtc[0x19];
+  uint16_t  pallete_read_index;
+  uint16_t  pallete_write_index;
+  uint8_t   pallete[256 * 3];
+  } vga_;
 
-  uint16_t vbe_version_;
-  uint16_t vbe_index_;
-  uint16_t vbe_registers_[16];
+  struct {
+    uint16_t version;
+    uint16_t index;
+    uint16_t registers[16];
+  } vbe_;
 
   uint8_t* vram_map_select_;
   uint32_t vram_map_select_size_;
@@ -72,9 +76,9 @@ class Vga : public PciDevice, public DisplayInterface {
   void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
 
  protected:
-  uint32_t  vram_size_;
-  uint8_t*  vram_base_;
-  uint32_t  vga_mem_size_;
+  uint32_t    vram_size_;
+  uint8_t*    vram_base_;
+  uint32_t    vga_mem_size_;
   DisplayMode mode_;
   uint16_t    width_;
   uint16_t    height_;
@@ -95,6 +99,9 @@ class Vga : public PciDevice, public DisplayInterface {
   virtual void Disconnect();
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
 
   virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp);
 

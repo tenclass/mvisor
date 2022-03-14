@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+message VcpuState {
+  /* KVM Multi-processor state */
+  uint32  mp_state      = 1;
+  /* X86 Regs */
+  bytes   regs          = 2;
+  /* X86 SRegs */
+  bytes   sregs         = 3;
+  /* X86 XSAVE */
+  bytes   xsave         = 4;
+  /* X86 XCRS */
+  bytes   xcrs          = 5;
+  /* X86 MSRS */
+  bytes   msrs          = 6;
+  /* X86 LAPIC */
+  bytes   lapic         = 7;
+  /* Debug regs */
+  bytes   debug_regs    = 8;
+  /* Nested states */
+  bytes   nested_states = 9;
+  /* KVM Vcpu events */
+  bytes   events        = 10;
+}

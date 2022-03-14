@@ -155,3 +155,11 @@ void Device::Write(const IoResource* resource, uint64_t offset, uint8_t* data, u
   MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
     name_, resource->base, offset, size, *(uint64_t*)data);
 }
+
+bool Device::SaveState(MigrationWriter* writer) {
+  return true;
+}
+
+bool Device::LoadState(MigrationReader* reader) {
+  return true;
+}

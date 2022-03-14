@@ -120,16 +120,18 @@ class SerialPortInterface {
   virtual void OnMessage(uint8_t* data, size_t size) = 0;
   virtual void OnWritable() = 0;
 
-  virtual void SetReady(bool ready) {
-    ready_ = ready;
-  }
-
   void Initialize(SerialDeviceInterface* device, uint32_t id) {
     device_ = device;
     port_id_ = id;
   }
-  uint32_t port_id() { return port_id_; }
-  const char* port_name() { return port_name_; }
+
+  virtual void set_ready(bool ready) {
+    ready_ = ready;
+  }
+
+  inline uint32_t     port_id() const { return port_id_; }
+  inline const char*  port_name() const { return port_name_; }
+  inline bool         ready() const { return ready_; }
 
  protected:
   SerialDeviceInterface* device_;

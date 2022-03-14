@@ -24,8 +24,8 @@
 #include "spice/enums.h"
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
-  device_manager_ = machine_->device_manager();
   SDL_Init(SDL_INIT_VIDEO);
+  LookupDevices();
 }
 
 Viewer::~Viewer() {
@@ -198,40 +198,40 @@ void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
 void Viewer::Render() {
   if (requested_update_window_) {
     requested_update_window_ = false;
-
     DestroyWindow();
     CreateWindow();
-    for (auto partial : partials_) {
-      partial->Release();
-    }
-    partials_.clear();
   }
 
+  std::unique_lock<std::mutex> lock(mutex_);
   bool redraw = false;
   while (!cursor_updates_.empty()) {
-    mutex_.lock();
     auto cursor_update = cursor_updates_.front();
     cursor_updates_.pop_front();
-    mutex_.unlock();
+    lock.unlock();
     RenderCursor(cursor_update);
     cursor_update->Release();
+    lock.lock();
   }
   if (screen_texture_ && !partials_.empty()) {
     while (!partials_.empty()) {
-      mutex_.lock();
       auto partial = partials_.front();
       partials_.pop_front();
-      mutex_.unlock();
-      if (bpp_ == 8) {
-        RenderSurface(partial);
-      } else {
-        RenderPartial(partial);
+      lock.unlock();
+
+      if (partial->x + partial->width <= width_ && partial->y + partial->height <= height_) {
+        if (bpp_ == 8) {
+          RenderSurface(partial);
+        } else {
+          RenderPartial(partial);
+        }
       }
       partial->Release();
+      lock.lock();
     }
     redraw = true;
   }
 
+  lock.unlock();
   if (redraw) {
     SDL_RenderCopy(renderer_, screen_texture_, nullptr, nullptr);
     SDL_RenderPresent(renderer_);
@@ -240,6 +240,8 @@ void Viewer::Render() {
 
 
 PointerInputInterface* Viewer::GetActivePointer() {
+  if (machine_->IsPaused())
+    return nullptr;
   for (auto pointer : pointers_) {
     if (pointer->InputAcceptable()) {
       return pointer;
@@ -249,7 +251,7 @@ PointerInputInterface* Viewer::GetActivePointer() {
 }
 
 void Viewer::LookupDevices() {
-  keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2Keyboard"));
+  keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2"));
   spice_agent_ = dynamic_cast<SpiceAgentInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
   display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Qxl"));
   if (display_ == nullptr) {
@@ -277,7 +279,6 @@ void Viewer::LookupDevices() {
  */
 int Viewer::MainLoop() {
   SetThreadName("mvisor-viewer");
-  LookupDevices();
 
   auto frame_interval_us = std::chrono::microseconds(1000000 / 30);
   // Loop until all vcpu exits
@@ -306,7 +307,6 @@ int Viewer::MainLoop() {
 }
 
 void Viewer::HandleEvent(const SDL_Event& event) {
-  std::lock_guard<std::mutex> lock(mutex_);
   uint8_t transcoded[10] = { 0 };
   /* if we dont check the pointer changes, it would have 1000 pointer events per second */
   bool should_update_pointer = false;
@@ -319,6 +319,14 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         machine_->Resume();
       } else {
         machine_->Pause();
+      }
+    } else if (event.key.keysym.sym == SDLK_F2) {
+      if (machine_->IsPaused()) {
+        machine_->Load("/tmp/save");
+        machine_->Resume();
+      } else {
+        machine_->Pause();
+        machine_->Save("/tmp/save");
       }
     }
   case SDL_KEYUP:

@@ -25,6 +25,8 @@
 #include <functional>
 #include <mutex>
 
+#include "migration.h"
+
 enum MemoryType {
   kMemoryTypeReserved = 0,
   kMemoryTypeRam = 1,
@@ -63,6 +65,10 @@ class MemoryManager {
 
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   void Unmap(const MemoryRegion** region);
+
+  /* Used for migration */
+  bool SaveState(MigrationWriter* writer);
+  bool LoadState(MigrationReader* reader);
 
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);

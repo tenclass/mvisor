@@ -22,8 +22,10 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <cstring>
+
 #include "machine.h"
 #include "logger.h"
+#include "states/vcpu.pb.h"
 
 #define MAX_KVM_CPUID_ENTRIES 100
 
@@ -295,4 +297,126 @@ void Vcpu::PrintRegisters() {
 
   // call logger.h
   ::PrintRegisters(regs, sregs);
+}
+
+
+bool Vcpu::SaveState(MigrationWriter* writer) {
+  std::stringstream prefix;
+  prefix << "vcpu-" << vcpu_id_;
+  writer->SetPrefix(prefix.str());
+
+  VcpuState state;
+
+  /* KVM vcpu events */
+  kvm_vcpu_events events;
+  MV_ASSERT(ioctl(fd_, KVM_GET_VCPU_EVENTS, &events) == 0);
+  state.set_events(&events, sizeof(events));
+
+  /* KVM MP State */
+  kvm_mp_state mp_state;
+  MV_ASSERT(ioctl(fd_, KVM_GET_MP_STATE, &mp_state) == 0);
+  state.set_mp_state(mp_state.mp_state);
+
+  /* Common regsiters */
+  kvm_regs regs;
+  MV_ASSERT(ioctl(fd_, KVM_GET_REGS, &regs) == 0);
+  state.set_regs(&regs, sizeof(regs));
+
+  /* XSAVE */
+  kvm_xsave xsave;
+  MV_ASSERT(ioctl(fd_, KVM_GET_XSAVE, &xsave) == 0);
+  state.set_xsave(&xsave, sizeof(xsave));
+
+  /* XCRS */
+  kvm_xcrs xcrs;
+  MV_ASSERT(ioctl(fd_, KVM_GET_XCRS, &xcrs) == 0);
+  state.set_xcrs(&xcrs, sizeof(xcrs));
+
+  /* Special registers */
+  kvm_sregs sregs;
+  MV_ASSERT(ioctl(fd_, KVM_GET_SREGS, &sregs) == 0);
+  state.set_sregs(&sregs, sizeof(sregs));
+
+  /* MSRS Indices */
+  struct {
+    kvm_msr_list  list;
+    uint32_t      indices[100];
+  } msr_list = { .list = { sizeof(msr_list.indices) / sizeof(uint32_t) } };
+  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, &msr_list) == 0);
+
+  /* MSRS */
+  struct {
+    kvm_msrs      msrs;
+    kvm_msr_entry entries[100];
+  } msrs = { .msrs = { .nmsrs = msr_list.list.nmsrs } };
+  for (uint i = 0; i < msr_list.list.nmsrs; i++) {
+    msrs.entries[i].index = msr_list.indices[i];
+  }
+  MV_ASSERT(ioctl(fd_, KVM_GET_MSRS, &msrs) == (int)msrs.msrs.nmsrs);
+  state.set_msrs(&msrs, sizeof(msrs));
+
+  /* LAPIC */
+  kvm_lapic_state lapic;
+  MV_ASSERT(ioctl(fd_, KVM_GET_LAPIC, &lapic) == 0);
+  state.set_lapic(&lapic, sizeof(lapic));
+
+  writer->WriteProtobuf("CPU", state);
+  return true;
+}
+
+bool Vcpu::LoadState(MigrationReader* reader) {
+  std::stringstream prefix;
+  prefix << "vcpu-" << vcpu_id_;
+  reader->SetPrefix(prefix.str());
+
+  VcpuState state;
+  if (!reader->ReadProtobuf("CPU", state)) {
+    return false;
+  }
+
+  /* Special registers */
+  kvm_sregs sregs;
+  memcpy(&sregs, state.sregs().data(), sizeof(sregs));
+  MV_ASSERT(ioctl(fd_, KVM_SET_SREGS, &sregs) == 0);
+
+  /* Common regsiters */
+  kvm_regs regs;
+  memcpy(&regs, state.regs().data(), sizeof(regs));
+  MV_ASSERT(ioctl(fd_, KVM_SET_REGS, &regs) == 0);
+
+  /* XSAVE */
+  kvm_xsave xsave;
+  memcpy(&xsave, state.xsave().data(), sizeof(xsave));
+  MV_ASSERT(ioctl(fd_, KVM_SET_XSAVE, &xsave) == 0);
+
+  /* XCRS */
+  kvm_xcrs xcrs;
+  memcpy(&xcrs, state.xcrs().data(), sizeof(xcrs));
+  MV_ASSERT(ioctl(fd_, KVM_SET_XCRS, &xcrs) == 0);
+
+  /* MSRS */
+  struct {
+    kvm_msrs      msrs;
+    kvm_msr_entry entries[100];
+  } msrs;
+  memcpy(&msrs, state.msrs().data(), sizeof(msrs));
+  MV_ASSERT(ioctl(fd_, KVM_SET_MSRS, &msrs) == (int)msrs.msrs.nmsrs);
+
+  /* KVM vcpu events */
+  kvm_vcpu_events events;
+  memcpy(&events, state.events().data(), sizeof(events));
+  MV_ASSERT(ioctl(fd_, KVM_SET_VCPU_EVENTS, &events) == 0);
+  
+  /* KVM MP State */
+  kvm_mp_state mp_state;
+  mp_state.mp_state = state.mp_state();
+  MV_ASSERT(ioctl(fd_, KVM_SET_MP_STATE, &mp_state) == 0);
+
+  /* LAPIC */
+  kvm_lapic_state lapic;
+  memcpy(&lapic, state.lapic().data(), sizeof(lapic));
+  MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
+
+  MV_LOG("load cpu state %d", vcpu_id_);
+  return true;
 }

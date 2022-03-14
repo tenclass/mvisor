@@ -17,12 +17,15 @@
  */
 
 #include "device_manager.h"
-#include <cstring>
+
 #include <algorithm>
+
+#include <cstring>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/eventfd.h>
 #include <signal.h>
+
 #include "logger.h"
 #include "memory_manager.h"
 #include "machine.h"
@@ -46,6 +49,8 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
   machine_(machine), root_(root)
 {
   root_->manager_ = this;
+  /* Initialize IRQ chip */
+  SetupIrqChip();
   
   /* Initialize GSI routing table */
   SetupGsiRoutingTable();
@@ -291,12 +296,19 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         ptr += size;
       }
 
-      if (machine_->debug()) {
+      if (machine_->debug() && !ioeventfd) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
-        if (!ioeventfd && cost_us >= 10000) {
+        if (cost_us >= 10000) {
           MV_LOG("%s SLOW IO %s port=0x%x size=%u data=%lx cost=%.3lfms", device->name(),
             is_write ? "out" : "in", port, size, *(uint64_t*)data, double(cost_us) / 1000.0);
+        }
+        ++io_accounting_.total_pio;
+        if (start_time - io_accounting_.last_print_time > std::chrono::seconds(1)) {
+          MV_LOG("pio count=%u  mmio count=%u", io_accounting_.total_pio, io_accounting_.total_mmio);
+          io_accounting_.last_print_time = start_time;
+          io_accounting_.total_pio = 0;
+          io_accounting_.total_mmio = 0;
         }
       }
       return;
@@ -344,13 +356,22 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         device->Read(resource, base - resource->base, data, size);
       }
 
-      if (machine_->debug()) {
+      if (machine_->debug() && !ioeventfd) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::steady_clock::now() - start_time).count();
-        if (!ioeventfd && cost_us >= 10000) {
+        if (cost_us >= 10000) {
           MV_LOG("%s SLOW MMIO %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(),
             is_write ? "out" : "in", base, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
+        ++io_accounting_.total_mmio;
+        if (start_time - io_accounting_.last_print_time > std::chrono::seconds(1)) {
+          MV_LOG("pio count=%u  mmio count=%u", io_accounting_.total_pio, io_accounting_.total_mmio);
+          io_accounting_.last_print_time = start_time;
+          io_accounting_.total_pio = 0;
+          io_accounting_.total_mmio = 0;
+        }
+        // MV_LOG("%s handled mmio %s base: 0x%016lx size: %x data: %016lx", device->name(),
+        //   is_write ? "write" : "read", base, size, *(uint64_t*)data);
       }
       return;
     }
@@ -409,6 +430,20 @@ void DeviceManager::UpdateGsiRoutingTable() {
   auto ret = ioctl(machine_->vm_fd_, KVM_SET_GSI_ROUTING, table);
   if (ret) {
     MV_PANIC("KVM_SET_GSI_ROUTING ret=%d", ret);
+  }
+}
+
+/* Use KVM Irq Chip */
+void DeviceManager::SetupIrqChip() {
+  // Use Kvm in-kernel IRQChip
+  if (ioctl(machine_->vm_fd_, KVM_CREATE_IRQCHIP) < 0) {
+    MV_PANIC("failed to create irqchip");
+  }
+
+  // Use Kvm in-kernel PITClock
+  struct kvm_pit_config pit_config = { 0 };
+  if (ioctl(machine_->vm_fd_, KVM_CREATE_PIT2, &pit_config) < 0) {
+    MV_PANIC("failed to create pit");
   }
 }
 
@@ -511,4 +546,87 @@ void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int
   mutex_.unlock();
   
   UpdateGsiRoutingTable();
+}
+
+
+bool DeviceManager::SaveState(MigrationWriter* writer) {
+  writer->SetPrefix("kvm-irqchip");
+  /* Save irq chip */
+  kvm_irqchip chip;
+  chip.chip_id = KVM_IRQCHIP_PIC_MASTER;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_IRQCHIP, &chip) == 0);
+  writer->WriteRaw("PIC_MASTER", &chip.chip.pic, sizeof(chip.chip.pic));
+
+  chip.chip_id = KVM_IRQCHIP_PIC_SLAVE;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_IRQCHIP, &chip) == 0);
+  writer->WriteRaw("PIC_SLAVE", &chip.chip.pic, sizeof(chip.chip.pic));
+
+  chip.chip_id = KVM_IRQCHIP_IOAPIC;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_IRQCHIP, &chip) == 0);
+  writer->WriteRaw("IOAPIC", &chip.chip.ioapic, sizeof(chip.chip.ioapic));
+
+  kvm_pit_state2 pit2;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_PIT2, &pit2) == 0);
+  writer->WriteRaw("PIT2", &pit2, sizeof(pit2));
+  
+  // writer->SetPrefix("kvm-clock");
+  // kvm_clock_data clock = { 0 };
+  // MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_CLOCK, &clock) == 0);
+  // writer->WriteRaw("CLOCK", &clock, sizeof(clock));
+
+  /* Save states of devices */
+  for (auto device : registered_devices_) {
+    writer->SetPrefix(device->name());
+    if (!device->SaveState(writer)) {
+      MV_PANIC("failed to save state of device %s", device->name());
+      return false;
+    }
+  }
+  return true;
+}
+
+bool DeviceManager::LoadState(MigrationReader* reader) {
+  reader->SetPrefix("kvm-irqchip");
+  /* Load irq chip */
+  kvm_irqchip chip;
+  chip.chip_id = KVM_IRQCHIP_PIC_MASTER;
+  if (!reader->ReadRaw("PIC_MASTER", &chip.chip.pic, sizeof(chip.chip.pic)))
+    return false;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_IRQCHIP, &chip) == 0);
+
+  chip.chip_id = KVM_IRQCHIP_PIC_SLAVE;
+  if (!reader->ReadRaw("PIC_SLAVE", &chip.chip.pic, sizeof(chip.chip.pic)))
+    return false;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_IRQCHIP, &chip) == 0);
+
+  chip.chip_id = KVM_IRQCHIP_IOAPIC;
+  if (!reader->ReadRaw("IOAPIC", &chip.chip.ioapic, sizeof(chip.chip.ioapic)))
+    return false;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_IRQCHIP, &chip) == 0);
+
+  kvm_pit_state2 pit2;
+  if (!reader->ReadRaw("PIT2", &pit2, sizeof(pit2)))
+    return false;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_PIT2, &pit2) == 0);
+
+  // reader->SetPrefix("kvm-clock");
+  // kvm_clock_data clock = { 0 };
+  // if (!reader->ReadRaw("CLOCK", &clock, sizeof(clock)))
+  //   return false;
+  // MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_CLOCK, &clock) == 0);
+
+  /* Reset device states */
+  for (auto device : registered_devices_) {
+    device->Reset();
+  }
+
+  /* Load device states */
+  for (auto device : registered_devices_) {
+    reader->SetPrefix(device->name());
+    if (!device->LoadState(reader)) {
+      MV_PANIC("failed to load state of device %s", device->name());
+      return false;
+    }
+  }
+  return true;
 }

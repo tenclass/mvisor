@@ -20,6 +20,7 @@
 #include "logger.h"
 #include "device_manager.h"
 #include "pci_device.h"
+#include "states/pci_host.pb.h"
 
 #define MCH_CONFIG_ADDR             0xCF8
 #define MCH_CONFIG_DATA             0xCFC
@@ -51,7 +52,7 @@
 class PciHost : public PciDevice {
  private:
   uint64_t          pcie_xbar_base_ = 0;
-  PciConfigAddress  pci_config_address_;
+  PciConfigAddress  config_addr_;
 
  public:
   PciHost() {
@@ -68,38 +69,59 @@ class PciHost : public PciDevice {
     AddIoResource(kIoResourceTypePio, MCH_CONFIG_DATA, 4, "MCH Config Data");
   }
 
+  virtual bool SaveState(MigrationWriter* writer) {
+    MchState state;
+    state.set_config(config_addr_.data);
+    writer->WriteProtobuf("MCH", state);
+    return PciDevice::SaveState(writer);
+  }
+
+  virtual bool LoadState(MigrationReader* reader) {
+    if (!PciDevice::LoadState(reader)) {
+      return false;
+    }
+    MchState state;
+    if (!reader->ReadProtobuf("MCH", state)) {
+      return false;
+    }
+    config_addr_.data = state.config();
+    MchUpdatePcieXBar();
+    return true;
+  }
+
   void MchUpdatePcieXBar() {
     uint32_t pciexbar = *(uint32_t*)(pci_header_.data + MCH_PCIEXBAR);
     int enable = pciexbar & 1;
-    uint32_t base = pciexbar & Q35_MASK(64, 35, 28);
-    uint64_t length = (1LL << 20) * 256;
-    if (pcie_xbar_base_) {
-      RemoveIoResource(kIoResourceTypeMmio, pcie_xbar_base_);
-      pcie_xbar_base_ = 0;
-    }
-    if (enable) {
-      AddIoResource(kIoResourceTypeMmio, base, length, "PCIE XBAR");
-      pcie_xbar_base_ = base;
+    if (!!enable != !!pcie_xbar_base_) {
+      uint32_t base = pciexbar & Q35_MASK(64, 35, 28);
+      uint64_t length = (1LL << 20) * 256;
+      if (pcie_xbar_base_) {
+        RemoveIoResource(kIoResourceTypeMmio, pcie_xbar_base_);
+        pcie_xbar_base_ = 0;
+      }
+      if (enable) {
+        AddIoResource(kIoResourceTypeMmio, base, length, "PCIE XBAR");
+        pcie_xbar_base_ = base;
+      }
     }
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == MCH_CONFIG_ADDR) {
-      uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
+      uint8_t* pointer = (uint8_t*)&config_addr_.data + offset;
       memcpy(pointer, data, size);
     
     } else if (resource->base == MCH_CONFIG_DATA) {
       MV_ASSERT(size <= 4);
       
-      PciDevice* pci_device = manager_->LookupPciDevice(pci_config_address_.bus,
-        pci_config_address_.devfn);
+      PciDevice* pci_device = manager_->LookupPciDevice(config_addr_.bus, config_addr_.devfn);
       if (pci_device) {
-        pci_config_address_.reg_offset = offset;
+        config_addr_.reg_offset = offset;
         pci_device->WritePciConfigSpace(
-          pci_config_address_.data & PCI_DEVICE_CONFIG_MASK, data, size);
+          config_addr_.data & PCI_DEVICE_CONFIG_MASK, data, size);
       } else {
         MV_LOG("failed to lookup pci bus=0x%x devfn=0x%02x",
-          pci_config_address_.bus, pci_config_address_.devfn);
+          config_addr_.bus, config_addr_.devfn);
       }
     
     } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
@@ -121,19 +143,18 @@ class PciHost : public PciDevice {
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == MCH_CONFIG_ADDR) {
-      uint8_t* pointer = (uint8_t*)&pci_config_address_.data + offset;
+      uint8_t* pointer = (uint8_t*)&config_addr_.data + offset;
       memcpy(data, pointer, size);
     
     } else if (resource->base == MCH_CONFIG_DATA) {
       if (size > 4)
         size = 4;
       
-      PciDevice* pci_device = manager_->LookupPciDevice(pci_config_address_.bus,
-        pci_config_address_.devfn);
+      PciDevice* pci_device = manager_->LookupPciDevice(config_addr_.bus, config_addr_.devfn);
       if (pci_device) {
-        pci_config_address_.reg_offset = offset;
+        config_addr_.reg_offset = offset;
         pci_device->ReadPciConfigSpace(
-          pci_config_address_.data & PCI_DEVICE_CONFIG_MASK, data, size);
+          config_addr_.data & PCI_DEVICE_CONFIG_MASK, data, size);
       } else {
         memset(data, 0xff, size);
       }

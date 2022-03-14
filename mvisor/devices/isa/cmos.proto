@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message CmosState {
+  uint32  index         = 1;
+  bytes   data          = 2;
+  bool    nmi_disabled  = 3;
+}

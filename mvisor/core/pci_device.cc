@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include "logger.h"
 #include "machine.h"
+#include "states/pci_device.pb.h"
 
 
 PciDevice::PciDevice() {
@@ -360,4 +361,71 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
   if (bar.address && !bar.active) {
     ActivatePciBar(index);
   }
+}
+
+bool PciDevice::SaveState(MigrationWriter* writer) {
+  PciDeviceState state;
+  state.set_bus(bus_);
+  state.set_device(devfn_ >> 3);
+  state.set_function(devfn_ & 0b11);
+  state.set_config_space(pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
+
+  for (int i = 0; i < msi_config_.msix_table_size; i++) {
+    auto& msix = msi_config_.msix_table[i];
+    auto entry = state.add_msix_entries();
+    entry->set_address(((uint64_t)msix.message.address_hi << 32) | msix.message.address_lo);
+    entry->set_data(msix.message.data);
+    entry->set_control(msix.control);
+  }
+  writer->WriteProtobuf("PCI", state);
+  return Device::SaveState(writer);
+}
+
+bool PciDevice::LoadState(MigrationReader* reader) {
+  if (!Device::LoadState(reader)) {
+    return false;
+  }
+  PciDeviceState state;
+  if (!reader->ReadProtobuf("PCI", state)) {
+    return false;
+  }
+  bus_ = state.bus();
+  devfn_ = PCI_MAKE_DEVFN(state.device(), state.function());
+  auto& config_space = state.config_space();
+  memcpy(pci_header_.data, config_space.data(), config_space.size());
+
+  /* recover pci bar information */
+  for (int i = 0; i < PCI_BAR_NUMS; i++) {
+    auto &bar = pci_bars_[i];
+    bar.address = pci_header_.bars[i] & bar.address_mask;
+    if (bar.type == kIoResourceTypePio) {
+      if (bar.address && (pci_header_.command & PCI_COMMAND_IO)) {
+        ActivatePciBar(i);
+      }
+    } else {
+      if (bar.address && (pci_header_.command & PCI_COMMAND_MEMORY)) {
+        ActivatePciBar(i);
+      }
+    }
+  }
+
+  /* recover msix table */
+  for (int i = 0; i < msi_config_.msix_table_size; i++) {
+    auto& msix = msi_config_.msix_table[i];
+    auto& entry = state.msix_entries(i);
+    msix.message.address_hi = entry.address() >> 32;
+    msix.message.address_lo = (uint32_t)entry.address();
+    msix.message.data = entry.data();
+    msix.control = entry.control();
+  }
+
+  /* enable msi / msix */
+  if (msi_config_.length) {
+    if (msi_config_.is_msix) {
+      msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
+    } else {
+      msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
+    }
+  }
+  return true;
 }

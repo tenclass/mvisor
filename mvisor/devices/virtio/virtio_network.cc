@@ -37,10 +37,10 @@ struct RxMode {
 
 class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
  private:
-  virtio_net_config net_config_;
-  RxMode            rx_mode_;
-  std::set<MacAddress> mac_table_;
-  NetworkBackendInterface* backend_ = nullptr;
+  virtio_net_config         net_config_;
+  RxMode                    rx_mode_;
+  std::set<MacAddress>      mac_table_;
+  NetworkBackendInterface*  backend_ = nullptr;
 
  public:
   VirtioNetwork() {

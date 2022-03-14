@@ -17,11 +17,14 @@
  */
 
 #include "ide_storage.h"
+
 #include <cstring>
+
 #include "logger.h"
 #include "ahci_port.h"
 #include "ata_interval.h"
 #include "disk_image.h"
+#include "states/ahci_cdrom.pb.h"
 
 /*
  *  SENSE KEYS
@@ -184,7 +187,7 @@ void AhciCdrom::Connect() {
   }
 }
 
-void AhciCdrom::SetError(int sense_key, int asc) {
+void AhciCdrom::SetError(uint sense_key, uint asc) {
   regs_.error = sense_key << 4;
   regs_.status = ATA_SR_DRDY | ATA_SR_ERR;
   regs_.count0 = (regs_.count0 & ~7) | ATA_CB_SC_P_CD | ATA_CB_SC_P_IO;
@@ -378,6 +381,25 @@ void AhciCdrom::Atapi_IdentifyData() {
 
   io_.nbytes = io_.buffer_size < 512 ? io_.buffer_size : 512;
   memcpy(io_.buffer, p, io_.nbytes);
+}
+
+
+bool AhciCdrom::SaveState(MigrationWriter* writer) {
+  AhciCdromState state;
+  state.set_sense_key(sense_key_);
+  state.set_asc(asc_);
+  writer->WriteProtobuf("CDROM", state);
+  return IdeStorageDevice::SaveState(writer);
+}
+
+bool AhciCdrom::LoadState(MigrationReader* reader) {
+  AhciCdromState state;
+  if (!reader->ReadProtobuf("CDROM", state)) {
+    return false;
+  }
+  sense_key_ = state.sense_key();
+  asc_ = state.asc();
+  return true;
 }
 
 DECLARE_DEVICE(AhciCdrom);

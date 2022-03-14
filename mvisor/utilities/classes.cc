@@ -26,6 +26,7 @@
 
 #define MAX_LEVEL 10
 
+static uint last_object_id = 0;
 static std::map<std::string, ClassItem*>* classes = nullptr;
 
 /* Alias PciHost to pci-host */
@@ -67,6 +68,7 @@ Object* realize_class(const char* name) {
     MV_PANIC("class not found %s", name);
   }
   Object* o = it->second->create();
+  o->set_id(++last_object_id);
   o->set_classname(it->second->class_name);
   o->set_name(name);
   return o;

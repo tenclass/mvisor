@@ -54,6 +54,12 @@ struct IoEvent {
   int             fd;
 };
 
+struct IoAccounting {
+  IoTimePoint     last_print_time;
+  uint            total_pio = 0;
+  uint            total_mmio = 0;
+};
+
 class Machine;
 class DeviceManager {
  public:
@@ -80,6 +86,8 @@ class DeviceManager {
   void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write, bool ioeventfd = false);
 
   void* TranslateGuestMemory(uint64_t gpa);
+  bool SaveState(MigrationWriter* writer);
+  bool LoadState(MigrationReader* reader);
   
   /* IRQ / MSIs all are GSIs */
   void SetIrq(uint32_t irq, uint32_t level);
@@ -92,6 +100,7 @@ class DeviceManager {
   IoThread* io();
 
  private:
+  void SetupIrqChip();
   void SetupGsiRoutingTable();
   void UpdateGsiRoutingTable();
 
@@ -105,6 +114,7 @@ class DeviceManager {
   std::recursive_mutex    mutex_;
   std::vector<kvm_irq_routing_entry>  gsi_routing_table_;
   int                     next_gsi_ = 0;
+  IoAccounting            io_accounting_;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

@@ -18,15 +18,20 @@
 
 
 #include "machine.h"
+
 #include <linux/kvm.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstring>
+
+#include <filesystem>
+
+#include "logger.h"
 #include "disk_image.h"
 #include "device_interface.h"
-#include "logger.h"
+#include "migration.h"
 
 #define X86_EPT_IDENTITY_BASE 0xfeffc000
 
@@ -47,7 +52,6 @@ Machine::Machine(std::string config_path) {
 
   LoadBiosFile();
   CreateArchRelated();
-  CreateVcpu();
 
   /* Currently, a Q35 chipset mother board is implemented */
   Device* root = dynamic_cast<Device*>(LookupObjectByName("system-root"));
@@ -58,6 +62,8 @@ Machine::Machine(std::string config_path) {
   io_thread_ = new IoThread(this);
   /* Initialize device manager, connect and reset all devices */
   device_manager_ = new DeviceManager(this, root);
+  /* Create vcpu objects */
+  CreateVcpu();
 }
 
 /* Free VM resources */
@@ -152,17 +158,6 @@ void Machine::CreateArchRelated() {
   
   /* Map these addresses as reserved so the guest never touch it */
   memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved, "EPT+TSS");
-
-  // Use Kvm in-kernel IRQChip
-  if (ioctl(vm_fd_, KVM_CREATE_IRQCHIP) < 0) {
-    MV_PANIC("failed to create irqchip");
-  }
-
-  // Use Kvm in-kernel PITClock
-  struct kvm_pit_config pit_config = { 0 };
-  if (ioctl(vm_fd_, KVM_CREATE_PIT2, &pit_config) < 0) {
-    MV_PANIC("failed to create pit");
-  }
 }
 
 void Machine::CreateVcpu() {
@@ -175,6 +170,12 @@ void Machine::CreateVcpu() {
 
 /* Start vCPU threads and IO thread */
 void Machine::Run() {
+  if (config_->snapshot()) {
+    auto path = std::filesystem::path(config_->path());
+    Load(path.parent_path());
+  }
+  paused_ = false;
+
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }
@@ -265,6 +266,8 @@ void Machine::Pause() {
   if (!valid_ || paused_)
     return;
   paused_ = true;
+  io_thread_->FlushDiskImages();
+
   wait_count_ = num_vcpus_ + 1;
   for (auto vcpu : vcpus_) {
     vcpu->Kick();
@@ -292,8 +295,56 @@ void Machine::WaitToResume() {
   });
 }
 
-
+/* Listeners are called after Pause / Resume */
 void Machine::RegisterStateChangeListener(VoidCallback callback) {
   std::lock_guard<std::mutex> lock(mutex_);
   state_change_listeners_.push_back(callback);
+}
+
+/* Should call by UI thread */
+void Machine::Save(std::string path) {
+  /* Make sure the machine is paused */
+  if (!IsPaused()) {
+    Pause();
+  }
+  MV_LOG("start saving");
+
+  MigrationWriter writer(path);
+  /* Save configuration */
+  config_->Save(path + "/configuration.yaml");
+  /* Save vcpu states */
+  for (auto vcpu : vcpus_) {
+    vcpu->SaveState(&writer);
+  }
+  /* Save device states */
+  device_manager_->SaveState(&writer);
+  /* Save system RAM */
+  memory_manager_->SaveState(&writer);
+  MV_LOG("done saving");
+}
+
+/* Should call by UI thread */
+void Machine::Load(std::string path) {
+  /* Make sure the machine is paused */
+  if (!IsPaused()) {
+    Pause();
+  }
+  MV_LOG("start loading");
+
+  MigrationReader reader(path);
+  /* Load system RAM */
+  if (!memory_manager_->LoadState(&reader)) {
+    MV_PANIC("failed to load RAM");
+  }
+  /* Load device states */
+  if (!device_manager_->LoadState(&reader)) {
+    MV_PANIC("failed to load device states");
+  }
+  /* Load vcpu states */
+  for (auto vcpu : vcpus_) {
+    if (!vcpu->LoadState(&reader)) {
+      MV_PANIC("failed to load %s", vcpu->name());
+    }
+  }
+  MV_LOG("done loading");
 }

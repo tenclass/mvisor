@@ -17,14 +17,17 @@
  */
 
 #include "ahci_host.h"
+
+#include <sys/ioctl.h>
 #include <cstring>
+
 #include "logger.h"
 #include "device_manager.h"
 #include "ide_storage.h"
 #include "ahci_internal.h"
 #include "machine.h"
 #include "linux/kvm.h"
-#include <sys/ioctl.h>
+#include "states/ahci_host.pb.h"
 
 /* Reference:
  * https://wiki.osdev.org/AHCI
@@ -161,6 +164,45 @@ void AhciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data,
         name_, resource->base, offset, size, value);
     }
   }
+}
+
+bool AhciHost::SaveState(MigrationWriter* writer) {
+  AhciHostState state;
+  auto control = state.mutable_control();
+  control->set_capabilities(host_control_.capabilities);
+  control->set_global_host_control(host_control_.global_host_control);
+  control->set_irq_status(host_control_.irq_status);
+  control->set_ports_implemented(host_control_.ports_implemented);
+  control->set_version(host_control_.version);
+
+  for (int i = 0; i < num_ports_; i++) {
+    auto port_state = state.add_ports();
+    ports_[i]->SaveState(port_state);
+  }
+  writer->WriteProtobuf("AHCI", state);
+  return PciDevice::SaveState(writer);
+}
+
+bool AhciHost::LoadState(MigrationReader* reader) {
+  if (!PciDevice::LoadState(reader)) {
+    return false;
+  }
+  AhciHostState state;
+  if (!reader->ReadProtobuf("AHCI", state)) {
+    return false;
+  }
+  auto &control = state.control();
+  host_control_.capabilities = control.capabilities();
+  host_control_.global_host_control = control.global_host_control();
+  host_control_.irq_status = control.irq_status();
+  host_control_.ports_implemented = control.ports_implemented();
+  host_control_.version = control.version();
+
+  for (int i = 0; i < num_ports_; i++) {
+    auto &port_state = state.ports(i);
+    ports_[i]->LoadState(&port_state);
+  }
+  return true;
 }
 
 DECLARE_DEVICE(AhciHost);

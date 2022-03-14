@@ -22,12 +22,17 @@
 #include <vector>
 #include <array>
 #include <set>
+#include <chrono>
+
 #include "pci_device.h"
 #include "usb_device.h"
 #include "device_manager.h"
 #include "xhci_internal.h"
 #include "usb.h"
 #include "logger.h"
+#include "states/xhci_host.pb.h"
+
+using namespace std::chrono;
 
 struct UsbPortState {
   uint        id;
@@ -41,7 +46,7 @@ struct XhciRing {
 };
 
 struct XhciTransfer;
-struct XhciEndpointContext {
+struct XhciEndpoint {
   uint      id;
   uint      slot_id;
   EPType    type;
@@ -62,7 +67,7 @@ struct XhciSlot {
   bool        enabled;
   bool        addressed;
   uint64_t    context_address;
-  XhciEndpointContext* endpoints[31];
+  XhciEndpoint* endpoints[31];
   UsbDevice*  device;
   int         interrupt_vector;
 };
@@ -78,7 +83,7 @@ struct XhciEvent {
 };
 
 struct XhciTransfer {
-  XhciEndpointContext* endpoint;
+  XhciEndpoint* endpoint;
   TRBCCode      status;
   uint          stream_id;
   bool          completed;
@@ -96,15 +101,17 @@ class XhciHost : public PciDevice {
     uint max_interrupts_ = 16;
     uint max_slots_ = 64;
     uint max_pstreams_mask_ = 7;
-    std::array<UsbPortState, 128> port_states_ = { 0 };
-    std::array<XhciPortRegisters, 128> port_regs_ = { 0 };
+  
+    std::array<UsbPortState, 128>           port_states_ = { 0 };
+    std::array<XhciPortRegisters, 128>      port_regs_ = { 0 };
     std::array<XhciInterruptRegisters, 128> interrupt_regs_ = { 0 };
-    std::array<XhciSlot, 128> slots_ = { 0 };
-    XhciRing command_ring_;
-    IoTimePoint microframe_index_start_;
-    XhciCapabilityRegisters capability_regs_;
-    XhciOperationalRegisters operational_regs_;
-    XhciRuntimeRegisters runtime_regs_;
+    std::array<XhciSlot, 128>               slots_ = { 0 };
+    XhciRing                                command_ring_;
+    IoTimePoint                             microframe_index_start_;
+    XhciCapabilityRegisters                 capability_regs_;
+    XhciOperationalRegisters                operational_regs_;
+    XhciRuntimeRegisters                    runtime_regs_;
+  
     /* global mutex */
     std::mutex mutex_;
 
@@ -137,9 +144,11 @@ class XhciHost : public PciDevice {
     MV_ASSERT(max_interrupts_ <= 128);
     MV_ASSERT(max_ports_ <= 128);
     MV_ASSERT(max_slots_ <= 128);
+
+    /* USB ports are divided in half, 2.0 ports and 3.0 ports. */
     for (uint i = 0; i < max_ports_; i++) {
       port_states_[i].id = i + 1;
-      port_states_[i].speed_mask = uint32_t(i < max_ports_ / 2 ? 0B111 : 0B1000);
+      port_states_[i].speed_mask = uint32_t(i < max_ports_ / 2 ? 0b111 : 0b1000);
     }
 
     /* Connect USB devices to ports */
@@ -165,6 +174,103 @@ class XhciHost : public PciDevice {
     }
     MV_PANIC("failed to attach USB device %s", device->name());
     return false;
+  }
+
+  bool SaveState(MigrationWriter* writer) {
+    XhciHostState state;
+    auto operational = state.mutable_operational();
+    operational->set_usb_command(operational_regs_.usb_command);
+    operational->set_usb_status(operational_regs_.usb_status);
+    operational->set_device_notification_control(operational_regs_.device_notification_control);
+    operational->set_command_ring_control(operational_regs_.command_ring_control);
+    operational->set_context_base_array_pointer(operational_regs_.context_base_array_pointer);
+    operational->set_configure(operational_regs_.configure);
+
+    auto runtime = state.mutable_runtime();
+    runtime->set_microframe_index(GetMicroFrameIndex());
+
+    auto command_ring = state.mutable_command_ring();
+    command_ring->set_dequeue(command_ring_.dequeue);
+    command_ring->set_consumer_cycle_bit(command_ring_.consumer_cycle_bit);
+
+    for (uint i = 0; i < max_ports_; i++) {
+      auto port = state.add_ports();
+      port->set_status_control(port_regs_[i].status_control);
+    }
+
+    for (uint i = 0; i < max_slots_; i++) {
+      auto slot = state.add_slots();
+      slot->set_enabled(slots_[i].enabled);
+      slot->set_addressed(slots_[i].addressed);
+    }
+
+    for (uint i = 0; i < max_interrupts_; i++) {
+      auto interrupt = state.add_interrupts();
+      interrupt->set_management(interrupt_regs_[i].management);
+      interrupt->set_moderation(interrupt_regs_[i].moderation);
+      interrupt->set_event_ring_table_size(interrupt_regs_[i].event_ring_table_size);
+      interrupt->set_event_ring_table_base(interrupt_regs_[i].event_ring_table_base);
+      interrupt->set_event_ring_dequeue_pointer(interrupt_regs_[i].event_ring_dequeue_pointer);
+      interrupt->set_event_ring_segment_start(interrupt_regs_[i].event_ring_segment.start);
+      interrupt->set_event_ring_segment_size(interrupt_regs_[i].event_ring_segment.size);
+      interrupt->set_event_ring_enqueue_index(interrupt_regs_[i].event_ring_enqueue_index);
+      interrupt->set_event_ring_producer_cycle_bit(interrupt_regs_[i].producer_cycle_bit);
+    }
+
+    writer->WriteProtobuf("XHCI", state);
+    return PciDevice::SaveState(writer);
+  }
+
+  bool LoadState(MigrationReader* reader) {
+    if (!PciDevice::LoadState(reader)) {
+      return false;
+    }
+    XhciHostState state;
+    if (!reader->ReadProtobuf("XHCI", state)) {
+      return false;
+    }
+    auto& operational = state.operational();
+    operational_regs_.usb_command = operational.usb_command();
+    operational_regs_.usb_status = operational.usb_status();
+    operational_regs_.device_notification_control = operational.device_notification_control();
+    operational_regs_.command_ring_control = operational.command_ring_control();
+    operational_regs_.context_base_array_pointer = operational.context_base_array_pointer();
+    operational_regs_.configure = operational.configure();
+
+    auto& runtime = state.runtime();
+    microframe_index_start_ = steady_clock::now() - nanoseconds(runtime.microframe_index() * 125000);
+
+    auto& command_ring = state.command_ring();
+    command_ring_.dequeue = command_ring.dequeue();
+    command_ring_.consumer_cycle_bit = command_ring.consumer_cycle_bit();
+
+    for (uint i = 0; i < max_ports_; i++) {
+      auto& port = state.ports(i);
+      port_regs_[i].status_control = port.status_control();
+    }
+
+    for (uint i = 0; i < max_slots_; i++) {
+      auto& slot = state.slots(i);
+      slots_[i].enabled = slot.enabled();
+      slots_[i].addressed = slot.addressed();
+      if (slot.addressed()) {
+        PostLoadSlot(i + 1);
+      }
+    }
+
+    for (uint i = 0; i < max_interrupts_; i++) {
+      auto& interrupt = state.interrupts(i);
+      interrupt_regs_[i].management = interrupt.management();
+      interrupt_regs_[i].moderation = interrupt.moderation();
+      interrupt_regs_[i].event_ring_table_size = interrupt.event_ring_table_size();
+      interrupt_regs_[i].event_ring_table_base = interrupt.event_ring_table_base();
+      interrupt_regs_[i].event_ring_dequeue_pointer = interrupt.event_ring_dequeue_pointer();
+      interrupt_regs_[i].event_ring_segment.start = interrupt.event_ring_segment_start();
+      interrupt_regs_[i].event_ring_segment.size = interrupt.event_ring_segment_size();
+      interrupt_regs_[i].event_ring_enqueue_index = interrupt.event_ring_enqueue_index();
+      interrupt_regs_[i].producer_cycle_bit = interrupt.event_ring_producer_cycle_bit();
+    }
+    return true;
   }
 
   virtual void Reset() {
@@ -413,11 +519,15 @@ class XhciHost : public PciDevice {
     }
   }
 
+  int64_t GetMicroFrameIndex() {
+    auto delta_ns = (steady_clock::now() - microframe_index_start_).count();
+    return delta_ns / 125000;
+  }
+
   void ReadRuntimeRegs(uint64_t offset, uint8_t* data, uint32_t size) {
     if (offset < 0x20) {
       if (offset == offsetof(XhciRuntimeRegisters, microframe_index)) {
-        auto delta_ns = (std::chrono::steady_clock::now() - microframe_index_start_).count();
-        int64_t mfindex = delta_ns / 125000;
+        auto mfindex = GetMicroFrameIndex();
         memcpy(data, &mfindex, size);
       } else {
         MV_PANIC("ReadRuntimeRegs offset=0x%lx size=%u", offset, size);
@@ -434,7 +544,7 @@ class XhciHost : public PciDevice {
     if ((command & USBCMD_RS) && !(operational_regs_.usb_command & USBCMD_RS)) {
       // RUN
       operational_regs_.usb_status &= ~USBSTS_HCH;
-      microframe_index_start_ = std::chrono::steady_clock::now();
+      microframe_index_start_ = steady_clock::now();
     } else if (!(command & USBCMD_RS) && (operational_regs_.usb_command & USBCMD_RS)) {
       // STOP
       operational_regs_.usb_status |= USBSTS_HCH;
@@ -524,6 +634,7 @@ class XhciHost : public PciDevice {
         }
       }
       slot.enabled = false;
+      slot.addressed = false;
     }
     return CC_SUCCESS;
   }
@@ -602,7 +713,7 @@ class XhciHost : public PciDevice {
       if (input[1] & (1 << i)) {
         auto endpoint_context = input_slot + 8 * i;
         DisableEndpoint(slot_id, i);
-        EnableEndpoint(slot_id, i, endpoint_context);
+        EnableEndpoint(slot_id, i, endpoint_context, true);
         memcpy(output + 8 * i, endpoint_context, 0x20);
       }
     }
@@ -612,6 +723,37 @@ class XhciHost : public PciDevice {
     output[0] &= ~(SLOT_CONTEXT_ENTRIES_MASK << SLOT_CONTEXT_ENTRIES_SHIFT);
     output[0] |= input_slot[0] & (SLOT_CONTEXT_ENTRIES_MASK << SLOT_CONTEXT_ENTRIES_SHIFT);
     return CC_SUCCESS;
+  }
+
+  void PostLoadSlot(uint slot_id) {
+    MV_ASSERT(slot_id >= 1 && slot_id <= max_slots_);
+    auto &slot = slots_[slot_id - 1];
+
+    auto context_base_array = (uint64_t*)manager_->TranslateGuestMemory(
+      operational_regs_.context_base_array_pointer);
+    slot.context_address = context_base_array[slot_id];
+  
+    auto slot_context = (uint32_t*)manager_->TranslateGuestMemory(slot.context_address);
+    uint port_id = (slot_context[1] >> 16) & 0xFF;
+
+    slot.interrupt_vector = get_field(slot_context[2], TRB_INTR);
+    slot.device = LookupDevice(port_id, slot_context[0] & 0xFFFFF);
+    MV_ASSERT(slot.device);
+    
+    for (uint endpoint_id = 1; endpoint_id <= 31; endpoint_id++) {
+      auto endpoint_context = slot_context + 8 * endpoint_id;
+      auto state = endpoint_context[0] & EP_STATE_MASK;
+      if (state == EP_DISABLED)
+        continue;
+      
+      EnableEndpoint(slot_id, endpoint_id, endpoint_context, false);
+      if (state == EP_RUNNING) {
+        /* Restart kicking endpoint */
+        manager_->io()->Schedule([this, slot_id, endpoint_id]() {
+          KickEndpoint(slot_id, endpoint_id, 0);
+        });
+      }
+    }
   }
 
   TRBCCode AddressSlot(uint slot_id, uint64_t input_addr, bool block_set_request) {
@@ -657,7 +799,7 @@ class XhciHost : public PciDevice {
       }
     }
 
-    EnableEndpoint(slot_id, 1, input_endpoint0);
+    EnableEndpoint(slot_id, 1, input_endpoint0, true);
     
     memcpy(output, input_slot, 0x20);
     memcpy(output + 8, input_endpoint0, 0x20);
@@ -806,8 +948,8 @@ class XhciHost : public PciDevice {
 
   /* ======================== Endpoint Functions ======================= */
 
-  XhciEndpointContext* CreateEndpointContext(uint slot_id, uint endpoint_id, uint32_t* context) {
-    auto endpoint = new XhciEndpointContext { 0 };
+  XhciEndpoint* CreateEndpoint(uint slot_id, uint endpoint_id, uint32_t* context) {
+    auto endpoint = new XhciEndpoint { 0 };
     endpoint->id = endpoint_id;
     endpoint->slot_id = slot_id;
 
@@ -830,7 +972,7 @@ class XhciHost : public PciDevice {
     return endpoint;
   }
 
-  void EnableEndpoint(uint slot_id, uint endpoint_id, uint32_t* context) {
+  void EnableEndpoint(uint slot_id, uint endpoint_id, uint32_t* context, bool autorun) {
     MV_ASSERT(slot_id >= 1 && slot_id <= max_slots_);
     MV_ASSERT(endpoint_id >= 1 && endpoint_id <= 31);
 
@@ -839,15 +981,17 @@ class XhciHost : public PciDevice {
       DisableEndpoint(slot_id, endpoint_id);
     }
 
-    XhciEndpointContext* endpoint = CreateEndpointContext(slot_id, endpoint_id, context);
+    auto endpoint = CreateEndpoint(slot_id, endpoint_id, context);
     if (debug_) {
       MV_LOG("endpoint %d.%d type=%d, max packet size=%d interval=%d", endpoint_id / 2, endpoint_id % 2,
         endpoint->type, endpoint->max_packet_size, endpoint->interval);
     }
     slot.endpoints[endpoint_id - 1] = endpoint;
-    endpoint->state = EP_RUNNING;
-    context[0] &= ~EP_STATE_MASK;
-    context[0] |= EP_RUNNING;
+    if (autorun) {
+      context[0] &= ~EP_STATE_MASK;
+      context[0] |= EP_RUNNING;
+    }
+    endpoint->state = context[0] & EP_STATE_MASK;
   }
 
   TRBCCode DisableEndpoint(uint slot_id, uint endpoint_id) {
@@ -948,7 +1092,7 @@ class XhciHost : public PciDevice {
     }
   }
 
-  void SetEndpointState(XhciEndpointContext* endpoint, uint32_t state) {
+  void SetEndpointState(XhciEndpoint* endpoint, uint32_t state) {
     uint32_t* context = (uint32_t*)manager_->TranslateGuestMemory(
       endpoint->context_address);
     context[0] &= ~EP_STATE_MASK;
@@ -965,7 +1109,7 @@ class XhciHost : public PciDevice {
 
   /* ======================== Transfer Functions ======================= */
 
-  XhciTransfer* CreateTransfer(XhciEndpointContext* endpoint, uint stream_id, int length) {
+  XhciTransfer* CreateTransfer(XhciEndpoint* endpoint, uint stream_id, int length) {
     auto transfer = new XhciTransfer;
     transfer->completed = false;
     transfer->endpoint = endpoint;
@@ -986,7 +1130,7 @@ class XhciHost : public PciDevice {
     }
   }
 
-  void TerminateAllTransfers(XhciEndpointContext* endpoint, TRBCCode report) {
+  void TerminateAllTransfers(XhciEndpoint* endpoint, TRBCCode report) {
     auto copied(endpoint->transfers);
     for (auto transfer : copied) {
       TerminateTransfer(transfer, report);
@@ -1105,14 +1249,15 @@ class XhciHost : public PciDevice {
       break;
     }
 
-    ReportTransfer(transfer);
     if (transfer->status != CC_SUCCESS) {
       StallEndpoint(transfer);
+    } else {
+      // Update ring dequeue to context
+      auto endpoint = transfer->endpoint;
+      SetEndpointState(endpoint, endpoint->state);
     }
-
-    // Update ring dequeue to context
-    auto endpoint = transfer->endpoint;
-    SetEndpointState(endpoint, endpoint->state);
+  
+    ReportTransfer(transfer);
   }
 
   bool SetupTransfer(XhciTransfer* transfer) {

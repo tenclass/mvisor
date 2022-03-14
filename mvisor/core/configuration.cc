@@ -17,9 +17,13 @@
  */
 
 #include "configuration.h"
+
 #include <libgen.h>
 #include <unistd.h>
 #include <cstring>
+
+#include <fstream>
+
 #include "machine.h"
 #include "logger.h"
 
@@ -60,6 +64,7 @@ std::string Configuration::FindPath(std::string path) const {
   return path;
 }
 
+/* Load configuration from file */
 bool Configuration::Load(std::string path) {
   if (!machine_->objects_.empty()) {
     MV_PANIC("Machine already loaded");
@@ -70,7 +75,8 @@ bool Configuration::Load(std::string path) {
 
 /* Load configuration file *.yaml */
 bool Configuration::LoadFile(std::string path) {
-  YAML::Node config = YAML::LoadFile(FindPath(path));
+  path_ = FindPath(path);
+  YAML::Node config = YAML::LoadFile(path_);
   if (config["base"]) {
     /* Add the current config directory to directories and load base file */
     char temp[1024] = { 0 };
@@ -85,11 +91,16 @@ bool Configuration::LoadFile(std::string path) {
   if (config["objects"]) {
     LoadObjects(config["objects"]);
   }
+  if (config["snapshot"]) {
+    snapshot_ = config["snapshot"].as<bool>();
+  } else {
+    snapshot_ = false;
+  }
   return true;
 }
 
 /* Extract machine configs */
-void Configuration::LoadMachine(YAML::Node node) {
+void Configuration::LoadMachine(const YAML::Node& node) {
   if (node["memory"]) {
     string memory = node["memory"].as<string>();
     MV_ASSERT(memory.back() == 'G');
@@ -106,7 +117,7 @@ void Configuration::LoadMachine(YAML::Node node) {
   }
 }
 
-void Configuration::LoadObjects(YAML::Node objects_node) {
+void Configuration::LoadObjects(const YAML::Node& objects_node) {
   auto &objects = machine_->objects_;
   struct NodeObject {
     YAML::Node node;
@@ -200,3 +211,74 @@ void Configuration::LoadObjects(YAML::Node objects_node) {
   }
 }
 
+/* Save configuration to file */
+bool Configuration::Save(std::string path) {
+  std::ofstream ofs(path, std::ios::out);
+  if (!ofs.is_open())
+    return false;
+
+  auto root = YAML::Node();
+  root["snapshot"] = true;
+  root["version"] = 1;
+
+  /* Build time */
+  auto now = time(nullptr);
+  char temp[100];
+  strftime(temp, 100, "%Y-%m-%d %H:%M:%S", gmtime(&now));
+  root["create_time"] = temp;
+  
+  /* Build machine */
+  auto machine_node = root["machine"];
+  SaveMachine(machine_node);
+
+  /* Build objects */
+  std::vector<Object*> objects;
+  for (auto it = machine_->objects_.begin(); it != machine_->objects_.end(); it++) {
+    objects.push_back(it->second);
+  }
+  /* Sort by id */
+  std::sort(objects.begin(), objects.end(), [](Object* a, Object* b) {
+    return a->id() < b->id();
+  });
+
+  auto objects_node = root["objects"];
+  for (auto o : objects) {
+    auto node = YAML::Node();
+    node["name"] = o->name();
+    node["class"] = o->classname();
+    node["debug"] = o->debug();
+    if (o->parent()) {
+      node["parent"] = o->parent()->name();
+    }
+    auto &kv = o->key_values();
+    for (auto it = kv.begin(); it != kv.end(); it++) {
+      auto& value = it->second;
+      switch (value.index())
+      {
+      case 0:
+        node[it->first] = std::get<std::string>(it->second);
+        break;
+      case 1:
+        node[it->first] = std::get<bool>(it->second);
+        break;
+      case 2:
+        node[it->first] = std::get<uint64_t>(it->second);
+        break;
+      }
+    }
+    objects_node.push_back(node);
+  }
+
+  ofs << root << std::endl;
+  return true;
+}
+
+/* Save machine configs */
+void Configuration::SaveMachine(YAML::Node& node) {
+  std::stringstream ss;
+  ss << machine_->ram_size_ / (1UL << 30) << "G";
+  node["memory"] = ss.str();
+  node["vcpu"] = machine_->num_vcpus_;
+  node["bios"] = machine_->bios_path_;
+  node["debug"] = machine_->debug_;
+}

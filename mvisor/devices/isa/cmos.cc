@@ -20,6 +20,7 @@
 #include <ctime>
 #include "logger.h"
 #include "device_manager.h"
+#include "states/cmos.pb.h"
 
 #define RTC_BASE_ADDRESS 0x70
 
@@ -72,6 +73,26 @@ class Cmos : public Device {
     non_maskable_interrupt_disabled_ = false;
     cmos_index_ = 0;
     bzero(cmos_data_, sizeof(cmos_data_));
+  }
+
+  bool SaveState(MigrationWriter* writer) {
+    CmosState state;
+    state.set_index(cmos_index_);
+    state.set_data(cmos_data_, sizeof(cmos_data_));
+    state.set_nmi_disabled(non_maskable_interrupt_disabled_);
+    writer->WriteProtobuf("CMOS", state);
+    return Device::SaveState(writer);
+  } 
+
+  bool LoadState(MigrationReader* reader) {
+    CmosState state;
+    if (!reader->ReadProtobuf("CMOS", state)) {
+      return false;
+    }
+    non_maskable_interrupt_disabled_ = state.nmi_disabled();
+    cmos_index_ = state.index();
+    memcpy(cmos_data_, state.data().data(), sizeof(cmos_data_));
+    return Device::LoadState(reader);
   }
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -146,6 +167,8 @@ class Cmos : public Device {
     }
     return;
   }
+
+
 };
 
 DECLARE_DEVICE(Cmos);

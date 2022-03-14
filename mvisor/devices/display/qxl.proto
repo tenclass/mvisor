@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+message QxlState {
+  message GuestSlot {
+    uint64  mem_start           = 1;
+    uint64  mem_end             = 2;
+    bool    active              = 3;
+  }
+
+  message GuestPrimary {
+    uint32  width               = 1;
+    uint32  height              = 2;
+    int32   stride              = 3;
+    uint32  format              = 4;
+    uint32  position            = 5;
+    uint32  mouse_mode          = 6;
+    uint32  flags               = 7;
+    uint32  type                = 8;
+    uint64  mem_address         = 9;
+  }
+
+  repeated GuestSlot  guest_slots         = 2;
+  GuestPrimary        guest_primary       = 3;
+  uint64              last_release_offset = 4;
+}

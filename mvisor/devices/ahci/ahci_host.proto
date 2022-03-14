@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+message AhciHostState {
+  message ControlRegisters {
+    uint32  capabilities          = 1;
+    uint32  global_host_control   = 2;
+    uint32  irq_status            = 3;
+    uint32  ports_implemented     = 4;
+    uint32  version               = 5;
+  }
+  message PortRegisters {
+    uint32  command_list_base0= 1;
+    uint32  command_list_base1= 2;
+    uint32  fis_base0         = 3;
+    uint32  fis_base1         = 4;
+    uint32  irq_status        = 5;
+    uint32  irq_mask          = 6;
+    uint32  command           = 7;
+    uint32  task_flie_data    = 8;
+    uint32  signature         = 9;
+    uint32  sata_status       = 10;
+    uint32  sata_control      = 11;
+    uint32  sata_error        = 12;
+    uint32  sata_active       = 13;
+  }
+
+  message PortState {
+    uint32            index          = 1;
+    int32             busy_slot      = 2;
+    bool              init_d2h_sent  = 3;
+    PortRegisters     registers      = 4;
+  }
+
+  ControlRegisters    control     = 1;
+  repeated PortState  ports       = 2;
+}

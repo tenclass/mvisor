@@ -23,6 +23,7 @@
 #include "memory_manager.h"
 #include "machine.h"
 #include "smbios.h"
+#include "states/firmware_config.pb.h"
 
 #define FW_CFG_ACPI_DEVICE_ID "QEMU0002"
 
@@ -195,6 +196,26 @@ class FirmwareConfig : public Device {
     InitializeConfig();
 
     Device::Connect();
+  }
+
+  bool SaveState(MigrationWriter* writer) {
+    FirmwareConfigState state;
+    state.set_current_index(current_index_);
+    state.set_current_offset(current_offset_);
+    state.set_dma_address(dma_address_);
+    writer->WriteProtobuf("FIRMWARE_CONFIG", state);
+    return Device::SaveState(writer);
+  }
+
+  bool LoadState(MigrationReader* reader) {
+    FirmwareConfigState state;
+    if (!reader->ReadProtobuf("FIRMWARE_CONFIG", state)) {
+      return false;
+    }
+    current_index_ = state.current_index();
+    current_offset_ = state.current_offset();
+    dma_address_ = state.dma_address();
+    return Device::LoadState(reader);
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {

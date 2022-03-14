@@ -22,6 +22,7 @@
 #include "device_manager.h"
 #include "machine.h"
 #include "device_interface.h"
+#include "states/ps2.pb.h"
 
 #define STATUS_OFULL    0x01
 #define STATUS_SYSFLAG  0x04
@@ -44,7 +45,7 @@
 /* Reference: https://wiki.osdev.org/%228042%22_PS/2_Controller
  */
 
-class Ps2Keyboard : public Device, public KeyboardInputInterface {
+class Ps2 : public Device, public KeyboardInputInterface {
  private:
   std::deque<uint8_t> keyboard_queue_;
   std::deque<uint8_t> mouse_queue_;
@@ -54,24 +55,68 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
   uint8_t mode_;
   uint8_t last_command_;
   uint8_t output_data_;
-  int raised_irq_;
-  bool output_data_is_read_;
+  bool    output_data_is_read_;
+  int     raised_irq_;
 
-  uint8_t mouse_button_state_;
-  uint8_t mouse_resolution_;
-  uint8_t mouse_sample_rate_;
-  uint8_t mouse_command_;
-  uint8_t mouse_scaling_;
-  uint8_t mouse_id_;
-  uint8_t mouse_stream_mode_;
-  bool mouse_disable_streaming_;
+  struct {
+    uint8_t buttons;
+    int     dx;
+    int     dy;
+    uint8_t resolution;
+    uint8_t sample_rate;
+    uint8_t command;
+    uint8_t scaling;
+    uint8_t id;
+    uint8_t stream_mode;
+    bool    disable_streaming;
+  } mouse_;
 
-  // Mouse relative X, Y
-  int mouse_dx_, mouse_dy_;
-  
-  uint8_t keyboard_scancode_set_;
-  bool keyboard_disable_scanning_;
+  struct {
+    uint8_t scancode_set;
+    bool    disable_scanning;
+  } keyboard_;
 
+  bool SaveState(MigrationWriter* writer) {
+    Ps2State state;
+    state.set_mode(mode_);
+    state.set_status(status_);
+
+    auto keyboard = state.mutable_keyboard();
+    keyboard->set_scancode_set(keyboard_.scancode_set);
+
+    auto mouse = state.mutable_mouse();
+    mouse->set_resolution(mouse_.resolution);
+    mouse->set_buttons(mouse_.buttons);
+    mouse->set_sample_rate(mouse_.sample_rate);
+    mouse->set_scaling(mouse_.scaling);
+    mouse->set_stream_mode(mouse_.stream_mode);
+    mouse->set_dx(mouse_.dx);
+    mouse->set_dy(mouse_.dy);
+    writer->WriteProtobuf("PS2", state);
+    return Device::SaveState(writer);
+  }
+
+  bool LoadState(MigrationReader* reader) {
+    Ps2State state;
+    if (!reader->ReadProtobuf("PS2", state)) {
+      return false;
+    }
+    mode_ = state.mode();
+    status_ = state.status();
+    
+    auto& keyboard = state.keyboard();
+    keyboard_.scancode_set = keyboard.scancode_set();
+
+    auto& mouse = state.mouse();
+    mouse_.resolution = mouse.resolution();
+    mouse_.buttons = mouse.buttons();
+    mouse_.sample_rate = mouse.sample_rate();
+    mouse_.scaling = mouse.scaling();
+    mouse_.stream_mode = mouse.stream_mode();
+    mouse_.dx = mouse.dx();
+    mouse_.dy = mouse.dy();
+    return Device::LoadState(reader);
+  }
   
   void Reset() {
     status_ = STATUS_KEYLOCK | STATUS_COMMAND;
@@ -85,26 +130,26 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
 
   void ResetKeyboard() {
     keyboard_queue_.clear();
-    keyboard_scancode_set_ = 2;
-    keyboard_disable_scanning_ = false;
+    keyboard_.scancode_set = 2;
+    keyboard_.disable_scanning = false;
   }
 
   void ResetMouse() {
     mouse_queue_.clear();
-    mouse_command_ = 0;
-    mouse_resolution_ = 4;
-    mouse_sample_rate_ = 100;
-    mouse_scaling_ = 1;
-    mouse_dx_ = mouse_dy_ = 0;
-    mouse_disable_streaming_ = false;
-    mouse_stream_mode_ = 1;
+    mouse_.command = 0;
+    mouse_.resolution = 4;
+    mouse_.sample_rate = 100;
+    mouse_.scaling = 1;
+    mouse_.dx = mouse_.dy = 0;
+    mouse_.disable_streaming = false;
+    mouse_.stream_mode = 1;
     /* 
      * https://wiki.osdev.org/PS/2_Mouse
      * 0: Normal 2 buttons mouse
      * 3: Use 3 buttons
      * 5: Use 5 buttons
      */
-    mouse_id_ = 3;
+    mouse_.id = 3;
   }
 
   void RaiseIrq(int irq) {
@@ -182,38 +227,38 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
   }
 
   void WriteMouseCommand(uint8_t data) {
-    switch (mouse_command_)
+    switch (mouse_.command)
     {
     case 0xE8: // resolution
-      mouse_resolution_ = data;
-      mouse_command_ = 0;
+      mouse_.resolution = data;
+      mouse_.command = 0;
       PushMouse(RESPONSE_ACK);
       break;
     case 0xF3: // sample rate
-      mouse_sample_rate_ = data;
-      mouse_command_ = 0;
+      mouse_.sample_rate = data;
+      mouse_.command = 0;
       PushMouse(RESPONSE_ACK);
       break;
     case 0:
       switch (data)
       {
       case 0xE6:
-        mouse_scaling_ = 1;
+        mouse_.scaling = 1;
         PushMouse(RESPONSE_ACK);
         break;
       case 0xE7:
-        mouse_scaling_ = 2;
+        mouse_.scaling = 2;
         PushMouse(RESPONSE_ACK);
         break;
       case 0xE8: // set resolution
-        mouse_command_ = data;
+        mouse_.command = data;
         PushMouse(RESPONSE_ACK);
         break;
       case 0xE9: // send status
         PushMouse(RESPONSE_ACK);
-        PushMouse(mouse_stream_mode_ << 6 | (!mouse_disable_streaming_ << 5) | (!mouse_scaling_ << 4) | mouse_button_state_);
-        PushMouse(mouse_resolution_);
-        PushMouse(mouse_sample_rate_);
+        PushMouse(mouse_.stream_mode << 6 | (!mouse_.disable_streaming << 5) | (!mouse_.scaling << 4) | mouse_.buttons);
+        PushMouse(mouse_.resolution);
+        PushMouse(mouse_.sample_rate);
         break;
       case 0xEA: // set stream mode
         MV_ASSERT(data == 1);
@@ -221,18 +266,18 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
         break;
       case 0xF2: // get mouse ID
         PushMouse(RESPONSE_ACK);
-        PushMouse(mouse_id_);
+        PushMouse(mouse_.id);
         break;
       case 0xF3: // set sample rate
-        mouse_command_ = data;
+        mouse_.command = data;
         PushMouse(RESPONSE_ACK);
         break;
       case 0xF4: // enable mouse
-        mouse_disable_streaming_ = false;
+        mouse_.disable_streaming = false;
         PushMouse(RESPONSE_ACK);
         break;
       case 0xF5: // disable mouse
-        mouse_disable_streaming_ = true;
+        mouse_.disable_streaming = true;
         PushMouse(RESPONSE_ACK);
         break;
       case 0xF6: // set defaults
@@ -251,7 +296,7 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
       }
       break;
     default:
-      MV_PANIC("unhandled mouse command = 0x%x", mouse_command_);
+      MV_PANIC("unhandled mouse command = 0x%x", mouse_.command);
       break;
     }
   }
@@ -271,11 +316,11 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
       last_command_ = data;
       PushKeyboard(RESPONSE_ACK);
     case 0xF4: // enable keyboard scanning
-      keyboard_disable_scanning_ = false;
+      keyboard_.disable_scanning = false;
       PushKeyboard(RESPONSE_ACK);
       break;
     case 0xF5: // disable keyboard scanning
-      keyboard_disable_scanning_ = true;
+      keyboard_.disable_scanning = true;
       PushKeyboard(RESPONSE_ACK);
       break;
     case 0xFF: // reset keyboard
@@ -372,10 +417,10 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
     case 0xF0: // keyboard scancode set
       PushKeyboard(RESPONSE_ACK);
       if (data == 0) {
-        PushKeyboard(keyboard_scancode_set_);
+        PushKeyboard(keyboard_.scancode_set);
       } else {
-        keyboard_scancode_set_ = data;
-        MV_ASSERT(keyboard_scancode_set_ == 2);
+        keyboard_.scancode_set = data;
+        MV_ASSERT(keyboard_.scancode_set == 2);
       }
       break;
     case 0xF3: // set typematic rate
@@ -389,7 +434,7 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
 
 
  public:
-  Ps2Keyboard() {
+  Ps2() {
     AddIoResource(kIoResourceTypePio, 0x92, 1, "A20 Gate");
     AddIoResource(kIoResourceTypePio, 0x60, 1, "PS2 Data");
     AddIoResource(kIoResourceTypePio, 0x64, 1, "PS2 Command");
@@ -434,7 +479,7 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
   }
 
   void QueueKeyboardEvent(uint8_t scancode[10]) {
-    if (keyboard_disable_scanning_) {
+    if (keyboard_.disable_scanning) {
       return;
     }
   
@@ -445,12 +490,12 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
   }
 
   void QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) {
-    if (mouse_disable_streaming_) {
+    if (mouse_.disable_streaming) {
       return;
     }
   
     std::lock_guard<std::mutex> lock(mutex_);
-    uint8_t state = mouse_button_state_ = (uint8_t)button_state;
+    uint8_t state = mouse_.buttons = (uint8_t)button_state;
     rel_y = -rel_y;
     state |= 8; // Always 1
     if (rel_x < 0) {
@@ -466,8 +511,8 @@ class Ps2Keyboard : public Device, public KeyboardInputInterface {
   }
 
   bool InputAcceptable() {
-    return !keyboard_disable_scanning_ && !mouse_disable_streaming_;
+    return !keyboard_.disable_scanning && !mouse_.disable_streaming;
   }
 };
 
-DECLARE_DEVICE(Ps2Keyboard);
+DECLARE_DEVICE(Ps2);

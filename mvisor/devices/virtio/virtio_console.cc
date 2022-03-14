@@ -20,10 +20,12 @@
 #include <array>
 #include <functional>
 #include <linux/virtio_console.h>
+
 #include "device_interface.h"
 #include "logger.h"
 #include "device_manager.h"
 #include "virtio_pci.h"
+#include "states/virtio_console.pb.h"
 
 class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
  private:
@@ -44,7 +46,7 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
     device_features_ |= (1UL << VIRTIO_CONSOLE_F_MULTIPORT);
 
     bzero(&console_config_, sizeof(console_config_));
-    console_config_.max_nr_ports = common_config_.num_queues / 2 - 1;
+    console_config_.max_nr_ports = 1;
   }
 
   void Connect() {
@@ -55,6 +57,7 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
       if (port) {
         port->Initialize(this, console_ports_.size() + 1);
         console_ports_.push_back(port);
+        ++console_config_.max_nr_ports;
       } else {
         MV_PANIC("%s is not a port object", object->name());
       }
@@ -66,6 +69,36 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
     VirtioPci::Reset();
   
     CreateQueuesForPorts();
+  }
+
+  bool SaveState(MigrationWriter* writer) {
+    VirtioConsoleState state;
+    for (auto console_port : console_ports_) {
+      auto port = state.add_ports();
+      port->set_id(console_port->port_id());
+      port->set_ready(console_port->ready());
+    }
+    writer->WriteProtobuf("VIRTIO_CONSOLE", state);
+    return VirtioPci::SaveState(writer);
+  }
+
+  bool LoadState(MigrationReader* reader) {
+    if (!VirtioPci::LoadState(reader)) {
+      return false;
+    }
+    VirtioConsoleState state;
+    if (!reader->ReadProtobuf("VIRTIO_CONSOLE", state)) {
+      return false;
+    }
+    for (int i = 0; i < state.ports_size(); i++) {
+      auto& port = state.ports(i);
+      for (auto console_port : console_ports_) {
+        if (console_port->port_id() == port.id()) {
+          console_port->set_ready(port.ready());
+        }
+      }
+    }
+    return true;
   }
 
   void CreateQueuesForPorts() {
@@ -205,7 +238,7 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
       break;
     
     case VIRTIO_CONSOLE_PORT_OPEN:
-      port->SetReady(vcc->value);
+      port->set_ready(vcc->value);
       break;
     default:
       MV_PANIC("port=%d event=%d", vcc->id, vcc->event);

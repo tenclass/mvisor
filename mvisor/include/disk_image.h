@@ -55,6 +55,7 @@ class DiskImage : public Object {
   virtual ~DiskImage();
   virtual void Connect();
   bool readonly() { return readonly_; }
+  bool busy();
 
   /* Always use this static method to create a DiskImage */
 

@@ -17,10 +17,13 @@
  */
 
 #include "usb_device.h"
+
 #include <cstring>
+
 #include "usb.h"
 #include "logger.h"
 #include "device_manager.h"
+#include "states/usb_device.pb.h"
 
 void UsbDevice::Reset() {
   configuration_value_ = 0;
@@ -35,6 +38,29 @@ void UsbDevice::Reset() {
   }
   endpoints_.clear();
 }
+
+
+bool UsbDevice::SaveState(MigrationWriter* writer) {
+  UsbDeviceState state;
+  state.set_configuration_value(configuration_value_);
+  state.set_remote_wakeup(remote_wakeup_);
+  writer->WriteProtobuf("USB_DEVICE", state);
+  return Device::SaveState(writer);
+}
+
+bool UsbDevice::LoadState(MigrationReader* reader) {
+  if (!Device::LoadState(reader)) {
+    return false;
+  }
+  UsbDeviceState state;
+  if (!reader->ReadProtobuf("USB_DEVICE", state)) {
+    return false;
+  }
+  remote_wakeup_ = state.remote_wakeup();
+  SetConfiguration(state.configuration_value());
+  return true;
+}
+
 
 UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete) {
   auto packet = new UsbPacket {

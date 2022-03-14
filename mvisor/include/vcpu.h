@@ -25,6 +25,8 @@
 #include <functional>
 #include <mutex>
 
+#include "migration.h"
+
 #define SIG_USER_INTERRUPT (SIGRTMIN + 0)
 
 class Machine;
@@ -53,6 +55,10 @@ class Vcpu {
   /* Reset vCPU registers to default values */
   void Reset();
 
+  /* Used for migration */
+  bool SaveState(MigrationWriter* writer);
+  bool LoadState(MigrationReader* reader);
+
   /* Used for debugging */
   void EnableSingleStep();
   void PrintRegisters();
@@ -72,19 +78,19 @@ class Vcpu {
   void ProcessMmio();
   void ExecuteTasks();
 
-  static __thread Vcpu* current_vcpu_;
+  static __thread Vcpu*     current_vcpu_;
 
-  Machine* machine_;
-  int vcpu_id_ = -1;
-  int fd_ = -1;
-  char name_[16];
-  struct kvm_run *kvm_run_;
-  struct kvm_coalesced_mmio_ring *mmio_ring_;
-  std::thread thread_;
-  bool debug_ = false;
-  VcpuRegisters default_registers_;
-  std::deque<VcpuTask> tasks_;
-  std::mutex mutex_;
+  Machine*                  machine_;
+  int                       vcpu_id_ = -1;
+  int                       fd_ = -1;
+  char                      name_[16];
+  kvm_run*                  kvm_run_;
+  kvm_coalesced_mmio_ring*  mmio_ring_;
+  std::thread               thread_;
+  bool                      debug_ = false;
+  VcpuRegisters             default_registers_;
+  std::deque<VcpuTask>      tasks_;
+  std::mutex                mutex_;
 };
 
 #endif // _MVISOR_VCPU_H

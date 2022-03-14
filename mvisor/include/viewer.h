@@ -63,7 +63,6 @@ class Viewer {
   PointerInputInterface* GetActivePointer();
 
   Machine* machine_;
-  DeviceManager* device_manager_;
   DisplayInterface* display_;
   KeyboardInputInterface* keyboard_;
   SpiceAgentInterface* spice_agent_;

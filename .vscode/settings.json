@@ -61,6 +61,9 @@
         "stddef.h": "c",
         "variant": "cpp",
         "future": "cpp",
-        "csignal": "cpp"
+        "csignal": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "iostream": "cpp"
     }
 }

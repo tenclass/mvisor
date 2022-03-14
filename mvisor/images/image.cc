@@ -89,6 +89,8 @@ void DiskImage::Finalize() {
 void DiskImage::WorkerProcess() {
   SetThreadName("mvisor-disk");
   
+  io_->RegisterDiskImage(this);
+
   while (!finalized_) {
     std::unique_lock<std::mutex> lock(worker_mutex_);
     worker_cv_.wait(lock, [this]() {
@@ -99,11 +101,18 @@ void DiskImage::WorkerProcess() {
       break;
     }
     auto callback = worker_queue_.front();
-    worker_queue_.pop_front();
     lock.unlock();
-
+  
     callback();
+
+    /* Only remove item after job is done.
+     * Remember to lock mutex again when operating on worker_queue_
+     */
+    lock.lock();
+    worker_queue_.pop_front();
   }
+  
+  io_->UnregisterDiskImage(this);
 }
 
 void DiskImage::ReadAsync(void *buffer, off_t position, size_t length, IoCallback callback) {
@@ -154,4 +163,9 @@ void DiskImage::FlushAsync(IoCallback callback) {
   });
   worker_mutex_.unlock();
   worker_cv_.notify_all();
+}
+
+bool DiskImage::busy() {
+  std::lock_guard<std::mutex> lock(worker_mutex_);
+  return !worker_queue_.empty();
 }

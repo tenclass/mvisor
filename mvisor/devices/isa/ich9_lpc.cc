@@ -24,12 +24,15 @@
 #include "pci_device.h"
 #include "device_manager.h"
 #include "machine.h"
+#include "states/ich9_lpc.pb.h"
 
 #define ICH9_LPC_PMBASE                         0x40
 #define ICH9_LPC_PMBASE_BASE_ADDRESS_MASK       Q35_MASK(32, 15, 7)
 #define ICH9_LPC_PMBASE_RTE                     0x1
 #define ICH9_LPC_PMBASE_DEFAULT                 0x1
-#define ICH9_PMIO_SMI_EN_APMC_EN                (1 << 5)
+
+#define ICH9_LPC_PMIO_PM1_CTRL_SMI_EN           (1)
+#define ICH9_LPC_PMIO_ACPI_SMI_EN_APMC_EN       (1 << 5)
 
 #define ICH9_LPC_ACPI_CTRL                      0x44
 #define ICH9_LPC_ACPI_CTRL_ACPI_EN              0x80
@@ -85,31 +88,39 @@ static uint64_t acpi_get_clock(uint64_t now)
 
 class Ich9Lpc : public PciDevice {
  private:
-  uint8_t   acpi_gpe_regs_[16];
-  uint16_t  acpi_control_;
-  uint8_t   apm_control_;
-  uint8_t   apm_state_;
-  uint16_t  acpi_pm_event_status_;
-  uint16_t  acpi_pm_event_enable_;
-
+  Ich9LpcState  state_;
+  bool          initialized_pmio_ = false;
+  bool          initialized_rcrb_ = false;
 
   void UpdatePmBaseSci() {
     uint32_t pm_io_base = *(uint32_t*)(pci_header_.data + ICH9_LPC_PMBASE);
     uint8_t acpi_control = *(uint8_t*)(pci_header_.data + ICH9_LPC_ACPI_CTRL);
     if (acpi_control & ICH9_LPC_ACPI_CTRL_ACPI_EN) {
-      pm_io_base &= ICH9_LPC_PMBASE_BASE_ADDRESS_MASK;
-      AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "LPC PM");
+      if (!initialized_pmio_) {
+        pm_io_base &= ICH9_LPC_PMBASE_BASE_ADDRESS_MASK;
+        AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "LPC PM");
+        initialized_pmio_ = true;
+      }
     } else {
-      RemoveIoResource(kIoResourceTypePio, "LPC PM");
+      if (initialized_pmio_) {
+        RemoveIoResource(kIoResourceTypePio, "LPC PM");
+        initialized_pmio_ = false;
+      }
     }
   }
 
   void UpdateRootComplexRegisterBLock() {
     uint32_t rcrb = *(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA);
     if (rcrb & ICH9_LPC_RCBA_EN) {
-      AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "LPC RCRB");
+      if (!initialized_rcrb_) {
+        AddIoResource(kIoResourceTypeMmio, rcrb & ICH9_LPC_RCBA_BA_MASK, ICH9_CC_SIZE, "LPC RCRB");
+        initialized_rcrb_ = true;
+      }
     } else {
-      RemoveIoResource(kIoResourceTypeMmio, "LPC RCRB");
+      if (initialized_rcrb_) {
+        RemoveIoResource(kIoResourceTypeMmio, "LPC RCRB");
+        initialized_rcrb_ = false;
+      }
     }
   }
 
@@ -129,14 +140,24 @@ class Ich9Lpc : public PciDevice {
     AddIoResource(kIoResourceTypePio, 0xB2, 2, "LPC APM");
   }
 
+  bool SaveState(MigrationWriter* writer) {
+    writer->WriteProtobuf("LPC", state_);
+    return PciDevice::SaveState(writer);
+  }
+
+  bool LoadState(MigrationReader* reader) {
+    if (!reader->ReadProtobuf("LPC", state_)) {
+      return false;
+    }
+    UpdatePmBaseSci();
+    UpdateRootComplexRegisterBLock();
+    return PciDevice::LoadState(reader);
+  }
+
   void Reset() {
     PciDevice::Reset();
-
-    bzero(&acpi_gpe_regs_, sizeof(acpi_gpe_regs_));
-    acpi_control_ = 0;
-    apm_control_ = apm_state_ = 0;
-    acpi_pm_event_status_ = 1;
-    acpi_pm_event_enable_ = 0;
+    state_.Clear();
+    state_.mutable_acpi()->set_smi_enable(ICH9_LPC_PMIO_ACPI_SMI_EN_APMC_EN);
   }
 
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
@@ -166,86 +187,105 @@ class Ich9Lpc : public PciDevice {
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == 0xB2) { // APM IO
+      auto &apm = state_.apm();
       if (offset == 0) {
-        *data = apm_control_;
+        *data = apm.control();
       } else {
-        *data = apm_state_;
+        *data = apm.status();
       }
       return;
     }
-    if (offset >= 0x8 && offset < 0xC) {          // ACPI TMR
-      MV_ASSERT(size == 4);
-      *(uint32_t*)data = acpi_get_clock(get_clock_realtime()) & 0xFFFFFF;
-    } else if (offset >= 0x0 && offset < 0x4) {   // ACPI Event
-      MV_ASSERT(size == 2);
-      if (offset == 0) {
-        *(uint16_t*)data = acpi_pm_event_status_;
-      } else {
-        *(uint16_t*)data = acpi_pm_event_enable_;
-      }
-    } else if (offset >= 0x4 && offset < 0x8) {   // ACPI CNT
-      MV_ASSERT(size == 2);
-      *(uint16_t*)data = acpi_control_;
-    } else if (offset >= 0x20 && offset < 0x30) { // ACPI GPE
-      MV_ASSERT(size == 1);
-      offset -= 0x20;
-      data[0] = acpi_gpe_regs_[offset];
-    } else if (offset >= 0x30 && offset < 0x38) { // ACPI SMI
-      MV_ASSERT(size == 4);
-      if (offset == 0x30) {
-        // Tell SeaBIOS not to initialize SMM
-        *(uint32_t*)data = ICH9_PMIO_SMI_EN_APMC_EN;
-      } else {
-        MV_PANIC("not supported");
-      }
-    } else {
-      MV_PANIC("not supported read at 0x%x", resource->base + offset);
+
+    /* PM IO */
+    MV_ASSERT(resource->length == ICH9_PMIO_SIZE);
+    auto &acpi = state_.acpi();
+    uint64_t value;
+
+    switch (offset)
+    {
+    case 0x00:
+      value = acpi.pm1_status();
+      break;
+    case 0x02:
+      value = acpi.pm1_enable();
+      break;
+    case 0x04:
+      value = acpi.pm1_control();
+      break;
+    case 0x08:
+      value = acpi_get_clock(get_clock_realtime()) & 0xFFFFFF;
+      break;
+    case 0x20 ... 0x27:
+      value = acpi.gpe0_status() >> ((offset - 0x20) << 3);
+      break;
+    case 0x28 ... 0x2F:
+      value = acpi.gpe0_enable() >> ((offset - 0x28) << 3);
+      break;
+    case 0x30:
+      value = acpi.smi_enable();
+      break;
+    case 0x34:
+      value = acpi.smi_status();
+    default:
+      MV_PANIC("not supported reading at ACPI offset=0x%x", offset);
+      break;
     }
+
+    memcpy(data, &value, size);
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    auto acpi = state_.mutable_acpi();
+  
     if (resource->base == 0xB2) { // APM IO
+      auto apm = state_.mutable_apm();
       if (offset == 0) {
-        apm_control_ = *data;
-        if (apm_control_ == 2) { // Enable ACPI
-          acpi_control_ |= 1;
-        } else if (apm_control_ == 3) { // Disable ACPI
-          acpi_control_ &= ~1;
+        apm->set_control(*data);
+        if (apm->control() == 2) { // Enable ACPI
+          acpi->set_pm1_control(acpi->pm1_control() | ICH9_LPC_PMIO_PM1_CTRL_SMI_EN);
+        } else if (apm->control() == 3) { // Disable ACPI
+          acpi->set_pm1_control(acpi->pm1_control() & ~ICH9_LPC_PMIO_PM1_CTRL_SMI_EN);
         } else {
-          MV_PANIC("unknown apm control=0x%x", apm_control_);
+          MV_PANIC("unknown apm control=0x%x", *data);
         }
       } else {
-        apm_state_ = *data;
+        apm->set_status(*data);
       }
       return;
     }
 
-    if (offset >= 0x0 && offset < 0x4) { // ACPI Event
-      MV_ASSERT(size == 2);
-      uint16_t value = *(uint16_t*)data;
-      if (offset == 0) {
-        acpi_pm_event_status_ &= ~value;
-      } else {
-        acpi_pm_event_enable_ = value;
-      }
-    } else if (offset >= 0x4 && offset < 0x8) { // ACPI CNT
-      MV_ASSERT(size == 2);
-      uint16_t value = *(uint16_t*)data;
-      acpi_control_ = value & ~ACPI_BITMASK_SLEEP_ENABLE;
+    /* PM IO */
+    MV_ASSERT(resource->length == ICH9_PMIO_SIZE);
+    uint64_t value = 0;
+    memcpy(&value, data, size);
+  
+    switch (offset)
+    {
+    case 0x00:
+      acpi->set_pm1_status(acpi->pm1_status() & ~value);
+      break;
+    case 0x02:
+      acpi->set_pm1_enable(value);
+      break;
+    case 0x04:
+      acpi->set_pm1_control(value & ~ACPI_BITMASK_SLEEP_ENABLE);
       if (value & ACPI_BITMASK_SLEEP_ENABLE) {
         AcpiSuspend((value >> 10) & 7);
       }
-    } else if (offset >= 0x20 && offset < 0x30) {  // ACPI GPE
-      MV_ASSERT(size == 1);
-      offset -= 0x20;
-      if (offset < 8) {
-        acpi_gpe_regs_[offset] &= ~data[0]; // GPE_STS
-      } else {
-        acpi_gpe_regs_[offset] = data[0];   // GPE_EN
-      }
-    } else {
-      MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-        name_, resource->base, offset, size, *(uint64_t*)data);
+      break;
+    case 0x20 ... 0x27:
+      value = acpi->gpe0_status();
+      memcpy((uint8_t*)&value + offset - 0x20, data, size);
+      acpi->set_gpe0_status(value);
+      break;
+    case 0x28 ... 0x2F:
+      value = acpi->gpe0_enable();
+      memcpy((uint8_t*)&value + offset - 0x28, data, size);
+      acpi->set_gpe0_enable(value);
+      break;
+    default:
+      MV_PANIC("not supported writing at ACPI offset=0x%lx value=0x%lx", offset, value);
+      break;
     }
   }
 

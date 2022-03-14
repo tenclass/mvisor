@@ -50,7 +50,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
     strcpy(port_name_, "com.redhat.spice.0");
     pending_resize_event_ = false;
     last_send_mouse_time_ = steady_clock::now();
-    num_monitors_ = 2;
+    num_monitors_ = 1;
   }
 
   void OnMessage(uint8_t* data, size_t size) {

@@ -29,7 +29,7 @@ objects:
   - class: ich9-lpc
     children:
       - cmos
-      - ps2-keyboard
+      - ps2
       - pc-speaker
   
   - class: ich9-hda
