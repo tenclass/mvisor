@@ -417,6 +417,5 @@ bool Vcpu::LoadState(MigrationReader* reader) {
   memcpy(&lapic, state.lapic().data(), sizeof(lapic));
   MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
 
-  MV_LOG("load cpu state %d", vcpu_id_);
   return true;
 }

@@ -321,13 +321,8 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         machine_->Pause();
       }
     } else if (event.key.keysym.sym == SDLK_F2) {
-      if (machine_->IsPaused()) {
-        machine_->Load("/tmp/save");
-        machine_->Resume();
-      } else {
-        machine_->Pause();
-        machine_->Save("/tmp/save");
-      }
+      machine_->Pause();
+      machine_->Save("/tmp/save");
     }
   case SDL_KEYUP:
     if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {

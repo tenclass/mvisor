@@ -4,7 +4,7 @@ base: q35.yaml
 machine:
   memory: 2G
   vcpu: 4
-  debug: Yes
+  debug: No
 
 objects:
   # - class: ahci-cdrom
