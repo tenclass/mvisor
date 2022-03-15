@@ -333,7 +333,19 @@ void MemoryManager::UnregisterMemoryListener(const MemoryListener** plistener) {
 bool MemoryManager::SaveState(MigrationWriter* writer) {
   writer->SetPrefix("memory");
   writer->WriteRaw("BIOS", bios_data_, bios_size_);
-  writer->WriteRaw("RAM", ram_host_, machine_->ram_size_);
+
+  /* Write RAM to sparse file */
+  int fd = writer->BeginWrite("RAM");
+  ftruncate(fd, machine_->ram_size_);
+
+  auto ptr = (uint8_t*)ram_host_;
+  for (size_t pos = 0; pos < machine_->ram_size_; pos += PAGE_SIZE) {
+    if (!test_zero(ptr, PAGE_SIZE)) {
+      pwrite(fd, ptr, PAGE_SIZE, pos);
+    }
+    ptr += PAGE_SIZE;
+  }
+  writer->EndWrite("RAM");
   return true;
 }
 
@@ -354,10 +366,5 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
     MV_PANIC("failed to map memory");
   }
   reader->EndRead("RAM");
-  
-  // Option way: read all
-  // if (!reader->ReadRaw("RAM", ram_host_, machine_->ram_size_)) {
-  //   return false;
-  // }
   return true;
 }

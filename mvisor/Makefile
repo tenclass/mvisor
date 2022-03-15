@@ -6,7 +6,7 @@ MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on
 CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -g
-CCFLAGS = $(CFLAGS) -std=c++17
+CCFLAGS = $(CFLAGS) -std=c++17 -mavx2
 BUILD_DIR = ../build
 
 MV_PROTOBUF_SOURCE := $(wildcard */*.proto)

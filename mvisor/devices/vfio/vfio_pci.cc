@@ -615,6 +615,8 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
     if (pending_bytes == 0) {
       success = true;
       break;
+    } else if (pending_bytes > area.size) {
+      pending_bytes = area.size;
     }
 
     uint64_t data_offset = 0;

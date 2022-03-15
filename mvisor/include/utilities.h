@@ -60,4 +60,8 @@ static inline void safe_close(int *fd) {
   }
 }
 
+/* Test if buffer is all zero.
+ * buffer must be 256 bytes alignment */
+bool test_zero(const void* buffer, size_t length);
+
 #endif // _MVISOR_UTILITY_H
