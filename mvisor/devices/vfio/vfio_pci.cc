@@ -133,15 +133,18 @@ void VfioPci::SetupPciConfiguration() {
       switch (cap->type)
       {
       case PCI_CAP_ID_MSI: {
-        /* Only support 64bit MSI currently */
-        auto msi_cap = (MsiCapability64*)cap;
-        MV_ASSERT(!(msi_cap->control & PCI_MSI_FLAGS_MASKBIT));
-        MV_ASSERT(msi_cap->control & PCI_MSI_FLAGS_64BIT);
-        msi_config_.is_64bit = msi_cap->control & PCI_MSI_FLAGS_64BIT;
+        uint16_t control = *(uint16_t*)&cap[1];
+        MV_ASSERT(!(control & PCI_MSI_FLAGS_MASKBIT));
+        msi_config_.is_64bit = control & PCI_MSI_FLAGS_64BIT;
         msi_config_.offset = pos;
         msi_config_.is_msix = false;
-        msi_config_.length = sizeof(*msi_cap);
-        msi_config_.msi64 = msi_cap;
+        if (msi_config_.is_64bit) {
+          msi_config_.msi64 = (MsiCapability64*)cap;
+          msi_config_.length = sizeof(MsiCapability64);
+        } else {
+          msi_config_.msi32 = (MsiCapability32*)cap;
+          msi_config_.length = sizeof(MsiCapability32);
+        }
         break;
       }
       case PCI_CAP_ID_MSIX:
@@ -149,6 +152,10 @@ void VfioPci::SetupPciConfiguration() {
         break;
       case PCI_CAP_ID_VNDR:
         /* ignore vendor specific data */
+        break;
+      case PCI_CAP_ID_EXP:
+        MV_LOG("unsupported PCI Express, dump config space");
+        DumpHex(pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
         break;
       default:
         MV_LOG("unhandled capability=0x%x", cap->type);
@@ -524,17 +531,25 @@ void VfioPci::UpdateMsiRoutes() {
 
   for (uint vector = 0; vector < nr_vectors; vector++) {
     auto &interrupt = interrupts_[vector];
-    auto msi = msi_config_.msi64;
     if (interrupt.event_fd == -1) {
       interrupt.event_fd = eventfd(0, 0);
     }
-    auto address = ((uint64_t)msi->address1 << 32) | msi->address0;
+  
+    uint64_t msi_address;
+    uint32_t msi_data;
+    if (msi_config_.is_64bit) {
+      msi_address = ((uint64_t)msi_config_.msi64->address1 << 32) | msi_config_.msi64->address0;
+      msi_data = msi_config_.msi64->data;
+    } else {
+      msi_address = msi_config_.msi32->address;
+      msi_data = msi_config_.msi32->data;
+    }
 
     if (msi_config_.enabled) {
       if (interrupt.gsi == -1) {
-        interrupt.gsi = manager_->AddMsiRoute(address, msi->data, interrupt.event_fd);
+        interrupt.gsi = manager_->AddMsiRoute(msi_address, msi_data, interrupt.event_fd);
       } else {
-        manager_->UpdateMsiRoute(interrupt.gsi, address, msi->data, interrupt.event_fd);
+        manager_->UpdateMsiRoute(interrupt.gsi, msi_address, msi_data, interrupt.event_fd);
       }
     } else {
       if (interrupt.gsi != -1) {
