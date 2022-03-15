@@ -70,6 +70,8 @@ DeviceManager::~DeviceManager() {
     /* Disconnect invoked recursively */
     root_->Disconnect();
   }
+  
+  safe_close(&vfio_kvm_device_fd_);
 }
 
 /* Called when system start or reset */
@@ -134,6 +136,39 @@ void DeviceManager::RegisterDevice(Device* device) {
 
 void DeviceManager::UnregisterDevice(Device* device) {
   registered_devices_.erase(device);
+}
+
+
+void DeviceManager::RegisterVfioGroup(int group_fd) {
+  if (vfio_kvm_device_fd_ == -1) {
+    kvm_create_device create = { .type = KVM_DEV_TYPE_VFIO };
+    if (ioctl(machine_->vm_fd_, KVM_CREATE_DEVICE, &create) < 0) {
+      MV_PANIC("failed to create KVM VFIO device");
+    }
+    vfio_kvm_device_fd_ = create.fd;
+  }
+
+  kvm_device_attr attr = {
+    .group = KVM_DEV_VFIO_GROUP,
+    .attr = KVM_DEV_VFIO_GROUP_ADD,
+    .addr = (uint64_t)&group_fd
+  };
+  if (ioctl(vfio_kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
+    MV_PANIC("failed to add group %d to KVM VFIO device %d", group_fd, vfio_kvm_device_fd_);
+  }
+}
+
+void DeviceManager::UnregisterVfioGroup(int group_fd) {
+  MV_ASSERT(vfio_kvm_device_fd_ != -1);
+
+  kvm_device_attr attr = {
+    .group = KVM_DEV_VFIO_GROUP,
+    .attr = KVM_DEV_VFIO_GROUP_DEL,
+    .addr = (uint64_t)&group_fd
+  };
+  if (ioctl(vfio_kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
+    MV_PANIC("failed to delete group %d to KVM VFIO device %d", group_fd, vfio_kvm_device_fd_);
+  }
 }
 
 

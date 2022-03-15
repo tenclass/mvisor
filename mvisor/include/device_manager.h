@@ -69,6 +69,8 @@ class DeviceManager {
   void RegisterDevice(Device* device);
   void UnregisterDevice(Device* device);
   void ResetDevices();
+  void RegisterVfioGroup(int group_fd);
+  void UnregisterVfioGroup(int group_fd);
 
   void RegisterIoHandler(Device* device, const IoResource* resource);
   void UnregisterIoHandler(Device* device, const IoResource* resource);
@@ -115,6 +117,7 @@ class DeviceManager {
   std::vector<kvm_irq_routing_entry>  gsi_routing_table_;
   int                     next_gsi_ = 0;
   IoAccounting            io_accounting_;
+  int                     vfio_kvm_device_fd_ = -1;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

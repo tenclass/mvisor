@@ -73,6 +73,9 @@ void VfioPci::Disconnect() {
       safe_close(&interrupt.event_fd);
     }
   }
+
+  manager_->UnregisterVfioGroup(group_fd_);
+
   safe_close(&device_fd_);
   safe_close(&container_fd_);
   safe_close(&group_fd_);
@@ -284,6 +287,9 @@ void VfioPci::SetupVfioContainer() {
     }
   }
   free(info);
+  
+  /* Add iommu group to KVM */
+  manager_->RegisterVfioGroup(group_fd_);
 }
 
 void VfioPci::SetupVfioDevice() {
@@ -313,10 +319,14 @@ void VfioPci::SetupVfioDevice() {
       region_info = (vfio_region_info*)realloc(region_info, region_info->argsz);
       MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_REGION_INFO, region_info) == 0);
     }
-    if (!region_info->size)
+    if (!region_info->size) {
+      free(region_info);
       continue;
-    if (region_info->index >= MAX_VFIO_REGIONS)
+    }
+    if (region_info->index >= MAX_VFIO_REGIONS) {
+      free(region_info);
       continue;
+    }
     
     auto &region = regions_[region_info->index];
     region.index = region_info->index;
