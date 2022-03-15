@@ -83,6 +83,10 @@ void VfioPci::Disconnect() {
 }
 
 void VfioPci::Reset() {
+  /* disable IO / MMIO / bus master and INTX */
+  uint16_t command = pci_header_.command & ~(PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER | PCI_COMMAND_INTX_DISABLE);
+  WritePciConfigSpace(offsetof(PciConfigHeader, command), (uint8_t*)&command, 2);
+
   /* reset vfio device */
   if (device_fd_ > 0 && (device_info_.flags & VFIO_DEVICE_FLAGS_RESET)) {
     if (ioctl(device_fd_, VFIO_DEVICE_RESET) < 0) {
@@ -105,7 +109,7 @@ void VfioPci::SetupPciConfiguration() {
   /* Disable IRQ, use MSI instead, should we update the vfio device ??? */
   pci_header_.irq_pin = 0;
   pci_header_.irq_line = 0;
-  pci_header_.command = 0;
+  pci_header_.command = PCI_COMMAND_INTX_DISABLE;
   /* Multifunction is not supported yet */
   pci_header_.header_type &= ~PCI_MULTI_FUNCTION;
   MV_ASSERT(pci_header_.header_type == PCI_HEADER_TYPE_NORMAL);
@@ -482,13 +486,13 @@ bool VfioPci::DeactivatePciBar(uint8_t index) {
 }
 
 
-ssize_t VfioPci::ReadRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length) {
+ssize_t VfioPci::ReadRegion(uint8_t index, uint64_t offset, void* data, uint32_t length) {
   MV_ASSERT(index < MAX_VFIO_REGIONS);
   auto &region = regions_[index];
   return pread(device_fd_, data, length, region.offset + offset);
 }
 
-ssize_t VfioPci::WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length) {
+ssize_t VfioPci::WriteRegion(uint8_t index, uint64_t offset, void* data, uint32_t length) {
   MV_ASSERT(index < MAX_VFIO_REGIONS);
   auto &region = regions_[index];
   return pwrite(device_fd_, data, length, region.offset + offset);

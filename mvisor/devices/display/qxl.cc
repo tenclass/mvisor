@@ -524,8 +524,14 @@ class Qxl : public Vga {
       QXLImage* image = (QXLImage*)GetMemSlotAddress(copy->src_bitmap);
       MV_ASSERT(image->descriptor.type == SPICE_IMAGE_TYPE_BITMAP);
       MV_ASSERT(image->descriptor.flags == 0);
+
       QXLBitmap* bitmap = &image->bitmap;
-      MV_ASSERT(bitmap->format == SPICE_BITMAP_FMT_RGBA);
+      if (bitmap->format != SPICE_BITMAP_FMT_RGBA) {
+        MV_LOG("invalid bitmap format=0x%x", bitmap->format);
+        ReleaseGuestResource(&drawable->release_info);
+        delete partial;
+        break;
+      }
       MV_ASSERT(bitmap->palette == 0);
       MV_ASSERT(bitmap->stride == bitmap->x * guest_primary_.bytes_pp);
       MV_ASSERT(partial->width == (int)bitmap->x && partial->height == (int)bitmap->y);

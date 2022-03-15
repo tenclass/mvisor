@@ -444,8 +444,6 @@ void Vga::UpdateVRamMemoryMap() {
     if (debug_) {
       MV_LOG("VGA map index=%d read_index=%d", index, read_index);
     }
-  } else {
-    MV_PANIC("invalid mode=%d", mode_);
   }
 }
 

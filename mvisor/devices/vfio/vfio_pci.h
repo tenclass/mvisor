@@ -88,8 +88,8 @@ class VfioPci : public PciDevice {
   void UnmapDmaPages(const MemorySlot* slot);
   void MapBarRegion(uint8_t index);
   void UnmapBarRegion(uint8_t index);
-  ssize_t ReadRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length);
-  ssize_t WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length);
+  ssize_t ReadRegion(uint8_t index, uint64_t offset, void* data, uint32_t length);
+  ssize_t WriteRegion(uint8_t index, uint64_t offset, void* data, uint32_t length);
   int     FindRegion(uint32_t type, uint32_t subtype);
   void SetMigrationDeviceState(uint32_t device_state);
 
