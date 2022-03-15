@@ -40,11 +40,11 @@ class MigrationWriter {
   void WriteString(std::string tag, const std::string& data);
   void WriteProtobuf(std::string tag, const Message& message);
   void WriteMemoryPages(std::string tag, void* pages, size_t size, uint64_t base);
+  int  BeginWrite(std::string tag);
+  void EndWrite(std::string tag);
 
   inline std::string base_path() { return base_path_; }
  private:
-  void BeginWrite(std::string& tag);
-  void EndWrite(std::string& tag);
 
   int         fd_ = -1;
   std::string prefix_;
@@ -61,9 +61,9 @@ class MigrationReader {
   std::string ReadString(std::string tag);
   bool ReadProtobuf(std::string tag, Message& message);
   bool ReadMemoryPages(std::string tag, void* target, size_t size, uint64_t base);
+  int  BeginRead(std::string tag);
+  void EndRead(std::string tag);
  private:
-  void BeginRead(std::string& tag);
-  void EndRead(std::string& tag);
 
   int         fd_ = -1;
   size_t      file_size_ = 0;

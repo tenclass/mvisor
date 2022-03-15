@@ -37,6 +37,11 @@ debug: all
 image:
 	qemu-img create -f qcow2 -F qcow2 -b /data/win10.qcow2 /data/hd.qcow2
 
+vfio: all
+	-echo 1 > /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b/remove
+	echo "c2e088ba-954f-11ec-8584-525400666f2b" > /sys/class/mdev_bus/0000:3b:00.0/mdev_supported_types/nvidia-231/create
+	$(EXECUTABLE)
+
 all: $(EXECUTABLE)
 
 proto: $(MV_PROTOBUF_CC)

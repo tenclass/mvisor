@@ -55,6 +55,7 @@ void VfioPci::Connect() {
   SetupPciConfiguration();
   SetupGfxPlane();
   SetupDmaMaps();
+  SetupMigraionInfo();
 }
 
 void VfioPci::Disconnect() {
@@ -67,6 +68,7 @@ void VfioPci::Disconnect() {
       manager_->UpdateMsiRoute(interrupt.gsi, 0, 0, -1);
     }
     if (interrupt.event_fd > 0) {
+      // If we use IRQFD, we don't use polling to handle interrupts
       // manager_->io()->StopPolling(interrupt.event_fd);
       safe_close(&interrupt.event_fd);
     }
@@ -373,6 +375,26 @@ void VfioPci::SetupVfioDevice() {
   }
 }
 
+void VfioPci::SetupMigraionInfo() {
+  bzero(&migration_, sizeof(migration_));
+  auto index = FindRegion(VFIO_REGION_TYPE_MIGRATION, VFIO_REGION_SUBTYPE_MIGRATION);
+  if (index < 0) {
+    return;
+  }
+  migration_.enabled = true;
+  migration_.region = &regions_[index];
+  MV_ASSERT(migration_.region->mmap_areas.size() == 1);
+
+  auto machine = manager_->machine();
+  machine->RegisterStateChangeListener([=]() {
+    if (machine->IsPaused()) {
+      SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
+    } else {
+      SetMigrationDeviceState(VFIO_DEVICE_STATE_RUNNING);
+    }
+  });
+}
+
 void VfioPci::MapBarRegion(uint8_t index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
@@ -417,7 +439,6 @@ bool VfioPci::ActivatePciBar(uint8_t index) {
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
     MV_ASSERT(!bar.active);
-    MV_LOG("ActivatePciBar %d 0x%lx", index, bar.address);
     MapBarRegion(index);
     bar.active = true;
     return true;
@@ -431,7 +452,6 @@ bool VfioPci::DeactivatePciBar(uint8_t index) {
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
     MV_ASSERT(bar.active);
-    MV_LOG("DeactivatePciBar %d 0x%lx", index, bar.address);
     UnmapBarRegion(index);
     bar.active = false;
     return true;
@@ -450,6 +470,15 @@ ssize_t VfioPci::WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint
   MV_ASSERT(index < MAX_VFIO_REGIONS);
   auto &region = regions_[index];
   return pwrite(device_fd_, data, length, region.offset + offset);
+}
+
+int VfioPci::FindRegion(uint32_t type, uint32_t subtype) {
+  for (uint8_t i = 0; i < regions_.size(); i++) {
+    if (regions_[i].type == type && regions_[i].subtype == subtype) {
+      return i;
+    }
+  }
+  return -ENOENT;
 }
 
 void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -551,6 +580,103 @@ void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length
   MV_ASSERT(ret == (ssize_t)length);
 
   PciDevice::ReadPciConfigSpace(offset, data, length);
+}
+
+void VfioPci::SetMigrationDeviceState(uint32_t device_state) {
+  MV_ASSERT(migration_.enabled);
+  pwrite(device_fd_, &device_state, sizeof(device_state), migration_.region->offset);
+}
+
+bool VfioPci::SaveState(MigrationWriter* writer) {
+  if (!migration_.enabled) {
+    MV_LOG("%s:%s blocked migration", name_, device_name_.c_str());
+    return false;
+  }
+
+  /* Map buffer for saving */
+  auto& area = migration_.region->mmap_areas.front();
+  void* buffer = mmap(nullptr, area.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+    device_fd_, migration_.region->offset + area.offset);
+  if (buffer == MAP_FAILED) {
+    MV_PANIC("failed to map area offset=0x%lx size=0x%lx", area.offset, area.size);
+  }
+
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_SAVING);
+  int fd = writer->BeginWrite("DATA");
+
+  while (true) {
+    uint64_t pending_bytes;
+    auto ret = pread(device_fd_, &pending_bytes, sizeof(pending_bytes),
+      migration_.region->offset + offsetof(vfio_device_migration_info, pending_bytes));
+    if (ret < 0) {
+      writer->EndWrite("DATA");
+      return false;
+    }
+
+    if (pending_bytes == 0)
+      break;
+
+    uint64_t data_offset = 0;
+    pread(device_fd_, &data_offset, sizeof(data_offset),
+      migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
+    MV_ASSERT(data_offset == area.offset);
+    MV_ASSERT(pending_bytes <= area.size);
+    
+    ret = write(fd, buffer, pending_bytes);
+    MV_ASSERT(ret == (ssize_t)pending_bytes);
+  }
+
+  writer->EndWrite("DATA");
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
+
+  munmap(buffer, area.size);
+
+  return PciDevice::SaveState(writer);
+}
+
+bool VfioPci::LoadState(MigrationReader* reader) {
+  if (!PciDevice::LoadState(reader)) {
+    return false;
+  }
+
+  /* Restore the PCI config space to VFIO device */
+  auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
+  pwrite(device_fd_, pci_header_.data, PCI_DEVICE_CONFIG_SIZE, config_region.offset);
+
+  /* Update MSI routes */
+  UpdateMsiRoutes();
+
+  /* Map buffer for restoring */
+  auto& area = migration_.region->mmap_areas.front();
+  void* buffer = mmap(nullptr, area.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+    device_fd_, migration_.region->offset + area.offset);
+  if (buffer == MAP_FAILED) {
+    MV_PANIC("failed to map area offset=0x%lx size=0x%lx", area.offset, area.size);
+  }
+
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
+  int fd = reader->BeginRead("DATA");
+
+  while (true) {
+    uint64_t data_offset = 0;
+    pread(device_fd_, &data_offset, sizeof(data_offset),
+      migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
+    MV_ASSERT(data_offset == area.offset);
+    
+    auto ret = read(fd, buffer, area.size);
+    if (ret > 0) {
+      pwrite(device_fd_, &ret, sizeof(ret),
+        migration_.region->offset + offsetof(vfio_device_migration_info, data_size));
+    }
+    if (ret < (ssize_t)area.size)
+      break;
+  }
+
+  reader->EndRead("DATA");
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
+  
+  munmap(buffer, area.size);
+  return true;
 }
 
 DECLARE_DEVICE(VfioPci);

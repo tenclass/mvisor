@@ -148,7 +148,9 @@ void Machine::Run() {
     auto path = std::filesystem::path(config_->path());
     Load(path.parent_path());
   }
-  paused_ = false;
+  
+  /* Set paused = false */
+  Resume();
 
   for (auto vcpu: vcpus_) {
     vcpu->Start();
@@ -289,13 +291,25 @@ void Machine::Save(std::string path) {
     vcpu->SaveState(&writer);
   }
   /* Save device states */
-  device_manager_->SaveState(&writer);
+  if (!device_manager_->SaveState(&writer)) {
+    MV_PANIC("failed to save device states");
+    return;
+  }
   /* Save system RAM */
-  memory_manager_->SaveState(&writer);
+  if (!memory_manager_->SaveState(&writer)) {
+    MV_PANIC("failed to save RAM");
+    return;
+  }
   /* Save disk images */
-  io_thread_->SaveDiskImage(&writer);
+  if (!io_thread_->SaveDiskImage(&writer)) {
+    MV_PANIC("failed to sync disk images");
+    return;
+  }
   /* Save configuration after saving disk images (paths might changed) */
-  config_->Save(path + "/configuration.yaml");
+  if (!config_->Save(path + "/configuration.yaml")) {
+    MV_PANIC("failed to save configuration yaml");
+    return;
+  }
   MV_LOG("done saving");
 }
 

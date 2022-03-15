@@ -74,7 +74,7 @@ void MigrationWriter::WriteMemoryPages(std::string tag, void* target, size_t siz
   MV_PANIC("not impl");
 }
 
-void MigrationWriter::BeginWrite(std::string& tag) {
+int MigrationWriter::BeginWrite(std::string tag) {
   MV_ASSERT(fd_ == -1);
   auto full_path = path(base_path_) / prefix_;
   if (!exists(full_path)) {
@@ -89,9 +89,10 @@ void MigrationWriter::BeginWrite(std::string& tag) {
 
   fd_ = open(full_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   MV_ASSERT(fd_ != -1);
+  return fd_;
 }
 
-void MigrationWriter::EndWrite(std::string& tag) {
+void MigrationWriter::EndWrite(std::string tag) {
   safe_close(&fd_);
 }
 
@@ -146,7 +147,7 @@ bool MigrationReader::ReadMemoryPages(std::string tag, void* target, size_t size
   return true;
 }
 
-void MigrationReader::BeginRead(std::string& tag) {
+int MigrationReader::BeginRead(std::string tag) {
   MV_ASSERT(fd_ == -1);
   auto full_path = path(base_path_) / prefix_ / tag;
   fd_ = open(full_path.c_str(), O_RDONLY);
@@ -155,8 +156,9 @@ void MigrationReader::BeginRead(std::string& tag) {
   struct stat st;
   fstat(fd_, &st);
   file_size_ = st.st_size;
+  return fd_;
 }
 
-void MigrationReader::EndRead(std::string& tag) {
+void MigrationReader::EndRead(std::string tag) {
   safe_close(&fd_);
 }

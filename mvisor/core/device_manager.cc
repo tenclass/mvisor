@@ -578,7 +578,7 @@ bool DeviceManager::SaveState(MigrationWriter* writer) {
   for (auto device : registered_devices_) {
     writer->SetPrefix(device->name());
     if (!device->SaveState(writer)) {
-      MV_PANIC("failed to save state of device %s", device->name());
+      MV_LOG("failed to save state of device %s", device->name());
       return false;
     }
   }

@@ -49,6 +49,11 @@ struct VfioInterrupt {
   int       gsi;
 };
 
+struct VfioMigration {
+  bool        enabled;
+  VfioRegion* region;
+};
+
 class VfioPci : public PciDevice {
  public:
   VfioPci();
@@ -64,6 +69,10 @@ class VfioPci : public PciDevice {
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
 
+  /* VFIO migration */
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
+
  protected:
   void SetupVfioGroup();
   void SetupVfioDevice();
@@ -72,6 +81,8 @@ class VfioPci : public PciDevice {
   void SetupPciInterrupts();
   void SetupGfxPlane();
   void SetupDmaMaps();
+  void SetupMigraionInfo();
+
   void UpdateMsiRoutes();
   void MapDmaPages(const MemorySlot* slot);
   void UnmapDmaPages(const MemorySlot* slot);
@@ -79,6 +90,8 @@ class VfioPci : public PciDevice {
   void UnmapBarRegion(uint8_t index);
   ssize_t ReadRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length);
   ssize_t WriteRegion(uint8_t index, uint64_t offset, uint8_t* data, uint32_t length);
+  int     FindRegion(uint32_t type, uint32_t subtype);
+  void SetMigrationDeviceState(uint32_t device_state);
 
  private:
   std::string   sysfs_path_;
@@ -91,6 +104,7 @@ class VfioPci : public PciDevice {
   std::array<VfioRegion, MAX_VFIO_REGIONS>        regions_;
   std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>  interrupts_;
   const MemoryListener*                           memory_listener_ = nullptr;
+  VfioMigration migration_;
 };
 
 #endif // _MVISOR_DEVICES_VFIO_VFIO_PCI_H
