@@ -603,18 +603,19 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
 
   SetMigrationDeviceState(VFIO_DEVICE_STATE_SAVING);
   int fd = writer->BeginWrite("DATA");
+  bool success = false;
 
   while (true) {
     uint64_t pending_bytes;
     auto ret = pread(device_fd_, &pending_bytes, sizeof(pending_bytes),
       migration_.region->offset + offsetof(vfio_device_migration_info, pending_bytes));
-    if (ret < 0) {
-      writer->EndWrite("DATA");
-      return false;
-    }
-
-    if (pending_bytes == 0)
+    if (ret < 0)
       break;
+
+    if (pending_bytes == 0) {
+      success = true;
+      break;
+    }
 
     uint64_t data_offset = 0;
     pread(device_fd_, &data_offset, sizeof(data_offset),
@@ -631,7 +632,7 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
 
   munmap(buffer, area.size);
 
-  return PciDevice::SaveState(writer);
+  return success && PciDevice::SaveState(writer);
 }
 
 bool VfioPci::LoadState(MigrationReader* reader) {

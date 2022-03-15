@@ -329,6 +329,7 @@ void MemoryManager::UnregisterMemoryListener(const MemoryListener** plistener) {
   }
 }
 
+/* Save memory to file */
 bool MemoryManager::SaveState(MigrationWriter* writer) {
   writer->SetPrefix("memory");
   writer->WriteRaw("BIOS", bios_data_, bios_size_);
@@ -336,13 +337,27 @@ bool MemoryManager::SaveState(MigrationWriter* writer) {
   return true;
 }
 
+/* Reading memory data from file */
 bool MemoryManager::LoadState(MigrationReader* reader) {
   reader->SetPrefix("memory");
   if (!reader->ReadRaw("BIOS", bios_data_, bios_size_)) {
     return false;
   }
-  if (!reader->ReadRaw("RAM", ram_host_, machine_->ram_size_)) {
-    return false;
+
+  /* Unmap the preallocated */
+  munmap(ram_host_, machine_->ram_size_);
+
+  /* Map the RAM file as copy on write memory */
+  int fd = reader->BeginRead("RAM");
+  ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+  if (ram_host_ == MAP_FAILED) {
+    MV_PANIC("failed to map memory");
   }
+  reader->EndRead("RAM");
+  
+  // Option way: read all
+  // if (!reader->ReadRaw("RAM", ram_host_, machine_->ram_size_)) {
+  //   return false;
+  // }
   return true;
 }
