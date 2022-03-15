@@ -35,6 +35,7 @@ PciDevice::PciDevice() {
   bzero(&msi_config_, sizeof(msi_config_));
 
   next_capability_offset_ = 0x40;
+  is_pcie_ = false;
 }
 
 PciDevice::~PciDevice() {
@@ -157,12 +158,12 @@ void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data
 }
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  MV_ASSERT(offset + length <= PCI_DEVICE_CONFIG_SIZE);
+  MV_ASSERT(offset + length <= pci_config_size());
   memcpy(data, pci_header_.data + offset, length);
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  MV_ASSERT(offset + length <= PCI_DEVICE_CONFIG_SIZE);
+  MV_ASSERT(offset + length <= pci_config_size());
   if (offset == PCI_COMMAND) {
     MV_ASSERT(length == 2);
     WritePciCommand(*(uint16_t*)data);
@@ -368,7 +369,8 @@ bool PciDevice::SaveState(MigrationWriter* writer) {
   state.set_bus(bus_);
   state.set_device(devfn_ >> 3);
   state.set_function(devfn_ & 0b11);
-  state.set_config_space(pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
+  state.set_pcie(is_pcie_);
+  state.set_config_space(pci_header_.data, pci_config_size());
 
   for (int i = 0; i < msi_config_.msix_table_size; i++) {
     auto& msix = msi_config_.msix_table[i];
@@ -391,8 +393,9 @@ bool PciDevice::LoadState(MigrationReader* reader) {
   }
   bus_ = state.bus();
   devfn_ = PCI_MAKE_DEVFN(state.device(), state.function());
+  is_pcie_ = state.pcie();
   auto& config_space = state.config_space();
-  memcpy(pci_header_.data, config_space.data(), config_space.size());
+  memcpy(pci_header_.data, config_space.data(), pci_config_size());
 
   /* recover pci bar information */
   for (int i = 0; i < PCI_BAR_NUMS; i++) {

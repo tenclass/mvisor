@@ -301,6 +301,12 @@ class PciDeviceState : public ::google::protobuf::Message /* @@protoc_insertion_
   ::google::protobuf::uint32 function() const;
   void set_function(::google::protobuf::uint32 value);
 
+  // bool pcie = 6;
+  void clear_pcie();
+  static const int kPcieFieldNumber = 6;
+  bool pcie() const;
+  void set_pcie(bool value);
+
   // @@protoc_insertion_point(class_scope:PciDeviceState)
  private:
 
@@ -310,6 +316,7 @@ class PciDeviceState : public ::google::protobuf::Message /* @@protoc_insertion_
   ::google::protobuf::uint32 bus_;
   ::google::protobuf::uint32 device_;
   ::google::protobuf::uint32 function_;
+  bool pcie_;
   mutable int _cached_size_;
   friend struct ::protobuf_pci_5fdevice_2eproto::TableStruct;
   friend void ::protobuf_pci_5fdevice_2eproto::InitDefaultsPciDeviceStateImpl();
@@ -494,6 +501,20 @@ inline const ::google::protobuf::RepeatedPtrField< ::PciDeviceState_MsiXTableEnt
 PciDeviceState::msix_entries() const {
   // @@protoc_insertion_point(field_list:PciDeviceState.msix_entries)
   return msix_entries_;
+}
+
+// bool pcie = 6;
+inline void PciDeviceState::clear_pcie() {
+  pcie_ = false;
+}
+inline bool PciDeviceState::pcie() const {
+  // @@protoc_insertion_point(field_get:PciDeviceState.pcie)
+  return pcie_;
+}
+inline void PciDeviceState::set_pcie(bool value) {
+  
+  pcie_ = value;
+  // @@protoc_insertion_point(field_set:PciDeviceState.pcie)
 }
 
 #ifdef __GNUC__

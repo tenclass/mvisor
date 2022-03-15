@@ -125,6 +125,7 @@ union PciConfigAddress {
 #define PCI_DEVICE_CONFIG_SIZE 256
 #define PCI_DEVICE_CONFIG_MASK (PCI_DEVICE_CONFIG_SIZE - 1)
 #define PCI_BAR_NUMS 6
+#define PCIE_DEVICE_CONFIG_SIZE 0x1000
 
 #define Q35_MASK(bit, ms_bit, ls_bit) \
 ((uint##bit##_t)(((1ULL << ((ms_bit) + 1)) - 1) & ~((1ULL << ls_bit) - 1)))
@@ -157,7 +158,7 @@ struct PciConfigHeader {
       uint8_t    max_lat;
     } __attribute__((packed));
     /* Pad to PCI config space size */
-    uint8_t data[PCI_DEVICE_CONFIG_SIZE];
+    uint8_t data[PCIE_DEVICE_CONFIG_SIZE];
   };
 };
 
@@ -206,6 +207,7 @@ class PciDevice : public Device {
   uint8_t devfn() { return devfn_; }
   const PciConfigHeader& pci_header() { return pci_header_; }
   const PciBarInfo& pci_bar(uint8_t index) { return pci_bars_[index]; }
+  uint    pci_config_size() { return is_pcie_ ? PCIE_DEVICE_CONFIG_SIZE : PCI_DEVICE_CONFIG_SIZE; }
 
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
@@ -241,6 +243,7 @@ class PciDevice : public Device {
   PciRomBarInfo     pci_rom_;
   PciMsiConfig      msi_config_;
   uint16_t          next_capability_offset_;
+  bool              is_pcie_;
 };
 
 #endif // _MVISOR_PCI_DEVICE_H

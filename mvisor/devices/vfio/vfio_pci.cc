@@ -104,6 +104,8 @@ void VfioPci::SetupPciConfiguration() {
   }
   /* Disable IRQ, use MSI instead, should we update the vfio device ??? */
   pci_header_.irq_pin = 0;
+  pci_header_.irq_line = 0;
+  pci_header_.command = 0;
   /* Multifunction is not supported yet */
   pci_header_.header_type &= ~PCI_MULTI_FUNCTION;
   MV_ASSERT(pci_header_.header_type == PCI_HEADER_TYPE_NORMAL);
@@ -154,6 +156,7 @@ void VfioPci::SetupPciConfiguration() {
         /* ignore vendor specific data */
         break;
       case PCI_CAP_ID_EXP:
+        is_pcie_ = true;
         MV_LOG("unsupported PCI Express, dump config space");
         DumpHex(pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
         break;
@@ -166,7 +169,9 @@ void VfioPci::SetupPciConfiguration() {
   }
 
   /* Update changes to device */
-  pwrite(device_fd_, pci_header_.data, config_size, config_region.offset);
+  for (int i = 0; i < PCI_DEVICE_CONFIG_SIZE; i += 2) {
+    pwrite(device_fd_, &pci_header_.data[i], 2, config_region.offset + i);
+  }
 }
 
 void VfioPci::SetupGfxPlane() {
@@ -519,12 +524,12 @@ void VfioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, u
 }
 
 void VfioPci::UpdateMsiRoutes() {
-  /* FIXME: only 64bit MSI is implemented now */
+  /* FIXME: only MSI is implemented now */
   MV_ASSERT(!msi_config_.is_msix);
-  MV_ASSERT(msi_config_.is_64bit);
 
-  msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
-  uint nr_vectors = 1 << ((msi_config_.msi64->control & PCI_MSI_FLAGS_QSIZE) >> 4);
+  uint16_t control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
+  msi_config_.enabled = control & PCI_MSI_FLAGS_ENABLE;
+  uint nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
 
   /* FIXME: nr_vectors > 1 not tested yet */
   MV_ASSERT(nr_vectors == 1);
@@ -560,13 +565,22 @@ void VfioPci::UpdateMsiRoutes() {
   
     uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int)];
     auto irq_set = (vfio_irq_set*)buffer;
-    irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
-    irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
-    irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
-    irq_set->start = vector;
-    irq_set->count = 1;
+
     int event_fd = msi_config_.enabled ? interrupt.event_fd : -1;
-    memcpy(irq_set->data, &event_fd, sizeof(int));
+    if (msi_config_.enabled) {
+      irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
+      irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+      irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
+      irq_set->start = vector;
+      irq_set->count = 1;
+      memcpy(irq_set->data, &event_fd, sizeof(int));
+    } else {
+      irq_set->argsz = sizeof(vfio_irq_set);
+      irq_set->flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER;
+      irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
+      irq_set->start = 0;
+      irq_set->count = 0;
+    }
 
     auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);
     if (debug_) {
@@ -580,7 +594,7 @@ void VfioPci::UpdateMsiRoutes() {
 
 void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   MV_ASSERT(length <= 4);
-  MV_ASSERT(offset + length <= PCI_DEVICE_CONFIG_SIZE);
+  MV_ASSERT(offset + length <= PCIE_DEVICE_CONFIG_SIZE);
   auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
 
   /* write the VFIO device, check if msi */
@@ -597,10 +611,10 @@ void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t lengt
 }
 
 void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  MV_ASSERT(offset + length <= PCI_DEVICE_CONFIG_SIZE);
-  auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
+  MV_ASSERT(offset + length <= PCIE_DEVICE_CONFIG_SIZE);
 
   /* read from VFIO device */
+  auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
   auto ret = pread(device_fd_, pci_header_.data + offset, length, config_region.offset + offset);
   MV_ASSERT(ret == (ssize_t)length);
 
@@ -669,7 +683,9 @@ bool VfioPci::LoadState(MigrationReader* reader) {
 
   /* Restore the PCI config space to VFIO device */
   auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
-  pwrite(device_fd_, pci_header_.data, PCI_DEVICE_CONFIG_SIZE, config_region.offset);
+  for (uint i = 0; i < pci_config_size(); i += 2) {
+    pwrite(device_fd_, &pci_header_.data[i], 2, config_region.offset + i);
+  }
 
   /* Update MSI routes */
   UpdateMsiRoutes();

@@ -12,4 +12,5 @@ message PciDeviceState {
   uint32  function                      = 3;
   bytes   config_space                  = 4;
   repeated MsiXTableEntry msix_entries  = 5;
+  bool    pcie                          = 6;
 }

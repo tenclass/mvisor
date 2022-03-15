@@ -284,6 +284,7 @@ void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
   }
 
   // should never reach here
+  PrintMemoryScope();
   MV_PANIC("failed to translate guest physical address 0x%016lx", gpa);
   return nullptr;
 }
