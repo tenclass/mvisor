@@ -86,6 +86,7 @@ void Qcow2Image::Initialize() {
 }
 
 void Qcow2Image::InitializeQcow2Header() {
+  bzero(&image_header_, sizeof(image_header_));
   /* Read the image header at offset 0 */
   ReadFile(&image_header_, sizeof(image_header_), 0);
   /* Bigendian to host */
@@ -117,7 +118,8 @@ void Qcow2Image::InitializeQcow2Header() {
   }
 
   total_blocks_ = image_header_.size >> block_size_shift_;
-  cluster_size_ = 1 << image_header_.cluster_bits;
+  cluster_bits_ = image_header_.cluster_bits;
+  cluster_size_ = 1 << cluster_bits_;
   l2_entries_ = cluster_size_ / sizeof(uint64_t);
   copied_cluster_ = new uint8_t[cluster_size_];
 
@@ -128,6 +130,9 @@ void Qcow2Image::InitializeQcow2Header() {
   /* If there is no snapshot, we assume all refcounts <= 1 */
   if (image_header_.nb_snapshots) {
     MV_PANIC("Qcow2 file with snapshots is not supported yet");
+  }
+  if (image_header_.version == 3 && image_header_.compression_type > 1) {
+    MV_PANIC("Unsupportted compression type=%d", image_header_.compression_type);
   }
 }
 
@@ -225,7 +230,7 @@ RefcountBlock* Qcow2Image::GetRefcountBlock(uint64_t cluster_index, uint64_t* rf
     if (!allocate) {
       return nullptr;
     }
-    block_offset = cluster_index * cluster_size_;
+    block_offset = cluster_index << cluster_bits_;
     rfb = NewRefcountBlock(block_offset);
     bzero(rfb->entries, rfb_entries_ * sizeof(uint16_t));
     rfb_cache_.Put(block_offset, rfb);
@@ -249,16 +254,16 @@ RefcountBlock* Qcow2Image::GetRefcountBlock(uint64_t cluster_index, uint64_t* rf
 
 void Qcow2Image::FreeCluster(uint64_t start) {
   uint64_t rfb_index;
-  uint64_t cluster_index = start / cluster_size_;
+  uint64_t cluster_index = start >> cluster_bits_;
   RefcountBlock* rfb = GetRefcountBlock(cluster_index, &rfb_index, false);
   if (rfb == nullptr) {
     MV_PANIC("Try to free an unallocated cluster 0x%lx", start);
     return;
   }
 
-  rfb->entries[rfb_index] = htobe16(0); // Set refcount to 0
+  rfb->entries[rfb_index] = htobe16(be16toh(rfb->entries[rfb_index]) - 1);
   rfb->dirty = true;
-  if (cluster_index < free_cluster_index_) {
+  if (rfb->entries[rfb_index] == 0 && cluster_index < free_cluster_index_) {
     free_cluster_index_ = cluster_index;
   }
 }
@@ -283,9 +288,9 @@ uint64_t Qcow2Image::AllocateCluster() {
   }
 
   // update refcount and set dirty
-  rfb->entries[rfb_index] = htobe16(1);
+  rfb->entries[rfb_index] = htobe16(be16toh(rfb->entries[rfb_index]) + 1);
   rfb->dirty = true;
-  return cluster_index * cluster_size_;
+  return cluster_index << cluster_bits_;
 }
 
 L2Table* Qcow2Image::NewL2Table(uint64_t l2_offset) {
@@ -315,7 +320,7 @@ L2Table* Qcow2Image::GetL2Table(bool is_write, off_t pos, uint64_t* offset_in_cl
     *length = cluster_size_ - *offset_in_cluster;
   }
 
-  uint64_t cluster_index = pos / cluster_size_;
+  uint64_t cluster_index = pos >> cluster_bits_;
   uint64_t l1_index = cluster_index / l2_entries_;
   *l2_index = cluster_index % l2_entries_;
   
@@ -349,7 +354,7 @@ L2Table* Qcow2Image::GetL2Table(bool is_write, off_t pos, uint64_t* offset_in_cl
 ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_zero) {
   uint64_t offset_in_cluster, l2_index;
   auto l2_table = GetL2Table(false, pos, &offset_in_cluster, &l2_index, &length);
-  if (l2_table == nullptr) {
+  if (l2_table == nullptr || !l2_table->entries[l2_index]) {
     if (backing_file_ == nullptr) { /* Reading at unallocated space always return zero??? */
       if (no_zero)
         return -2;
@@ -360,19 +365,30 @@ ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_
   }
 
   uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-  if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
-    MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
-  } else {
+  if (cluster_start & QCOW2_OFLAG_COMPRESSED) { /* Compressed descriptor */
+    MV_ASSERT(image_header_.compression_type == kCompressionTypeZstd);
+
     cluster_start &= QCOW2_OFFSET_MASK;
-    if (cluster_start == 0) {
-      if (backing_file_ == nullptr) { /* unallocated means zero */
-        if (no_zero)
-          return -2;
-        bzero(buffer, length);
-        return length;
-      }
-      return backing_file_->ReadCluster(buffer, pos, length);
+    size_t x = (62 - (cluster_bits_ - 8));
+    size_t mask = (1ULL << (cluster_bits_ - 8)) - 1;
+    uint64_t sectors = ((cluster_start >> x) & mask) + 1;
+    size_t compressed_length = sectors * QCOW2_COMPRESSED_SECTOR_SIZE -
+      (cluster_start & ~QCOW2_COMPRESSED_SECTOR_MASK);
+    cluster_start &= (1ULL << x) - 1;
+
+    void* compressed = new uint8_t[compressed_length];
+    ssize_t bytes_read = ReadFile(compressed, compressed_length, cluster_start);
+    if (bytes_read < 0) {
+      return bytes_read;
     }
+    auto ret = zstd_decompress(compressed, compressed_length, copied_cluster_, cluster_size_);
+    if (ret < 0) {
+      MV_PANIC("failed to decompressed length=0x%x ret=%d", compressed_length, ret);
+      return ret;
+    }
+    memcpy(buffer, copied_cluster_ + offset_in_cluster, length);
+  } else { /* Normal descriptor */
+    cluster_start &= QCOW2_OFFSET_MASK;
 
     ssize_t bytes_read = ReadFile(buffer, length, cluster_start + offset_in_cluster);
     if (bytes_read < 0) {
@@ -462,7 +478,7 @@ ssize_t Qcow2Image::DiscardCluster(off_t pos, size_t length) {
       return length;
     }
 
-    FreeCluster(cluster_start); // Set refcount to 0
+    FreeCluster(cluster_start);
     l2_table->entries[l2_index] = be64toh(0);
     l2_table->dirty = true;
   }

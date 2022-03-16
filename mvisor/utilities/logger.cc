@@ -63,7 +63,7 @@ void SaveToFile(const char* path, void* data, size_t size) {
   fclose(fp);
 }
 
-void DumpHex(void* data, size_t size) {
+void DumpHex(const void* data, size_t size) {
   uint8_t* ptr = (uint8_t*)data;
   printf("%08x  ", 0);
   for (size_t i = 0; i < size;) {

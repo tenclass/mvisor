@@ -64,4 +64,9 @@ static inline void safe_close(int *fd) {
  * buffer must be 256 bytes alignment */
 bool test_zero(const void* buffer, size_t length);
 
+/* Z standard compress / decompress
+ * https://github.com/facebook/zstd
+ */
+ssize_t zstd_decompress(const void* src,  size_t src_size, void* dest, size_t dest_size);
+
 #endif // _MVISOR_UTILITY_H

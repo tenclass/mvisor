@@ -23,10 +23,12 @@
 #include "lru_cache.h"
 
 
-#define QCOW2_OFLAG_COPIED        (1UL << 63)
-#define QCOW2_OFLAG_COMPRESSED    (1UL << 62)
-#define QCOW2_OFLAGS_MASK         (QCOW2_OFLAG_COPIED | QCOW2_OFLAG_COMPRESSED)
-#define QCOW2_OFFSET_MASK         (~QCOW2_OFLAGS_MASK)
+#define QCOW2_OFLAG_COPIED            (1UL << 63)
+#define QCOW2_OFLAG_COMPRESSED        (1UL << 62)
+#define QCOW2_OFLAGS_MASK             (QCOW2_OFLAG_COPIED | QCOW2_OFLAG_COMPRESSED)
+#define QCOW2_OFFSET_MASK             (~QCOW2_OFLAGS_MASK)
+#define QCOW2_COMPRESSED_SECTOR_SIZE  512
+#define QCOW2_COMPRESSED_SECTOR_MASK  (~(QCOW2_COMPRESSED_SECTOR_SIZE - 1LL))
 
 #define REFCOUNT_CACHE_ITEMS      128
 #define L2_CACHE_ITEMS            128
@@ -37,6 +39,11 @@ static inline void be32_to_cpus(uint32_t* x) {
 static inline void be64_to_cpus(uint64_t* x) {
   *x = be64toh(*x);
 }
+
+enum Qcow2CompressionType {
+  kCompressionTypeZlib = 0,
+  kCompressionTypeZstd = 1
+};
 
 struct Qcow2Header {
   uint32_t magic;
@@ -117,6 +124,7 @@ class Qcow2Image : public DiskImage {
   size_t total_blocks_ = 0;
   size_t image_size_ = 0;
   size_t cluster_size_;
+  size_t cluster_bits_;
 
   size_t l2_entries_;
   size_t rfb_entries_;

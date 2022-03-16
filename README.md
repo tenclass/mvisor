@@ -50,18 +50,20 @@ Feb 2022
 
 Milestone 3: Migration
 Mar 2022
-...
+1. CPU migration ✅
+2. VFIO migration ✅
+3. Migration to compressed file
 
 Milestone 4: Virtualization Management
 Apr 2022
-...
+1. Monitor unix socket
 
 ## Install
 
 For CentOS 8,
 
 ```
-yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler
+yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel
 make -j8
 ```
 
