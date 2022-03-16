@@ -26,7 +26,6 @@
 RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
   TcpSocket(backend, packet) {
   fd_ = -1;
-  InitializeRedirect();
 }
 
 RedirectTcpSocket::~RedirectTcpSocket() {
@@ -40,7 +39,7 @@ RedirectTcpSocket::~RedirectTcpSocket() {
   }
 }
 
-bool RedirectTcpSocket::IsActive() {
+bool RedirectTcpSocket::active() {
   // Kill half closed
   if ((read_done_ || write_done_) && time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
     return false;
@@ -81,7 +80,20 @@ void RedirectTcpSocket::Shutdown(int how) {
   }
 }
 
-void RedirectTcpSocket::InitializeRedirect() {
+void RedirectTcpSocket::Reset(Ipv4Packet* packet) {
+  SynchronizeTcp(packet->tcp);
+  seq_host_ = ntohl(packet->tcp->ack_seq);
+
+  auto reply = AllocatePacket(true);
+  if (reply) {
+    OnDataFromHost(reply, TCP_FLAG_RST);
+    seq_host_ += 1;
+  }
+}
+
+void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
+  SynchronizeTcp(packet->tcp);
+
   fd_ = socket(AF_INET, SOCK_STREAM, 0);
   MV_ASSERT(fd_ >= 0);
 
@@ -124,8 +136,8 @@ void RedirectTcpSocket::OnRemoteConnected() {
   auto packet = AllocatePacket(true);
   if (packet) {
     OnDataFromHost(packet, TCP_FLAG_SYN | TCP_FLAG_ACK);
+    seq_host_ += 1;
   }
-  seq_host_ += 1;
 }
 
 bool RedirectTcpSocket::UpdateGuestAck(tcphdr* tcp) {

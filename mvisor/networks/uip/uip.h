@@ -62,9 +62,10 @@ class Ipv4Socket {
  public:
   Ipv4Socket(NetworkBackendInterface* backend, Ipv4Packet* packet);
   virtual ~Ipv4Socket() {}
-  virtual bool IsActive() = 0;
   virtual void OnPacketFromGuest(Ipv4Packet* packet) = 0;
   
+  virtual bool active() = 0;
+
  protected:
   virtual Ipv4Packet* AllocatePacket(bool urgent);
   uint16_t CalculateChecksum(uint8_t* addr, uint16_t count);
@@ -95,14 +96,12 @@ class TcpSocket : public Ipv4Socket {
   void OnDataFromHost(Ipv4Packet* packet, uint32_t tcp_flags);
   void ParseTcpOptions(tcphdr* tcp);
   void FillTcpOptions(tcphdr* tcp);
+  void SynchronizeTcp(tcphdr* tcp);
 
   uint16_t sport_;
   uint16_t dport_;
   uint32_t window_size_;
   uint32_t guest_acked_;
-  /* Initial sequence number */
-  uint32_t isn_host_;
-  uint32_t isn_guest_;
   uint32_t ack_host_;
   uint32_t seq_host_;
   uint16_t mss_;
@@ -132,12 +131,15 @@ class RedirectTcpSocket : public TcpSocket {
   RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
   virtual ~RedirectTcpSocket();
   void Shutdown(int how);
-  virtual void OnPacketFromGuest(Ipv4Packet* packet);
-  virtual bool IsActive();
-  virtual bool UpdateGuestAck(tcphdr* tcp);
+  void InitializeRedirect(Ipv4Packet* packet);
+  void OnPacketFromGuest(Ipv4Packet* packet);
+  bool UpdateGuestAck(tcphdr* tcp);
+  void Reset(Ipv4Packet* packet);
+
+  bool active();
+  bool connected() { return connected_; }
 
  protected:
-  void InitializeRedirect();
   void StartReading();
   void StartWriting();
   void OnRemoteConnected();
@@ -160,14 +162,13 @@ class RedirectUdpSocket : public UdpSocket {
  public:
   RedirectUdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
     UdpSocket(backend, packet) {
-    InitializeRedirect();
   }
   virtual ~RedirectUdpSocket();
-  virtual void OnPacketFromGuest(Ipv4Packet* packet);
-  virtual bool IsActive();
+  void InitializeRedirect();
+  void OnPacketFromGuest(Ipv4Packet* packet);
+  bool active();
 
  protected:
-  void InitializeRedirect();
   void StartReading();
 
   int fd_;
@@ -181,8 +182,8 @@ class DhcpServiceUdpSocket : public UdpSocket {
     UdpSocket(backend, packet) {
   }
   void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask, uint32_t guest_ip);
-  virtual void OnPacketFromGuest(Ipv4Packet* packet);
-  virtual bool IsActive();
+  void OnPacketFromGuest(Ipv4Packet* packet);
+  bool active();
 
  private:
   std::string CreateDhcpResponse(DhcpMessage* request, int dhcp_type);

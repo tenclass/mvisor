@@ -112,7 +112,7 @@ class Uip : public Object, public NetworkBackendInterface {
 
   void OnTimer() {
     for (auto it = tcp_sockets_.begin(); it != tcp_sockets_.end();) {
-      if (!(*it)->IsActive()) {
+      if (!(*it)->active()) {
         delete *it;
         it = tcp_sockets_.erase(it);
       } else {
@@ -120,7 +120,7 @@ class Uip : public Object, public NetworkBackendInterface {
       }
     }
     for (auto it = udp_sockets_.begin(); it != udp_sockets_.end();) {
-      if (!(*it)->IsActive()) {
+      if (!(*it)->active()) {
         delete *it;
         it = udp_sockets_.erase(it);
       } else {
@@ -289,27 +289,28 @@ class Uip : public Object, public NetworkBackendInterface {
     uint16_t sport = ntohs(tcp->source);
     uint16_t dport = ntohs(tcp->dest);
     
-    RedirectTcpSocket* socket = nullptr;
-    
-    socket = dynamic_cast<RedirectTcpSocket*>(LookupTcpSocket(sip, dip, sport, dport));
-  
+    auto socket = dynamic_cast<RedirectTcpSocket*>(LookupTcpSocket(sip, dip, sport, dport));
+    if (socket == nullptr) {
+      socket = new RedirectTcpSocket(this, packet);
+      tcp_sockets_.push_back(socket);
+    }
+
     // Guest is trying to start a TCP session
     if (tcp->syn) {
-      if (socket == nullptr) {
-        socket = new RedirectTcpSocket(this, packet);
-        tcp_sockets_.push_back(socket);
-      }
-      return;
-    }
-  
-    if (socket == nullptr) {
-      if (real_device_->debug()) {
-        MV_LOG("failed to lookup TCP %x:%u -> %x:%u syn:%d ack:%d rst:%d fin:%d", sip, sport, dip, dport,
-          tcp->syn, tcp->ack, tcp->rst, tcp->fin);
-      }
+      socket->InitializeRedirect(packet);
       return;
     }
 
+    // If not connected, other packets will reset the connection
+    if (!socket->connected()) {
+      if (real_device_->debug()) {
+        MV_LOG("Reset TCP %x:%u -> %x:%u syn:%d ack:%d rst:%d fin:%d", sip, sport, dip, dport,
+          tcp->syn, tcp->ack, tcp->rst, tcp->fin);
+      }
+      socket->Reset(packet);
+      return;
+    }
+  
     // Guest is closing the TCP
     if (tcp->fin) {
       socket->Shutdown(SHUT_WR);
@@ -353,7 +354,7 @@ class Uip : public Object, public NetworkBackendInterface {
     uint16_t sport = ntohs(udp->source);
     uint16_t dport = ntohs(udp->dest);
 
-    UdpSocket* socket = LookupUdpSocket(sip, dip, sport, dport);
+    auto socket = LookupUdpSocket(sip, dip, sport, dport);
     if (socket == nullptr) {
       // Check if it's UDP broadcast
       if (dip == 0xFFFFFFFF || (dip & router_subnet_mask_) == (router_ip_ & router_subnet_mask_)) {
@@ -368,7 +369,9 @@ class Uip : public Object, public NetworkBackendInterface {
           return;
         }
       } else {
-        socket = new RedirectUdpSocket(this, packet);
+        auto redirect_udp = new RedirectUdpSocket(this, packet);
+        redirect_udp->InitializeRedirect();
+        socket = redirect_udp;
       }
       udp_sockets_.push_back(socket);
     }

@@ -33,7 +33,7 @@ RedirectUdpSocket::~RedirectUdpSocket() {
   }
 }
 
-bool RedirectUdpSocket::IsActive() {
+bool RedirectUdpSocket::active() {
   // Kill timedout
   if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
     return false;

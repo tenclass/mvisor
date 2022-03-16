@@ -67,7 +67,7 @@ void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t rou
   }
 }
 
-bool DhcpServiceUdpSocket::IsActive() {
+bool DhcpServiceUdpSocket::active() {
   // Kill timedout
   if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
     return false;
