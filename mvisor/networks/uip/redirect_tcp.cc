@@ -92,8 +92,18 @@ void RedirectTcpSocket::Reset(Ipv4Packet* packet) {
 }
 
 void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
+  if (fd_ > 0) {
+    return;
+  }
+
   SynchronizeTcp(packet->tcp);
 
+  // Initialize redirect states
+  write_done_ = false;
+  read_done_ = false;
+  can_read_ = false;
+  can_write_ = false;
+  connected_ = false;
   fd_ = socket(AF_INET, SOCK_STREAM, 0);
   MV_ASSERT(fd_ >= 0);
 
