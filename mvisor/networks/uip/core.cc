@@ -73,18 +73,18 @@ class Uip : public Object, public NetworkBackendInterface {
 
   /* UIP Router Configuration
    * Router MAC: 5255C0A80001
-   * Router IP: 192.168.0.1
+   * Router IP: 192.168.128.1
    */
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
     device_ = device;
     guest_mac_ = mac;
     memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", ETH_ALEN);
 
-    // Assign IP 192.168.1.1 to machine
+    // Assign IP 192.168.128.100 to machine
     // FIXME: should be configurable
-    router_subnet_mask_ = 0xFFFF0000;
-    router_ip_ = 0xC0A80001;
-    guest_ip_ = 0xC0A80101;
+    router_subnet_mask_ = 0xFFFFFF00;
+    router_ip_ = 0xC0A88001;
+    guest_ip_ = 0xC0A88064;
 
     // This function could only be called once
     MV_ASSERT(real_device_ == nullptr);

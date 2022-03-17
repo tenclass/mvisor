@@ -2,19 +2,20 @@ name: Default configuration
 base: q35.yaml
 
 machine:
-  memory: 2G
+  memory: 8G
   vcpu: 4
   debug: No
 
 objects:
   # - class: ahci-cdrom
-  #   image: /data/win10_21h1.iso
+  #   image: /mnt/iso/virtio.iso
   
   # - class: ahci-disk
   #   image: /data/empty.qcow2
+  #   snapshot: No
 
   - class: virtio-block
-    image: /data/c4d.qcow2
+    image: /mnt/images/6019019526e086323a3dbce6_6d75ef18-671d-47bf-a0a2-35a36764bdf8.qcow2
     snapshot: Yes
 
   # - name: nvidia-vgpu

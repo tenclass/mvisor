@@ -17,8 +17,12 @@
  */
 
 #include "uip.h"
+
+#include <cstring>
+
 #include "logger.h"
 #include <arpa/inet.h>
+
 
 struct DhcpMessage {
   uint8_t message_type;
@@ -51,10 +55,11 @@ void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t rou
   FILE* fp = fopen("/etc/resolv.conf", "r");
   if (fp) {
     while (!feof(fp)) {
-      char key[256], val[256];
-      if (fscanf(fp, "%s %s\n", key, val) != 2)
-        continue;
-      if (strncmp("nameserver", key, 10) == 0) {
+      char line[256], key[256], val[256];
+      fgets(line, sizeof(line), fp);
+      if (memcmp(line, "nameserver ", 11) == 0) {
+        if (sscanf(line, "%s %s\n", key, val) != 2)
+          continue;
         struct in_addr addr;
         if (inet_aton(val, &addr)) {
           nameservers_.push_back(ntohl(addr.s_addr));
@@ -64,6 +69,9 @@ void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t rou
     fclose(fp);
   } else {
     MV_LOG("warning: /etc/resolv.conf not found");
+  }
+  if (nameservers_.empty()) {
+    MV_PANIC("DNS nameservers not found");
   }
 }
 

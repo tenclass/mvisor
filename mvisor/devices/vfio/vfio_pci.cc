@@ -569,22 +569,13 @@ void VfioPci::UpdateMsiRoutes() {
   
     uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int)];
     auto irq_set = (vfio_irq_set*)buffer;
-
+    irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
+    irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+    irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
+    irq_set->start = vector;
+    irq_set->count = 1;
     int event_fd = msi_config_.enabled ? interrupt.event_fd : -1;
-    if (msi_config_.enabled) {
-      irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
-      irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
-      irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
-      irq_set->start = vector;
-      irq_set->count = 1;
-      memcpy(irq_set->data, &event_fd, sizeof(int));
-    } else {
-      irq_set->argsz = sizeof(vfio_irq_set);
-      irq_set->flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER;
-      irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
-      irq_set->start = 0;
-      irq_set->count = 0;
-    }
+    memcpy(irq_set->data, &event_fd, sizeof(int));
 
     auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);
     if (debug_) {
@@ -665,11 +656,18 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
     uint64_t data_offset = 0;
     pread(device_fd_, &data_offset, sizeof(data_offset),
       migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
+    uint64_t data_size = 0;
+    pread(device_fd_, &data_size, sizeof(data_size),
+      migration_.region->offset + offsetof(vfio_device_migration_info, data_size));
     MV_ASSERT(data_offset == area.offset);
-    MV_ASSERT(pending_bytes <= area.size);
+    MV_ASSERT(data_size <= area.size);
+
+    /* nVidia vGPU migration fixes */
+    if (data_size == 0)
+      data_size = pending_bytes;
     
-    ret = write(fd, buffer, pending_bytes);
-    MV_ASSERT(ret == (ssize_t)pending_bytes);
+    ret = write(fd, buffer, data_size);
+    MV_ASSERT(ret == (ssize_t)data_size);
   }
 
   writer->EndWrite("DATA");
