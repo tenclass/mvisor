@@ -260,6 +260,18 @@ class VgaState : public ::google::protobuf::Message /* @@protoc_insertion_point(
   ::google::protobuf::uint32 pallete_write_index() const;
   void set_pallete_write_index(::google::protobuf::uint32 value);
 
+  // uint32 dac_state = 14;
+  void clear_dac_state();
+  static const int kDacStateFieldNumber = 14;
+  ::google::protobuf::uint32 dac_state() const;
+  void set_dac_state(::google::protobuf::uint32 value);
+
+  // uint32 feature_control = 15;
+  void clear_feature_control();
+  static const int kFeatureControlFieldNumber = 15;
+  ::google::protobuf::uint32 feature_control() const;
+  void set_feature_control(::google::protobuf::uint32 value);
+
   // @@protoc_insertion_point(class_scope:VgaState)
  private:
 
@@ -277,6 +289,8 @@ class VgaState : public ::google::protobuf::Message /* @@protoc_insertion_point(
   ::google::protobuf::uint32 crtc_index_;
   ::google::protobuf::uint32 pallete_read_index_;
   ::google::protobuf::uint32 pallete_write_index_;
+  ::google::protobuf::uint32 dac_state_;
+  ::google::protobuf::uint32 feature_control_;
   mutable int _cached_size_;
   friend struct ::protobuf_vga_2eproto::TableStruct;
   friend void ::protobuf_vga_2eproto::InitDefaultsVgaStateImpl();
@@ -788,6 +802,34 @@ inline void VgaState::set_allocated_pallete(::std::string* pallete) {
   }
   pallete_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), pallete);
   // @@protoc_insertion_point(field_set_allocated:VgaState.pallete)
+}
+
+// uint32 dac_state = 14;
+inline void VgaState::clear_dac_state() {
+  dac_state_ = 0u;
+}
+inline ::google::protobuf::uint32 VgaState::dac_state() const {
+  // @@protoc_insertion_point(field_get:VgaState.dac_state)
+  return dac_state_;
+}
+inline void VgaState::set_dac_state(::google::protobuf::uint32 value) {
+  
+  dac_state_ = value;
+  // @@protoc_insertion_point(field_set:VgaState.dac_state)
+}
+
+// uint32 feature_control = 15;
+inline void VgaState::clear_feature_control() {
+  feature_control_ = 0u;
+}
+inline ::google::protobuf::uint32 VgaState::feature_control() const {
+  // @@protoc_insertion_point(field_get:VgaState.feature_control)
+  return feature_control_;
+}
+inline void VgaState::set_feature_control(::google::protobuf::uint32 value) {
+  
+  feature_control_ = value;
+  // @@protoc_insertion_point(field_set:VgaState.feature_control)
 }
 
 // -------------------------------------------------------------------

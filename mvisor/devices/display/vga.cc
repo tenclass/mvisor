@@ -103,6 +103,8 @@ bool Vga::SaveState(MigrationWriter* writer) {
   state.set_pallete_read_index(vga_.pallete_read_index);
   state.set_pallete_write_index(vga_.pallete_write_index);
   state.set_pallete(vga_.pallete, sizeof(vga_.pallete));
+  state.set_dac_state(vga_.dac_state);
+  state.set_feature_control(vga_.feature_control_);
   writer->WriteProtobuf("VGA", state);
 
   VbeState vbe_state;
@@ -138,6 +140,8 @@ bool Vga::LoadState(MigrationReader* reader) {
   vga_.pallete_read_index = state.pallete_read_index();
   vga_.pallete_write_index = state.pallete_write_index();
   memcpy(vga_.pallete, state.pallete().data(), sizeof(vga_.pallete));
+  vga_.dac_state = state.dac_state();
+  vga_.feature_control_ = state.feature_control();
 
   VbeState vbe_state;
   if (!reader->ReadProtobuf("VBE", vbe_state)) {
