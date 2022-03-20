@@ -72,6 +72,9 @@ class Vcpu {
   static void SignalHandler(int signum);
   void SetupSingalHandler();
   void SetupCpuid();
+  void SetupMachineCheckException();
+  void SetupModelSpecificRegisters();
+  uint64_t GetSupportedMsrFeature(uint index);
   void SaveDefaultRegisters();
   void Process();
   void ProcessIo();
@@ -87,7 +90,7 @@ class Vcpu {
   kvm_run*                  kvm_run_;
   kvm_coalesced_mmio_ring*  mmio_ring_;
   std::thread               thread_;
-  bool                      debug_ = false;
+  bool                      single_step_ = false;
   VcpuRegisters             default_registers_;
   std::deque<VcpuTask>      tasks_;
   std::mutex                mutex_;

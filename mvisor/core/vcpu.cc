@@ -32,6 +32,10 @@
 #define CPUID_TOPOLOGY_LEVEL_CORE     (2U << 8)
 #define CPUID_TOPOLOGY_LEVEL_INVALID  (0U << 8)
 
+#define MSR_IA32_TSC                  0x10
+#define MSR_IA32_UCODE_REV            0x8B
+#define KVM_MSR_ENTRY(_index, _data) 	(struct kvm_msr_entry) { .index = _index, .data = _data }
+
 /* Use Vcpu::current_vcpu() */
 __thread Vcpu* Vcpu::current_vcpu_ = nullptr;
 
@@ -58,6 +62,10 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
   ioctl(fd_, KVM_GET_SREGS, &default_registers_.sregs);
   
   SetupCpuid();
+
+  /* Setup MCE for booting Linux */
+  SetupMachineCheckException();
+  SetupModelSpecificRegisters();
 }
 
 Vcpu::~Vcpu() {
@@ -172,6 +180,52 @@ void Vcpu::SetupCpuid() {
   free(cpuid);
 }
 
+void Vcpu::SetupMachineCheckException() {
+  if ((machine_->cpuid_features_ & 0x4080) != 0x4080) {
+    /* MCE / MCA not supported */
+    return;
+  }
+  
+  uint64_t mce_cap;
+  uint64_t banks = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_MCE);
+  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_X86_GET_MCE_CAP_SUPPORTED, &mce_cap) == 0);
+  mce_cap = (mce_cap & ~0xFF) | banks; 
+
+  if (ioctl(fd_, KVM_X86_SETUP_MCE, &mce_cap) < 0) {
+    MV_PANIC("failed to setup x86 MCE");
+  }
+}
+
+uint64_t Vcpu::GetSupportedMsrFeature(uint index) {
+  struct {
+    kvm_msrs      msrs;
+    kvm_msr_entry entries[1];
+  } msrs = { 0 };
+
+  msrs.entries[0].index = MSR_IA32_UCODE_REV;
+  msrs.msrs.nmsrs = 1;
+  if (ioctl(machine_->kvm_fd_, KVM_GET_MSRS, &msrs) != 1) {
+    MV_PANIC("failed to get msr feature index=0x%x", index);
+  }
+  return msrs.entries[0].data;
+}
+
+void Vcpu::SetupModelSpecificRegisters() {
+  struct {
+    kvm_msrs      msrs;
+    kvm_msr_entry entries[100];
+  } msrs = { 0 };
+	uint index = 0;
+
+  msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_TSC, 0);
+	msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_UCODE_REV, GetSupportedMsrFeature(MSR_IA32_UCODE_REV));
+
+	msrs.msrs.nmsrs = index;
+  auto ret = ioctl(fd_, KVM_SET_MSRS, &msrs);
+	if (ret < 0)
+		MV_PANIC("KVM_SET_MSRS failed");
+}
+
 /* Used for debugging sometimes */
 void Vcpu::EnableSingleStep() {
   struct kvm_guest_debug debug = {
@@ -181,7 +235,7 @@ void Vcpu::EnableSingleStep() {
   if (ioctl(fd_, KVM_SET_GUEST_DEBUG, &debug) < 0)
     MV_PANIC("KVM_SET_GUEST_DEBUG");
   
-  debug_ = true;
+  single_step_ = true;
 }
 
 /* Memory trapped IO */
