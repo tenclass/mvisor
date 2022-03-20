@@ -304,10 +304,23 @@ void Vga::VgaReadPort(uint64_t port, uint8_t* data, uint32_t size) {
     MV_ASSERT(size == 1);
     *data = vga_.sequence[vga_.sequence_index];
     break;
+  case 0x3C6: 
+    *data = 0xFF;
+    break;
+  case 0x3C7:
+    *data = vga_.dac_state;
+    break;
+  case 0x3C8:
+    *data = vga_.pallete_write_index;
+    break;
   case 0x3C9:
     for (uint32_t i = 0; i < size; i++) {
       *data++ = vga_.pallete[vga_.pallete_read_index++];
     }
+    break;
+  case 0x3CA:
+    MV_ASSERT(size == 1);
+    *data = vga_.feature_control_;
     break;
   case 0x3CC:
     MV_ASSERT(size == 1);
@@ -320,6 +333,10 @@ void Vga::VgaReadPort(uint64_t port, uint8_t* data, uint32_t size) {
   case 0x3CF:
     MV_ASSERT(size == 1);
     *data = vga_.gfx[vga_.gfx_index];
+    break;
+  case 0x3D4:
+    MV_ASSERT(size == 1);
+    *data = vga_.crtc_index;
     break;
   case 0x3D5:
     MV_ASSERT(size == 1);
@@ -378,10 +395,12 @@ void Vga::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
   case 0x3C7:
     MV_ASSERT(size == 1);
     vga_.pallete_read_index = value * 3;
+    vga_.dac_state = 3;
     break;
   case 0x3C8:
     MV_ASSERT(size == 1);
     vga_.pallete_write_index = value * 3;
+    vga_.dac_state = 0;
     break;
   case 0x3C9:
     MV_ASSERT(size == 1);

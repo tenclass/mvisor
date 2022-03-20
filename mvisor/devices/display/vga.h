@@ -47,6 +47,8 @@ class Vga : public PciDevice, public DisplayInterface {
   uint16_t  pallete_read_index;
   uint16_t  pallete_write_index;
   uint8_t   pallete[256 * 3];
+  uint8_t   dac_state;
+  uint8_t   feature_control_;
   } vga_;
 
   struct {
