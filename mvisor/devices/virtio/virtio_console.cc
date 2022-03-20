@@ -47,6 +47,7 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
 
     bzero(&console_config_, sizeof(console_config_));
     console_config_.max_nr_ports = 1;
+    common_config_.num_queues = 6;
   }
 
   void Connect() {
@@ -155,8 +156,8 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
         HandleConsoleControl(vcc);
       }
       PushQueue(vq, element);
-      NotifyQueue(vq);
     }
+    NotifyQueue(vq);
   }
 
   void WriteBuffer(VirtQueue& vq, void* buffer, size_t size) {

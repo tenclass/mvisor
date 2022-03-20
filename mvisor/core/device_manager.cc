@@ -333,6 +333,8 @@ void DeviceManager::FlushCoalescingMmioBuffer() {
     sizeof(struct kvm_coalesced_mmio));
   while (coalesced_mmio_ring_->first != coalesced_mmio_ring_->last) {
     struct kvm_coalesced_mmio *m = &coalesced_mmio_ring_->coalesced_mmio[coalesced_mmio_ring_->first];
+    for (size_t i = m->len; i < sizeof(m->data); i++)
+      m->data[i] = 0;
     if (m->pio == 1) {
       machine_->device_manager()->HandleIo(m->phys_addr, m->data, m->len, 1, 1);
     } else {

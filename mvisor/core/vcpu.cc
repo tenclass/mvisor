@@ -244,6 +244,8 @@ void Vcpu::ProcessMmio() {
   dm->FlushCoalescingMmioBuffer();
 
   auto *mmio = &kvm_run_->mmio;
+  for (size_t i = mmio->len; i < sizeof(mmio->data); i++)
+    mmio->data[i] = 0;
   dm->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
 }
 

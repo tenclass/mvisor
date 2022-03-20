@@ -301,22 +301,44 @@ void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size)
   case VIRTIO_PCI_COMMON_GF:
     driver_features_[common_config_.guest_feature_select] = *(uint32_t*)data;
     break;
-  case VIRTIO_PCI_COMMON_Q_ENABLE:
-    if (common_config_.queue_enable == 1) {
-      auto &vq = queues_[common_config_.queue_select];
-      vq.descriptor_table_address = ((uint64_t)common_config_.queue_desc_hi << 32) | common_config_.queue_desc_lo;
-      vq.available_ring_address = ((uint64_t)common_config_.queue_avail_hi << 32) | common_config_.queue_avail_lo;
-      vq.used_ring_address = ((uint64_t)common_config_.queue_used_hi << 32) | common_config_.queue_used_lo;
-      EnableQueue(common_config_.queue_select);
-    } else {
-      MV_PANIC("%s not implemented disable queue %d", name_, common_config_.queue_select);
-    }
-    break;
-  case VIRTIO_PCI_COMMON_Q_MSIX: {
-    auto &vq = queues_[common_config_.queue_select];
-    vq.msix_vector = common_config_.queue_msix_vector;
-    break;
   }
+
+  if (offset >= VIRTIO_PCI_COMMON_Q_SIZE) {
+    auto& vq = queues_[common_config_.queue_select];
+    switch (offset)
+    {
+    case VIRTIO_PCI_COMMON_Q_SIZE:
+      vq.size = *(uint32_t*)data;
+      break;
+    case VIRTIO_PCI_COMMON_Q_AVAILHI:
+      memcpy((uint8_t*)&vq.available_ring_address + 4, data, size);
+      break;
+    case VIRTIO_PCI_COMMON_Q_AVAILLO:
+      memcpy((uint8_t*)&vq.available_ring_address, data, size);
+      break;
+    case VIRTIO_PCI_COMMON_Q_USEDHI:
+      memcpy((uint8_t*)&vq.used_ring_address + 4, data, size);
+      break;
+    case VIRTIO_PCI_COMMON_Q_USEDLO:
+      memcpy((uint8_t*)&vq.used_ring_address, data, size);
+      break;
+    case VIRTIO_PCI_COMMON_Q_DESCHI:
+      memcpy((uint8_t*)&vq.descriptor_table_address + 4, data, size);
+      break;
+    case VIRTIO_PCI_COMMON_Q_DESCLO:
+      memcpy((uint8_t*)&vq.descriptor_table_address, data, size);
+      break;
+    case VIRTIO_PCI_COMMON_Q_MSIX: 
+      vq.msix_vector = common_config_.queue_msix_vector;
+      break;
+    case VIRTIO_PCI_COMMON_Q_ENABLE:
+      if (common_config_.queue_enable == 1) {
+        EnableQueue(common_config_.queue_select);
+      } else {
+        MV_PANIC("%s not implemented disable queue %d", name_, common_config_.queue_select);
+      }
+      break;
+    }
   }
 }
 
@@ -401,7 +423,7 @@ void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data
   } else {
     PciDevice::Write(resource, offset, data, size);
   }
-  // MV_LOG("Write at base=0x%lx offset=0x%lx data=0x%lx size=%x", resource->base, offset, *(uint64_t*)data, size);
+  MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
 }
 
 void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -419,6 +441,6 @@ void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
   } else {
     PciDevice::Read(resource, offset, data, size);
   }
-  // MV_LOG("read at base=0x%lx offset=0x%lx data=0x%lx size=%x", resource->base, offset, *(uint64_t*)data, size);
+  MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
 }
 
