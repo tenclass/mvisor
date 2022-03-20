@@ -140,6 +140,9 @@ AhciCdrom::AhciCdrom()
     CBD_RW_DATA10* p = (CBD_RW_DATA10*)io_.atapi_command;
     io_.lba_block = be32toh(p->lba);
     io_.lba_count = be16toh(p->count);
+    if (debug_) {
+      MV_LOG("ATAPI read block=0x%lx count=0x%lx", io_.lba_block, io_.lba_count);
+    }
     Atapi_ReadSectorsAsync();
   };
   

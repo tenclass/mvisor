@@ -42,7 +42,7 @@ class DummyDevice : public Device {
     AddIoResource(kIoResourceTypePio, 0x00A0, 2, "PIC 2");
 
     /* PORT 00ED */
-    AddIoResource(kIoResourceTypePio, 0x00ED, 1, "Unknown");
+    AddIoResource(kIoResourceTypePio, 0x00ED, 1, "IO Delay");
 
     /* PORT 00F0-00FF - Math co-processor */
     AddIoResource(kIoResourceTypePio, 0x00F0, 2, "Math Processor");
@@ -64,12 +64,6 @@ class DummyDevice : public Device {
     /* PORT 0378-037A - PARALLEL PRINTER PORT (usually LPT2, sometimes LPT3) */
     AddIoResource(kIoResourceTypePio, 0x0378, 3, "Parallel LPT2");
 
-    /* Serial Ports */
-    AddIoResource(kIoResourceTypePio, 0x3F8, 8, "COM 1"); 
-    AddIoResource(kIoResourceTypePio, 0x2F8, 8, "COM 2"); 
-    AddIoResource(kIoResourceTypePio, 0x3E8, 8, "COM 3"); 
-    AddIoResource(kIoResourceTypePio, 0x2E8, 8, "COM 4");
-
     /* PORT 06F2 DOS access this port */
     AddIoResource(kIoResourceTypePio, 0x06F2, 8, "Unknown");
     
@@ -85,6 +79,10 @@ class DummyDevice : public Device {
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     // Do nothing
+    if (resource->base == 0x00ED) {
+      /* IO Delay */
+      return;
+    }
     if (manager_->machine()->debug()) {
       MV_LOG("%s ignore %s write base=0x%lx offset=0x%lx data=0x%lx size=%d",
         resource->type == kIoResourceTypeMmio ? "MMIO" : "PIO",

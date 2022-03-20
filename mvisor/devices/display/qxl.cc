@@ -65,6 +65,7 @@ class Qxl : public Vga {
   Qxl() {
     pci_header_.vendor_id = 0x1B36;
     pci_header_.device_id = 0x0100;
+    pci_header_.revision_id = 5;
     
     /* Bar 1: 8MB, not used in Windows driver */
     qxl_vram32_size_ = _MB(8);
@@ -242,9 +243,43 @@ class Qxl : public Vga {
     ring->items[prod].el = 0;
   }
 
+  uint64_t TranslateAsyncCommand(uint64_t command, bool* async) {
+    *async = true;
+    switch (command)
+    {
+    case QXL_IO_UPDATE_AREA_ASYNC:
+      command = QXL_IO_UPDATE_AREA;
+      break;
+    case QXL_IO_MEMSLOT_ADD_ASYNC:
+      command = QXL_IO_MEMSLOT_ADD;
+      break;
+    case QXL_IO_CREATE_PRIMARY_ASYNC:
+      command = QXL_IO_CREATE_PRIMARY;
+      break;
+    case QXL_IO_DESTROY_PRIMARY_ASYNC:
+      command = QXL_IO_DESTROY_PRIMARY;
+      break;
+    case QXL_IO_DESTROY_SURFACE_ASYNC:
+      command = QXL_IO_DESTROY_SURFACE_WAIT;
+      break;
+    case QXL_IO_DESTROY_ALL_SURFACES_ASYNC:
+      command = QXL_IO_DESTROY_ALL_SURFACES;
+      break;
+    case QXL_IO_FLUSH_SURFACES_ASYNC:
+    case QXL_IO_MONITORS_CONFIG_ASYNC:
+      break;
+    default:
+      *async = false;
+      break;
+    }
+    return command;
+  }
+
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == pci_bars_[3].address) {
-      switch (offset)
+      bool async;
+      uint64_t command = TranslateAsyncCommand(offset, &async);
+      switch (command)
       {
       case QXL_IO_NOTIFY_CMD:
         FetchGraphicsCommands();
@@ -262,6 +297,7 @@ class Qxl : public Vga {
         AddMemSlot(*data, qxl_ram_->mem_slot);
         break;
       case QXL_IO_CREATE_PRIMARY:
+      case QXL_IO_CREATE_PRIMARY_ASYNC:
         CreatePrimarySurface(qxl_ram_->create_surface);
         break;
       case QXL_IO_DESTROY_PRIMARY:
@@ -277,6 +313,12 @@ class Qxl : public Vga {
         MV_PANIC("unhandled QXL command=0x%lx data=0x%lx size=0x%x",
           offset, *(uint64_t*)data, size);
         break;
+      }
+      if (async) {
+        if (debug_) {
+          MV_LOG("complete cmd=0x%x", offset);
+        }
+        SetInterrupt(QXL_INTERRUPT_IO_CMD);
       }
     } else {
       Vga::Write(resource, offset, data, size);

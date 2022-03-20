@@ -34,6 +34,11 @@ enum IoResourceType {
   kIoResourceTypeRam
 };
 
+enum IoResourceFlag {
+  kIoResourceFlagNone = 0,
+  kIoResourceFlagCoalescingMmio = 1
+};
+
 struct MemoryRegion;
 struct IoResource {
   IoResourceType      type;
@@ -43,6 +48,7 @@ struct IoResource {
   bool                enabled;
   void*               host_memory;
   const MemoryRegion* mapped_region;
+  IoResourceFlag      flags;
 };
 
 class DeviceManager;
@@ -64,7 +70,7 @@ class Device : public Object {
   DeviceManager* manager() { return manager_; }
  protected:
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
-  void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, void* host_memory, const char* name);
+  void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags = kIoResourceFlagNone);
   void RemoveIoResource(IoResourceType type, const char* name);
   void RemoveIoResource(IoResourceType type, uint64_t base);
   void SetIoResourceEnabled(IoResource* resource, bool enabled);

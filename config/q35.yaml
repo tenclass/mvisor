@@ -17,11 +17,10 @@ objects:
   - class: pci-host
     children:
       - ich9-lpc
-      - ich9-smbus
       - ich9-hda
       - ahci-host
       - xhci-host
-      - qxl
+      - vga
       - virtio-console
       - virtio-block
       - virtio-network
@@ -31,6 +30,7 @@ objects:
       - cmos
       - ps2
       - pc-speaker
+      - serial8250
   
   - class: ich9-hda
     debug: No
@@ -45,6 +45,9 @@ objects:
     children:
       - ahci-cdrom
       - ahci-disk
+
+  - class: ahci-cdrom
+    debug: No
   
   - class: xhci-host
     debug: No
@@ -57,9 +60,11 @@ objects:
   - class: qxl
     rom: ../share/vgabios-qxl.bin
     vram_size: 256
+    debug: No
 
   - class: vga
     rom: ../share/vgabios-stdvga.bin
+    debug: No
 
   - class: virtio-console
     children:

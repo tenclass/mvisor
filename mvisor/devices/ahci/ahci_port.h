@@ -89,6 +89,7 @@ class AhciPort {
   void Write(uint64_t offset, uint32_t value);
   void Read(uint64_t offset, uint32_t* data);
   void Reset();
+  void SoftReset();
 
   /* Called by AhciHost */
   void SaveState(AhciHostState_PortState* port_state);

@@ -57,6 +57,7 @@ class PciHost : public PciDevice {
  public:
   PciHost() {
     devfn_ = PCI_MAKE_DEVFN(0, 0);
+    is_pcie_ = true;
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x29C0;

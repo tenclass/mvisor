@@ -76,10 +76,10 @@ void Device::Disconnect() {
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name) {
-  AddIoResource(type, base, length, nullptr, name);
+  AddIoResource(type, base, length, name, nullptr, kIoResourceFlagNone);
 }
 
-void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, void* host_memory, const char* name) {
+void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
   auto resource = new IoResource {
     .type = type,
     .base = base,
@@ -87,6 +87,7 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
     .name = name,
     .host_memory = host_memory
   };
+  resource->flags = flags;
   io_resources_.push_back(resource);
   if (connected_) {
     SetIoResourceEnabled(resource, true);

@@ -51,7 +51,6 @@ Vga::Vga() {
   pci_header_.vendor_id = 0x1234;
   pci_header_.device_id = 0x1111;
   pci_header_.class_code = 0x030000;
-  pci_header_.revision_id = 5;
   pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
@@ -68,7 +67,8 @@ Vga::Vga() {
 
   AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
   AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "VBE IO");
-  AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO");
+  AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO",
+    nullptr, kIoResourceFlagCoalescingMmio);
 }
 
 Vga::~Vga() {
@@ -147,8 +147,8 @@ bool Vga::LoadState(MigrationReader* reader) {
   vbe_.index = vbe_state.index();
   memcpy(vbe_.registers, vbe_state.registers().data(), sizeof(vbe_.registers));
 
-  UpdateVRamMemoryMap();
   UpdateDisplayMode();
+  UpdateVRamMemoryMap();
   return true;
 }
 
@@ -187,20 +187,14 @@ void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t*
   uint16_t location = (vga_.crtc[0xE] << 8) | (vga_.crtc[0xF]);
   *sel_start = vga_.crtc[0xA] & 0x1F;
   *sel_end = vga_.crtc[0xB] & 0x1F;
-  *y = location / 80;
+  *y = (location / 80) % 25;
   *x = location % 80;
 }
 
 void Vga::GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) {
-  if ((vga_.gfx[6] & 0x1) == 0) {
-    *w = 640;
-    *h = 400;
-    *bpp = 8;
-  } else {
-    *w = width_;
-    *h = height_;
-    *bpp = bpp_;
-  }
+  *w = width_;
+  *h = height_;
+  *bpp = bpp_;
 }
 
 const uint8_t* Vga::GetPallete() const {
@@ -282,6 +276,7 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
       if (value & 1) {
         UpdateDisplayMode();
       }
+      UpdateVRamMemoryMap();
       break;
     case VBE_DISPI_INDEX_BANK:
       UpdateVRamMemoryMap();
@@ -430,6 +425,9 @@ void Vga::UpdateVRamMemoryMap() {
     vram_map_select_ = vram_base_;
     vram_map_select_size_ = vram_size_;
     vram_read_select_ = vram_base_ + (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16);
+    if (debug_) {
+      MV_LOG("VBE map offset=0x%lx", (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16));
+    }
   } else if (mode_ == kDisplayVgaMode || mode_ == kDisplayTextMode) {
     const int map_types[][2] = {
       { 0xA0000, 0x20000 }, { 0xA0000, 0x10000 },

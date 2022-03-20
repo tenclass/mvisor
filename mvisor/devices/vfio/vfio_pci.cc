@@ -431,7 +431,7 @@ void VfioPci::MapBarRegion(uint8_t index) {
     protect |= PROT_WRITE;
   if (region.mmap_areas.empty()) {
     bar.host_memory = mmap(nullptr, region.size, protect, MAP_SHARED, device_fd_, region.offset);
-    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, bar.host_memory, "VFIO BAR RAM");
+    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, "VFIO BAR RAM", bar.host_memory);
   } else {
     /* The MMIO region is overlapped by the mmap areas */
     AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "VFIO BAR MMIO");
@@ -440,7 +440,7 @@ void VfioPci::MapBarRegion(uint8_t index) {
       if (area.mmap == MAP_FAILED) {
         MV_PANIC("failed to map region %d, area offset=0x%lx size=0x%lx", index, area.offset, area.size);
       }
-      AddIoResource(kIoResourceTypeRam, bar.address + area.offset, area.size, area.mmap, "VFIO BAR RAM");
+      AddIoResource(kIoResourceTypeRam, bar.address + area.offset, area.size, "VFIO BAR RAM", area.mmap);
     }
   }
 }

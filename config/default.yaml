@@ -5,17 +5,18 @@ machine:
   memory: 8G
   vcpu: 4
   debug: No
+  hypervisor: No
 
 objects:
-  # - class: ahci-cdrom
-  #   image: /mnt/iso/virtio.iso
+  - class: ahci-cdrom
+    image: /mnt/iso/ubuntu-20.04.1-desktop-amd64.iso
   
   # - class: ahci-disk
   #   image: /data/empty.qcow2
   #   snapshot: No
 
   - class: virtio-block
-    image: /mnt/images/6019019526e086323a3dbce6_6d75ef18-671d-47bf-a0a2-35a36764bdf8.qcow2
+    image: /data/win10.qcow2
     snapshot: Yes
 
   # - name: nvidia-vgpu

@@ -94,6 +94,7 @@ class Machine {
 
   std::map<std::string, Object*> objects_;
   bool debug_ = false;
+  bool hypervisor_ = false;
 
   std::mutex mutex_;
   std::condition_variable wait_to_resume_;

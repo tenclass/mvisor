@@ -78,14 +78,16 @@ class DeviceManager {
   IoEvent* RegisterIoEvent(Device* device, IoResourceType type, uint64_t address, uint32_t length, uint64_t datamatch);
   void UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address);
   void UnregisterIoEvent(IoEvent* event);
+  void SetupCoalescingMmioRing(kvm_coalesced_mmio_ring* ring);
+  void FlushCoalescingMmioBuffer();
 
   void PrintDevices();
-  Device* LookupDeviceByName(const std::string name);
+  Device* LookupDeviceByClass(const std::string class_name);
   PciDevice* LookupPciDevice(uint16_t bus, uint8_t devfn);
 
   /* call by machine */
   void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count, bool ioeventfd = false);
-  void HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write, bool ioeventfd = false);
+  void HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int is_write, bool ioeventfd = false);
 
   void* TranslateGuestMemory(uint64_t gpa);
   bool SaveState(MigrationWriter* writer);
@@ -118,6 +120,8 @@ class DeviceManager {
   int                     next_gsi_ = 0;
   IoAccounting            io_accounting_;
   int                     vfio_kvm_device_fd_ = -1;
+  kvm_coalesced_mmio_ring*  coalesced_mmio_ring_ = nullptr;
+  std::recursive_mutex    coalesced_mmio_ring_mutex_;
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

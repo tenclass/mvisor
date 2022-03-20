@@ -101,9 +101,9 @@ void DeviceManager::PrintDevices() {
   }
 }
 
-Device* DeviceManager::LookupDeviceByName(const std::string name) {
+Device* DeviceManager::LookupDeviceByClass(const std::string class_name) {
   for (auto device : registered_devices_) {
-    if (device->name() == name) {
+    if (device->classname() == class_name) {
       return device;
     }
   }
@@ -189,6 +189,16 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource
       .device = device,
       .memory_region = region
     });
+
+    if (resource->flags & kIoResourceFlagCoalescingMmio) {
+      kvm_coalesced_mmio_zone zone = {
+        .addr = resource->base,
+        .size =  (uint32_t)resource->length
+      };
+      if (ioctl(machine_->vm_fd_, KVM_REGISTER_COALESCED_MMIO, &zone) != 0) {
+        MV_PANIC("failed to register coaleascing MMIO");
+      }
+    }
   }
 }
 
@@ -208,6 +218,16 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource* resour
         delete *it;
         mmio_handlers_.erase(it);
         break;
+      }
+    }
+
+    if (resource->flags & kIoResourceFlagCoalescingMmio) {
+      kvm_coalesced_mmio_zone zone = {
+        .addr = resource->base,
+        .size = (uint32_t)resource->length
+      };
+      if (ioctl(machine_->vm_fd_, KVM_UNREGISTER_COALESCED_MMIO, &zone) != 0) {
+        MV_PANIC("failed to unregister coaleascing MMIO");
       }
     }
   }
@@ -285,18 +305,41 @@ void DeviceManager::UnregisterIoEvent(IoEvent* event) {
 }
 
 void DeviceManager::UnregisterIoEvent(Device* device, IoResourceType type, uint64_t address) {
-  mutex_.lock();
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
   auto it = std::find_if(ioevents_.begin(), ioevents_.end(), [=](auto &e) {
     return e->device == device && e->address == address &&
       ((type == kIoResourceTypePio) == !!(e->flags & KVM_IOEVENTFD_FLAG_PIO));
   });
   if (it == ioevents_.end()) {
-    mutex_.unlock();
     return;
   }
   auto event = *it;
-  mutex_.unlock();
+  lock.unlock();
   UnregisterIoEvent(event);
+}
+
+void DeviceManager::SetupCoalescingMmioRing(kvm_coalesced_mmio_ring* ring) {
+  if (coalesced_mmio_ring_ == nullptr) {
+    coalesced_mmio_ring_ = ring;
+  }
+}
+
+/* FIXME: Is mutex necessary? */
+void DeviceManager::FlushCoalescingMmioBuffer() {
+  if (!coalesced_mmio_ring_) {
+    return;
+  }
+  uint max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
+    sizeof(struct kvm_coalesced_mmio));
+  while (coalesced_mmio_ring_->first != coalesced_mmio_ring_->last) {
+    struct kvm_coalesced_mmio *m = &coalesced_mmio_ring_->coalesced_mmio[coalesced_mmio_ring_->first];
+    if (m->pio == 1) {
+      machine_->device_manager()->HandleIo(m->phys_addr, m->data, m->len, 1, 1);
+    } else {
+      machine_->device_manager()->HandleMmio(m->phys_addr, m->data, m->len, 1);
+    }
+    coalesced_mmio_ring_->first = (coalesced_mmio_ring_->first + 1) % max_entries;
+  }
 }
 
 /* IO ports may overlap like MMIO addresses.
@@ -307,7 +350,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
   int it_count = 0;
   std::deque<IoHandler*>::iterator it;
 
-  mutex_.lock();
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
   for (it = pio_handlers_.begin(); it != pio_handlers_.end(); it++, it_count++) {
     auto resource = (*it)->resource;
     if (port >= resource->base && port < resource->base + resource->length) {
@@ -318,7 +361,7 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
         pio_handlers_.erase(it);
         --it;
       }
-      mutex_.unlock();
+      lock.unlock();
 
       auto start_time = std::chrono::steady_clock::now();
       uint8_t* ptr = data;
@@ -345,13 +388,14 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
           io_accounting_.total_pio = 0;
           io_accounting_.total_mmio = 0;
         }
+        // MV_LOG("%s handle io %s port: 0x%x size: %x data: %016lx count: %d", device->name(),
+        //   is_write ? "out" : "in", port, size, *(uint64_t*)data, count);
       }
       return;
     }
   }
 
   /* Accessing invalid port always returns error */
-  mutex_.unlock();
   memset(data, 0xFF, size);
   if (machine_->debug()) {
     /* Not allowed unhandled IO for debugging */
@@ -366,14 +410,14 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
  * a few devices
  * Race condition could happen among multiple vCPUs, should be handled carefully in Read / Write
  */
-void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int is_write, bool ioeventfd) {
+void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int is_write, bool ioeventfd) {
   std::deque<IoHandler*>::iterator it;
   int it_count = 0;
 
-  mutex_.lock();
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
   for (it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++, it_count++) {
     auto resource = (*it)->resource;
-    if (base >= resource->base && base < resource->base + resource->length) {
+    if (addr >= resource->base && addr < resource->base + resource->length) {
       Device* device = (*it)->device;
 
       if (it_count >= 3) {
@@ -382,13 +426,13 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
         mmio_handlers_.erase(it);
         --it;
       }
-      mutex_.unlock();
+      lock.unlock();
 
       auto start_time = std::chrono::steady_clock::now();
       if (is_write) {
-        device->Write(resource, base - resource->base, data, size);
+        device->Write(resource, addr - resource->base, data, size);
       } else {
-        device->Read(resource, base - resource->base, data, size);
+        device->Read(resource, addr - resource->base, data, size);
       }
 
       if (machine_->debug() && !ioeventfd) {
@@ -396,7 +440,7 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
           std::chrono::steady_clock::now() - start_time).count();
         if (cost_us >= 10000) {
           MV_LOG("%s SLOW MMIO %s addr=0x%lx size=%u data=%lx cost=%.3lfms", device->name(),
-            is_write ? "out" : "in", base, size, *(uint64_t*)data, double(cost_us) / 1000.0);
+            is_write ? "out" : "in", addr, size, *(uint64_t*)data, double(cost_us) / 1000.0);
         }
         ++io_accounting_.total_mmio;
         if (start_time - io_accounting_.last_print_time > std::chrono::seconds(1)) {
@@ -405,17 +449,16 @@ void DeviceManager::HandleMmio(uint64_t base, uint8_t* data, uint16_t size, int 
           io_accounting_.total_pio = 0;
           io_accounting_.total_mmio = 0;
         }
-        // MV_LOG("%s handled mmio %s base: 0x%016lx size: %x data: %016lx", device->name(),
-        //   is_write ? "write" : "read", base, size, *(uint64_t*)data);
+        // MV_LOG("%s handled mmio %s addr: 0x%016lx size: %x data: %016lx", device->name(),
+        //   is_write ? "write" : "read", addr, size, *(uint64_t*)data);
       }
       return;
     }
   }
 
-  mutex_.unlock();
   if (machine_->debug()) {
-    MV_LOG("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
-      is_write ? "write" : "read", base, size, *(uint64_t*)data);
+    MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
+      is_write ? "write" : "read", addr, size, *(uint64_t*)data);
   }
 }
 
@@ -548,7 +591,7 @@ int DeviceManager::AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd) 
 
 /* Setting the address to 0 to remove a MSI route */
 void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd) {
-  mutex_.lock();
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
   auto it = std::find_if(gsi_routing_table_.begin(), gsi_routing_table_.end(), [gsi](auto &entry) {
     return entry.gsi == (uint)gsi;
   });
@@ -578,7 +621,7 @@ void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int
       }
     }
   }
-  mutex_.unlock();
+  lock.unlock();
   
   UpdateGsiRoutingTable();
 }

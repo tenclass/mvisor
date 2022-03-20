@@ -137,7 +137,7 @@ class Cmos : public Device {
       break;
     }
     case CMOS_FLOPPY_TYPE:
-      if (manager_->LookupDeviceByName("floppy")) {
+      if (manager_->LookupDeviceByClass("Floppy")) {
         // 4 - 1.44MB, 3.5" - 2 heads, 80 tracks, 18 sectors
         *data = 0x40;
       }

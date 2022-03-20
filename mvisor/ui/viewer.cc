@@ -253,9 +253,10 @@ PointerInputInterface* Viewer::GetActivePointer() {
 void Viewer::LookupDevices() {
   keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2"));
   spice_agent_ = dynamic_cast<SpiceAgentInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
-  display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Qxl"));
+  display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Qxl"));
   if (display_ == nullptr) {
-    display_ = dynamic_cast<DisplayInterface*>(machine_->LookupObjectByClass("Vga"));
+    display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Vga"));
+    MV_ASSERT(display_);
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
     pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));

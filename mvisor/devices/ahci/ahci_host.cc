@@ -147,6 +147,10 @@ void AhciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data,
   } else {
     switch (offset / 4)
     {
+    case kAhciHostRegCapabilities:
+    case kAhciHostRegPortsImplemented:
+      /* Why Linux write this register ??? */
+      break;
     case kAhciHostRegControl:
       if (value & HOST_CONTROL_RESET) {
         Reset();

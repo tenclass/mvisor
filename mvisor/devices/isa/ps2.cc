@@ -242,6 +242,13 @@ class Ps2 : public Device, public KeyboardInputInterface {
     case 0:
       switch (data)
       {
+      case 0x00:
+      case 0x0A:
+      case 0x88:
+      case 0xE1:
+        /* Linux uses these commands, why ??? */
+        PushMouse(0xFE);
+        break;
       case 0xE6:
         mouse_.scaling = 1;
         PushMouse(RESPONSE_ACK);
@@ -311,6 +318,11 @@ class Ps2 : public Device, public KeyboardInputInterface {
     case 0xF0: // get/set keyboard scancode set
       last_command_ = data;
       PushKeyboard(RESPONSE_ACK);
+      break;
+    case 0xF2: // set LED state
+      PushKeyboard(RESPONSE_ACK);
+      PushKeyboard(0xAB);
+      PushKeyboard(0x41);
       break;
     case 0xF3: // set typematic rate
       last_command_ = data;
@@ -406,6 +418,10 @@ class Ps2 : public Device, public KeyboardInputInterface {
       break;
     case 0xD1: // controller output gate
       /* Windows wrote 0xDF, not supported yet */
+      break;
+    case 0xD3: // mouse loop
+      PushMouse(data);
+      PushMouse(RESPONSE_ACK);
       break;
     case 0xD4: // mouse status
       WriteMouseCommand(data);

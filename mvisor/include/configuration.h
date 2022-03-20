@@ -45,6 +45,7 @@ class Configuration {
   void LoadMachine(const YAML::Node& node);
   void LoadObjects(const YAML::Node& node);
   void SaveMachine(YAML::Node& node);
+  void SetObjectKeyValue(Object* object, std::string key, const YAML::Node& value);
 
   Machine*    machine_;
   Device*     root_;

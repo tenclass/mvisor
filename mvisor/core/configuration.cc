@@ -99,6 +99,26 @@ bool Configuration::LoadFile(std::string path) {
   return true;
 }
 
+void Configuration::SetObjectKeyValue(Object* object, std::string key, const YAML::Node& value) {
+  /* try type uint64_t or bool or string */
+  try {
+    auto uint_value = value.as<uint64_t>();
+    (*object)[key] = uint_value;
+    return;
+  } catch (const YAML::BadConversion& e) { }
+  try {
+    auto bool_value = value.as<bool>();
+    (*object)[key] = bool_value;
+    return;
+  } catch (const YAML::BadConversion& e) { }
+  try {
+    auto string_value = value.as<string>();
+    (*object)[key] = string_value;
+    return;
+  } catch (const YAML::BadConversion& e) { }
+  MV_PANIC("Object %s has invalid key %s", object->name(), key.c_str());
+}
+
 /* Extract machine configs */
 void Configuration::LoadMachine(const YAML::Node& node) {
   if (node["memory"]) {
@@ -114,6 +134,9 @@ void Configuration::LoadMachine(const YAML::Node& node) {
   }
   if (node["debug"]) {
     machine_->debug_ = node["debug"].as<bool>();
+  }
+  if (node["hypervisor"]) {
+    machine_->hypervisor_ = node["hypervisor"].as<bool>();
   }
 }
 
@@ -157,23 +180,7 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
         object->set_debug(value.as<bool>());
         continue;
       }
-      /* try type uint64_t or bool or string */
-      try {
-        auto uint_value = value.as<uint64_t>();
-        (*object)[key] = uint_value;
-        continue;
-      } catch (const YAML::BadConversion& e) { }
-      try {
-        auto bool_value = value.as<bool>();
-        (*object)[key] = bool_value;
-        continue;
-      } catch (const YAML::BadConversion& e) { }
-      try {
-        auto string_value = value.as<string>();
-        (*object)[key] = string_value;
-        continue;
-      } catch (const YAML::BadConversion& e) { }
-      MV_PANIC("Object %s has invalid key %s", name.c_str(), key.c_str());
+      SetObjectKeyValue(object, key, value);
     }
   }
   
