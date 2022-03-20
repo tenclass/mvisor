@@ -221,13 +221,27 @@ void VirtioPci::PushQueue(VirtQueue& vq, VirtElement* element) {
   auto &item = vq.used_ring->items[vq.used_ring->index % vq.size];
   item.id = element->id;
   item.length = element->length;
+  delete element;
 
   /* Make sure other vCPU could see the buffer before we update index. */
   asm volatile ("sfence": : :"memory");
 
   ++vq.used_ring->index;
+}
 
-  delete element;
+void VirtioPci::PushQueueMultiple(VirtQueue& vq, std::vector<VirtElement*>& elements) {
+  auto index = vq.used_ring->index;
+  for (auto element : elements) {
+    auto &item = vq.used_ring->items[index++ % vq.size];
+    item.id = element->id;
+    item.length = element->length;
+    delete element;
+  }
+
+  /* Make sure other vCPU could see the buffer before we update index. */
+  asm volatile ("sfence": : :"memory");
+
+  vq.used_ring->index = index;
 }
 
 void VirtioPci::NotifyQueue(VirtQueue& vq) {
@@ -311,22 +325,16 @@ void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size)
       vq.size = *(uint32_t*)data;
       break;
     case VIRTIO_PCI_COMMON_Q_AVAILHI:
-      memcpy((uint8_t*)&vq.available_ring_address + 4, data, size);
-      break;
     case VIRTIO_PCI_COMMON_Q_AVAILLO:
-      memcpy((uint8_t*)&vq.available_ring_address, data, size);
+      vq.available_ring_address = ((uint64_t)common_config_.queue_avail_hi << 32) | common_config_.queue_avail_lo;
       break;
     case VIRTIO_PCI_COMMON_Q_USEDHI:
-      memcpy((uint8_t*)&vq.used_ring_address + 4, data, size);
-      break;
     case VIRTIO_PCI_COMMON_Q_USEDLO:
-      memcpy((uint8_t*)&vq.used_ring_address, data, size);
+      vq.used_ring_address = ((uint64_t)common_config_.queue_used_hi << 32) | common_config_.queue_used_lo;
       break;
     case VIRTIO_PCI_COMMON_Q_DESCHI:
-      memcpy((uint8_t*)&vq.descriptor_table_address + 4, data, size);
-      break;
     case VIRTIO_PCI_COMMON_Q_DESCLO:
-      memcpy((uint8_t*)&vq.descriptor_table_address, data, size);
+      vq.descriptor_table_address = ((uint64_t)common_config_.queue_desc_hi << 32) | common_config_.queue_desc_lo;
       break;
     case VIRTIO_PCI_COMMON_Q_MSIX: 
       vq.msix_vector = common_config_.queue_msix_vector;
@@ -423,7 +431,9 @@ void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data
   } else {
     PciDevice::Write(resource, offset, data, size);
   }
-  MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
+  if (debug_) {
+    MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
+  }
 }
 
 void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -441,6 +451,8 @@ void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
   } else {
     PciDevice::Read(resource, offset, data, size);
   }
-  MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
+  if (debug_) {
+    MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
+  }
 }
 

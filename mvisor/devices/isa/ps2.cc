@@ -368,6 +368,9 @@ class Ps2 : public Device, public KeyboardInputInterface {
         RaiseIrq(MOUSE_IRQ);
       }
       break;
+    case 0xA9: // Test mouse port
+      PushKeyboard(0);
+      break;
     case 0xAA: // Test controller
       status_ |= STATUS_SYSFLAG;
       PushKeyboard(0x55);

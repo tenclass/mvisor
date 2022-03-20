@@ -54,16 +54,14 @@ class VirtioBlock : public VirtioPci {
   }
 
   virtual void Disconnect() {
-    VirtioPci::Disconnect();
     if (image_) {
+      VirtioPci::Disconnect();
       delete image_;
       image_ = nullptr;
     }
   }
 
   virtual void Connect() {
-    VirtioPci::Connect();
-
     /* Connect to backend image */
     bool readonly = false;
     if (has_key("readonly")) {
@@ -74,6 +72,8 @@ class VirtioBlock : public VirtioPci {
       image_ = DiskImage::Create(this, path, readonly);
     }
     if (image_) {
+      VirtioPci::Connect();
+
       InitializeGeometry();
       if (readonly) {
         device_features_ |= VIRTIO_BLK_F_RO;

@@ -86,14 +86,55 @@ bool DhcpServiceUdpSocket::active() {
 void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   DhcpMessage* dhcp = (DhcpMessage*)packet->data;
 
+  /* Parse options */
+  uint32_t option_type = 0, requested_ip = 0;
+  std::string hostname, parameters;
+
+  for (uint8_t* p = dhcp->option; p[0] != 0xFF; p += p[1] + 2) {
+    switch (p[0])
+    {
+    case 0x0C: // hostname
+      hostname = std::string((char*)&p[2], p[1]);
+      break;
+    case 0x32: // requested IP
+      requested_ip = ntohl(*(uint32_t*)&p[2]);
+      break;
+    case 0x35: // option type
+      option_type = p[2];
+      break;
+    case 0x37: // parameter list
+      parameters = std::string((char*)&p[2], p[1]);
+      break;
+    case 0x39: // max packet size
+      break;
+    case 0x3D: // client ID
+      break;
+    default:
+      if (debug_) {
+        MV_LOG("ignore DHCP option 0x%x", p[0]);
+      }
+      break;
+    }
+  }
+
+  if (debug_) {
+    MV_LOG("DHCP option_type=%d requested=0x%x hostname=%s parameters:", option_type, requested_ip, hostname.c_str());
+    DumpHex(parameters.data(), parameters.size());
+  }
+  
+  /* Handle message */
   std::string reply;
-  if (dhcp->option[2] == 1 && dhcp->option[0] == 53) { // Discover
+  if (option_type == 0x01) { // Discover
     reply = CreateDhcpResponse(dhcp, 2);
-  } else if (dhcp->option[2] == 3 && dhcp->option[0] == 53) { // Request
-    reply = CreateDhcpResponse(dhcp, 5);
+  } else if (option_type == 0x03) { // Request
+    if (requested_ip == 0 || requested_ip == guest_ip_) {
+      reply = CreateDhcpResponse(dhcp, 5);  // ACK
+    } else {
+      reply = CreateDhcpResponse(dhcp, 6);  // NAK
+    }
   } else {
     DumpHex(dhcp, packet->data_length);
-    MV_LOG("unknown dhcp packet option[0]=%x option[2]=%x", dhcp->option[0], dhcp->option[2]);
+    MV_LOG("unknown dhcp packet option_type=0x%x", option_type);
     return;
   }
 
@@ -102,6 +143,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   if (reply_packet == nullptr) {
     return;
   }
+
   reply_packet->data_length = reply.size();
   memcpy(reply_packet->data, reply.data(), reply_packet->data_length);
 

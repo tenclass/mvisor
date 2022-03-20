@@ -57,11 +57,13 @@ void AhciPort::Reset() {
   if (drive_->debug()) {
     MV_LOG("reset, command issue=0x%x", port_control_.command_issue);
   }
+  bzero(&port_control_, sizeof(port_control_));
   port_control_.command_issue = 0;
   port_control_.irq_status = 0;
   port_control_.irq_mask = 0;
   port_control_.sata_control = 0;
   port_control_.command = PORT_CMD_SPIN_UP | PORT_CMD_POWER_ON;
+  SoftReset();
 }
 
 void AhciPort::SoftReset() {
@@ -78,11 +80,6 @@ void AhciPort::SoftReset() {
   }
 
   drive_->Reset();
-  if (drive_->type() == kIdeStorageTypeCdrom) {
-    port_control_.signature = ATA_SIGNATURE_CDROM;
-  } else {
-    port_control_.signature = ATA_SIGNATURE_DISK;
-  }
 }
 
 void AhciPort::UpdateInitD2H() {
@@ -92,6 +89,11 @@ void AhciPort::UpdateInitD2H() {
   init_d2h_sent_ = true;
 
   UpdateRegisterD2H();
+  if (drive_->type() == kIdeStorageTypeCdrom) {
+    port_control_.signature = ATA_SIGNATURE_CDROM;
+  } else {
+    port_control_.signature = ATA_SIGNATURE_DISK;
+  }
 }
 
 /* io->vector contains a shadow copy to the PRDT (physical region descriptor table)
@@ -222,7 +224,9 @@ void AhciPort::Read(uint64_t offset, uint32_t* data) {
   } else {
     *data = *((uint32_t*)&port_control_ + reg_index);
   }
-  // MV_LOG("%d:%s read port index=%d ret=0x%x", port_index_, drive_->name(), reg_index, *data);
+  if (host_->debug()) {
+    MV_LOG("%d:%s read port index=%d ret=0x%x", port_index_, drive_->name(), reg_index, *data);
+  }
 }
 
 void AhciPort::CheckEngines() {
@@ -264,7 +268,9 @@ void AhciPort::CheckEngines() {
 void AhciPort::Write(uint64_t offset, uint32_t value) {
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
-  // MV_LOG("%d:%s write port index=%d value=0x%x", port_index_, drive_->name(), reg_index, value);
+  if (host_->debug()) {
+    MV_LOG("%d:%s write port index=%d value=0x%x", port_index_, drive_->name(), reg_index, value);
+  }
 
   switch (reg_index)
   {
@@ -318,8 +324,7 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     /* Read Only */
     break;
   case kAhciPortRegSataControl:
-    if (((port_control_.sata_control & AHCI_SCR_SCTL_DET) == 1) &&
-        ((value & AHCI_SCR_SCTL_DET) == 0)) {
+    if (((port_control_.sata_control & AHCI_SCR_SCTL_DET) == 1) && ((value & AHCI_SCR_SCTL_DET) == 0)) {
       SoftReset();
     }
     port_control_.sata_control = value;

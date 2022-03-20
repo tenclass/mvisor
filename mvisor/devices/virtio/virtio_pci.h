@@ -138,6 +138,7 @@ class VirtioPci : public PciDevice {
   void PrintQueue(VirtQueue& vq);
   VirtElement* PopQueue(VirtQueue& vq);
   void PushQueue(VirtQueue& vq, VirtElement* element);
+  void PushQueueMultiple(VirtQueue& vq, std::vector<VirtElement*>& elements);
   void NotifyQueue(VirtQueue& vq);
   void AddQueue(uint16_t queue_size, VoidCallback callback);
   virtual void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size);
