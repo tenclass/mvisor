@@ -27,6 +27,7 @@
 IdeStorageDevice::IdeStorageDevice() {
   image_ = nullptr;
   bzero(&drive_info_, sizeof(drive_info_));
+  bzero(&regs_, sizeof(regs_));
 
   ata_handlers_[0x00] = [=] () { // NOP
     MV_PANIC("nop");

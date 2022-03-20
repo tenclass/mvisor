@@ -110,7 +110,7 @@ class AhciPort {
   AhciHost*             host_ = nullptr;
   int                   port_index_;
   AhciPortRegs          port_control_;
-  IdeStorageDevice*     drive_;
+  IdeStorageDevice*     drive_ = nullptr;
   bool                  init_d2h_sent_ = false;
   uint8_t*              command_list_ = nullptr;
   AhciRxFis*            rx_fis_ = nullptr;

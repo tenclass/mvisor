@@ -54,10 +54,6 @@ void AhciPort::AttachDevice(IdeStorageDevice* device) {
 }
 
 void AhciPort::Reset() {
-  if (drive_->debug()) {
-    MV_LOG("reset, command issue=0x%x", port_control_.command_issue);
-  }
-  bzero(&port_control_, sizeof(port_control_));
   port_control_.command_issue = 0;
   port_control_.irq_status = 0;
   port_control_.irq_mask = 0;
@@ -67,6 +63,8 @@ void AhciPort::Reset() {
 }
 
 void AhciPort::SoftReset() {
+  if (host_->debug())
+    MV_LOG("%s port reseted", drive_->name());
   port_control_.sata_status = 0;
   port_control_.sata_error = 0;
   port_control_.sata_active = 0;
@@ -241,6 +239,8 @@ void AhciPort::CheckEngines() {
       ((uint64_t)port_control_.command_list_base1 << 32) | port_control_.command_list_base0);
     if (command_list_ != nullptr) {
       port_control_.command |= PORT_CMD_LIST_ON;
+      if (host_->debug())
+        MV_LOG("%s port command dma started", drive_->name());
     } else {
       port_control_.command &= ~(PORT_CMD_START | PORT_CMD_LIST_ON);
       return;
@@ -255,6 +255,8 @@ void AhciPort::CheckEngines() {
       (((uint64_t)port_control_.fis_base1 << 32) | port_control_.fis_base0);
     if (rx_fis_ != nullptr) {
       port_control_.command |= PORT_CMD_FIS_ON;
+      if (host_->debug())
+        MV_LOG("%s port fis dma started", drive_->name());
     } else {
       port_control_.command &= ~(PORT_CMD_FIS_RX | PORT_CMD_FIS_ON);
       return;
@@ -307,14 +309,15 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     /* Check FIS RX and CLB engines */
     CheckEngines();
 
+    /* XXX usually the FIS would be pending on the bus here and
+      issuing deferred until the OS enables FIS receival.
+      Instead, we only submit it once - which works in most
+      cases, but is a hack. */
+    if (port_control_.command & PORT_CMD_FIS_ON) {
+      UpdateInitD2H();
+    }
+
     manager_->io()->Schedule([this](){
-      /* XXX usually the FIS would be pending on the bus here and
-        issuing deferred until the OS enables FIS receival.
-        Instead, we only submit it once - which works in most
-        cases, but is a hack. */
-      if ((port_control_.command & PORT_CMD_FIS_ON) && !init_d2h_sent_) {
-        UpdateInitD2H();
-      }
       CheckCommand();
     });
     break;

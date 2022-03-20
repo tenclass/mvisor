@@ -77,13 +77,11 @@ void AhciHost::Connect() {
   /* Add storage devices */
   for (size_t i = 0; i < children_.size(); i++) {
     IdeStorageDevice* device = dynamic_cast<IdeStorageDevice*>(children_[i]);
-    if (device->has_key("image")) {
-      num_ports_++;
-      if (!ports_[i]) {
-        ports_[i] = new AhciPort(manager_, this, i);
-      }
-      ports_[i]->AttachDevice(device);
+    num_ports_++;
+    if (!ports_[i]) {
+      ports_[i] = new AhciPort(manager_, this, i);
     }
+    ports_[i]->AttachDevice(device);
   }
 }
 
