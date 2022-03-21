@@ -279,6 +279,8 @@ bool IoThread::CanPauseNow() {
 bool IoThread::SaveDiskImage(MigrationWriter* writer) {
   for (auto image : disk_images_) {
     auto& device = *image->deivce();
+    if (image->readonly())
+      continue;
     writer->SetPrefix(device.name());
     auto new_path = writer->base_path() + "/" + device.name() + "/disk.qcow2";
     if (std::filesystem::exists(new_path)) {
