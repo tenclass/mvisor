@@ -222,6 +222,11 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     in.parameters[AC_PAR_AUDIO_WIDGET_CAP] = (AC_WID_PIN << AC_WCAP_TYPE_SHIFT) | AC_WCAP_STEREO;
     in.parameters[AC_PAR_PIN_CAP] = AC_PINCAP_IN;
     nodes_.push_back(in);
+
+    // setup with default format
+    for (auto &stream : streams_) {
+      SetupStream(&stream);
+    }
   }
 
   void StartCommand(uint8_t node_id, uint32_t data, ResponseCallback callback) {
@@ -342,7 +347,10 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     if (stream->format & AC_FMT_TYPE_NON_PCM) {
       return;
     }
-    MV_ASSERT((stream->format & AC_FMT_BITS_MASK) == AC_FMT_BITS_16);
+    if ((stream->format & AC_FMT_BITS_MASK) != AC_FMT_BITS_16) {
+      MV_LOG("not supported audio format 0x%x yet", stream->format);
+      return;
+    }
 
     stream->frequency = (stream->format & AC_FMT_BASE_44K) ? 44100 : 48000;
 

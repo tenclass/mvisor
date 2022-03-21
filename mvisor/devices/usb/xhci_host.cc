@@ -328,6 +328,10 @@ class XhciHost : public PciDevice {
   }
 
   void PushEvent(uint vector, XhciEvent &event) {
+    if (debug_) {
+      MV_LOG("ring[%d] event type=%d code=%d slot=%d", vector,
+        event.type, event.completion_code, event.slot_id);
+    }
     MV_ASSERT(vector < max_interrupts_);
     auto &interrupt = interrupt_regs_[vector];
     auto &segment = interrupt.event_ring_segment;
@@ -414,7 +418,8 @@ class XhciHost : public PciDevice {
     auto &segment = interrupt.event_ring_segment;
 
     if (debug_) {
-      MV_LOG("reset event ring[%d] start=0x%lX size=%d", index, segment.start, segment.size); 
+      MV_LOG("reset event ring[%d] start=0x%lX size=%d table_base=0x%lx", index,
+        segment.start, segment.size, interrupt.event_ring_table_base); 
     }
     MV_ASSERT(segment.size >= 16 && segment.size < 4096);
   }
@@ -453,11 +458,13 @@ class XhciHost : public PciDevice {
 
   void WriteRuntimeRegs(uint64_t offset, uint8_t* data, uint32_t size) {
     MV_ASSERT(offset >= 0x20);
-    uint64_t value = 0;
-    memcpy(&value, data, size);
-    int index = (offset - 0x20) / 0x20;
+    MV_ASSERT(size == 4);
+    uint32_t value = *(uint32_t*)data;
+    uint index = (offset - 0x20) / 0x20;
+    uint index_offset = offset % 0x20;
+  
     auto &interrupt = interrupt_regs_[index];
-    switch (offset & 0x1F)
+    switch (index_offset)
     {
     case offsetof(XhciInterruptRegisters, management):
       if (value & IMAN_IP) {
@@ -468,21 +475,23 @@ class XhciHost : public PciDevice {
       CheckInterrupt(index);
       break;
     case offsetof(XhciInterruptRegisters, moderation):
-      interrupt.moderation = value & 0xFFFFFFFF;
+      interrupt.moderation = value;
       break;
     case offsetof(XhciInterruptRegisters, event_ring_table_size):
       interrupt.event_ring_table_size = value & 0xFFFF;
       break;
-    case offsetof(XhciInterruptRegisters, event_ring_table_base):
-      interrupt.event_ring_table_base = value & 0xFFFFFFFFFFFFFFC0ULL;
+    case offsetof(XhciInterruptRegisters, event_ring_table_base_low):
+      interrupt.event_ring_table_base_low = value & 0xFFFFFFC0UL;
+      break;
+    case offsetof(XhciInterruptRegisters, event_ring_table_base_high):
+      interrupt.event_ring_table_base_high = value;
       ResetEventRing(index);
       break;
-    case offsetof(XhciInterruptRegisters, event_ring_dequeue_pointer):
+    case offsetof(XhciInterruptRegisters, event_ring_dequeue_pointer_low): {
       if (value & ERDP_EHB) {
-        interrupt.event_ring_dequeue_pointer &= ~ERDP_EHB;
+        interrupt.event_ring_dequeue_pointer_low &= ~ERDP_EHB;
       }
-      interrupt.event_ring_dequeue_pointer = (value & ~ERDP_EHB) |
-        (interrupt.event_ring_dequeue_pointer & ERDP_EHB);
+      interrupt.event_ring_dequeue_pointer_low = (value & ~ERDP_EHB) | (interrupt.event_ring_dequeue_pointer_low & ERDP_EHB);
       if (value & ERDP_EHB) {
         auto dequeue = interrupt.event_ring_dequeue_pointer;
         auto &segment = interrupt.event_ring_segment;
@@ -493,9 +502,12 @@ class XhciHost : public PciDevice {
         }
       }
       break;
-    default:
-      memcpy((uint8_t*)&interrupt + offset, data, size);
+    }
+    case offsetof(XhciInterruptRegisters, event_ring_dequeue_pointer_high):
+      interrupt.event_ring_dequeue_pointer_high = value;
       break;
+    default:
+      MV_PANIC("invalid offset=0x%x", index_offset);
     }
   }
 
@@ -566,42 +578,49 @@ class XhciHost : public PciDevice {
   }
 
   void WriteOperationalRegs(uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_ASSERT(size == 4);
+    uint32_t value = *(uint32_t*)data;
+    if (debug_) {
+      MV_LOG("offset=0x%lx size=%u data=0x%x", offset, size, value);
+    }
     switch (offset)
     {
     case offsetof(XhciOperationalRegisters, usb_command):
-      WriteOperationalUsbCommand(*(uint32_t*)data);
+      WriteOperationalUsbCommand(value);
       break;
     case offsetof(XhciOperationalRegisters, usb_status): {
-      MV_ASSERT(size = 4);
-      uint32_t value = *(uint32_t*)data;
       operational_regs_.usb_status &= ~(value & (USBSTS_HSE|USBSTS_EINT|USBSTS_PCD|USBSTS_SRE));
       CheckInterrupt(0);
       break;
     }
-    case offsetof(XhciOperationalRegisters, configure):
-      operational_regs_.configure = data[0];
+    case offsetof(XhciOperationalRegisters, device_notification_control):
+      operational_regs_.device_notification_control = value & 0xFFFF;
       break;
-    case offsetof(XhciOperationalRegisters, command_ring_control):
-      if (data[0] & (CRCR_CA|CRCR_CS) && (data[0] & CRCR_CRR)) {
+    case offsetof(XhciOperationalRegisters, command_ring_control_low):
+      operational_regs_.command_ring_control_low = (value & 0xFFFFFFCF) | (operational_regs_.command_ring_control_low & CRCR_CRR);
+      break;
+    case offsetof(XhciOperationalRegisters, command_ring_control_high):
+      operational_regs_.command_ring_control_high = value;
+      if ((operational_regs_.command_ring_control_low & (CRCR_CA|CRCR_CS)) && (operational_regs_.command_ring_control_low & CRCR_CRR)) {
         XhciEvent event = { ER_COMMAND_COMPLETE, CC_COMMAND_RING_STOPPED };
-        data[0] &= ~CRCR_CRR;
+        operational_regs_.command_ring_control_low &= ~CRCR_CRR;
         PushEvent(0, event);
-        memcpy(&operational_regs_.command_ring_control, data, size);
       } else {
-        memcpy(&operational_regs_.command_ring_control, data, size);
         SetupRing(command_ring_, operational_regs_.command_ring_control & ~0x3F);
       }
-      operational_regs_.command_ring_control &= ~(CRCR_CA | CRCR_CS);
+      operational_regs_.command_ring_control_low &= ~(CRCR_CA | CRCR_CS);
       break;
-    case offsetof(XhciOperationalRegisters, device_notification_control):
-    case offsetof(XhciOperationalRegisters, context_base_array_pointer):
-    case offsetof(XhciOperationalRegisters, context_base_array_pointer) + 4:
-    case offsetof(XhciOperationalRegisters, command_ring_control) + 4:
-      memcpy((uint8_t*)&operational_regs_ + offset, data, size);
+    case offsetof(XhciOperationalRegisters, context_base_array_pointer_low):
+      operational_regs_.context_base_array_pointer_low = value & 0xFFFFFFC0;
+      break;
+    case offsetof(XhciOperationalRegisters, context_base_array_pointer_high):
+      operational_regs_.context_base_array_pointer_high = value;
+      break;
+    case offsetof(XhciOperationalRegisters, configure):
+      operational_regs_.configure = value & 0xFF;
       break;
     default:
-      MV_PANIC("WriteOperationalRegs offset=0x%lx size=%u data=0x%lx",
-        offset, size, *(uint64_t*)data);
+      MV_PANIC("WriteOperationalRegs offset=0x%lx size=%u data=0x%x", offset, size, value);
       break;
     }
   }
@@ -636,6 +655,22 @@ class XhciHost : public PciDevice {
       slot.enabled = false;
       slot.addressed = false;
     }
+    return CC_SUCCESS;
+  }
+
+  TRBCCode ResetSlot(uint slot_id) {
+    MV_ASSERT(slot_id >= 1 && slot_id <= max_slots_);
+    auto &slot = slots_[slot_id - 1];
+  
+    for (uint i = 1; i < 31; i++) {
+      if (slot.endpoints[i]) {
+        DisableEndpoint(slot_id, i + 1);
+      }
+    }
+
+    auto slot_context = (uint32_t*)manager_->TranslateGuestMemory(slot.context_address);
+    slot_context[3] &= ~(SLOT_STATE_MASK << SLOT_STATE_SHIFT);
+    slot_context[3] |= SLOT_DEFAULT << SLOT_STATE_SHIFT;
     return CC_SUCCESS;
   }
 
@@ -1495,6 +1530,11 @@ class XhciHost : public PciDevice {
           code = SetEndpointDequee(slot_id, endpoint_id, stream_id, trb.parameter);
         }
         break;
+      case CR_RESET_DEVICE:
+        if (GetSlot(event, trb, slot_id)) {
+          code = ResetSlot(slot_id);
+        }
+        break;
       default:
         MV_PANIC("unhandled TRB type=%d", type);
         break;
@@ -1551,11 +1591,21 @@ class XhciHost : public PciDevice {
       // }
       if (offset < capability_regs_.capability_length) {
       } else if (offset < capability_regs_.capability_length + 0x400ULL) {
-        WriteOperationalRegs(offset - capability_regs_.capability_length, data, size);
+        if (size == 8) {
+          WriteOperationalRegs(offset - capability_regs_.capability_length, data, 4);
+          WriteOperationalRegs(offset - capability_regs_.capability_length + 4, data + 4, 4);
+        } else {
+          WriteOperationalRegs(offset - capability_regs_.capability_length, data, size);
+        }
       } else if (offset < 0x1000) {
         WritePortRegs(offset - capability_regs_.capability_length - 0x400, data, size);
       } else if (offset < 0x2000) {
-        WriteRuntimeRegs(offset - 0x1000, data, size);
+        if (size == 8) {
+          WriteRuntimeRegs(offset - 0x1000, data, 4);
+          WriteRuntimeRegs(offset - 0x1000 + 4, data + 4, 4);
+        } else {
+          WriteRuntimeRegs(offset - 0x1000, data, size);
+        }
       } else if (offset < 0x3000) {
         WriteDoorbellRegs(resource->base + offset, offset - 0x2000, data, size);
       }

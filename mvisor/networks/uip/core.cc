@@ -151,16 +151,26 @@ class Uip : public Object, public NetworkBackendInterface {
       memcpy(packet->buffer + copied, v.iov_base, v.iov_len);
       copied += v.iov_len;
     }
+
+    // if (real_device_->debug()) {
+    //   MV_LOG("[guest] %lu bytes", copied);
+    //   DumpHex(packet->buffer, copied);
+    // }
     packet->eth = (ethhdr*)packet->buffer;
     ParseEthPacket(packet);
   }
 
   bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
-    // fill eth headers
+    /* Ethernet header is filled here */
     ethhdr* eth = (ethhdr*)buffer;
     eth->h_proto = htons(protocol);
     memcpy(eth->h_dest, guest_mac_.data, sizeof(eth->h_dest));
     memcpy(eth->h_source, router_mac_.data, sizeof(eth->h_source));
+
+    // if (real_device_->debug()) {
+    //   MV_LOG("[host] %lu bytes", size);
+    //   DumpHex(buffer, size);
+    // }
     return device_->WriteBuffer(buffer, size);
   }
 

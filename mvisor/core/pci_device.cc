@@ -159,13 +159,18 @@ void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_PANIC("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    MV_LOG("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    return;
   }
   memcpy(data, pci_header_.data + offset, length);
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  MV_ASSERT(offset + length <= pci_config_size());
+  if (offset + length > pci_config_size()) {
+    MV_LOG("%s failed write config space at 0x%lx length=%d", name_, offset, length);
+    return;
+  }
+
   if (offset == PCI_COMMAND) {
     MV_ASSERT(length == 2);
     WritePciCommand(*(uint16_t*)data);

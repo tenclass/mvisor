@@ -150,6 +150,12 @@ class Ich9HdaState : public ::google::protobuf::Message /* @@protoc_insertion_po
   ::std::string* release_hda_registers();
   void set_allocated_hda_registers(::std::string* hda_registers);
 
+  // uint64 wall_clock_counter = 3;
+  void clear_wall_clock_counter();
+  static const int kWallClockCounterFieldNumber = 3;
+  ::google::protobuf::uint64 wall_clock_counter() const;
+  void set_wall_clock_counter(::google::protobuf::uint64 value);
+
   // uint32 rirb_counter = 2;
   void clear_rirb_counter();
   static const int kRirbCounterFieldNumber = 2;
@@ -161,6 +167,7 @@ class Ich9HdaState : public ::google::protobuf::Message /* @@protoc_insertion_po
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr hda_registers_;
+  ::google::protobuf::uint64 wall_clock_counter_;
   ::google::protobuf::uint32 rirb_counter_;
   mutable int _cached_size_;
   friend struct ::protobuf_ich9_5fhda_2eproto::TableStruct;
@@ -242,6 +249,20 @@ inline void Ich9HdaState::set_rirb_counter(::google::protobuf::uint32 value) {
   
   rirb_counter_ = value;
   // @@protoc_insertion_point(field_set:Ich9HdaState.rirb_counter)
+}
+
+// uint64 wall_clock_counter = 3;
+inline void Ich9HdaState::clear_wall_clock_counter() {
+  wall_clock_counter_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 Ich9HdaState::wall_clock_counter() const {
+  // @@protoc_insertion_point(field_get:Ich9HdaState.wall_clock_counter)
+  return wall_clock_counter_;
+}
+inline void Ich9HdaState::set_wall_clock_counter(::google::protobuf::uint64 value) {
+  
+  wall_clock_counter_ = value;
+  // @@protoc_insertion_point(field_set:Ich9HdaState.wall_clock_counter)
 }
 
 #ifdef __GNUC__

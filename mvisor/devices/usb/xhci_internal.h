@@ -47,9 +47,21 @@ struct XhciOperationalRegisters {
   uint32_t  page_size;
   uint32_t  reserved1[2];
   uint32_t  device_notification_control;
-  uint64_t  command_ring_control;
+  union {
+    struct {
+      uint32_t  command_ring_control_low;
+      uint32_t  command_ring_control_high;
+    };
+    uint64_t    command_ring_control;
+  };
   uint32_t  reserved2[4];
-  uint64_t  context_base_array_pointer;
+  union {
+    struct {
+      uint32_t  context_base_array_pointer_low;
+      uint32_t  context_base_array_pointer_high;
+    };
+    uint64_t    context_base_array_pointer;
+  };
   uint32_t  configure;
 } __attribute__((packed));
 
@@ -72,8 +84,20 @@ struct XhciInterruptRegisters {
   uint32_t  moderation;
   uint32_t  event_ring_table_size;
   uint32_t  reserved;
-  uint64_t  event_ring_table_base;
-  uint64_t  event_ring_dequeue_pointer;
+  union {
+    struct {
+      uint32_t  event_ring_table_base_low;
+      uint32_t  event_ring_table_base_high;
+    };
+    uint64_t    event_ring_table_base;
+  };
+  union {
+    struct {
+      uint32_t  event_ring_dequeue_pointer_low;
+      uint32_t  event_ring_dequeue_pointer_high;
+    };
+    uint64_t    event_ring_dequeue_pointer;
+  };
   /* User defined state variables */
   XhciEventRingSegment event_ring_segment;
   uint64_t  event_ring_enqueue_index;

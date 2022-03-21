@@ -30,6 +30,7 @@ struct HdaCodecBuffer {
   uint8_t*  data;
   size_t    length;
   bool      interrupt_on_completion;
+  size_t    read_counter;
 };
 
 class HdaCodecInterface {

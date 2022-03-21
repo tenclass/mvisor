@@ -43,7 +43,9 @@ class PcSpeaker : public Device {
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     state_ = data[0];
-    MV_LOG("speaker %s, state=0x%x", (state_ & 1) ? "enabled" : "disabled", state_);
+    if (debug_) {
+      MV_LOG("speaker %s, state=0x%x", (state_ & 1) ? "enabled" : "disabled", state_);
+    }
   }
 };
 

@@ -84,7 +84,10 @@ void RedirectUdpSocket::StartReading() {
       return;
     }
 
-    int ret = recv(fd_, packet->data, UIP_MAX_UDP_PAYLOAD, 0);
+    /* FIXME: Limit packet size for Linux driver */
+    auto recv_size = UIP_MAX_UDP_PAYLOAD < 1440 ? UIP_MAX_UDP_PAYLOAD : 1440;
+
+    int ret = recv(fd_, packet->data, recv_size, 0);
     if (ret < 0) {
       packet->Release();
       return;

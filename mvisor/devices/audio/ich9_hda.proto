@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 message Ich9HdaState {
-  bytes   hda_registers   = 1;
-  uint32  rirb_counter    = 2;
+  bytes   hda_registers       = 1;
+  uint32  rirb_counter        = 2;
+  uint64  wall_clock_counter  = 3;
 }

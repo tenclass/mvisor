@@ -147,8 +147,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     while (auto element = PopQueue(vq)) {
       HandleTransmit(vq, element);
       PushQueue(vq, element);
-      NotifyQueue(vq);
     }
+    NotifyQueue(vq);
   }
 
   void OnControl(int queue_index) {
@@ -157,13 +157,17 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     while (auto element = PopQueue(vq)) {
       HandleControl(vq, element);
       PushQueue(vq, element);
-      NotifyQueue(vq);
     }
+    NotifyQueue(vq);
   }
 
   virtual bool WriteBuffer(void* buffer, size_t size) {
     VirtQueue& vq = queues_[0];
     MV_ASSERT(vq.enabled);
+    std::vector<VirtElement*> elements;
+
+    virtio_net_hdr_v1* net_header = nullptr;
+    size_t net_header_length = sizeof(*net_header);
   
     size_t offset = 0;
     while (offset < size) {
@@ -174,15 +178,22 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
         }
         return false;
       }
+      element->length = 0;
 
       if (offset == 0) {
-        /* Prepend virtio net header to the buffer vector, the first buffer length = 0xC */
-        virtio_net_hdr_v1 header = { .gso_type = VIRTIO_NET_HDR_GSO_NONE };
-        auto &iov = element->vector[0];
-        MV_ASSERT(iov.iov_len == sizeof(header));
-        memcpy(iov.iov_base, &header, sizeof(header));
-        element->length += sizeof(header);
-        element->vector.pop_front();
+        /* Prepend virtio net header to the buffer vector*/
+        auto &iov = element->vector.front();
+        net_header = (virtio_net_hdr_v1*)iov.iov_base;
+        bzero(net_header, net_header_length);
+        element->length += net_header_length;
+
+        /* Windows driver has standalone buffer for virtio net header */ 
+        if (iov.iov_len == net_header_length) {
+          element->vector.pop_front();
+        } else {
+          iov.iov_base = (uint8_t*)iov.iov_base + net_header_length;
+          iov.iov_len -= net_header_length;
+        }
       }
 
       size_t remain_bytes = size - offset;
@@ -194,9 +205,14 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
         element->length += bytes;
       }
 
-      PushQueue(vq, element);
-      MV_ASSERT(offset == size);
+      elements.push_back(element);
+      if (offset < size) {
+        MV_LOG("offset=%lu size=%lu", offset, size);
+      }
     }
+
+    net_header->num_buffers = elements.size();
+    PushQueueMultiple(vq, elements);
     NotifyQueue(vq);
     return true;
   }

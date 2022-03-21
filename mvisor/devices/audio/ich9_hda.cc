@@ -20,6 +20,7 @@
 
 #include <cstring>
 #include <vector>
+#include <chrono>
 
 #include "logger.h"
 #include "pci_device.h"
@@ -28,10 +29,15 @@
 #include "hda_internal.h"
 #include "states/ich9_hda.pb.h"
 
+using namespace std::chrono;
+
+
 class Ich9Hda : public PciDevice {
  private:
   Ich9HdaRegisters  regs_;
   uint32_t          rirb_counter_;
+  IoTimePoint       wall_clock_base_;
+
   std::vector<HdaCodecInterface*> codecs_;
 
   struct Ich9HdaStreamState {
@@ -84,6 +90,7 @@ class Ich9Hda : public PciDevice {
 
     MV_ASSERT(sizeof(regs_) == 0x180);
     rirb_counter_ = 0;
+    wall_clock_base_ = steady_clock::now();
     bzero(&regs_, sizeof(regs_));
     regs_.global_capabilities = 0x4401; // 4 input, 4 output, 64bit supported
     regs_.major_version = 1;
@@ -102,10 +109,16 @@ class Ich9Hda : public PciDevice {
     CheckIrqLevel();
   }
 
+  uint64_t GetWallClockCounter() {
+    auto delta_ns = duration_cast<nanoseconds>(steady_clock::now() - wall_clock_base_);
+    return delta_ns.count();
+  }
+
   virtual bool SaveState(MigrationWriter* writer) {
     Ich9HdaState state;
     state.set_hda_registers(&regs_, sizeof(regs_));
     state.set_rirb_counter(rirb_counter_);
+    state.set_wall_clock_counter(GetWallClockCounter());
     writer->WriteProtobuf("HDA", state);
     return PciDevice::SaveState(writer);
   }
@@ -121,6 +134,7 @@ class Ich9Hda : public PciDevice {
     auto& regs = state.hda_registers();
     memcpy(&regs_, regs.data(), sizeof(regs_));
     rirb_counter_ = state.rirb_counter();
+    wall_clock_base_ = steady_clock::now() - nanoseconds(state.wall_clock_counter());
 
     /* When finished loading states, restart stream if started before */
     manager_->io()->Schedule([this]() {
@@ -178,7 +192,7 @@ class Ich9Hda : public PciDevice {
     MV_ASSERT(offset + size <= sizeof(regs_));
 
     if (offset == offsetof(Ich9HdaRegisters, wall_clock_counter)) {
-      MV_PANIC("not implemented: should update clock");
+      regs_.wall_clock_counter = (uint32_t)GetWallClockCounter();
     }
     memcpy(data, (uint8_t*)&regs_ + offset, size);
     // MV_LOG("read %s at 0x%lx size=%x ret=0x%x", name_, offset, size, *(uint32_t*)data);
@@ -192,7 +206,10 @@ class Ich9Hda : public PciDevice {
     if (offset >= 0x80 && offset < 0x180) {
       uint64_t stream_desc_index = (offset - 0x80) / 0x20;
       uint64_t stream_desc_offset = (offset - 0x80) % 0x20;
-      WriteStreamDescriptor(stream_desc_index, stream_desc_offset, data, size);
+      // byte write
+      for (uint i = 0; i < size; i++) {
+        WriteStreamDescriptor(stream_desc_index, stream_desc_offset + i, &data[i], 1);
+      }
       return;
     }
 
@@ -263,10 +280,12 @@ class Ich9Hda : public PciDevice {
       stream_state.buffers.emplace_back(HdaCodecBuffer {
         .data = (uint8_t*)manager_->TranslateGuestMemory(entries[i].address),
         .length = entries[i].length,
-        .interrupt_on_completion = (entries[i].flags & 1) == 1
+        .interrupt_on_completion = (entries[i].flags & 1) == 1,
+        .read_counter =0
       });
     }
     stream_state.buffers_index = 0;
+    stream.link_position_in_buffer = 0;
   }
 
   size_t TransferStreamData(uint64_t index, uint8_t* destination, size_t length) {
@@ -275,27 +294,37 @@ class Ich9Hda : public PciDevice {
     MV_ASSERT(stream_state.buffers_index <= stream.last_valid_index);
 
     auto &entry = stream_state.buffers[stream_state.buffers_index];
-    MV_ASSERT(entry.length <= length);
-    if (index >= 4) {
-      memcpy(destination, entry.data, entry.length);
-    } else {
-      memcpy(entry.data, destination, entry.length);
-    }
-    stream.link_position_in_buffer += entry.length;
-    stream_state.buffers_index++;
-    if (debug_) {
-      MV_LOG("stream[%d] nr=%d dma transferred %d bytes", index, stream.stream_id, entry.length);
+    if (length > entry.length - entry.read_counter) {
+      length = entry.length - entry.read_counter;
     }
 
-    if (stream.link_position_in_buffer == stream.cyclic_buffer_length) {
-      stream.link_position_in_buffer = 0;
-      stream_state.buffers_index = 0;
+    /* IN or OUT */
+    if (index >= 4) {
+      memcpy(destination, entry.data + entry.read_counter, length);
+    } else {
+      memcpy(entry.data + entry.read_counter, destination, length);
     }
-    if (entry.interrupt_on_completion) {
-      stream.status |= 1 << 2;
-      CheckIrqLevel();
+    stream.link_position_in_buffer += length;
+    entry.read_counter += length;
+
+    /* Check if we should read next buffer */
+    if (entry.read_counter == entry.length) {
+      entry.read_counter = 0;
+      stream_state.buffers_index++;
+
+      if (stream.link_position_in_buffer >= stream.cyclic_buffer_length) {
+        stream.link_position_in_buffer = 0;
+        stream_state.buffers_index = 0;
+      }
+      if (entry.interrupt_on_completion) {
+        stream.status |= 1 << 2;
+        CheckIrqLevel();
+      }
     }
-    return entry.length;
+    if (debug_) {
+      MV_LOG("stream[%d] nr=%d dma transferred %d bytes", index, stream.stream_id, length);
+    }
+    return length;
   }
 
   void StartStopStream(uint64_t index) {

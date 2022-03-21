@@ -181,7 +181,10 @@ void RedirectTcpSocket::StartReading() {
       return;
     }
 
-    int ret = recv(fd_, packet->data, available, 0);
+    /* FIXME: Limit packet size for Linux driver */
+    auto recv_size = available < 1440 ? available : 1440;
+
+    int ret = recv(fd_, packet->data, recv_size, 0);
     if (ret <= 0) {
       packet->Release();
       if (ret < 0 && errno == EAGAIN) {
