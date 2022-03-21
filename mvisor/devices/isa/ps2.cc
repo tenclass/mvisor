@@ -164,8 +164,8 @@ class Ps2 : public Device, public KeyboardInputInterface {
     }
 
     if (enabled) {
-      manager_->SetIrq(irq, 0);
-      manager_->SetIrq(irq, 1);
+      manager_->SetGsiLevel(irq, 0);
+      manager_->SetGsiLevel(irq, 1);
       raised_irq_ = irq;
     }
   }
@@ -216,7 +216,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
     status_ &= ~(STATUS_AUXDATA | STATUS_OFULL);
 
     if (raised_irq_ != -1) {
-      manager_->SetIrq(raised_irq_, 0);
+      manager_->SetGsiLevel(raised_irq_, 0);
       raised_irq_ = -1;
     }
     

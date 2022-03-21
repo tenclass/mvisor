@@ -112,11 +112,11 @@ class Serial8250 : public Device {
     if (!status) {
       console->interrupt_id = UART_IIR_NO_INT;
       if (console->irq_status)
-        manager_->SetIrq(console->irq_line, 0);
+        manager_->SetGsiLevel(console->irq_line, 0);
     } else {
       console->interrupt_id = status;
       if (!console->irq_status)
-        manager_->SetIrq(console->irq_line, 1);
+        manager_->SetGsiLevel(console->irq_line, 1);
     }
     console->irq_status = status;
 

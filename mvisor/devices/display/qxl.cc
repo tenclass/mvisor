@@ -66,9 +66,12 @@ class Qxl : public Vga {
     pci_header_.vendor_id = 0x1B36;
     pci_header_.device_id = 0x0100;
     pci_header_.revision_id = 5;
+    pci_header_.irq_pin = 1;
     
-    /* Bar 1: 8MB, not used in Windows driver */
-    qxl_vram32_size_ = _MB(8);
+    /* Bar 1: 64MB, not used in Windows driver, but Linux driver 
+     * https://www.spice-space.org/multiple-monitors.html
+     */
+    qxl_vram32_size_ = _MB(128);
     qxl_vram32_base_ = (uint8_t*)valloc(qxl_vram32_size_);
     pci_bars_[1].host_memory = qxl_vram32_base_;
 
@@ -287,6 +290,9 @@ class Qxl : public Vga {
       case QXL_IO_NOTIFY_CURSOR:
         FetchCursorCommands();
         break;
+      case QXL_IO_UPDATE_AREA:
+        MV_LOG("QXL_IO_UPDATE_AREA not implemented");
+        break;
       case QXL_IO_RESET:
         Reset();
         UpdateIrqLevel();
@@ -297,17 +303,19 @@ class Qxl : public Vga {
         AddMemSlot(*data, qxl_ram_->mem_slot);
         break;
       case QXL_IO_CREATE_PRIMARY:
-      case QXL_IO_CREATE_PRIMARY_ASYNC:
         CreatePrimarySurface(qxl_ram_->create_surface);
         break;
       case QXL_IO_DESTROY_PRIMARY:
         DestroyPrimarySurface();
         break;
       case QXL_IO_NOTIFY_OOM:
-        MV_PANIC("QXL guest OOM");
+        MV_LOG("QXL guest OOM");
         break;
       case QXL_IO_UPDATE_IRQ:
         UpdateIrqLevel();
+        break;
+      case QXL_IO_MONITORS_CONFIG_ASYNC:
+        MV_LOG("monitor config not implemented");
         break;
       default:
         MV_PANIC("unhandled QXL command=0x%lx data=0x%lx size=0x%x",
@@ -315,9 +323,6 @@ class Qxl : public Vga {
         break;
       }
       if (async) {
-        if (debug_) {
-          MV_LOG("complete cmd=0x%x", offset);
-        }
         SetInterrupt(QXL_INTERRUPT_IO_CMD);
       }
     } else {
@@ -344,6 +349,9 @@ class Qxl : public Vga {
     guest_slots_[slot_id].offset = slot.mem_start - pci_bars_[bar_index].address;
     guest_slots_[slot_id].hva = (uint8_t*)pci_bars_[bar_index].host_memory + guest_slots_[slot_id].offset;
     guest_slots_[slot_id].active = true;
+    if (debug_) {
+      MV_LOG("add QXL memslot %d bar=%d 0x%lx-0x%lx", slot_id, bar_index, slot.mem_start, slot.mem_end);
+    }
   }
 
   void CreatePrimarySurface(QXLSurfaceCreate& create) {
@@ -365,6 +373,8 @@ class Qxl : public Vga {
     bool changed = (mode_ != kDisplayQxlMode) || (width_ != create.width) ||
       (height_ != create.height) || (bpp_ != guest_primary_.bits_pp);
     if (changed) {
+      if (debug_)
+        MV_LOG("create primary %dx%d", create.width, create.height);
       UpdateDisplayMode();
     }
   }
@@ -403,9 +413,7 @@ class Qxl : public Vga {
 
   void UpdateIrqLevel() {
     int level = !!(qxl_ram_->int_pending & qxl_ram_->int_mask);
-    if (pci_header_.irq_line) {
-      manager_->SetIrq(pci_header_.irq_line, level);
-    }
+    SetIrq(level);
   }
 
   void* GetMemSlotAddress(uint64_t data) {
@@ -529,6 +537,12 @@ class Qxl : public Vga {
       ParseCursor(cursor);
       break;
     }
+    case QXL_CMD_SURFACE: {
+      QXLSurfaceCmd* surface = (QXLSurfaceCmd*)GetMemSlotAddress(command.data);
+      MV_LOG("surface cmd=%d id=%d flags=0x%x", surface->type, surface->surface_id, surface->flags);
+      ReleaseGuestResource(&surface->release_info);
+      break;
+    }
     default:
       DumpHex(&command, sizeof(command));
       MV_PANIC("unhandled command type=0x%x data=0x%lx", command.type, command.data);
@@ -549,33 +563,49 @@ class Qxl : public Vga {
       MV_LOG("Invalid draw box %d-%d %d-%d surface %ux%u",
         drawable->bbox.left, drawable->bbox.right, drawable->bbox.top, drawable->bbox.bottom,
         guest_primary_.surface.width, guest_primary_.surface.height);
+      ReleaseGuestResource(&drawable->release_info);
+      delete partial;
       return;
     }
+    MV_ASSERT(drawable->surface_id == 0);
   
     switch (drawable->type)
     {
     case QXL_DRAW_COPY: {
       QXLCopy* copy = &drawable->u.copy;
       MV_ASSERT(drawable->effect == QXL_EFFECT_OPAQUE);
-      MV_ASSERT(drawable->clip.type == SPICE_CLIP_TYPE_NONE);
+      // MV_ASSERT(drawable->clip.type == SPICE_CLIP_TYPE_NONE);
       if (drawable->self_bitmap) {
         MV_ASSERT(drawable->self_bitmap_area.left == drawable->bbox.left && drawable->self_bitmap_area.right == drawable->bbox.right);
       }
       MV_ASSERT(copy->src_area.top == 0 && copy->src_area.left == 0);
       MV_ASSERT(copy->rop_descriptor == SPICE_ROPD_OP_PUT);
       QXLImage* image = (QXLImage*)GetMemSlotAddress(copy->src_bitmap);
-      MV_ASSERT(image->descriptor.type == SPICE_IMAGE_TYPE_BITMAP);
-      MV_ASSERT(image->descriptor.flags == 0);
+      if (image->descriptor.type != SPICE_IMAGE_TYPE_BITMAP) {
+        MV_LOG("image->descriptor.type=0x%x", image->descriptor.flags);
+        ReleaseGuestResource(&drawable->release_info);
+        delete partial;
+        break;
+      }
+      if (image->descriptor.flags != 0) {
+        MV_LOG("image->descriptor.flags=0x%x", image->descriptor.flags);
+        ReleaseGuestResource(&drawable->release_info);
+        delete partial;
+        break;
+      }
 
       QXLBitmap* bitmap = &image->bitmap;
-      if (bitmap->format != SPICE_BITMAP_FMT_RGBA) {
+      if (bitmap->format != SPICE_BITMAP_FMT_RGBA && bitmap->format != SPICE_BITMAP_FMT_32BIT) {
         MV_LOG("invalid bitmap format=0x%x", bitmap->format);
         ReleaseGuestResource(&drawable->release_info);
         delete partial;
         break;
       }
       MV_ASSERT(bitmap->palette == 0);
-      MV_ASSERT(bitmap->stride == bitmap->x * guest_primary_.bytes_pp);
+      if (bitmap->stride != bitmap->x * guest_primary_.bytes_pp) {
+        MV_LOG("bitmap->stride=%d bitmap->x=%d", bitmap->stride, bitmap->x);
+        MV_ASSERT(drawable->clip.type == SPICE_CLIP_TYPE_RECTS);
+      }
       MV_ASSERT(partial->width == (int)bitmap->x && partial->height == (int)bitmap->y);
       partial->stride = bitmap->stride;
       partial->flip = !(bitmap->flags & QXL_BITMAP_TOP_DOWN);

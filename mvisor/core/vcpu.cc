@@ -120,30 +120,6 @@ void Vcpu::SetupCpuid() {
       machine_->cpuid_version_ = entry->eax;
       machine_->cpuid_features_ = entry->edx;
       break;
-    case 0x6: // Thermal and Power Management Leaf
-      entry->ecx = entry->ecx & ~(1 << 3); // disable peformance energy bias
-      break;
-		case 0xA: { // Architectural Performance Monitoring
-			union cpuid10_eax {
-				struct {
-					unsigned int version_id		:8;
-					unsigned int num_counters	:8;
-					unsigned int bit_width		:8;
-					unsigned int mask_length	:8;
-				} split;
-				unsigned int full;
-			} eax;
-
-			/* If the host has perf system running, but no architectural events available
-			 * through kvm pmu -- disable perf support, thus Linux won't even try to access msr
-			 * registers. */
-			if (entry->eax) {
-				eax.full = entry->eax;
-				if (eax.split.version_id != 2 || !eax.split.num_counters)
-					entry->eax = 0;
-			}
-			break;
-		}
     case 0xB: // CPU topology (cores = num_vcpus / 2, threads per core = 2)
       switch (entry->index) {
       case 0:

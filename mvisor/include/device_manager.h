@@ -94,7 +94,7 @@ class DeviceManager {
   bool LoadState(MigrationReader* reader);
   
   /* IRQ / MSIs all are GSIs */
-  void SetIrq(uint32_t irq, uint32_t level);
+  void SetGsiLevel(uint32_t gsi, uint32_t level);
   void SignalMsi(uint64_t address, uint32_t data);
   int AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd = -1);
   void UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd = -1);

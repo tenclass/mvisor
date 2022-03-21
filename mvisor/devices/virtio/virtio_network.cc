@@ -44,7 +44,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
  public:
   VirtioNetwork() {
-    devfn_ = PCI_MAKE_DEVFN(1, 0);
+    devfn_ = PCI_MAKE_DEVFN(4, 0);
     pci_header_.class_code = 0x020000;
     pci_header_.device_id = 0x1000;
     pci_header_.subsys_id = 0x0001;

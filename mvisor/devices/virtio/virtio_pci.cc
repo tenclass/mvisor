@@ -28,8 +28,8 @@
 VirtioPci::VirtioPci() {
     pci_header_.vendor_id = 0x1AF4;
     pci_header_.subsys_vendor_id = 0x1AF4;
-    pci_header_.irq_pin = 0;
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+    pci_header_.irq_pin = 1;
 
     AddPciBar(0, 0x40, kIoResourceTypePio);
     AddPciBar(4, 0x4000, kIoResourceTypeMmio);
@@ -265,8 +265,8 @@ void VirtioPci::NotifyQueue(VirtQueue& vq) {
   }
   if (msi_config_.enabled) {
     SignalMsi(vq.msix_vector);
-  } else if (pci_header_.irq_line) {
-    manager_->SetIrq(pci_header_.irq_line, isr_status_ & 1);
+  } else if (pci_header_.irq_pin) {
+    SetIrq(isr_status_ & 1);
   }
 }
 
@@ -443,7 +443,7 @@ void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
     } else if (offset < 0x2000) { /* ISR Status */
       *data = isr_status_;
       isr_status_ = 0;
-      manager_->SetIrq(pci_header_.irq_line, 0);
+      SetIrq(0);
     } else if (offset < 0x3000) { /* Device config */
       ReadDeviceConfig(offset - 0x2000, data, size);
     } else if (offset < 0x4000) { /* Notification */

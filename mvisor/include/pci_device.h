@@ -235,6 +235,7 @@ class PciDevice : public Device {
   void AddMsiCapability();
   void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);
   void SignalMsi(int vector = 0);
+  void SetIrq(uint level);
 
   uint8_t           devfn_;
   uint8_t           bus_;

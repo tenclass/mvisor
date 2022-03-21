@@ -126,7 +126,6 @@ class XhciHost : public PciDevice {
     pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
     pci_header_.subsys_vendor_id = 0x1AF4;
     pci_header_.subsys_id = 0x1100;
-    pci_header_.irq_pin = 0;
     pci_header_.cacheline_size = 0x10;
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
 

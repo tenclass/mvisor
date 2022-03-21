@@ -131,6 +131,32 @@ void PciDevice::SignalMsi(int vector) {
   }
 }
 
+/* According to the ACPI configuration used by SeaBIOS,
+ * DEV 0-24       INTx[A-D] -> PIRQ[E-F]
+ * DEV 25-29, 31  INTx[A-D] -> PIRQ[A-D]
+ * DEV 30         INTx[A-D] -> PIRQ[E-F]
+ */
+void PciDevice::SetIrq(uint level) {
+  if (!pci_header_.irq_pin) {
+    return;
+  }
+
+  uint8_t slot = devfn_ >> 3;
+  uint8_t intx = pci_header_.irq_pin - 1;
+  uint8_t pirq = (slot + intx) % 4 + 4;
+
+  /* For ICH9 special devices, we should read the configuration from LPC RCBA */
+  if (slot == 30) {
+    pirq = (intx % 4) + 4;
+  } else if (slot >= 25) {
+    MV_ASSERT(pci_header_.irq_pin == 1);
+    pirq = intx % 4;
+  }
+
+  /* PIRQ is starting from index 16 */
+  manager_->SetGsiLevel(16 + pirq, level);
+}
+
 void PciDevice::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   if (msi_config_.is_msix && resource->base == pci_bars_[msi_config_.msix_bar].address &&
     offset >= msi_config_.msix_space_offset &&
@@ -163,12 +189,18 @@ void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t leng
     return;
   }
   memcpy(data, pci_header_.data + offset, length);
+  if (debug_) {
+    MV_LOG("%s read pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
+  }
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
     MV_LOG("%s failed write config space at 0x%lx length=%d", name_, offset, length);
     return;
+  }
+  if (debug_) {
+    MV_LOG("%s write pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
   }
 
   if (offset == PCI_COMMAND) {

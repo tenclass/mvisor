@@ -20,7 +20,7 @@ objects:
       - ich9-hda
       - ahci-host
       - xhci-host
-      - vga
+      - qxl
       - virtio-console
       - virtio-block
       - virtio-network
@@ -59,7 +59,6 @@ objects:
   
   - class: qxl
     rom: ../share/vgabios-qxl.bin
-    vram_size: 256
     debug: No
 
   - class: vga

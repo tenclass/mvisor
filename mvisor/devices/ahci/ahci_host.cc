@@ -36,7 +36,7 @@
 
 AhciHost::AhciHost() {
   /* FIXME: should gernerated by parent pci device */
-  devfn_ = PCI_MAKE_DEVFN(0x1F, 2);
+  devfn_ = PCI_MAKE_DEVFN(31, 2);
   
   /* PCI config */
   pci_header_.vendor_id = 0x8086;
@@ -124,11 +124,11 @@ void AhciHost::CheckIrq() {
     if (msi_config_.enabled) {
       SignalMsi();
     } else {
-      manager_->SetIrq(pci_header_.irq_line, 1);
+      SetIrq(1);
     }
   } else {
     if (!msi_config_.enabled) {
-      manager_->SetIrq(pci_header_.irq_line, 0);
+      SetIrq(0);
     }
   }
 }

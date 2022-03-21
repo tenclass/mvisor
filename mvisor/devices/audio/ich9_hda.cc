@@ -47,7 +47,7 @@ class Ich9Hda : public PciDevice {
 
  public:
   Ich9Hda() {
-    devfn_ = PCI_MAKE_DEVFN(4, 0);
+    devfn_ = PCI_MAKE_DEVFN(27, 0);
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x293E;
@@ -56,8 +56,8 @@ class Ich9Hda : public PciDevice {
     pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
     pci_header_.subsys_vendor_id = 0x1AF4;
     pci_header_.subsys_id = 0x1100;
-    pci_header_.irq_pin = 0;
     pci_header_.command = PCI_COMMAND_MEMORY;
+    pci_header_.irq_pin = 1;
 
     /* HDCTL off 0x40 bit 0 selects signaling mode (1-HDA, 0 - Ac97) 18.1.19 */
     pci_header_.data[0x40] = 0x01;
@@ -178,7 +178,7 @@ class Ich9Hda : public PciDevice {
         SignalMsi();
       }
     } else {
-      manager_->SetIrq(pci_header_.irq_line, level);
+      SetIrq(level);
     }
   }
 

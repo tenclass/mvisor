@@ -55,12 +55,11 @@ Vga::Vga() {
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
   pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
-  pci_header_.irq_pin = 1;
   
 
-  /* Bar 0: 256MB VRAM (default total) */
+  /* Bar 0: 64MB VRAM */
   vga_mem_size_ = _MB(16);
-  vram_size_ = _MB(256);
+  vram_size_ = _MB(64);
 
   AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* vgamem */
   /* FIXME: bar 2 should be implemented for stdvga if Qxl is not enabled??? */
@@ -244,7 +243,7 @@ void Vga::VbeReadPort(uint64_t port, uint16_t* data) {
     if (vbe_.registers[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_GETCAPS) {
       /* VBE initialization will enable and get capabilities and then disable */
       const uint16_t max_values[] = {
-        0, VBE_DISPI_MAX_XRES, VBE_DISPI_INDEX_YRES, VBE_DISPI_MAX_BPP
+        0, VBE_DISPI_MAX_XRES, VBE_DISPI_MAX_YRES, VBE_DISPI_MAX_BPP
       };
       MV_ASSERT(vbe_.index < sizeof(max_values) / sizeof(uint16_t));
       *data = max_values[vbe_.index];

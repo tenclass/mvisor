@@ -128,7 +128,7 @@ class Ich9Lpc : public PciDevice {
 
  public:
   Ich9Lpc() {
-    devfn_ = PCI_MAKE_DEVFN(0x1F, 0);
+    devfn_ = PCI_MAKE_DEVFN(31, 0);
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x2918;
@@ -182,10 +182,10 @@ class Ich9Lpc : public PciDevice {
     }
     if (ranges_overlap(offset, length, ICH9_LPC_PIRQE_ROUT, 4)) {
       /* activate irq remapping in LPC E-H */
-      // MV_PANIC("activate irq remapping in LPC E-H");
     }
     if (ranges_overlap(offset, length, ICH9_LPC_GEN_PMCON_1, 8)) {
       MV_PANIC("ich9_lpc_pmcon_update(lpc);");
+      // MV_PANIC("activate irq remapping in LPC E-H");
     }
   }
 

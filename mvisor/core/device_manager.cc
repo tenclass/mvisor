@@ -471,15 +471,14 @@ void* DeviceManager::TranslateGuestMemory(uint64_t gpa) {
   return host;
 }
 
-/* Maybe we should have an IRQ manager or just let KVM do this? */
-void DeviceManager::SetIrq(uint32_t irq, uint32_t level) {
-  /* Send an IRQ to the guest */
+/* Sets the level of a GSI input to the interrupt controller model */
+void DeviceManager::SetGsiLevel(uint32_t gsi, uint32_t level) {
   struct kvm_irq_level irq_level = {
-    .irq = irq,
+    .irq = gsi,
     .level = level
   };
   if (ioctl(machine_->vm_fd_, KVM_IRQ_LINE, &irq_level) != 0) {
-    MV_PANIC("KVM_IRQ_LINE failed");
+    MV_PANIC("KVM_IRQ_LINE failed, gsi=%u, level=%u", gsi, level);
   }
 }
 
