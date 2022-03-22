@@ -127,7 +127,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   std::unordered_set<MemorySlot*> pending_remove;
   
   /* Lock the global mutex while handling insert or remove */
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
 
   MemorySlot* slot = new MemorySlot;
   slot->id = AllocateSlotId();
@@ -239,7 +239,7 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
       region->gpa, region->size, region->type);
   }
 
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::unique_lock lock(mutex_);
   // Remove KVM slots
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ) {
     auto slot = it->second;
@@ -270,6 +270,8 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
  * we simply use upper_bound to locate the slot in O(logN)
  */
 void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
+  std::shared_lock lock(mutex_);
+
   // Find the first slot whose begin is smaller than gpa
   auto it = kvm_slots_.upper_bound(gpa);
   if (it != kvm_slots_.begin()) {
@@ -298,6 +300,7 @@ uint64_t MemoryManager::HostToGuestAddress(void* host) {
 /* Used for debugging */
 void MemoryManager::PrintMemoryScope() {
   static const char* type_strings[] = { "Reserved", "RAM", "Device" };
+  std::shared_lock lock(mutex_);
   MV_LOG("%lu memory slots", kvm_slots_.size());
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
     MemorySlot* slot = it->second;
@@ -309,6 +312,7 @@ void MemoryManager::PrintMemoryScope() {
 
 std::vector<const MemorySlot*> MemoryManager::GetMemoryFlatView() {
   std::vector<const MemorySlot*> slots;
+  std::shared_lock lock(mutex_);
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
     slots.push_back(it->second);
   }
