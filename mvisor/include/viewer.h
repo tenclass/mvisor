@@ -61,6 +61,7 @@ class Viewer {
   void RenderCursor(const DisplayCursorUpdate* cursor_update);
   void HandleEvent(const SDL_Event& event);
   PointerInputInterface* GetActivePointer();
+  void SendPointerEvent();
 
   Machine* machine_;
   DisplayInterface* display_;

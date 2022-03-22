@@ -292,7 +292,7 @@ int Viewer::MainLoop() {
     }
 
     /* Check viewer window resize */
-    if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
+    if (spice_agent_ && pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
       pending_resize_.triggered = false;
       spice_agent_->Resize(pending_resize_.width, pending_resize_.height);
     }
@@ -306,10 +306,24 @@ int Viewer::MainLoop() {
   return 0;
 }
 
+void Viewer::SendPointerEvent() {
+  auto pointer = GetActivePointer();
+  if (pointer) {
+    int x, y;
+    SDL_GetMouseState(&x, &y);
+    /* Check if window is scaled */
+    if (pending_resize_.width && pending_resize_.height) {
+      x = x * width_ / pending_resize_.width;
+      y = y * height_ / pending_resize_.height;
+    }
+    pointer_state_.x = x;
+    pointer_state_.y = y;
+    pointer->QueuePointerEvent(pointer_state_);
+  }
+}
+
 void Viewer::HandleEvent(const SDL_Event& event) {
   uint8_t transcoded[10] = { 0 };
-  /* if we dont check the pointer changes, it would have 1000 pointer events per second */
-  bool should_update_pointer = false;
 
   switch (event.type)
   {
@@ -330,18 +344,11 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       keyboard_->QueueKeyboardEvent(transcoded);
     }
     break;
-  case SDL_MOUSEWHEEL: {
-    int x, y;
-    SDL_GetMouseState(&x, &y);
-    auto pointer = GetActivePointer();
-    if (pointer) {
-      pointer_state_.x = x;
-      pointer_state_.y = y;
-      pointer_state_.z = event.wheel.y;
-      pointer->QueuePointerEvent(pointer_state_);
-    }
+  case SDL_MOUSEWHEEL:
+    pointer_state_.z = event.wheel.y;
+    SendPointerEvent();
+    pointer_state_.z = 0;
     break;
-  }
   case SDL_MOUSEBUTTONDOWN:
   case SDL_MOUSEBUTTONUP:
     if (event.button.state) {
@@ -349,32 +356,22 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     } else {
       pointer_state_.buttons &= ~(1 << event.button.button);
     }
-    should_update_pointer = true;
-    /* fall through */
-  case SDL_MOUSEMOTION: {
-    auto pointer = GetActivePointer();
-    if (pointer) {
-      int x, y;
-      SDL_GetMouseState(&x, &y);
-      if (should_update_pointer || pointer_state_.x != x || pointer_state_.y != y) {
-        pointer_state_.x = x;
-        pointer_state_.y = y;
-        pointer_state_.z = 0;
-        pointer->QueuePointerEvent(pointer_state_);
-      }
+    SendPointerEvent();
+    break;
+  case SDL_MOUSEMOTION:
+    /* if we dont check the pointer changes, it would have 1000 pointer events per second */
+    if (event.motion.x != pointer_state_.x || event.motion.y != pointer_state_.y) {
+      SendPointerEvent();
     }
     break;
-  }
   case SDL_WINDOWEVENT:
     switch (event.window.event)
     {
     case SDL_WINDOWEVENT_RESIZED:
-      if (spice_agent_) {
-        pending_resize_.triggered = true;
-        pending_resize_.width = event.window.data1;
-        pending_resize_.height = event.window.data2;
-        pending_resize_.time = std::chrono::steady_clock::now();
-      }
+      pending_resize_.triggered = true;
+      pending_resize_.width = event.window.data1;
+      pending_resize_.height = event.window.data2;
+      pending_resize_.time = std::chrono::steady_clock::now();
       break;
     }
     break;
