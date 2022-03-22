@@ -452,17 +452,26 @@ void Vga::UpdateVRamMemoryMap() {
     if (debug_) {
       MV_LOG("VBE map offset=0x%lx, bank offset=0x%lx", offset, (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16));
     }
+  
+    /* Map / unmap the area as ram to accelerate */
+    if (has_mapped_vga_) {
+      RemoveIoResource(kIoResourceTypeRam, VGA_MMIO_BASE);
+    }
+    AddIoResource(kIoResourceTypeRam, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA RAM", vram_read_select_);
+    has_mapped_vga_ = true;
   } else if (mode_ == kDisplayVgaMode || mode_ == kDisplayTextMode) {
-    const int map_types[][2] = {
+    const size_t map_types[][2] = {
       { 0xA0000, 0x20000 }, { 0xA0000, 0x10000 },
       { 0xB0000, 0x08000 }, { 0xB8000, 0x08000 }
     };
-    /* Memory map select */
+    
+    /* Memory map select controls visual area while read select controls IO */
     int index = (vga_.gfx[6] >> 2) & 0b11;
     int read_index = vga_.gfx[4] & 0b11;
     vram_map_select_size_ = map_types[index][1];
     vram_map_select_ = vram_base_ + map_types[index][0] - VGA_MMIO_BASE;
     vram_read_select_ = vram_base_ + vram_map_select_size_ * read_index;
+
     if (debug_) {
       MV_LOG("VGA map index=%d read_index=%d", index, read_index);
     }

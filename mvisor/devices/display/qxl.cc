@@ -370,11 +370,12 @@ class Qxl : public Vga {
       MV_PANIC("unsupported surface format=0x%x", create.format);
       break;
     }
+    if (debug_) {
+      MV_LOG("create primary %dx%d", create.width, create.height);
+    }
     bool changed = (mode_ != kDisplayQxlMode) || (width_ != create.width) ||
       (height_ != create.height) || (bpp_ != guest_primary_.bits_pp);
     if (changed) {
-      if (debug_)
-        MV_LOG("create primary %dx%d", create.width, create.height);
       UpdateDisplayMode();
     }
   }
@@ -551,6 +552,23 @@ class Qxl : public Vga {
   }
 
   void ParseDrawable(QXLDrawable* drawable) {
+    // DisplayPartialBitmap* surface = new DisplayPartialBitmap {
+    //   .width = (int)guest_primary_.surface.width,
+    //   .height = (int)guest_primary_.surface.height,
+    //   .x = 0,
+    //   .y = 0
+    // };
+    // surface->stride = guest_primary_.qxl_stride;
+    // GetMemSlotChunkedData(guest_primary_.surface.mem, surface->vector);
+    // MV_LOG("stride=%u %dx%d surface=0x%lx data0=0x%lx", surface->stride, surface->width, surface->height,
+    //   guest_primary_.surface.mem, surface->vector.front().data);
+    // surface->Release = [=]() {
+    //   ReleaseGuestResource(&drawable->release_info);
+    //   delete surface;
+    // };
+    // NotifyDisplayRender(surface);
+    // return; 
+
     DisplayPartialBitmap* partial = new DisplayPartialBitmap {
       .width = drawable->bbox.right - drawable->bbox.left,
       .height = drawable->bbox.bottom - drawable->bbox.top,

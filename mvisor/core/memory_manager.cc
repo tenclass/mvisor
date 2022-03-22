@@ -32,9 +32,11 @@
 #include "machine.h"
 #include "logger.h"
 
-static uint32_t _new_slot_id = 0;
-static inline uint32_t get_new_slot_id() {
-  return _new_slot_id++;
+uint MemoryManager::AllocateSlotId() {
+  auto it = free_slots_.begin();
+  uint slot_id = *it;
+  free_slots_.erase(it);
+  return slot_id;
 }
 
 void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
@@ -54,6 +56,10 @@ void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
 
 MemoryManager::MemoryManager(const Machine* machine)
     : machine_(machine) {
+  uint max_slots = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_NR_MEMSLOTS);
+  for (uint i = 0; i < max_slots; i++) {
+    free_slots_.insert(i);
+  }
 
   InitializeSystemRam();
   LoadBiosFile();
@@ -121,9 +127,10 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   std::unordered_set<MemorySlot*> pending_remove;
   
   /* Lock the global mutex while handling insert or remove */
-  mutex_.lock();
+  std::lock_guard<std::mutex> lock(mutex_);
+
   MemorySlot* slot = new MemorySlot;
-  slot->id = get_new_slot_id();
+  slot->id = AllocateSlotId();
   slot->region = region;
   slot->type = region->type;
   slot->begin = region->gpa;
@@ -144,14 +151,14 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
         // Left collision
         left = new MemorySlot(*hit);
         left->end = slot->begin;
-        left->id = get_new_slot_id();
+        left->id = AllocateSlotId();
       }
       if (slot->end < hit->end) {
         // Right collision
         right = new MemorySlot(*hit);
         right->begin = slot->end;
         right->hva = reinterpret_cast<uint64_t>(right->region->host) + (right->begin - right->region->gpa);
-        right->id = get_new_slot_id();
+        right->id = AllocateSlotId();
       }
       // Move the iterator before we change kvm_slots
       ++it;
@@ -181,12 +188,12 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
   // Finally add the new slot
   kvm_slots_[slot->begin] = slot;
   regions_.insert(region);
-  mutex_.unlock();
 
   // Commit the pending slots to KVM
   for (auto slot : pending_remove) {
     if (slot->type == kMemoryTypeRam) {
       UpdateKvmSlot(slot, true);
+      free_slots_.insert(slot->id);
     }
     // tell listeners we removed a slot
     for (auto listener : listeners_) {
@@ -232,14 +239,20 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
       region->gpa, region->size, region->type);
   }
 
-  std::vector<MemorySlot*> pending_remove;
-
-  mutex_.lock();
+  std::lock_guard<std::mutex> lock(mutex_);
   // Remove KVM slots
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ) {
     auto slot = it->second;
     if (slot->region == region) {
-      pending_remove.push_back(slot);
+      if (slot->type == kMemoryTypeRam) {
+        UpdateKvmSlot(slot, true);
+        free_slots_.insert(slot->id);
+      }
+      // tell listeners we removed a slot
+      for (auto listener : listeners_) {
+        listener->callback(slot, true);
+      }
+      delete slot;
       it = kvm_slots_.erase(it);
     } else {
       ++it;
@@ -250,19 +263,6 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
   if (regions_.erase(region)) {
     delete region;
     *pregion = nullptr;
-  }
-  mutex_.unlock();
-  
-  for (auto slot : pending_remove) {
-    if (slot->type == kMemoryTypeRam) {
-      // Remvoe kvm slot
-      UpdateKvmSlot(slot, true);
-    }
-    // tell listeners we removed a slot
-    for (auto listener : listeners_) {
-      listener->callback(slot, true);
-    }
-    delete slot;
   }
 }
 

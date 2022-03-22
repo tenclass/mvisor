@@ -123,8 +123,7 @@ void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
   }
   int lines = partial->height;
   size_t src_index = 0;
-  while (lines > 0) {
-    MV_ASSERT(src_index < partial->vector.size());
+  while (lines > 0 && src_index < partial->vector.size()) {
     uint8_t* src = partial->vector[src_index].data;
     auto copy_lines = partial->vector[src_index].size / partial->stride;
     while (copy_lines > 0) {
@@ -324,6 +323,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     } else if (event.key.keysym.sym == SDLK_F2) {
       machine_->Pause();
       machine_->Save("/tmp/save");
+      return;
     }
   case SDL_KEYUP:
     if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {

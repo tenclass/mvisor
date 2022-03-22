@@ -60,6 +60,7 @@ class Vga : public PciDevice, public DisplayInterface {
   uint8_t* vram_map_select_;
   uint32_t vram_map_select_size_;
   uint8_t* vram_read_select_;
+  bool     has_mapped_vga_ = false;
 
   std::vector<DisplayChangeListener> display_change_listerners_;
   std::vector<DisplayRenderCallback> display_render_callbacks_;
