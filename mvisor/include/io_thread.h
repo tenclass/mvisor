@@ -23,7 +23,7 @@
 #include <sys/epoll.h>
 
 #include <deque>
-#include <unordered_set>
+#include <set>
 #include <unordered_map>
 #include <thread>
 #include <functional>
@@ -86,9 +86,9 @@ class IoThread {
   std::recursive_mutex  mutex_;
   int                   event_fd_;
   int                   epoll_fd_;
-  std::unordered_set<IoTimer*>          timers_;
+  std::set<IoTimer*>    timers_;
+  std::set<DiskImage*>  disk_images_;
   std::unordered_map<int, EpollEvent*>  epoll_events_;
-  std::unordered_set<DiskImage*>        disk_images_;
 };
 
 #endif // _MVISOR_IO_THREAD_H

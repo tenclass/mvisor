@@ -431,6 +431,18 @@ class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(
   const ::google::protobuf::RepeatedPtrField< ::QxlState_GuestSlot >&
       guest_slots() const;
 
+  // repeated uint64 free_resources = 5;
+  int free_resources_size() const;
+  void clear_free_resources();
+  static const int kFreeResourcesFieldNumber = 5;
+  ::google::protobuf::uint64 free_resources(int index) const;
+  void set_free_resources(int index, ::google::protobuf::uint64 value);
+  void add_free_resources(::google::protobuf::uint64 value);
+  const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+      free_resources() const;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+      mutable_free_resources();
+
   // .QxlState.GuestPrimary guest_primary = 3;
   bool has_guest_primary() const;
   void clear_guest_primary();
@@ -440,19 +452,14 @@ class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(
   ::QxlState_GuestPrimary* mutable_guest_primary();
   void set_allocated_guest_primary(::QxlState_GuestPrimary* guest_primary);
 
-  // uint64 last_release_offset = 4;
-  void clear_last_release_offset();
-  static const int kLastReleaseOffsetFieldNumber = 4;
-  ::google::protobuf::uint64 last_release_offset() const;
-  void set_last_release_offset(::google::protobuf::uint64 value);
-
   // @@protoc_insertion_point(class_scope:QxlState)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::QxlState_GuestSlot > guest_slots_;
+  ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > free_resources_;
+  mutable int _free_resources_cached_byte_size_;
   ::QxlState_GuestPrimary* guest_primary_;
-  ::google::protobuf::uint64 last_release_offset_;
   mutable int _cached_size_;
   friend struct ::protobuf_qxl_2eproto::TableStruct;
   friend void ::protobuf_qxl_2eproto::InitDefaultsQxlStateImpl();
@@ -724,18 +731,34 @@ inline void QxlState::set_allocated_guest_primary(::QxlState_GuestPrimary* guest
   // @@protoc_insertion_point(field_set_allocated:QxlState.guest_primary)
 }
 
-// uint64 last_release_offset = 4;
-inline void QxlState::clear_last_release_offset() {
-  last_release_offset_ = GOOGLE_ULONGLONG(0);
+// repeated uint64 free_resources = 5;
+inline int QxlState::free_resources_size() const {
+  return free_resources_.size();
 }
-inline ::google::protobuf::uint64 QxlState::last_release_offset() const {
-  // @@protoc_insertion_point(field_get:QxlState.last_release_offset)
-  return last_release_offset_;
+inline void QxlState::clear_free_resources() {
+  free_resources_.Clear();
 }
-inline void QxlState::set_last_release_offset(::google::protobuf::uint64 value) {
-  
-  last_release_offset_ = value;
-  // @@protoc_insertion_point(field_set:QxlState.last_release_offset)
+inline ::google::protobuf::uint64 QxlState::free_resources(int index) const {
+  // @@protoc_insertion_point(field_get:QxlState.free_resources)
+  return free_resources_.Get(index);
+}
+inline void QxlState::set_free_resources(int index, ::google::protobuf::uint64 value) {
+  free_resources_.Set(index, value);
+  // @@protoc_insertion_point(field_set:QxlState.free_resources)
+}
+inline void QxlState::add_free_resources(::google::protobuf::uint64 value) {
+  free_resources_.Add(value);
+  // @@protoc_insertion_point(field_add:QxlState.free_resources)
+}
+inline const ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >&
+QxlState::free_resources() const {
+  // @@protoc_insertion_point(field_list:QxlState.free_resources)
+  return free_resources_;
+}
+inline ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
+QxlState::mutable_free_resources() {
+  // @@protoc_insertion_point(field_mutable_list:QxlState.free_resources)
+  return &free_resources_;
 }
 
 #ifdef __GNUC__

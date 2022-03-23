@@ -63,6 +63,8 @@ class Machine {
   inline int num_vcpus() { return num_vcpus_; }
   inline uint64_t ram_size() { return ram_size_; }
   inline bool debug() { return debug_; }
+  inline const std::string& guest_os() const { return guest_os_; }
+  inline void set_guest_os(std::string os) { guest_os_ = os; }
 
  private:
   friend class IoThread;
@@ -95,6 +97,7 @@ class Machine {
   std::map<std::string, Object*> objects_;
   bool debug_ = false;
   bool hypervisor_ = false;
+  std::string guest_os_;
 
   std::mutex mutex_;
   std::condition_variable wait_to_resume_;

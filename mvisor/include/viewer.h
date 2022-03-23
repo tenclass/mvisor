@@ -66,8 +66,8 @@ class Viewer {
   Machine* machine_;
   DisplayInterface* display_;
   KeyboardInputInterface* keyboard_;
-  SpiceAgentInterface* spice_agent_;
   std::vector<PointerInputInterface*> pointers_;
+  std::vector<DisplayResizeInterface*> resizers_;
 
   SDL_Window* window_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;

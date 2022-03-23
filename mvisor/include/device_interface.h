@@ -27,8 +27,8 @@
 
 class KeyboardInputInterface {
  public:
-  virtual void QueueKeyboardEvent(uint8_t scancode[10]) = 0;
-  virtual void QueueMouseEvent(uint buttons, int rel_x, int rel_y, int rel_z) = 0;
+  virtual bool QueueKeyboardEvent(uint8_t scancode[10]) = 0;
+  virtual bool QueueMouseEvent(uint buttons, int rel_x, int rel_y, int rel_z) = 0;
   virtual bool InputAcceptable() = 0;
 };
 
@@ -42,15 +42,14 @@ struct PointerEvent {
 };
 class PointerInputInterface {
  public:
-  virtual void QueuePointerEvent(PointerEvent event) = 0;
+  virtual bool QueuePointerEvent(PointerEvent event) = 0;
   virtual bool InputAcceptable() = 0;
 };
 
-class SpiceAgentInterface {
+class DisplayResizeInterface {
  public:
-  virtual void Resize(uint32_t width, uint32_t height) = 0;
+  virtual bool Resize(uint width, uint height) = 0;
 };
-
 
 enum CursorUpdateCommand {
   kDisplayCursorUpdateHide,
@@ -103,8 +102,7 @@ class DisplayInterface {
   virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) = 0;
   virtual const uint8_t* GetPallete() const = 0;
   virtual void RegisterDisplayChangeListener(DisplayChangeListener callback) = 0;
-  virtual void RegisterDisplayRenderer(DisplayRenderCallback draw_callback,
-    DisplayCursorUpdateCallback cursor_callback) = 0;
+  virtual void RegisterDisplayRenderer(DisplayRenderCallback draw_callback, DisplayCursorUpdateCallback cursor_callback) = 0;
 };
 
 

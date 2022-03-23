@@ -64,6 +64,7 @@
         "csignal": "cpp",
         "hash_map": "cpp",
         "hash_set": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "shared_mutex": "cpp"
     }
 }

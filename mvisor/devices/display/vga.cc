@@ -80,7 +80,7 @@ void Vga::Reset() {
 
   vram_map_select_ = vram_base_;
   vram_read_select_ = vram_base_;
-  mode_ = kDisplayTextMode;
+  mode_ = kDisplayUnknownMode;
   width_ = 640;
   height_ = 400;
   bpp_ = 8;
@@ -479,6 +479,9 @@ void Vga::UpdateVRamMemoryMap() {
 }
 
 void Vga::UpdateDisplayMode() {
+  auto old_mode = mode_;
+  auto old_w = width_, old_h = height_, old_bpp = bpp_;
+
   if (vbe_.registers[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) {
     mode_ = kDisplayVbeMode;
     width_ = vbe_.registers[VBE_DISPI_INDEX_XRES];
@@ -496,7 +499,10 @@ void Vga::UpdateDisplayMode() {
     height_ = 480;
     bpp_ = 8;
   }
-  NotifyDisplayModeChange();
+
+  if (old_mode != mode_ || old_w != width_ || old_h != height_ || old_bpp != bpp_) {
+    NotifyDisplayModeChange();
+  }
 }
 
 void Vga::NotifyDisplayModeChange() {

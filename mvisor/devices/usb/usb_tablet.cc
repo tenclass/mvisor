@@ -187,7 +187,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
   }
 
   /* This interface function is called by the UI thread, so use a mutex */
-  virtual void QueuePointerEvent(PointerEvent event) {
+  virtual bool QueuePointerEvent(PointerEvent event) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     /* SPICE buttons to PS/2 buttons */
@@ -202,6 +202,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
     manager_->io()->Schedule([this]() {
       NotifyEndpoint(0x81);
     });
+    return true;
   }
 
   virtual bool InputAcceptable() {

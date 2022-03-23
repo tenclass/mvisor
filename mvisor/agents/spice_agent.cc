@@ -36,7 +36,7 @@ using namespace std::chrono;
 const auto kSendMouseInterval = milliseconds(20);
 
 class SpiceAgent : public Object, public SerialPortInterface,
-  public SpiceAgentInterface, public PointerInputInterface
+  public DisplayResizeInterface, public PointerInputInterface
 {
  private:
   bool                      pending_resize_event_;
@@ -156,9 +156,9 @@ class SpiceAgent : public Object, public SerialPortInterface,
     return ready_;
   }
 
-  virtual void QueuePointerEvent(PointerEvent event) {
+  virtual bool QueuePointerEvent(PointerEvent event) {
     if (!ready_) {
-      return;
+      return false;
     }
     if (event.z > 0) {
       QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_UP), event.x, event.y);
@@ -169,14 +169,15 @@ class SpiceAgent : public Object, public SerialPortInterface,
     } else {
       QueueEvent(event.buttons, event.x, event.y);
     }
+    return true;
   }
 
-  virtual void Resize(uint32_t width, uint32_t height) {
+  virtual bool Resize(uint32_t width, uint32_t height) {
     width_ = width;
     height_ = height;
     if (!ready_) {
       pending_resize_event_ = true;
-      return;
+      return false;
     }
 
     size_t config_size = sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig);
@@ -188,6 +189,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
     config->monitors[0].height = height_;
     SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, config, config_size);
     free(config);
+    return true;
   }
 };
 

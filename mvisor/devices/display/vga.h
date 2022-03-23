@@ -90,8 +90,8 @@ class Vga : public PciDevice, public DisplayInterface {
   void NotifyDisplayModeChange();
   void NotifyDisplayRender(DisplayPartialBitmap* partial);
   void NotifyDisplayCursorUpdate(DisplayCursorUpdate* update);
-  void OnRefreshTimer();
-  void UpdateDisplayMode();
+  virtual void UpdateDisplayMode();
+  virtual void OnRefreshTimer();
 
  public:
   Vga();

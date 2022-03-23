@@ -251,7 +251,6 @@ PointerInputInterface* Viewer::GetActivePointer() {
 
 void Viewer::LookupDevices() {
   keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2"));
-  spice_agent_ = dynamic_cast<SpiceAgentInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
   display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Qxl"));
   if (display_ == nullptr) {
     display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Vga"));
@@ -259,6 +258,9 @@ void Viewer::LookupDevices() {
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
     pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));
+  }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayResizeInterface*>(o); })) {
+    resizers_.push_back(dynamic_cast<DisplayResizeInterface*>(o));
   }
   MV_ASSERT(keyboard_ && display_);
 
@@ -292,9 +294,17 @@ int Viewer::MainLoop() {
     }
 
     /* Check viewer window resize */
-    if (spice_agent_ && pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
+    if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
       pending_resize_.triggered = false;
-      spice_agent_->Resize(pending_resize_.width, pending_resize_.height);
+      for (auto resizer : resizers_) {
+        if (machine_->guest_os() == "Linux" && std::string("SpiceAgent") == dynamic_cast<Object*>(resizer)->classname()) {
+          /* FIXME: spice agent resize is not working on Linux */
+          continue;
+        }
+        if (resizer->Resize(pending_resize_.width, pending_resize_.height)) {
+          break;
+        }
+      }
     }
 
     /* Keep display FPS */
@@ -308,14 +318,13 @@ int Viewer::MainLoop() {
 
 void Viewer::SendPointerEvent() {
   auto pointer = GetActivePointer();
-  if (pointer) {
-    int x, y;
+  if (pointer && window_) {
+    int x, y, w, h;
     SDL_GetMouseState(&x, &y);
+    SDL_GetWindowSize(window_, &w, &h);
     /* Check if window is scaled */
-    if (pending_resize_.width && pending_resize_.height) {
-      x = x * width_ / pending_resize_.width;
-      y = y * height_ / pending_resize_.height;
-    }
+    x = x * width_ / w;
+    y = y * height_ / h;
     pointer_state_.x = x;
     pointer_state_.y = y;
     pointer->QueuePointerEvent(pointer_state_);

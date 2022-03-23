@@ -248,6 +248,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
       case 0xE1:
         /* Linux uses these commands, why ??? */
         PushMouse(0xFE);
+        manager_->machine()->set_guest_os("Linux");
         break;
       case 0xE6:
         mouse_.scaling = 1;
@@ -333,6 +334,10 @@ class Ps2 : public Device, public KeyboardInputInterface {
       break;
     case 0xF5: // disable keyboard scanning
       keyboard_.disable_scanning = true;
+      PushKeyboard(RESPONSE_ACK);
+      break;
+    case 0xF6: // reset keyboard and enable scanning
+      Reset();
       PushKeyboard(RESPONSE_ACK);
       break;
     case 0xFF: // reset keyboard
@@ -497,20 +502,21 @@ class Ps2 : public Device, public KeyboardInputInterface {
     }
   }
 
-  void QueueKeyboardEvent(uint8_t scancode[10]) {
+  bool QueueKeyboardEvent(uint8_t scancode[10]) {
     if (keyboard_.disable_scanning) {
-      return;
+      return false;
     }
   
     std::lock_guard<std::mutex> lock(mutex_);
     for (int i = 0; i < 10 && scancode[i]; i++) {
       PushKeyboard(scancode[i]);
     }
+    return true;
   }
 
-  void QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) {
+  bool QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) {
     if (mouse_.disable_streaming) {
-      return;
+      return false;
     }
   
     std::lock_guard<std::mutex> lock(mutex_);
@@ -527,6 +533,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
     }
     uint8_t data[] = { state, (uint8_t)rel_x, (uint8_t)rel_y, (uint8_t)rel_z };
     PushMouse4(data);
+    return true;
   }
 
   bool InputAcceptable() {
