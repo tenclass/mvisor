@@ -57,9 +57,9 @@ Vga::Vga() {
   pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
   
 
-  /* Bar 0: 64MB VRAM */
+  /* Bar 0: 128MB VRAM */
   vga_mem_size_ = _MB(16);
-  vram_size_ = _MB(64);
+  vram_size_ = _MB(128);
 
   AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* vgamem */
   /* FIXME: bar 2 should be implemented for stdvga if Qxl is not enabled??? */

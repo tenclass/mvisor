@@ -81,10 +81,10 @@ class Qxl : public Vga, public DisplayResizeInterface {
     pci_header_.revision_id = 5;
     pci_header_.irq_pin = 1;
     
-    /* Bar 1: 64MB, not used in Windows driver, but Linux driver 
+    /* Bar 1: 8MB, not used in Windows driver, but Linux driver 
      * https://www.spice-space.org/multiple-monitors.html
      */
-    qxl_vram32_size_ = _MB(128);
+    qxl_vram32_size_ = _MB(8);
     qxl_vram32_base_ = (uint8_t*)valloc(qxl_vram32_size_);
     pci_bars_[1].host_memory = qxl_vram32_base_;
 
@@ -147,7 +147,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       primary->set_mem_address(surface.mem);
     }
     for (auto info : free_resources_) {
-      state.add_free_resources((uint64_t)info - (uint64_t)qxl_vram32_base_);
+      state.add_free_resources((uint64_t)info - (uint64_t)vram_base_);
     }
     writer->WriteProtobuf("QXL", state);
     writer->WriteRaw("VRAM32", qxl_vram32_base_, qxl_vram32_size_);
@@ -194,7 +194,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
 
     for (int i = 0; i < state.free_resources_size(); i++) {
-      free_resources_.push_back((QXLReleaseInfo*)(state.free_resources(i) + (uint64_t)qxl_vram32_base_));
+      auto info = (QXLReleaseInfo*)((uint64_t)vram_base_ + state.free_resources(i));
+      free_resources_.push_back(info);
     }
     return true;
   }
