@@ -503,6 +503,7 @@ ssize_t Qcow2Image::BlockIo(void *buffer, off_t position, size_t length, ImageIo
       ret = WriteCluster(ptr, position, length - offset);
       break;
     case kImageIoDiscard:
+    case kImageIoWriteZeros:
       ret = DiscardCluster(position, length - offset);
       break;
     default:
@@ -551,8 +552,8 @@ ssize_t Qcow2Image::Write(void *buffer, off_t position, size_t length) {
   return BlockIo(buffer, position, length, kImageIoWrite);
 }
 
-ssize_t Qcow2Image::Discard(off_t position, size_t length) {
-  return BlockIo(nullptr, position, length, kImageIoDiscard);
+ssize_t Qcow2Image::Discard(off_t position, size_t length, bool write_zeros) {
+  return BlockIo(nullptr, position, length, write_zeros ? kImageIoWriteZeros : kImageIoDiscard);
 }
 
 ssize_t Qcow2Image::Flush() {

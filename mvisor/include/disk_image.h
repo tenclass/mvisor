@@ -36,8 +36,9 @@ enum ImageIoType {
   kImageIoInformation,
   kImageIoRead,
   kImageIoWrite,
+  kImageIoFlush,
   kImageIoDiscard,
-  kImageIoFlush
+  kImageIoWriteZeros
 };
 
 struct ImageInformation {
@@ -68,12 +69,12 @@ class DiskImage : public Object {
   virtual ssize_t Write(void *buffer, off_t position, size_t length) = 0;
   virtual ssize_t Flush() = 0;
   /* Optional */
-  virtual ssize_t Discard(off_t position, size_t length);
+  virtual ssize_t Discard(off_t position, size_t length, bool write_zeros);
 
   /* Interface for user */
   virtual void ReadAsync(void *buffer, off_t position, size_t length, IoCallback callback);
   virtual void WriteAsync(void *buffer, off_t position, size_t length, IoCallback callback);
-  virtual void DiscardAsync(off_t position, size_t length, IoCallback callback);
+  virtual void DiscardAsync(off_t position, size_t length, bool write_zeros, IoCallback callback);
   virtual void FlushAsync(IoCallback callback);
 
  protected:

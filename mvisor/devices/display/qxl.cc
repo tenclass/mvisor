@@ -105,6 +105,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
   }
 
   virtual void Reset() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     /* Vga Reset() resets mode */
     Vga::Reset();
 
@@ -272,17 +273,19 @@ class Qxl : public Vga, public DisplayResizeInterface {
       width_ = primary_surface_->surface.width;
       height_ = primary_surface_->surface.height;
       bpp_ = primary_surface_->bits_pp;
+      stride_ = primary_surface_->abs_stride;
       NotifyDisplayModeChange();
     } else {
       Vga::UpdateDisplayMode();
     }
   }
 
-  virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) {
+  virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp, uint16_t* stride) {
     if (mode_ == kDisplayQxlMode) {
       *w = primary_surface_->surface.width;
       *h = primary_surface_->surface.height;
       *bpp = primary_surface_->bits_pp;
+      *stride = primary_surface_->abs_stride;
     } else {
       Vga::GetDisplayMode(w, h, bpp);
     }

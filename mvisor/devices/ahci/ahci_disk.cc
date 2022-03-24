@@ -80,9 +80,10 @@ AhciDisk::AhciDisk() {
   ata_handlers_[0xB0] = [=] () { // SMART
     AbortCommand();
   };
-
+  
+  ata_handlers_[0x25] =          // ATA_CMD_READ_DMA_EXT
   ata_handlers_[0xC8] = [=] () { // ATA_CMD_READ_DMA
-    io_.lba_mode = kIdeLbaMode28;
+    io_.lba_mode = regs_.command == 0x25 ? kIdeLbaMode48 : kIdeLbaMode28;
     io_.dma_status = 1;
     ReadLba();
     if (debug_) {
@@ -92,8 +93,9 @@ AhciDisk::AhciDisk() {
     Ata_ReadWriteSectorsAsync(false);
   };
 
+  ata_handlers_[0x35] =          // ATA_CMD_WRITE_DMA_EXT
   ata_handlers_[0xCA] = [=] () { // ATA_CMD_WRITE_DMA
-    io_.lba_mode = kIdeLbaMode28;
+    io_.lba_mode = regs_.command == 0x35 ? kIdeLbaMode48 : kIdeLbaMode28;
     io_.dma_status = 1;
     ReadLba();
     if (debug_) {
@@ -259,7 +261,7 @@ void AhciDisk::Ata_TrimAsync() {
   }
   io_.nbytes = 0;
   for (auto chunk : chunks) {
-    image_->DiscardAsync(chunk.position, chunk.length, [this, total_bytes, chunk](ssize_t ret) {
+    image_->DiscardAsync(chunk.position, chunk.length, false, [this, total_bytes, chunk](ssize_t ret) {
       io_.nbytes += chunk.length;
       if (io_.nbytes == (ssize_t)total_bytes) {
         WriteLba();

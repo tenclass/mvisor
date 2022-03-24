@@ -25,7 +25,7 @@ struct Ich9HdaBdlEntry {
   uint64_t address;
   uint32_t length;
   uint32_t flags;
-};
+} __attribute__((packed));
 
 struct Ich9HdaStream {
   uint8_t   control;

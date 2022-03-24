@@ -109,9 +109,9 @@ class Ich9Hda : public PciDevice {
     CheckIrqLevel();
   }
 
-  uint64_t GetWallClockCounter() {
+  uint32_t GetWallClockCounter() {
     auto delta_ns = duration_cast<nanoseconds>(steady_clock::now() - wall_clock_base_);
-    return delta_ns.count();
+    return (uint32_t)(delta_ns.count() * 24 / 1000); /* 24 MHz */
   }
 
   virtual bool SaveState(MigrationWriter* writer) {
@@ -134,7 +134,7 @@ class Ich9Hda : public PciDevice {
     auto& regs = state.hda_registers();
     memcpy(&regs_, regs.data(), sizeof(regs_));
     rirb_counter_ = state.rirb_counter();
-    wall_clock_base_ = steady_clock::now() - nanoseconds(state.wall_clock_counter());
+    wall_clock_base_ = steady_clock::now() - nanoseconds(state.wall_clock_counter() * 1000 / 24);
 
     /* When finished loading states, restart stream if started before */
     manager_->io()->Schedule([this]() {
@@ -192,16 +192,19 @@ class Ich9Hda : public PciDevice {
     MV_ASSERT(offset + size <= sizeof(regs_));
 
     if (offset == offsetof(Ich9HdaRegisters, wall_clock_counter)) {
-      regs_.wall_clock_counter = (uint32_t)GetWallClockCounter();
+      regs_.wall_clock_counter = GetWallClockCounter();
     }
     memcpy(data, (uint8_t*)&regs_ + offset, size);
-    // MV_LOG("read %s at 0x%lx size=%x ret=0x%x", name_, offset, size, *(uint32_t*)data);
+
+    // uint64_t value = 0;
+    // memcpy(&value, data, size);
+    // MV_LOG("read %s at 0x%lx size=%x ret=0x%lx", name_, offset, size, value);
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     MV_ASSERT(resource->base == pci_bars_[0].address);
     MV_ASSERT(offset >= 0 && (offset + size) <= sizeof(regs_));
-    // MV_LOG("write %s at 0x%lx size=%x ret=0x%x", name_, offset, size, *(uint32_t*)data);
+    // MV_LOG("write %s at 0x%lx size=%x data=0x%x", name_, offset, size, *(uint32_t*)data);
 
     if (offset >= 0x80 && offset < 0x180) {
       uint64_t stream_desc_index = (offset - 0x80) / 0x20;
@@ -232,6 +235,10 @@ class Ich9Hda : public PciDevice {
       regs_.interrupt_status &= ~(value & 0xC00000FF);
       break;
     }
+    case offsetof(Ich9HdaRegisters, corb_size):
+    case offsetof(Ich9HdaRegisters, rirb_size):
+      /* readonly field */
+      break;
     case offsetof(Ich9HdaRegisters, corb_status):
       regs_.corb_status &= ~(data[0] & 1);
       break;
@@ -276,13 +283,25 @@ class Ich9Hda : public PciDevice {
     MV_ASSERT((addr & 127) == 0); // aligned by 128 bytes
 
     Ich9HdaBdlEntry* entries = (Ich9HdaBdlEntry*)manager_->TranslateGuestMemory(addr);
+    bool has_ioc = false;
     for (int i = 0; i <= stream.last_valid_index; i++) {
-      stream_state.buffers.emplace_back(HdaCodecBuffer {
+      auto buffer = HdaCodecBuffer {
         .data = (uint8_t*)manager_->TranslateGuestMemory(entries[i].address),
         .length = entries[i].length,
-        .interrupt_on_completion = (entries[i].flags & 1) == 1,
+        .interrupt_on_completion = !!(entries[i].flags & 1),
         .read_counter =0
-      });
+      };
+      if (buffer.interrupt_on_completion) {
+        has_ioc = true;
+      }
+
+      if (debug_) {
+        MV_LOG("buffer addr=0x%lx len=0x%x ioc=%d", entries[i].address, buffer.length, entries[i].flags);
+      }
+      stream_state.buffers.push_back(buffer);
+    }
+    if (!has_ioc) {
+      MV_PANIC("failed to setup hda buffer descriptor list, provide a timer or turn on hypervisor?");
     }
     stream_state.buffers_index = 0;
     stream.link_position_in_buffer = 0;
@@ -434,7 +453,8 @@ class Ich9Hda : public PciDevice {
     rirb_counter_++;
 
     if (debug_) {
-      MV_LOG("codec_index=%d response=0x%x", codec_index, response);
+      MV_LOG("codec_index=%d wp=%x response=0x%x extended=0x%x", codec_index,
+        write_pointer, response, extended);
     }
 
     if (regs_.rirb_control & ICH6_RBCTL_IRQ_EN) {

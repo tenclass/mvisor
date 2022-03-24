@@ -176,7 +176,7 @@ class Qcow2Image : public DiskImage {
   virtual void Initialize();
   virtual ssize_t Read(void *buffer, off_t position, size_t length);
   virtual ssize_t Write(void *buffer, off_t position, size_t length);
-  virtual ssize_t Discard(off_t position, size_t length);
+  virtual ssize_t Discard(off_t position, size_t length, bool write_zeros);
   virtual ssize_t Flush();
 
   virtual ImageInformation information() {

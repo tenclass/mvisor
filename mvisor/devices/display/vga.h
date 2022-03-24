@@ -86,6 +86,7 @@ class Vga : public PciDevice, public DisplayInterface {
   uint16_t    width_;
   uint16_t    height_;
   uint16_t    bpp_;
+  uint16_t    stride_;
 
   void NotifyDisplayModeChange();
   void NotifyDisplayRender(DisplayPartialBitmap* partial);

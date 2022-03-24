@@ -47,9 +47,7 @@ class VirtioBlock : public VirtioPci {
       (1UL << VIRTIO_BLK_F_FLUSH) |
       // (1UL << VIRTIO_BLK_F_TOPOLOGY) |
       (1UL << VIRTIO_BLK_F_WCE) |
-      (1UL << VIRTIO_BLK_F_MQ) |
-      (1UL << VIRTIO_BLK_F_DISCARD) |
-      (1UL << VIRTIO_BLK_F_WRITE_ZEROES);
+      (1UL << VIRTIO_BLK_F_MQ);
     bzero(&block_config_, sizeof(block_config_));
   }
 
@@ -70,6 +68,11 @@ class VirtioBlock : public VirtioPci {
     if (has_key("image")) {
       std::string path = std::get<std::string>(key_values_["image"]);
       image_ = DiskImage::Create(this, path, readonly);
+
+      /* Qcow2 supports disacard & write zeros */
+      if (path.find(".qcow2") != std::string::npos) {
+        device_features_ |=  (1UL << VIRTIO_BLK_F_DISCARD) | (1UL << VIRTIO_BLK_F_WRITE_ZEROES);
+      }
     }
     if (image_) {
       VirtioPci::Connect();
@@ -140,6 +143,9 @@ class VirtioBlock : public VirtioPci {
           callback(ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR);
         }
       };
+      if (debug_) {
+        MV_LOG("%s pos=0x%lx len=0x%lx ", is_write ? "write" : "read", position, length);
+      }
       if (is_write) {
         image_->WriteAsync(buffer, position, length, io_complete);
       } else {
@@ -198,13 +204,15 @@ class VirtioBlock : public VirtioPci {
       callback();
       break;
     }
+    case VIRTIO_BLK_T_WRITE_ZEROES:
     case VIRTIO_BLK_T_DISCARD: {
       auto &iov = vector.front();
       auto discard = (virtio_blk_discard_write_zeroes*)iov.iov_base;
       MV_ASSERT(iov.iov_len == sizeof(*discard));
       size_t position = discard->sector * block_config_.blk_size;
       size_t length = discard->num_sectors * block_config_.blk_size;
-      image_->DiscardAsync(position, length, [status, callback, length](auto ret) {
+      bool write_zeros = request->type == VIRTIO_BLK_T_WRITE_ZEROES;
+      image_->DiscardAsync(position, length, write_zeros, [status, callback, length](auto ret) {
         *status = ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });

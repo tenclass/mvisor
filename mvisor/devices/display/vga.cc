@@ -276,12 +276,20 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
         MV_LOG("set vbe enable to %x %dx%d bpp=%d", value,
           vbe_.registers[1], vbe_.registers[2], vbe_.registers[3]);
       }
-      if (value & 1) {
+      if (value & VBE_DISPI_ENABLED) {
         UpdateDisplayMode();
+        UpdateVRamMemoryMap();
+        if (!(value & VBE_DISPI_NOCLEARMEM)) {
+          bzero(vram_map_select_, vram_map_select_size_);
+        }
+      } else {
+        UpdateVRamMemoryMap();
       }
       break;
+    default:
+      UpdateVRamMemoryMap();
+      break;
     }
-    UpdateVRamMemoryMap();
   }
 }
 
@@ -441,13 +449,11 @@ void Vga::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
 
 void Vga::UpdateVRamMemoryMap() {
   if (mode_ == kDisplayVbeMode) {
-    auto bpp = vbe_.registers[VBE_DISPI_INDEX_BPP];
-    uint stride = vbe_.registers[VBE_DISPI_INDEX_VIRT_WIDTH] * bpp / 8;
-    uint offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp / 8;
-    offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride;
+    uint offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
+    offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
   
     vram_map_select_ = vram_base_ + offset;
-    vram_map_select_size_ = vram_size_;
+    vram_map_select_size_ = stride_ * height_;
     vram_read_select_ = vram_base_ + (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16);
     if (debug_) {
       MV_LOG("VBE map offset=0x%lx, bank offset=0x%lx", offset, (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16));
@@ -484,20 +490,55 @@ void Vga::UpdateDisplayMode() {
 
   if (vbe_.registers[VBE_DISPI_INDEX_ENABLE] & VBE_DISPI_ENABLED) {
     mode_ = kDisplayVbeMode;
-    width_ = vbe_.registers[VBE_DISPI_INDEX_XRES];
-    height_ = vbe_.registers[VBE_DISPI_INDEX_YRES];
-    bpp_ = vbe_.registers[VBE_DISPI_INDEX_BPP];
+
+    /* VBE fixups */
+    auto& r = vbe_.registers;
+    r[VBE_DISPI_INDEX_XRES] &= ~3;
+    if (r[VBE_DISPI_INDEX_XRES] == 0) {
+      r[VBE_DISPI_INDEX_XRES] = 4;
+    }
+    if (r[VBE_DISPI_INDEX_XRES] > VBE_DISPI_MAX_XRES) {
+      r[VBE_DISPI_INDEX_XRES] = VBE_DISPI_MAX_XRES;
+    }
+    r[VBE_DISPI_INDEX_VIRT_WIDTH] &= ~3;
+    if (r[VBE_DISPI_INDEX_VIRT_WIDTH] > VBE_DISPI_MAX_XRES) {
+      r[VBE_DISPI_INDEX_VIRT_WIDTH] = VBE_DISPI_MAX_XRES;
+    }
+    if (r[VBE_DISPI_INDEX_VIRT_WIDTH] < r[VBE_DISPI_INDEX_XRES]) {
+      r[VBE_DISPI_INDEX_VIRT_WIDTH] = r[VBE_DISPI_INDEX_XRES];
+    }
+
+    if (r[VBE_DISPI_INDEX_YRES] == 0) {
+      r[VBE_DISPI_INDEX_YRES] = 1;
+    }
+    if (r[VBE_DISPI_INDEX_YRES] > VBE_DISPI_MAX_YRES) {
+      r[VBE_DISPI_INDEX_YRES] = VBE_DISPI_MAX_YRES;
+    }
+
+    if (r[VBE_DISPI_INDEX_X_OFFSET] > VBE_DISPI_MAX_XRES) {
+      r[VBE_DISPI_INDEX_X_OFFSET] = VBE_DISPI_MAX_XRES;
+    }
+    if (r[VBE_DISPI_INDEX_Y_OFFSET] > VBE_DISPI_MAX_YRES) {
+      r[VBE_DISPI_INDEX_Y_OFFSET] = VBE_DISPI_MAX_YRES;
+    }
+
+    width_ = r[VBE_DISPI_INDEX_XRES];
+    height_ = r[VBE_DISPI_INDEX_YRES];
+    bpp_ = r[VBE_DISPI_INDEX_BPP];
+    stride_ = r[VBE_DISPI_INDEX_VIRT_WIDTH] * bpp_ / 8;
   } else if ((vga_.gfx[6] & 0x1) == 0) {
     mode_ = kDisplayTextMode;
     width_ = 640;
     height_ = 400;
     bpp_ = 8;
+    stride_ = width_ * bpp_ / 8;
   } else {
     /* FIXME: width/height/bpp should be calculate from VGA regs */
     mode_ = kDisplayVgaMode;
     width_ = 640;
     height_ = 480;
     bpp_ = 8;
+    stride_ = width_ * bpp_ / 8;
   }
 
   if (old_mode != mode_ || old_w != width_ || old_h != height_ || old_bpp != bpp_) {
@@ -543,12 +584,12 @@ void Vga::OnRefreshTimer() {
 
 void Vga::RenderGraphicsMode() {
   DisplayPartialBitmap* partial = new DisplayPartialBitmap {
+    .stride = stride_,
     .width = width_,
     .height = height_,
     .x = 0,
     .y = 0
   };
-  partial->stride = partial->width * (bpp_ >> 3);
   partial->vector.emplace_back(DisplayPartialData {
     .data = vram_map_select_,
     .size = size_t(partial->stride * partial->height)
@@ -561,12 +602,12 @@ void Vga::RenderGraphicsMode() {
 
 void Vga::RenderTextMode() {
   DisplayPartialBitmap* partial = new DisplayPartialBitmap {
+    .stride = stride_,
     .width = width_,
     .height = height_,
     .x = 0,
     .y = 0
   };
-  partial->stride = partial->width * (bpp_ >> 3);
   uint8_t* buffer = new uint8_t[partial->stride * partial->height];
   partial->vector.emplace_back(DisplayPartialData {
     .data = buffer,

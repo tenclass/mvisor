@@ -29,7 +29,6 @@ objects:
     children:
       - cmos
       - ps2
-      - pc-speaker
       - serial8250
   
   - class: ich9-hda

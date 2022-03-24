@@ -520,9 +520,9 @@ void DeviceManager::SetupIrqChip() {
   }
 
   // Use Kvm in-kernel PITClock
-  struct kvm_pit_config pit_config = { 0 };
+  struct kvm_pit_config pit_config = { .flags = KVM_PIT_SPEAKER_DUMMY };
   if (ioctl(machine_->vm_fd_, KVM_CREATE_PIT2, &pit_config) < 0) {
-    MV_PANIC("failed to create pit");
+    MV_PANIC("failed to create pit2");
   }
 }
 

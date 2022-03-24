@@ -431,9 +431,6 @@ void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data
   } else {
     PciDevice::Write(resource, offset, data, size);
   }
-  if (debug_) {
-    MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
-  }
 }
 
 void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -450,9 +447,6 @@ void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
     }
   } else {
     PciDevice::Read(resource, offset, data, size);
-  }
-  if (debug_) {
-    MV_LOG("%s base=0x%lx offset=0x%lx size=%x data=0x%lx", name_, resource->base, offset, size, *(uint64_t*)data);
   }
 }
 

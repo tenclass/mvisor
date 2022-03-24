@@ -178,7 +178,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     dac.stream->gain_left = dac.stream->gain_right = 0x4A;
     dac.stream->format = AC_FMT_TYPE_PCM | AC_FMT_BITS_16 | (1 << AC_FMT_CHAN_SHIFT);
     dac.parameters[AC_PAR_AUDIO_WIDGET_CAP] = ((AC_WID_AUD_OUT << AC_WCAP_TYPE_SHIFT) |
-      AC_WCAP_FORMAT_OVRD | AC_WCAP_AMP_OVRD | AC_WCAP_STEREO);
+      AC_WCAP_FORMAT_OVRD | AC_WCAP_STEREO);
     dac.parameters[AC_PAR_PCM] = pcm_formats_;
     dac.parameters[AC_PAR_STREAM] = AC_SUPFMT_PCM;
     nodes_.push_back(dac);
@@ -205,7 +205,7 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     adc.stream->format = AC_FMT_TYPE_PCM | AC_FMT_BITS_16 | (1 << AC_FMT_CHAN_SHIFT);
     adc.connection.push_back(5);
     adc.parameters[AC_PAR_AUDIO_WIDGET_CAP] = (AC_WID_AUD_IN << AC_WCAP_TYPE_SHIFT) |
-      AC_WCAP_CONN_LIST | AC_WCAP_FORMAT_OVRD | AC_WCAP_AMP_OVRD | AC_WCAP_STEREO;
+      AC_WCAP_CONN_LIST | AC_WCAP_FORMAT_OVRD | AC_WCAP_STEREO;
     adc.parameters[AC_PAR_CONNLIST_LEN] = adc.connection.size();
     adc.parameters[AC_PAR_PCM] = pcm_formats_;
     adc.parameters[AC_PAR_STREAM] = AC_SUPFMT_PCM;
@@ -348,7 +348,9 @@ class HdaDuplex : public Device, public HdaCodecInterface {
       return;
     }
     if ((stream->format & AC_FMT_BITS_MASK) != AC_FMT_BITS_16) {
-      MV_LOG("not supported audio format 0x%x yet", stream->format);
+      if (debug_) {
+        MV_LOG("not supported audio format 0x%x", stream->format);
+      }
       return;
     }
 

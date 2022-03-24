@@ -68,7 +68,7 @@ void DiskImage::Connect() {
   }
 }
 
-ssize_t DiskImage::Discard(off_t position, size_t length) {
+ssize_t DiskImage::Discard(off_t position, size_t length, bool write_zeros) {
   return 0;
 }
 
@@ -139,14 +139,14 @@ void DiskImage::WriteAsync(void *buffer, off_t position, size_t length, IoCallba
   worker_cv_.notify_all();
 }
 
-void DiskImage::DiscardAsync(off_t position, size_t length, IoCallback callback) {
+void DiskImage::DiscardAsync(off_t position, size_t length, bool write_zeros, IoCallback callback) {
   if (readonly_) {
     return callback(0);
   }
 
   worker_mutex_.lock();
-  worker_queue_.push_back([this, position, length, callback]() {
-    auto ret = Discard(position, length);
+  worker_queue_.push_back([this, position, length, write_zeros, callback]() {
+    auto ret = Discard(position, length, write_zeros);
     io_->Schedule([=]() { callback(ret); });
   });
   worker_mutex_.unlock();
