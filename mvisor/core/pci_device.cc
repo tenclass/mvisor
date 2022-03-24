@@ -204,8 +204,13 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   // }
 
   if (offset == PCI_COMMAND) {
-    MV_ASSERT(length == 2);
-    WritePciCommand(*(uint16_t*)data);
+    if (length == 4) {
+      WritePciConfigSpace(offset, data, 2);
+      WritePciConfigSpace(offset + 2, data + 2, 2);
+    } else {
+      MV_ASSERT(length == 2);
+      WritePciCommand(*(uint16_t*)data);
+    }
     return;
   } else if (offset == PCI_STATUS) {
     MV_ASSERT(length == 2);

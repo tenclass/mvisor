@@ -172,8 +172,6 @@ void Vga::Connect() {
     pci_bars_[0].host_memory = vram_base_;
   }
 
-  refresh_timer_ = manager_->io()->AddTimer(1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
-
   PciDevice::Connect();
 }
 
@@ -182,7 +180,7 @@ void Vga::Disconnect() {
     munmap((void*)vram_base_, vram_size_);
     vram_base_ = nullptr;
   }
-  manager_->io()->RemoveTimer(refresh_timer_);
+  mode_ = kDisplayUnknownMode;
   PciDevice::Disconnect();
 }
 
@@ -194,10 +192,11 @@ void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t*
   *x = location % 80;
 }
 
-void Vga::GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) {
+void Vga::GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) {
   *w = width_;
   *h = height_;
   *bpp = bpp_;
+  *stride = stride_;
 }
 
 const uint8_t* Vga::GetPallete() const {
@@ -276,14 +275,12 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
         MV_LOG("set vbe enable to %x %dx%d bpp=%d", value,
           vbe_.registers[1], vbe_.registers[2], vbe_.registers[3]);
       }
+      UpdateDisplayMode();
+      UpdateVRamMemoryMap();
       if (value & VBE_DISPI_ENABLED) {
-        UpdateDisplayMode();
-        UpdateVRamMemoryMap();
         if (!(value & VBE_DISPI_NOCLEARMEM)) {
           bzero(vram_map_select_, vram_map_select_size_);
         }
-      } else {
-        UpdateVRamMemoryMap();
       }
       break;
     default:
@@ -540,6 +537,9 @@ void Vga::UpdateDisplayMode() {
     bpp_ = 8;
     stride_ = width_ * bpp_ / 8;
   }
+  if (debug_) {
+    MV_LOG("update mode=%d %dx%dx%d", mode_, width_, height_, bpp_);
+  }
 
   if (old_mode != mode_ || old_w != width_ || old_h != height_ || old_bpp != bpp_) {
     NotifyDisplayModeChange();
@@ -556,82 +556,61 @@ void Vga::RegisterDisplayChangeListener(DisplayChangeListener callback) {
   display_change_listerners_.push_back(callback);
 }
 
-void Vga::RegisterDisplayRenderer(DisplayRenderCallback draw_callback,
-    DisplayCursorUpdateCallback cursor_callback) {
-  display_render_callbacks_.push_back(draw_callback);
-  display_cursor_callbacks_.push_back(cursor_callback);
-}
-
-void Vga::NotifyDisplayRender(DisplayPartialBitmap* partial) {
-  for (auto &renderer : display_render_callbacks_) {
-    renderer(partial);
+bool Vga::AcquireUpdate(DisplayUpdate& update) {
+  mutex_.lock();
+  if (mode_ == kDisplayUnknownMode) {
+    mutex_.unlock();
+    return false;
   }
-}
 
-void Vga::NotifyDisplayCursorUpdate(DisplayCursorUpdate* update) {
-  for (auto &callback : display_cursor_callbacks_) {
-    callback(update);
-  }
-}
-
-void Vga::OnRefreshTimer() {
-  if (mode_ == kDisplayTextMode) {
-    RenderTextMode();
-  } else if (mode_ == kDisplayVbeMode) {
-    RenderGraphicsMode();
-  }
-}
-
-void Vga::RenderGraphicsMode() {
-  DisplayPartialBitmap* partial = new DisplayPartialBitmap {
+  auto partial = DisplayPartialBitmap {
     .stride = stride_,
     .width = width_,
     .height = height_,
     .x = 0,
     .y = 0
   };
-  partial->vector.emplace_back(DisplayPartialData {
-    .data = vram_map_select_,
-    .size = size_t(partial->stride * partial->height)
-  });
-  partial->Release = [partial]() {
-    delete partial;
-  };
-  NotifyDisplayRender(partial);
-}
 
-void Vga::RenderTextMode() {
-  DisplayPartialBitmap* partial = new DisplayPartialBitmap {
-    .stride = stride_,
-    .width = width_,
-    .height = height_,
-    .x = 0,
-    .y = 0
-  };
-  uint8_t* buffer = new uint8_t[partial->stride * partial->height];
-  partial->vector.emplace_back(DisplayPartialData {
-    .data = buffer,
-    .size = size_t(partial->stride * partial->height)
-  });
-  partial->Release = [partial]() {
-    delete[] partial->vector[0].data;
-    delete partial;
-  };
+  size_t data_size = stride_ * height_;
 
-  uint8_t* ptr = vram_map_select_;
-  for (int y = 0; y < 25; y++) {
-    for (int x = 0; x < 80; x++) {
-      int character = *ptr++;
-      int attribute = *ptr++;
-      DrawCharacter(buffer, partial->stride, x, y, character, attribute);
+  if (mode_ == kDisplayVbeMode) {
+    partial.vector.emplace_back(iovec {
+      .iov_base = vram_map_select_,
+      .iov_len = data_size
+    });
+  } else if (mode_ == kDisplayTextMode) {
+    if (vga_surface_.size() != data_size) {
+      vga_surface_.resize(data_size);
     }
+    uint8_t* ptr = vram_map_select_;
+    for (int y = 0; y < 25; y++) {
+      for (int x = 0; x < 80; x++) {
+        int character = *ptr++;
+        int attribute = *ptr++;
+        DrawCharacter((uint8_t*)vga_surface_.data(), stride_, x, y, character, attribute);
+      }
+    }
+    
+    DrawTextCursor((uint8_t*)vga_surface_.data(), stride_);
+    partial.vector.emplace_back(iovec {
+      .iov_base = vga_surface_.data(),
+      .iov_len = data_size
+    });
+  } else {
+    /* legacy VGA not supported yet */
+    mutex_.unlock();
+    return false;
   }
-  
-  DrawTextCursor(buffer, partial->stride);
-  NotifyDisplayRender(partial);
+  update.partials.emplace_back(std::move(partial));
+  update.cursor.visible = false;
+  return true;
 }
 
-void Vga::DrawCharacter(uint8_t* buffer, int stride, int x, int y, int character, int attribute) {
+void Vga::ReleaseUpdate() {
+  mutex_.unlock();
+}
+
+void Vga::DrawCharacter(uint8_t* buffer, uint stride, uint x, uint y, int character, int attribute) {
   uint8_t* font = (uint8_t*)__font8x16;
 
   buffer += (y * 16) * stride;
@@ -652,7 +631,7 @@ void Vga::DrawCharacter(uint8_t* buffer, int stride, int x, int y, int character
   }
 }
 
-void Vga::DrawTextCursor(uint8_t* buffer, int stride) {
+void Vga::DrawTextCursor(uint8_t* buffer, uint stride) {
   uint32_t fore_color = 7;
   uint8_t cx, cy, sl_start, sl_end;
   GetCursorLocation(&cx, &cy, &sl_start, &sl_end);

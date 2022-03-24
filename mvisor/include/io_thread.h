@@ -74,12 +74,13 @@ class IoThread {
   void RegisterDiskImage(DiskImage* image);
   void UnregisterDiskImage(DiskImage* image);
   void FlushDiskImages();
-  bool CanPauseNow();
   bool SaveDiskImage(MigrationWriter* writer);
+  uint GetDiskImageCount() { return disk_images_.size(); }
 
  private:
   void RunLoop();
   int  CheckTimers();
+  bool CanPauseNow();
 
   std::thread           thread_;
   Machine*              machine_;

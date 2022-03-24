@@ -234,19 +234,19 @@ class VcpuState : public ::google::protobuf::Message /* @@protoc_insertion_point
   ::std::string* release_debug_regs();
   void set_allocated_debug_regs(::std::string* debug_regs);
 
-  // bytes nested_states = 9;
-  void clear_nested_states();
-  static const int kNestedStatesFieldNumber = 9;
-  const ::std::string& nested_states() const;
-  void set_nested_states(const ::std::string& value);
+  // bytes nested_state = 9;
+  void clear_nested_state();
+  static const int kNestedStateFieldNumber = 9;
+  const ::std::string& nested_state() const;
+  void set_nested_state(const ::std::string& value);
   #if LANG_CXX11
-  void set_nested_states(::std::string&& value);
+  void set_nested_state(::std::string&& value);
   #endif
-  void set_nested_states(const char* value);
-  void set_nested_states(const void* value, size_t size);
-  ::std::string* mutable_nested_states();
-  ::std::string* release_nested_states();
-  void set_allocated_nested_states(::std::string* nested_states);
+  void set_nested_state(const char* value);
+  void set_nested_state(const void* value, size_t size);
+  ::std::string* mutable_nested_state();
+  ::std::string* release_nested_state();
+  void set_allocated_nested_state(::std::string* nested_state);
 
   // bytes events = 10;
   void clear_events();
@@ -261,6 +261,40 @@ class VcpuState : public ::google::protobuf::Message /* @@protoc_insertion_point
   ::std::string* mutable_events();
   ::std::string* release_events();
   void set_allocated_events(::std::string* events);
+
+  // bytes fpu = 12;
+  void clear_fpu();
+  static const int kFpuFieldNumber = 12;
+  const ::std::string& fpu() const;
+  void set_fpu(const ::std::string& value);
+  #if LANG_CXX11
+  void set_fpu(::std::string&& value);
+  #endif
+  void set_fpu(const char* value);
+  void set_fpu(const void* value, size_t size);
+  ::std::string* mutable_fpu();
+  ::std::string* release_fpu();
+  void set_allocated_fpu(::std::string* fpu);
+
+  // bytes cpuid = 13;
+  void clear_cpuid();
+  static const int kCpuidFieldNumber = 13;
+  const ::std::string& cpuid() const;
+  void set_cpuid(const ::std::string& value);
+  #if LANG_CXX11
+  void set_cpuid(::std::string&& value);
+  #endif
+  void set_cpuid(const char* value);
+  void set_cpuid(const void* value, size_t size);
+  ::std::string* mutable_cpuid();
+  ::std::string* release_cpuid();
+  void set_allocated_cpuid(::std::string* cpuid);
+
+  // int64 tsc_khz = 11;
+  void clear_tsc_khz();
+  static const int kTscKhzFieldNumber = 11;
+  ::google::protobuf::int64 tsc_khz() const;
+  void set_tsc_khz(::google::protobuf::int64 value);
 
   // uint32 mp_state = 1;
   void clear_mp_state();
@@ -279,8 +313,11 @@ class VcpuState : public ::google::protobuf::Message /* @@protoc_insertion_point
   ::google::protobuf::internal::ArenaStringPtr msrs_;
   ::google::protobuf::internal::ArenaStringPtr lapic_;
   ::google::protobuf::internal::ArenaStringPtr debug_regs_;
-  ::google::protobuf::internal::ArenaStringPtr nested_states_;
+  ::google::protobuf::internal::ArenaStringPtr nested_state_;
   ::google::protobuf::internal::ArenaStringPtr events_;
+  ::google::protobuf::internal::ArenaStringPtr fpu_;
+  ::google::protobuf::internal::ArenaStringPtr cpuid_;
+  ::google::protobuf::int64 tsc_khz_;
   ::google::protobuf::uint32 mp_state_;
   mutable int _cached_size_;
   friend struct ::protobuf_vcpu_2eproto::TableStruct;
@@ -682,57 +719,57 @@ inline void VcpuState::set_allocated_debug_regs(::std::string* debug_regs) {
   // @@protoc_insertion_point(field_set_allocated:VcpuState.debug_regs)
 }
 
-// bytes nested_states = 9;
-inline void VcpuState::clear_nested_states() {
-  nested_states_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// bytes nested_state = 9;
+inline void VcpuState::clear_nested_state() {
+  nested_state_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& VcpuState::nested_states() const {
-  // @@protoc_insertion_point(field_get:VcpuState.nested_states)
-  return nested_states_.GetNoArena();
+inline const ::std::string& VcpuState::nested_state() const {
+  // @@protoc_insertion_point(field_get:VcpuState.nested_state)
+  return nested_state_.GetNoArena();
 }
-inline void VcpuState::set_nested_states(const ::std::string& value) {
+inline void VcpuState::set_nested_state(const ::std::string& value) {
   
-  nested_states_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:VcpuState.nested_states)
+  nested_state_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:VcpuState.nested_state)
 }
 #if LANG_CXX11
-inline void VcpuState::set_nested_states(::std::string&& value) {
+inline void VcpuState::set_nested_state(::std::string&& value) {
   
-  nested_states_.SetNoArena(
+  nested_state_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:VcpuState.nested_states)
+  // @@protoc_insertion_point(field_set_rvalue:VcpuState.nested_state)
 }
 #endif
-inline void VcpuState::set_nested_states(const char* value) {
+inline void VcpuState::set_nested_state(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  nested_states_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:VcpuState.nested_states)
+  nested_state_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:VcpuState.nested_state)
 }
-inline void VcpuState::set_nested_states(const void* value, size_t size) {
+inline void VcpuState::set_nested_state(const void* value, size_t size) {
   
-  nested_states_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  nested_state_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:VcpuState.nested_states)
+  // @@protoc_insertion_point(field_set_pointer:VcpuState.nested_state)
 }
-inline ::std::string* VcpuState::mutable_nested_states() {
+inline ::std::string* VcpuState::mutable_nested_state() {
   
-  // @@protoc_insertion_point(field_mutable:VcpuState.nested_states)
-  return nested_states_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:VcpuState.nested_state)
+  return nested_state_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* VcpuState::release_nested_states() {
-  // @@protoc_insertion_point(field_release:VcpuState.nested_states)
+inline ::std::string* VcpuState::release_nested_state() {
+  // @@protoc_insertion_point(field_release:VcpuState.nested_state)
   
-  return nested_states_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return nested_state_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void VcpuState::set_allocated_nested_states(::std::string* nested_states) {
-  if (nested_states != NULL) {
+inline void VcpuState::set_allocated_nested_state(::std::string* nested_state) {
+  if (nested_state != NULL) {
     
   } else {
     
   }
-  nested_states_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nested_states);
-  // @@protoc_insertion_point(field_set_allocated:VcpuState.nested_states)
+  nested_state_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), nested_state);
+  // @@protoc_insertion_point(field_set_allocated:VcpuState.nested_state)
 }
 
 // bytes events = 10;
@@ -786,6 +823,126 @@ inline void VcpuState::set_allocated_events(::std::string* events) {
   }
   events_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), events);
   // @@protoc_insertion_point(field_set_allocated:VcpuState.events)
+}
+
+// int64 tsc_khz = 11;
+inline void VcpuState::clear_tsc_khz() {
+  tsc_khz_ = GOOGLE_LONGLONG(0);
+}
+inline ::google::protobuf::int64 VcpuState::tsc_khz() const {
+  // @@protoc_insertion_point(field_get:VcpuState.tsc_khz)
+  return tsc_khz_;
+}
+inline void VcpuState::set_tsc_khz(::google::protobuf::int64 value) {
+  
+  tsc_khz_ = value;
+  // @@protoc_insertion_point(field_set:VcpuState.tsc_khz)
+}
+
+// bytes fpu = 12;
+inline void VcpuState::clear_fpu() {
+  fpu_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& VcpuState::fpu() const {
+  // @@protoc_insertion_point(field_get:VcpuState.fpu)
+  return fpu_.GetNoArena();
+}
+inline void VcpuState::set_fpu(const ::std::string& value) {
+  
+  fpu_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:VcpuState.fpu)
+}
+#if LANG_CXX11
+inline void VcpuState::set_fpu(::std::string&& value) {
+  
+  fpu_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:VcpuState.fpu)
+}
+#endif
+inline void VcpuState::set_fpu(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  fpu_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:VcpuState.fpu)
+}
+inline void VcpuState::set_fpu(const void* value, size_t size) {
+  
+  fpu_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:VcpuState.fpu)
+}
+inline ::std::string* VcpuState::mutable_fpu() {
+  
+  // @@protoc_insertion_point(field_mutable:VcpuState.fpu)
+  return fpu_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* VcpuState::release_fpu() {
+  // @@protoc_insertion_point(field_release:VcpuState.fpu)
+  
+  return fpu_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VcpuState::set_allocated_fpu(::std::string* fpu) {
+  if (fpu != NULL) {
+    
+  } else {
+    
+  }
+  fpu_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), fpu);
+  // @@protoc_insertion_point(field_set_allocated:VcpuState.fpu)
+}
+
+// bytes cpuid = 13;
+inline void VcpuState::clear_cpuid() {
+  cpuid_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& VcpuState::cpuid() const {
+  // @@protoc_insertion_point(field_get:VcpuState.cpuid)
+  return cpuid_.GetNoArena();
+}
+inline void VcpuState::set_cpuid(const ::std::string& value) {
+  
+  cpuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:VcpuState.cpuid)
+}
+#if LANG_CXX11
+inline void VcpuState::set_cpuid(::std::string&& value) {
+  
+  cpuid_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:VcpuState.cpuid)
+}
+#endif
+inline void VcpuState::set_cpuid(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  cpuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:VcpuState.cpuid)
+}
+inline void VcpuState::set_cpuid(const void* value, size_t size) {
+  
+  cpuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:VcpuState.cpuid)
+}
+inline ::std::string* VcpuState::mutable_cpuid() {
+  
+  // @@protoc_insertion_point(field_mutable:VcpuState.cpuid)
+  return cpuid_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* VcpuState::release_cpuid() {
+  // @@protoc_insertion_point(field_release:VcpuState.cpuid)
+  
+  return cpuid_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void VcpuState::set_allocated_cpuid(::std::string* cpuid) {
+  if (cpuid != NULL) {
+    
+  } else {
+    
+  }
+  cpuid_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), cpuid);
+  // @@protoc_insertion_point(field_set_allocated:VcpuState.cpuid)
 }
 
 #ifdef __GNUC__

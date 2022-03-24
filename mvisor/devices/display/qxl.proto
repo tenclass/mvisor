@@ -19,7 +19,13 @@ message QxlState {
     uint64  mem_address         = 9;
   }
 
+  message Surface {
+    uint32  id                  = 1;
+    uint64  release_info        = 2;
+  }
+
   repeated GuestSlot  guest_slots         = 2;
   GuestPrimary        guest_primary       = 3;
   repeated uint64     free_resources      = 5;
+  repeated Surface    surfaces            = 6;
 }

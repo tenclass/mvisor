@@ -51,58 +51,44 @@ class DisplayResizeInterface {
   virtual bool Resize(uint width, uint height) = 0;
 };
 
-enum CursorUpdateCommand {
-  kDisplayCursorUpdateHide,
-  kDisplayCursorUpdateSet,
-  kDisplayCursorUpdateMove
-};
-typedef std::function <void()> ReleaseDisplayResourceCallback;
-struct DisplayPartialData {
-  uint8_t*    data;
-  size_t      size;
-};
+
 struct DisplayPartialBitmap {
-  std::vector<DisplayPartialData> vector;
-  int         stride;
-  int         width;
-  int         height;
-  int         x;
-  int         y;
-  bool        flip;
-  ReleaseDisplayResourceCallback  Release;
+  std::vector<iovec>  vector;
+  uint                stride;
+  uint                width;
+  uint                height;
+  uint                x;
+  uint                y;
+  bool                flip;
 };
-struct DisplayCursorUpdate {
-  CursorUpdateCommand   command;
-  union {
-    struct {
-      uint16_t x;
-      uint16_t y;
-    } move;
-    struct {
-      uint8_t   visible;
-      int       x;
-      int       y;
-      uint16_t  type;
-      uint16_t  width;
-      uint16_t  height;
-      uint16_t  hotspot_x;
-      uint16_t  hotspot_y;
-      uint8_t*  data;
-      size_t    size;
-    } set;
-  };
-  ReleaseDisplayResourceCallback Release;
+struct DisplayMouseCursor {
+  uint8_t     visible;
+  uint        x;
+  uint        y;
+  uint64_t    update_timestamp;
+  struct {
+    uint64_t  id;
+    uint16_t  type;
+    uint16_t  width;
+    uint16_t  height;
+    uint16_t  hotspot_x;
+    uint16_t  hotspot_y;
+    std::vector<iovec> vector;
+  } shape;
+};
+struct DisplayUpdate {
+  std::vector<DisplayPartialBitmap>  partials;
+  DisplayMouseCursor                 cursor;
 };
 
 typedef std::function <void(void)> DisplayChangeListener;
-typedef std::function <void(const DisplayPartialBitmap*)> DisplayRenderCallback;
-typedef std::function <void(const DisplayCursorUpdate*)> DisplayCursorUpdateCallback;
 class DisplayInterface {
  public:
-  virtual void GetDisplayMode(uint16_t* w, uint16_t* h, uint16_t* bpp) = 0;
+  virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) = 0;
   virtual const uint8_t* GetPallete() const = 0;
+  virtual bool AcquireUpdate(DisplayUpdate& update) = 0;
+  virtual void ReleaseUpdate() = 0;
   virtual void RegisterDisplayChangeListener(DisplayChangeListener callback) = 0;
-  virtual void RegisterDisplayRenderer(DisplayRenderCallback draw_callback, DisplayCursorUpdateCallback cursor_callback) = 0;
 };
 
 

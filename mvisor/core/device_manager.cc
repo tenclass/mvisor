@@ -648,10 +648,10 @@ bool DeviceManager::SaveState(MigrationWriter* writer) {
   MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_PIT2, &pit2) == 0);
   writer->WriteRaw("PIT2", &pit2, sizeof(pit2));
   
-  // writer->SetPrefix("kvm-clock");
-  // kvm_clock_data clock = { 0 };
-  // MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_CLOCK, &clock) == 0);
-  // writer->WriteRaw("CLOCK", &clock, sizeof(clock));
+  writer->SetPrefix("kvm-clock");
+  kvm_clock_data clock = { 0 };
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_CLOCK, &clock) == 0);
+  writer->WriteRaw("CLOCK", &clock, sizeof(clock));
 
   /* Save states of devices */
   for (auto device : registered_devices_) {
@@ -688,11 +688,13 @@ bool DeviceManager::LoadState(MigrationReader* reader) {
     return false;
   MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_PIT2, &pit2) == 0);
 
-  // reader->SetPrefix("kvm-clock");
-  // kvm_clock_data clock = { 0 };
-  // if (!reader->ReadRaw("CLOCK", &clock, sizeof(clock)))
-  //   return false;
-  // MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_CLOCK, &clock) == 0);
+  reader->SetPrefix("kvm-clock");
+  kvm_clock_data clock;
+  if (!reader->ReadRaw("CLOCK", &clock, sizeof(clock)))
+    return false;
+  clock.flags = 0;
+  bzero(clock.pad, sizeof(clock.pad));
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_CLOCK, &clock) == 0);
 
   /* Reset device states */
   for (auto device : registered_devices_) {

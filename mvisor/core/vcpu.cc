@@ -21,11 +21,11 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <linux/kvm.h>
 #include <cstring>
 
 #include "machine.h"
 #include "logger.h"
-#include "states/vcpu.pb.h"
 
 #define MAX_KVM_CPUID_ENTRIES         100
 #define CPUID_TOPOLOGY_LEVEL_SMT      (1U << 8)
@@ -56,16 +56,15 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
     auto ring = (kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
     machine_->device_manager()->SetupCoalescingMmioRing(ring);
   }
-
-  /* Save default registers for system reset */
-  ioctl(fd_, KVM_GET_REGS, &default_registers_.regs);
-  ioctl(fd_, KVM_GET_SREGS, &default_registers_.sregs);
   
   SetupCpuid();
 
   /* Setup MCE for booting Linux */
   SetupMachineCheckException();
   SetupModelSpecificRegisters();
+
+  /* Save default registers for system reset */
+  SaveStateTo(default_state_);
 }
 
 Vcpu::~Vcpu() {
@@ -85,10 +84,7 @@ void Vcpu::Start() {
 
 
 void Vcpu::Reset() {
-  if (ioctl(fd_, KVM_SET_REGS, &default_registers_.regs) < 0)
-    MV_PANIC("KVM_SET_REGS failed");
-  if (ioctl(fd_, KVM_SET_SREGS, &default_registers_.sregs) < 0)
-    MV_PANIC("KVM_SET_SREGS failed");
+  LoadStateFrom(default_state_);
 }
 
 /* 
@@ -99,15 +95,17 @@ void Vcpu::Reset() {
  */
 void Vcpu::SetupCpuid() {
   static const char cpu_model[48] = "Intel Xeon Processor (Cascadelake)";
-  struct kvm_cpuid2 *cpuid = (struct kvm_cpuid2*)malloc(
-    sizeof(*cpuid) + MAX_KVM_CPUID_ENTRIES * sizeof(cpuid->entries[0]));
+  struct {
+    struct kvm_cpuid2 cpuid2;
+    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
+  } cpuid;
   
-  cpuid->nent = MAX_KVM_CPUID_ENTRIES;
-  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, cpuid) < 0)
+  cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
+  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, &cpuid) < 0)
     MV_PANIC("KVM_GET_SUPPORTED_CPUID failed");
   
-  for (uint32_t i = 0; i < cpuid->nent; i++) {
-    auto entry = &cpuid->entries[i];
+  for (uint32_t i = 0; i < cpuid.cpuid2.nent; i++) {
+    auto entry = &cpuid.entries[i];
     switch (entry->function)
     {
     case 0x1: // ACPI ID & Features
@@ -150,10 +148,8 @@ void Vcpu::SetupCpuid() {
     }
   }
 
-  if (ioctl(fd_, KVM_SET_CPUID2, cpuid) < 0)
+  if (ioctl(fd_, KVM_SET_CPUID2, &cpuid) < 0)
     MV_PANIC("KVM_SET_CPUID2 failed");
-
-  free(cpuid);
 }
 
 void Vcpu::SetupMachineCheckException() {
@@ -350,13 +346,7 @@ void Vcpu::PrintRegisters() {
 }
 
 
-bool Vcpu::SaveState(MigrationWriter* writer) {
-  std::stringstream prefix;
-  prefix << "vcpu-" << vcpu_id_;
-  writer->SetPrefix(prefix.str());
-
-  VcpuState state;
-
+void Vcpu::SaveStateTo(VcpuState& state) {
   /* KVM vcpu events */
   kvm_vcpu_events events;
   MV_ASSERT(ioctl(fd_, KVM_GET_VCPU_EVENTS, &events) == 0);
@@ -371,6 +361,11 @@ bool Vcpu::SaveState(MigrationWriter* writer) {
   kvm_regs regs;
   MV_ASSERT(ioctl(fd_, KVM_GET_REGS, &regs) == 0);
   state.set_regs(&regs, sizeof(regs));
+
+  /* FPU regsiters */
+  kvm_fpu fpu;
+  MV_ASSERT(ioctl(fd_, KVM_GET_FPU, &fpu) == 0);
+  state.set_fpu(&fpu, sizeof(fpu));
 
   /* XSAVE */
   kvm_xsave xsave;
@@ -410,20 +405,28 @@ bool Vcpu::SaveState(MigrationWriter* writer) {
   MV_ASSERT(ioctl(fd_, KVM_GET_LAPIC, &lapic) == 0);
   state.set_lapic(&lapic, sizeof(lapic));
 
-  writer->WriteProtobuf("CPU", state);
-  return true;
-}
-
-bool Vcpu::LoadState(MigrationReader* reader) {
-  std::stringstream prefix;
-  prefix << "vcpu-" << vcpu_id_;
-  reader->SetPrefix(prefix.str());
-
-  VcpuState state;
-  if (!reader->ReadProtobuf("CPU", state)) {
-    return false;
+  /* TSC kHz */
+  int64_t tsc_khz = ioctl(fd_, KVM_GET_TSC_KHZ);
+  if (tsc_khz > 0) {
+    state.set_tsc_khz(tsc_khz);
   }
 
+  /* Guest debugs */
+  kvm_guest_debug debug;
+  MV_ASSERT(ioctl(fd_, KVM_GET_DEBUGREGS, &debug) == 0);
+  state.set_debug_regs(&debug, sizeof(debug));
+  
+  /* CPUID */
+  struct {
+    struct kvm_cpuid2 cpuid2;
+    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
+  } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, &cpuid) == 0);
+  MV_ASSERT(ioctl(fd_, KVM_GET_CPUID2, &cpuid) == 0);
+  state.set_cpuid(&cpuid, sizeof(cpuid));
+}
+
+void Vcpu::LoadStateFrom(VcpuState& state) {
   /* Special registers */
   kvm_sregs sregs;
   memcpy(&sregs, state.sregs().data(), sizeof(sregs));
@@ -433,6 +436,11 @@ bool Vcpu::LoadState(MigrationReader* reader) {
   kvm_regs regs;
   memcpy(&regs, state.regs().data(), sizeof(regs));
   MV_ASSERT(ioctl(fd_, KVM_SET_REGS, &regs) == 0);
+
+  /* FPU */
+  kvm_fpu fpu;
+  memcpy(&fpu, state.fpu().data(), sizeof(fpu));
+  MV_ASSERT(ioctl(fd_, KVM_SET_FPU, &fpu) == 0);
 
   /* XSAVE */
   kvm_xsave xsave;
@@ -467,5 +475,52 @@ bool Vcpu::LoadState(MigrationReader* reader) {
   memcpy(&lapic, state.lapic().data(), sizeof(lapic));
   MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
 
+  /* TSC kHz */
+  if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_CONTROL)) {
+    MV_ASSERT(ioctl(fd_, KVM_SET_TSC_KHZ, state.tsc_khz()) == 0);
+  }
+
+  /* Guest debugs */
+  kvm_guest_debug debug;
+  memcpy(&debug, state.debug_regs().data(), sizeof(debug));
+  MV_ASSERT(ioctl(fd_, KVM_SET_GUEST_DEBUG, &debug) == 0);
+
+  /* CPUID */
+  struct {
+    struct kvm_cpuid2 cpuid2;
+    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
+  } cpuid;
+  memcpy(&cpuid, state.cpuid().data(), sizeof(cpuid));
+  MV_ASSERT(ioctl(fd_, KVM_SET_CPUID2, &cpuid) == 0);
+}
+
+bool Vcpu::SaveState(MigrationWriter* writer) {
+  std::stringstream prefix;
+  prefix << "vcpu-" << vcpu_id_;
+  writer->SetPrefix(prefix.str());
+
+  VcpuState state;
+  SaveStateTo(state);
+
+  writer->WriteProtobuf("CURRENT", state);
+  writer->WriteProtobuf("DEFAULT", default_state_);
+  return true;
+}
+
+bool Vcpu::LoadState(MigrationReader* reader) {
+  std::stringstream prefix;
+  prefix << "vcpu-" << vcpu_id_;
+  reader->SetPrefix(prefix.str());
+
+  if (!reader->ReadProtobuf("DEFAULT", default_state_)) {
+    return false;
+  }
+
+  VcpuState state;
+  if (!reader->ReadProtobuf("CURRENT", state)) {
+    return false;
+  }
+
+  LoadStateFrom(state);
   return true;
 }

@@ -26,15 +26,11 @@
 #include <mutex>
 
 #include "migration.h"
+#include "states/vcpu.pb.h"
 
 #define SIG_USER_INTERRUPT (SIGRTMIN + 0)
 
 class Machine;
-
-struct VcpuRegisters {
-  struct kvm_regs regs;
-  struct kvm_sregs sregs;
-};
 
 typedef std::function<void(void)> VoidCallback;
 struct VcpuTask {
@@ -80,6 +76,8 @@ class Vcpu {
   void ProcessIo();
   void ProcessMmio();
   void ExecuteTasks();
+  void SaveStateTo(VcpuState& state);
+  void LoadStateFrom(VcpuState& state);
 
   static __thread Vcpu*     current_vcpu_;
 
@@ -91,7 +89,7 @@ class Vcpu {
   kvm_coalesced_mmio_ring*  mmio_ring_;
   std::thread               thread_;
   bool                      single_step_ = false;
-  VcpuRegisters             default_registers_;
+  VcpuState                 default_state_;
   std::deque<VcpuTask>      tasks_;
   std::mutex                mutex_;
 };

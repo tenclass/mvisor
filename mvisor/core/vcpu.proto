@@ -18,7 +18,13 @@ message VcpuState {
   /* Debug regs */
   bytes   debug_regs    = 8;
   /* Nested states */
-  bytes   nested_states = 9;
+  bytes   nested_state  = 9;
   /* KVM Vcpu events */
   bytes   events        = 10;
+  /* TSC kHz */
+  int64   tsc_khz       = 11;
+  /* X86 FPU */
+  bytes   fpu           = 12;
+  /* X86 CPUID */
+  bytes   cpuid         = 13;
 }

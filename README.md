@@ -9,6 +9,22 @@
 5. Extremely stable and high performance
 
 
+## Screenshot
+
+### Ubuntu
+
+<img src="./docs/ubuntu.jpg" width="640">
+
+### vGPU
+
+<img src="./docs/vgpu.jpg" width="640">
+
+### Multimedia
+
+<img src="./docs/multimedia.jpg" width="640">
+
+
+
 ## Roadmap And Current Status
 
 Milestone 1: Boot OS
@@ -72,8 +88,3 @@ An ISO image file is needed to install OS. Modify config/default.yaml to configu
 Virtio is recommended:
 
 <a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Downlaod Virtio Guest Tools</a>
-
-## Screenshot
-
-<img src="./docs/multimedia.jpg" width="640">
-

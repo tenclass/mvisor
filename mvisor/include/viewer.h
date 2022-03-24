@@ -26,16 +26,6 @@
 #include <mutex>
 #include <deque>
 
-struct SimulateCursor {
-  bool visible;
-  int x;
-  int y;
-  int width;
-  int height;
-  int hotspot_x;
-  int hotspot_y;
-  SDL_Texture* texture = nullptr;
-};
 
 struct PendingResize {
   bool triggered = false;
@@ -58,7 +48,7 @@ class Viewer {
   void UpdateCaption();
   void RenderPartial(const DisplayPartialBitmap* partial);
   void RenderSurface(const DisplayPartialBitmap* partial);
-  void RenderCursor(const DisplayCursorUpdate* cursor_update);
+  void RenderCursor(const DisplayMouseCursor* cursor_update);
   void HandleEvent(const SDL_Event& event);
   PointerInputInterface* GetActivePointer();
   void SendPointerEvent();
@@ -75,15 +65,12 @@ class Viewer {
   SDL_Palette* palette_ = nullptr;
   SDL_Cursor* cursor_ = nullptr;
 
-  SimulateCursor server_cursor_;
-  std::deque<const DisplayPartialBitmap*> partials_;
-  std::deque<const DisplayCursorUpdate*> cursor_updates_;
   std::mutex mutex_;
   bool requested_update_window_ = false;
+  bool cursor_visible_ = false;
+  uint64_t cursor_shape_id_ = 0;
 
-  uint16_t width_;
-  uint16_t height_;
-  uint16_t bpp_;
+  uint width_, height_, bpp_, stride_;
 
   PointerEvent pointer_state_ = { 0 };
   PendingResize pending_resize_;

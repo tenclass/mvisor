@@ -43,10 +43,6 @@ void Viewer::DestroyWindow() {
       SDL_FreeCursor(cursor_);
       cursor_ = nullptr;
     }
-    if (server_cursor_.texture) {
-      SDL_DestroyTexture(server_cursor_.texture);
-      server_cursor_.texture = nullptr;
-    }
     SDL_DestroyTexture(screen_texture_);
     SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);
@@ -57,12 +53,10 @@ void Viewer::DestroyWindow() {
 }
 
 void Viewer::CreateWindow() {
-  uint16_t w, h, bpp;
-  display_->GetDisplayMode(&w, &h, &bpp);
-  MV_ASSERT(w && h && bpp);
-  pointer_state_.screen_width = width_ = w;
-  pointer_state_.screen_height = height_ = h;
-  bpp_ = bpp;
+  display_->GetDisplayMode(&width_, &height_, &bpp_, &stride_);
+  MV_ASSERT(width_ && height_ && bpp_ && stride_);
+  pointer_state_.screen_width = width_;
+  pointer_state_.screen_height = height_;
   int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
   window_ = SDL_CreateWindow("MVisor", x, y, width_, height_, SDL_WINDOW_RESIZABLE);
   renderer_ = SDL_CreateRenderer(window_, -1, 0);
@@ -114,6 +108,7 @@ void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
   uint8_t* dst;
   int dst_stride;
   SDL_LockTexture(screen_texture_, NULL, (void**)&dst, &dst_stride);
+  uint8_t* dst_end = dst + dst_stride * height_;
 
   if (partial->flip) {
     dst += dst_stride * (partial->y + partial->height - 1) + partial->x * (bpp_ >> 3);
@@ -121,13 +116,15 @@ void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
   } else {
     dst += dst_stride * partial->y + partial->x * (bpp_ >> 3);
   }
-  int lines = partial->height;
+  int linesize = partial->width * (bpp_ >> 3);
+  size_t lines = partial->height;
   size_t src_index = 0;
   while (lines > 0 && src_index < partial->vector.size()) {
-    uint8_t* src = partial->vector[src_index].data;
-    auto copy_lines = partial->vector[src_index].size / partial->stride;
-    while (copy_lines > 0) {
-      memcpy(dst, src, partial->stride);
+    auto src = (uint8_t*)partial->vector[src_index].iov_base;
+    auto copy_lines = partial->vector[src_index].iov_len / partial->stride;
+    while (copy_lines > 0 && lines > 0) {
+      MV_ASSERT(dst + linesize <= dst_end);
+      memcpy(dst, src, linesize);
       src += partial->stride;
       dst += dst_stride;
       --copy_lines;
@@ -140,8 +137,8 @@ void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
 
 void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
   MV_ASSERT(partial->width == width_ && partial->height == height_);
-  MV_ASSERT(partial->vector.size() == 1 && partial->vector[0].size == width_ * height_);
-  auto surface_8bit = SDL_CreateRGBSurfaceWithFormatFrom(partial->vector[0].data,
+  MV_ASSERT(partial->vector.size() == 1 && partial->vector[0].iov_len == width_ * height_);
+  auto surface_8bit = SDL_CreateRGBSurfaceWithFormatFrom(partial->vector[0].iov_base,
     partial->width, partial->height, bpp_, partial->stride, SDL_PIXELFORMAT_INDEX8);
   SDL_SetSurfacePalette(surface_8bit, palette_);
   auto surface_32bit = SDL_ConvertSurfaceFormat(surface_8bit, SDL_PIXELFORMAT_BGRA32, 0);
@@ -150,46 +147,48 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
   SDL_FreeSurface(surface_8bit);
 }
 
-void Viewer::RenderCursor(const DisplayCursorUpdate* cursor_update) {
-  if (cursor_update->command == kDisplayCursorUpdateMove) {
-    server_cursor_.x = cursor_update->move.x;
-    server_cursor_.y = cursor_update->move.y;
-  } else if (cursor_update->command == kDisplayCursorUpdateSet) {
+void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
+  if (cursor_update->visible) {
+    if (cursor_update->shape.id == cursor_shape_id_) {
+      return;
+    }
     if (cursor_) {
       SDL_FreeCursor(cursor_);
       cursor_ = nullptr;
     }
     SDL_ShowCursor(SDL_ENABLE);
-    auto set = cursor_update->set;
-    uint32_t stride = SPICE_ALIGN(set.width, 8) >> 3;
-    if (set.type == SPICE_CURSOR_TYPE_MONO) {
+    auto& shape = cursor_update->shape;
+    uint32_t stride = SPICE_ALIGN(shape.width, 8) >> 3;
+
+    size_t size = 0;
+    for (auto& iov : shape.vector)
+      size += iov.iov_len;
+    auto shape_data = new uint8_t[size];
+    auto ptr = shape_data;
+    for (auto& iov : shape.vector) {
+      memcpy(ptr, iov.iov_base, iov.iov_len);
+      ptr += iov.iov_len;
+    }
+    if (shape.type == SPICE_CURSOR_TYPE_MONO) {
       uint8_t mask[4 * 100] = { 0 };
-      cursor_ = SDL_CreateCursor(set.data + stride * set.height, mask,
-        set.width, set.height, set.hotspot_x, set.hotspot_y);
+      cursor_ = SDL_CreateCursor(shape_data + stride * shape.height, mask,
+        shape.width, shape.height, shape.hotspot_x, shape.hotspot_y);
       SDL_SetCursor(cursor_);
     } else {
-      auto surface = SDL_CreateRGBSurfaceWithFormatFrom(set.data, set.width, set.height,
-        32, set.width * 4, SDL_PIXELFORMAT_BGRA32);
-      cursor_ = SDL_CreateColorCursor(surface, set.hotspot_x, set.hotspot_y);
+      auto surface = SDL_CreateRGBSurfaceWithFormatFrom(shape_data, shape.width, shape.height,
+        32, shape.width * 4, SDL_PIXELFORMAT_BGRA32);
+      cursor_ = SDL_CreateColorCursor(surface, shape.hotspot_x, shape.hotspot_y);
       SDL_SetCursor(cursor_);
-      /* Store the cursor texture for server cursor */
-      if (server_cursor_.texture) {
-        SDL_DestroyTexture(server_cursor_.texture);
-      }
-      server_cursor_.texture = SDL_CreateTextureFromSurface(renderer_, surface);
       SDL_FreeSurface(surface);
     }
-    /* Used when simulate cursor */
-    server_cursor_.visible = set.visible;
-    server_cursor_.x = set.x;
-    server_cursor_.y = set.y;
-    server_cursor_.width = set.width;
-    server_cursor_.height = set.height;
-    server_cursor_.hotspot_x = set.hotspot_x;
-    server_cursor_.hotspot_y = set.hotspot_y;
-  } else if (cursor_update->command == kDisplayCursorUpdateHide) {
-    SDL_ShowCursor(SDL_DISABLE);
-    server_cursor_.visible = false;
+    delete shape_data;
+    cursor_shape_id_ = shape.id;
+    cursor_visible_ = true;
+  } else {
+    if (cursor_visible_) {
+      cursor_visible_ = false;
+      SDL_ShowCursor(SDL_DISABLE);
+    }
   }
 }
 
@@ -201,37 +200,23 @@ void Viewer::Render() {
     CreateWindow();
   }
 
-  std::unique_lock<std::mutex> lock(mutex_);
-  bool redraw = false;
-  while (!cursor_updates_.empty()) {
-    auto cursor_update = cursor_updates_.front();
-    cursor_updates_.pop_front();
-    lock.unlock();
-    RenderCursor(cursor_update);
-    cursor_update->Release();
-    lock.lock();
-  }
-  if (screen_texture_ && !partials_.empty()) {
-    while (!partials_.empty()) {
-      auto partial = partials_.front();
-      partials_.pop_front();
-      lock.unlock();
+  DisplayUpdate update;
+  if (display_->AcquireUpdate(update)) {
+    RenderCursor(&update.cursor);
 
-      if (partial->x + partial->width <= width_ && partial->y + partial->height <= height_) {
+    for (auto& partial : update.partials) {
+      if (partial.x + partial.width <= width_ && partial.y + partial.height <= height_) {
         if (bpp_ == 8) {
-          RenderSurface(partial);
+          RenderSurface(&partial);
         } else {
-          RenderPartial(partial);
+          RenderPartial(&partial);
         }
       }
-      partial->Release();
-      lock.lock();
     }
-    redraw = true;
+    display_->ReleaseUpdate();
   }
 
-  lock.unlock();
-  if (redraw) {
+  if (!update.partials.empty()) {
     SDL_RenderCopy(renderer_, screen_texture_, nullptr, nullptr);
     SDL_RenderPresent(renderer_);
   }
@@ -266,13 +251,6 @@ void Viewer::LookupDevices() {
 
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
-  });
-  display_->RegisterDisplayRenderer([this](const DisplayPartialBitmap* partial) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    partials_.push_back(partial);
-  }, [this](const DisplayCursorUpdate* update) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    cursor_updates_.push_back(update);
   });
 }
 

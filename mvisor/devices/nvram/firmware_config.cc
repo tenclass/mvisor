@@ -124,8 +124,7 @@ class FirmwareConfig : public Device {
     SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
     SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
 
-    auto cdrom = machine->LookupObjectByClass("AhciCdrom");
-    if (cdrom && cdrom->has_key("image")) {
+    if (manager_->io()->GetDiskImageCount() > 1) {
       SetConfigUInt16(FW_CFG_BOOT_MENU, 2); // show menu if more than 1 drives
     } else {
       SetConfigUInt16(FW_CFG_BOOT_MENU, 0);

@@ -301,7 +301,7 @@ class Ich9Hda : public PciDevice {
       stream_state.buffers.push_back(buffer);
     }
     if (!has_ioc) {
-      MV_PANIC("failed to setup hda buffer descriptor list, provide a timer or turn on hypervisor?");
+      MV_LOG("failed to setup hda buffer descriptor list, provide a timer or turn on hypervisor?");
     }
     stream_state.buffers_index = 0;
     stream.link_position_in_buffer = 0;
@@ -331,7 +331,7 @@ class Ich9Hda : public PciDevice {
       entry.read_counter = 0;
       stream_state.buffers_index++;
 
-      if (stream.link_position_in_buffer >= stream.cyclic_buffer_length) {
+      if (stream_state.buffers_index > stream.last_valid_index) {
         stream.link_position_in_buffer = 0;
         stream_state.buffers_index = 0;
       }

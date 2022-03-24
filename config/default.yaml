@@ -17,7 +17,7 @@ objects:
   #   snapshot: Yes
 
   - class: virtio-block
-    image: /data/ubuntu.qcow2
+    image: /data/empty.qcow2
 
   # - name: nvidia-vgpu
   #   class: vfio-pci

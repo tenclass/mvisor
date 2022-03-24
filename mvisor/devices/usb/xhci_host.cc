@@ -512,6 +512,9 @@ class XhciHost : public PciDevice {
 
   void ReadOperationalRegs(uint64_t offset, uint8_t* data, uint32_t size) {
     memcpy(data, (uint8_t*)&operational_regs_ + offset, size);
+    if (debug_) {
+      MV_LOG("offset=0x%lx size=%u data=0x%x", offset, size, *(uint32_t*)data);
+    }
   }
 
   void ReadPortRegs(uint64_t offset, uint8_t* data, uint32_t size) {
@@ -551,15 +554,21 @@ class XhciHost : public PciDevice {
     }
   }
 
+  void Run() {      
+    operational_regs_.usb_status &= ~USBSTS_HCH;
+    microframe_index_start_ = steady_clock::now();
+  }
+
+  void Stop() {
+    operational_regs_.usb_status |= USBSTS_HCH;
+    operational_regs_.command_ring_control &= ~CRCR_CRR;
+  }
+
   void WriteOperationalUsbCommand(uint32_t command) {
     if ((command & USBCMD_RS) && !(operational_regs_.usb_command & USBCMD_RS)) {
-      // RUN
-      operational_regs_.usb_status &= ~USBSTS_HCH;
-      microframe_index_start_ = steady_clock::now();
+      Run();
     } else if (!(command & USBCMD_RS) && (operational_regs_.usb_command & USBCMD_RS)) {
-      // STOP
-      operational_regs_.usb_status |= USBSTS_HCH;
-      operational_regs_.command_ring_control &= ~CRCR_CRR;
+      Stop();
     }
     if (command & USBCMD_CSS) { // Save state
       operational_regs_.usb_status &= ~USBSTS_SRE;
@@ -1585,9 +1594,9 @@ class XhciHost : public PciDevice {
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == pci_bars_[0].address && offset < 0x3000) {
       std::lock_guard<std::mutex> lock(mutex_);
-      // if (debug_) {
-      //   MV_LOG("Write offset=0x%lx size=%u data=0x%lx", offset, size, *(uint64_t*)data);
-      // }
+      if (debug_) {
+        MV_LOG("Write offset=0x%lx size=%u data=0x%lx", offset, size, *(uint64_t*)data);
+      }
       if (offset < capability_regs_.capability_length) {
       } else if (offset < capability_regs_.capability_length + 0x400ULL) {
         if (size == 8) {

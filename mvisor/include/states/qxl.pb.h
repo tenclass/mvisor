@@ -36,7 +36,7 @@ namespace protobuf_qxl_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[3];
+  static const ::google::protobuf::internal::ParseTable schema[4];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -46,11 +46,14 @@ void InitDefaultsQxlState_GuestSlotImpl();
 void InitDefaultsQxlState_GuestSlot();
 void InitDefaultsQxlState_GuestPrimaryImpl();
 void InitDefaultsQxlState_GuestPrimary();
+void InitDefaultsQxlState_SurfaceImpl();
+void InitDefaultsQxlState_Surface();
 void InitDefaultsQxlStateImpl();
 void InitDefaultsQxlState();
 inline void InitDefaults() {
   InitDefaultsQxlState_GuestSlot();
   InitDefaultsQxlState_GuestPrimary();
+  InitDefaultsQxlState_Surface();
   InitDefaultsQxlState();
 }
 }  // namespace protobuf_qxl_2eproto
@@ -63,6 +66,9 @@ extern QxlState_GuestPrimaryDefaultTypeInternal _QxlState_GuestPrimary_default_i
 class QxlState_GuestSlot;
 class QxlState_GuestSlotDefaultTypeInternal;
 extern QxlState_GuestSlotDefaultTypeInternal _QxlState_GuestSlot_default_instance_;
+class QxlState_Surface;
+class QxlState_SurfaceDefaultTypeInternal;
+extern QxlState_SurfaceDefaultTypeInternal _QxlState_Surface_default_instance_;
 
 // ===================================================================
 
@@ -334,6 +340,112 @@ class QxlState_GuestPrimary : public ::google::protobuf::Message /* @@protoc_ins
 };
 // -------------------------------------------------------------------
 
+class QxlState_Surface : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:QxlState.Surface) */ {
+ public:
+  QxlState_Surface();
+  virtual ~QxlState_Surface();
+
+  QxlState_Surface(const QxlState_Surface& from);
+
+  inline QxlState_Surface& operator=(const QxlState_Surface& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  QxlState_Surface(QxlState_Surface&& from) noexcept
+    : QxlState_Surface() {
+    *this = ::std::move(from);
+  }
+
+  inline QxlState_Surface& operator=(QxlState_Surface&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const QxlState_Surface& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const QxlState_Surface* internal_default_instance() {
+    return reinterpret_cast<const QxlState_Surface*>(
+               &_QxlState_Surface_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    2;
+
+  void Swap(QxlState_Surface* other);
+  friend void swap(QxlState_Surface& a, QxlState_Surface& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline QxlState_Surface* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  QxlState_Surface* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const QxlState_Surface& from);
+  void MergeFrom(const QxlState_Surface& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(QxlState_Surface* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // uint64 release_info = 2;
+  void clear_release_info();
+  static const int kReleaseInfoFieldNumber = 2;
+  ::google::protobuf::uint64 release_info() const;
+  void set_release_info(::google::protobuf::uint64 value);
+
+  // uint32 id = 1;
+  void clear_id();
+  static const int kIdFieldNumber = 1;
+  ::google::protobuf::uint32 id() const;
+  void set_id(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:QxlState.Surface)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint64 release_info_;
+  ::google::protobuf::uint32 id_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_qxl_2eproto::TableStruct;
+  friend void ::protobuf_qxl_2eproto::InitDefaultsQxlState_SurfaceImpl();
+};
+// -------------------------------------------------------------------
+
 class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:QxlState) */ {
  public:
   QxlState();
@@ -369,7 +481,7 @@ class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(
                &_QxlState_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    2;
+    3;
 
   void Swap(QxlState* other);
   friend void swap(QxlState& a, QxlState& b) {
@@ -416,6 +528,7 @@ class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(
 
   typedef QxlState_GuestSlot GuestSlot;
   typedef QxlState_GuestPrimary GuestPrimary;
+  typedef QxlState_Surface Surface;
 
   // accessors -------------------------------------------------------
 
@@ -443,6 +556,18 @@ class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(
   ::google::protobuf::RepeatedField< ::google::protobuf::uint64 >*
       mutable_free_resources();
 
+  // repeated .QxlState.Surface surfaces = 6;
+  int surfaces_size() const;
+  void clear_surfaces();
+  static const int kSurfacesFieldNumber = 6;
+  const ::QxlState_Surface& surfaces(int index) const;
+  ::QxlState_Surface* mutable_surfaces(int index);
+  ::QxlState_Surface* add_surfaces();
+  ::google::protobuf::RepeatedPtrField< ::QxlState_Surface >*
+      mutable_surfaces();
+  const ::google::protobuf::RepeatedPtrField< ::QxlState_Surface >&
+      surfaces() const;
+
   // .QxlState.GuestPrimary guest_primary = 3;
   bool has_guest_primary() const;
   void clear_guest_primary();
@@ -459,6 +584,7 @@ class QxlState : public ::google::protobuf::Message /* @@protoc_insertion_point(
   ::google::protobuf::RepeatedPtrField< ::QxlState_GuestSlot > guest_slots_;
   ::google::protobuf::RepeatedField< ::google::protobuf::uint64 > free_resources_;
   mutable int _free_resources_cached_byte_size_;
+  ::google::protobuf::RepeatedPtrField< ::QxlState_Surface > surfaces_;
   ::QxlState_GuestPrimary* guest_primary_;
   mutable int _cached_size_;
   friend struct ::protobuf_qxl_2eproto::TableStruct;
@@ -649,6 +775,38 @@ inline void QxlState_GuestPrimary::set_mem_address(::google::protobuf::uint64 va
 
 // -------------------------------------------------------------------
 
+// QxlState_Surface
+
+// uint32 id = 1;
+inline void QxlState_Surface::clear_id() {
+  id_ = 0u;
+}
+inline ::google::protobuf::uint32 QxlState_Surface::id() const {
+  // @@protoc_insertion_point(field_get:QxlState.Surface.id)
+  return id_;
+}
+inline void QxlState_Surface::set_id(::google::protobuf::uint32 value) {
+  
+  id_ = value;
+  // @@protoc_insertion_point(field_set:QxlState.Surface.id)
+}
+
+// uint64 release_info = 2;
+inline void QxlState_Surface::clear_release_info() {
+  release_info_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 QxlState_Surface::release_info() const {
+  // @@protoc_insertion_point(field_get:QxlState.Surface.release_info)
+  return release_info_;
+}
+inline void QxlState_Surface::set_release_info(::google::protobuf::uint64 value) {
+  
+  release_info_ = value;
+  // @@protoc_insertion_point(field_set:QxlState.Surface.release_info)
+}
+
+// -------------------------------------------------------------------
+
 // QxlState
 
 // repeated .QxlState.GuestSlot guest_slots = 2;
@@ -761,9 +919,41 @@ QxlState::mutable_free_resources() {
   return &free_resources_;
 }
 
+// repeated .QxlState.Surface surfaces = 6;
+inline int QxlState::surfaces_size() const {
+  return surfaces_.size();
+}
+inline void QxlState::clear_surfaces() {
+  surfaces_.Clear();
+}
+inline const ::QxlState_Surface& QxlState::surfaces(int index) const {
+  // @@protoc_insertion_point(field_get:QxlState.surfaces)
+  return surfaces_.Get(index);
+}
+inline ::QxlState_Surface* QxlState::mutable_surfaces(int index) {
+  // @@protoc_insertion_point(field_mutable:QxlState.surfaces)
+  return surfaces_.Mutable(index);
+}
+inline ::QxlState_Surface* QxlState::add_surfaces() {
+  // @@protoc_insertion_point(field_add:QxlState.surfaces)
+  return surfaces_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::QxlState_Surface >*
+QxlState::mutable_surfaces() {
+  // @@protoc_insertion_point(field_mutable_list:QxlState.surfaces)
+  return &surfaces_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::QxlState_Surface >&
+QxlState::surfaces() const {
+  // @@protoc_insertion_point(field_list:QxlState.surfaces)
+  return surfaces_;
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

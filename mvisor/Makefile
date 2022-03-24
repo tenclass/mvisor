@@ -28,8 +28,13 @@ $(shell mkdir -p $(dir $(MV_OBJECTS)))
 run: all
 	time $(EXECUTABLE)
 
+# Press F2 to save VM to /tmp/save and make load to restore the VM
+# Remember to use snapshot=Yes in disk configuration
 load: all
 	$(EXECUTABLE) -f /tmp/save/configuration.yaml
+
+debug_load: all
+	gdb -ex "handle SIG34 nostop pass" -ex "run -f /tmp/save/configuration.yaml" $(EXECUTABLE)
 
 debug: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run" $(EXECUTABLE)
