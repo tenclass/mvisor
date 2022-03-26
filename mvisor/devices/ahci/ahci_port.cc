@@ -268,6 +268,8 @@ void AhciPort::CheckEngines() {
 }
 
 void AhciPort::Write(uint64_t offset, uint32_t value) {
+  std::lock_guard<std::mutex> lock(mutex_);
+
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
   if (host_->debug()) {

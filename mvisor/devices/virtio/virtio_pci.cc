@@ -73,8 +73,14 @@ VirtioPci::VirtioPci() {
 }
 
 void VirtioPci::Disconnect() {
-  /* Call reset to release io resources */
-  Reset();
+  if (use_ioevent_) {
+    for (uint index = 0; index < queues_.size(); index++) {
+      if (queues_[index].enabled) {
+        uint64_t notify_address = pci_bars_[4].address + 0x3000 + index * 4;
+        manager_->UnregisterIoEvent(this, kIoResourceTypeMmio, notify_address);
+      }
+    }
+  }
   PciDevice::Disconnect();
 }
 

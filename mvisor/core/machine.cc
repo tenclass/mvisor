@@ -77,7 +77,7 @@ Machine::~Machine() {
   delete memory_manager_;
   delete io_thread_;
 
-  // delete objects created by confiration
+  // delete objects created by configuration
   for (auto it = objects_.begin(); it != objects_.end(); it++) {
     delete it->second;
   }

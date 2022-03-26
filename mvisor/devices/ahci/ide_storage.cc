@@ -61,11 +61,11 @@ IdeStorageDevice::IdeStorageDevice() {
 }
 
 void IdeStorageDevice::Disconnect() {
-  Device::Disconnect();
   if (image_) {
     delete image_;
     image_ = nullptr;
   }
+  Device::Disconnect();
 }
 
 void IdeStorageDevice::Connect() {

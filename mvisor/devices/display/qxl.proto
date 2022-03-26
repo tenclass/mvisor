@@ -21,11 +21,16 @@ message QxlState {
 
   message Surface {
     uint32  id                  = 1;
-    uint64  release_info        = 2;
+    uint64  slot_address        = 2;
+  }
+
+  message Drawable {
+    uint64  slot_address        = 1;
   }
 
   repeated GuestSlot  guest_slots         = 2;
   GuestPrimary        guest_primary       = 3;
   repeated uint64     free_resources      = 5;
   repeated Surface    surfaces            = 6;
+  repeated Drawable   drawbles            = 7;
 }

@@ -19,6 +19,8 @@
 #ifndef __MVISOR_DEVICES_AHCI_PORT_H
 #define __MVISOR_DEVICES_AHCI_PORT_H
 
+#include <mutex>
+
 #include <cstdint>
 #include "ide_storage.h"
 #include "device.h"
@@ -115,6 +117,7 @@ class AhciPort {
   uint8_t*              command_list_ = nullptr;
   AhciRxFis*            rx_fis_ = nullptr;
   int                   busy_slot_ = -1;
+  std::mutex            mutex_;
 };
 
 #endif // __MVISOR_DEVICES_AHCI_PORT_H

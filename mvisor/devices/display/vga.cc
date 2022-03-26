@@ -557,9 +557,8 @@ void Vga::RegisterDisplayChangeListener(DisplayChangeListener callback) {
 }
 
 bool Vga::AcquireUpdate(DisplayUpdate& update) {
-  mutex_.lock();
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (mode_ == kDisplayUnknownMode) {
-    mutex_.unlock();
     return false;
   }
 
@@ -607,7 +606,6 @@ bool Vga::AcquireUpdate(DisplayUpdate& update) {
 }
 
 void Vga::ReleaseUpdate() {
-  mutex_.unlock();
 }
 
 void Vga::DrawCharacter(uint8_t* buffer, uint stride, uint x, uint y, int character, int attribute) {

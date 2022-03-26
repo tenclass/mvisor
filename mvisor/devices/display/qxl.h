@@ -192,7 +192,6 @@ typedef struct SPICE_ATTR_ALIGNED(4) SPICE_ATTR_PACKED QXLRam {
 
 } QXLRam;
 
-
 #include "spice/end-packed.h"
 
 #endif // _MVISOR_DEVICES_QXL_H

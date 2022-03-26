@@ -78,11 +78,11 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
   }
 
   virtual void Disconnect() {
-    VirtioPci::Disconnect();
     if (backend_) {
       delete dynamic_cast<Object*>(backend_);
       backend_ = nullptr;
     }
+    VirtioPci::Disconnect();
   }
 
   virtual void Connect() {

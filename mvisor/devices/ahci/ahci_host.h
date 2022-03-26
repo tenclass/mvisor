@@ -48,14 +48,14 @@ class AhciHost;
 class AhciHost : public PciDevice {
  public:
   AhciHost();
-  ~AhciHost();
+  virtual ~AhciHost();
 
-  void Connect();
-  void Disconnect();
-  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
-  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Connect();
+  virtual void Disconnect();
+  virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Reset();
   void CheckIrq();
-  void Reset();
 
   bool SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);

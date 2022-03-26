@@ -92,6 +92,7 @@ void AhciHost::Disconnect() {
       ports_[i] = nullptr;
     }
   }
+  PciDevice::Disconnect();
 }
 
 void AhciHost::Reset() {
