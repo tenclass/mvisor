@@ -66,6 +66,7 @@ class Vcpu {
 
  private:
   static void SignalHandler(int signum);
+  void PrepareX86Vcpu();
   void SetupSingalHandler();
   void SetupCpuid();
   void SetupMachineCheckException();

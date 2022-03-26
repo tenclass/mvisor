@@ -490,7 +490,7 @@ void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
     .data = data
   };
   auto ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
-  if (ret != 1) {
+  if (ret < 0) {
     MV_PANIC("KVM_SIGNAL_MSI ret=%d", ret);
   }
 }

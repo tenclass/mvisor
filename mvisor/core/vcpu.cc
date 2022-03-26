@@ -56,15 +56,6 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
     auto ring = (kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
     machine_->device_manager()->SetupCoalescingMmioRing(ring);
   }
-  
-  SetupCpuid();
-
-  /* Setup MCE for booting Linux */
-  SetupMachineCheckException();
-  SetupModelSpecificRegisters();
-
-  /* Save default registers for system reset */
-  SaveStateTo(default_state_);
 }
 
 Vcpu::~Vcpu() {
@@ -119,23 +110,6 @@ void Vcpu::SetupCpuid() {
       machine_->cpuid_features_ = entry->edx;
       break;
     case 0xB: // CPU topology (cores = num_vcpus / 2, threads per core = 2)
-      switch (entry->index) {
-      case 0:
-          entry->eax = 1;
-          entry->ebx = 2;
-          entry->ecx |= CPUID_TOPOLOGY_LEVEL_SMT;
-          break;
-      case 1:
-          entry->eax = 2;
-          entry->ebx = machine_->num_vcpus_ * 2;
-          entry->ecx |= CPUID_TOPOLOGY_LEVEL_CORE;
-          break;
-      default:
-          entry->eax = 0;
-          entry->ebx = 0;
-          entry->ecx |= CPUID_TOPOLOGY_LEVEL_INVALID;
-      }
-      entry->ecx = entry->index & 0xFF;
       entry->edx = vcpu_id_;
       break;
     case 0x80000002 ... 0x80000004: { // Setup CPU model string
@@ -245,13 +219,25 @@ void Vcpu::SetupSingalHandler() {
   signal(SIG_USER_INTERRUPT, Vcpu::SignalHandler);
 }
 
+void Vcpu::PrepareX86Vcpu() {
+  SetupCpuid();
+
+  /* Setup MCE for booting Linux */
+  SetupMachineCheckException();
+  SetupModelSpecificRegisters();
+
+  /* Save default registers for system reset */
+  SaveStateTo(default_state_);
+}
+
 /* Initialize and executing a vCPU thread */
 void Vcpu::Process() {
   current_vcpu_ = this;
   sprintf(name_, "mvisor-vcpu-%d", vcpu_id_);
-  
   SetThreadName(name_);
+  
   SetupSingalHandler();
+  PrepareX86Vcpu();
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 
