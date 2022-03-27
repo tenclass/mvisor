@@ -247,7 +247,7 @@ void Viewer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayResizeInterface*>(o); })) {
     resizers_.push_back(dynamic_cast<DisplayResizeInterface*>(o));
   }
-  MV_ASSERT(keyboard_ && display_);
+  MV_ASSERT(display_);
 
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
@@ -327,7 +327,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       return;
     }
   case SDL_KEYUP:
-    if (TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
+    if (keyboard_ && TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
       keyboard_->QueueKeyboardEvent(transcoded);
     }
     break;

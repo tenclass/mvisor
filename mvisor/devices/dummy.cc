@@ -97,7 +97,11 @@ class DummyDevice : public Device {
       resource->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
       resource->name, resource->base, offset, size);
     */
-    memset(data, 0xFF, size);
+    if (resource->type == kIoResourceTypePio) {
+      memset(data, 0xFF, size);
+    } else {
+      memset(data, 0x00, size);
+    }
   }
 
 };

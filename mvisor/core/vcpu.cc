@@ -56,6 +56,8 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
     auto ring = (kvm_coalesced_mmio_ring*)((uint64_t)kvm_run_ + coalesced_offset * PAGE_SIZE);
     machine_->device_manager()->SetupCoalescingMmioRing(ring);
   }
+
+  PrepareX86Vcpu();
 }
 
 Vcpu::~Vcpu() {
@@ -85,7 +87,6 @@ void Vcpu::Reset() {
  * TODO: Hyper-V
  */
 void Vcpu::SetupCpuid() {
-  static const char cpu_model[48] = "Intel Xeon Processor (Cascadelake)";
   struct {
     struct kvm_cpuid2 cpuid2;
     struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
@@ -109,18 +110,31 @@ void Vcpu::SetupCpuid() {
       machine_->cpuid_version_ = entry->eax;
       machine_->cpuid_features_ = entry->edx;
       break;
+    case 0x6: // Thermal and Power Management Leaf
+      entry->ecx = entry->ecx & ~(1 << 3); // don't touch MSR IA32_ENERGY_PERF_BIAS(0x1B0)
+      break;
     case 0xB: // CPU topology (cores = num_vcpus / 2, threads per core = 2)
       entry->edx = vcpu_id_;
       break;
     case 0x80000002 ... 0x80000004: { // Setup CPU model string
+      static const char cpu_model[48] = "Intel Xeon Processor (Cascadelake)";
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
     }
+    // case 0x40000000 ... 0x40000005:
+    //   entry->eax = entry->ebx = entry->ecx = entry->edx = 0;
+    //   entry->flags = 0;
+    //   break;
     default:
       break;
     }
   }
+
+  FILE* fp = fopen("/tmp/cpuid", "wb");
+  // fread(&cpuid, sizeof(cpuid), 1, fp);
+  fwrite(&cpuid, sizeof(cpuid), 1, fp);
+  fclose(fp);
 
   if (ioctl(fd_, KVM_SET_CPUID2, &cpuid) < 0)
     MV_PANIC("KVM_SET_CPUID2 failed");
@@ -220,10 +234,10 @@ void Vcpu::SetupSingalHandler() {
 }
 
 void Vcpu::PrepareX86Vcpu() {
-  SetupCpuid();
-
   /* Setup MCE for booting Linux */
   SetupMachineCheckException();
+
+  SetupCpuid();
   SetupModelSpecificRegisters();
 
   /* Save default registers for system reset */
@@ -237,7 +251,6 @@ void Vcpu::Process() {
   SetThreadName(name_);
   
   SetupSingalHandler();
-  PrepareX86Vcpu();
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 

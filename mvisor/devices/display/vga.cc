@@ -51,10 +51,10 @@ Vga::Vga() {
   pci_header_.vendor_id = 0x1234;
   pci_header_.device_id = 0x1111;
   pci_header_.class_code = 0x030000;
+  pci_header_.revision_id = 2;
   pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
-  pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
   
 
   /* Bar 0: 128MB VRAM */
@@ -338,6 +338,8 @@ void Vga::VgaReadPort(uint64_t port, uint8_t* data, uint32_t size) {
   case 0x3CF:
     MV_ASSERT(size == 1);
     *data = vga_.gfx[vga_.gfx_index];
+    if (vga_.gfx_index == 5)
+      *data = 0x50;
     break;
   case 0x3D4:
     MV_ASSERT(size == 1);
@@ -346,6 +348,8 @@ void Vga::VgaReadPort(uint64_t port, uint8_t* data, uint32_t size) {
   case 0x3D5:
     MV_ASSERT(size == 1);
     *data = vga_.crtc[vga_.crtc_index];
+    if (vga_.crtc_index == 7)
+      *data = 0x5d;
     break;
   case 0x3DA:
     MV_ASSERT(size == 1);

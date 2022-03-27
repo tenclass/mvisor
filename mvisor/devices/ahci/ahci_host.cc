@@ -46,8 +46,6 @@ AhciHost::AhciHost() {
   pci_header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
-  pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
-  pci_header_.cacheline_size = 8;
   pci_header_.irq_pin = 1;
 
   pci_header_.data[0x90] = 1 << 6; /* Address Map Register - AHCI mode */

@@ -27,9 +27,10 @@ class Ich9Smbus : public PciDevice {
     pci_header_.device_id = 0x2930;
     pci_header_.class_code = 0x0C0500;
     pci_header_.revision_id = 2;
-    pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
+    pci_header_.header_type = PCI_MULTI_FUNCTION | PCI_HEADER_TYPE_NORMAL;
     pci_header_.subsys_vendor_id = 0x1AF4;
     pci_header_.subsys_id = 0x1100;
+    pci_header_.irq_pin = 1;
 
     AddPciBar(4, 64, kIoResourceTypePio);
   }

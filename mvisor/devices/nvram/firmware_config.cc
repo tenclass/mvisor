@@ -27,6 +27,14 @@
 
 #define FW_CFG_ACPI_DEVICE_ID "QEMU0002"
 
+#define FEATURE_CONTROL_LOCKED                    (1<<0)
+#define FEATURE_CONTROL_VMXON_ENABLED_INSIDE_SMX  (1ULL << 1)
+#define FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX (1<<2)
+#define FEATURE_CONTROL_SGX_LC                    (1ULL << 17)
+#define FEATURE_CONTROL_SGX                       (1ULL << 18)
+#define FEATURE_CONTROL_LMCE                      (1<<20)
+
+
 class FirmwareConfig : public Device {
  private:
   uint16_t current_index_ = 0;
@@ -137,11 +145,15 @@ class FirmwareConfig : public Device {
   }
 
   void InitializeFiles () {
+    /* Set VMX ON and VM is outside of SMX */
+    uint64_t feature_control = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
+    AddConfigFile("etc/msr_feature_control", &feature_control, sizeof(feature_control));
+
     AddConfigFile("bios-geometry", nullptr, 0);
 
     std::string smbios_anchor, smbios_table;
     Smbios smbios(manager_->machine());
-    smbios.GetTables(smbios_anchor, smbios_table);
+    smbios.GetTables(smbios_anchor, smbios_table); 
     AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
     AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
   }

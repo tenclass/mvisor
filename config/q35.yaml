@@ -18,6 +18,7 @@ objects:
     children:
       - ich9-lpc
       - ich9-hda
+      # - ich9-smbus
       - ahci-host
       - xhci-host
       - qxl
@@ -29,7 +30,6 @@ objects:
     children:
       - cmos
       - ps2
-      - serial8250
   
   - class: ich9-hda
     debug: No

@@ -86,8 +86,8 @@ class Vcpu {
   int                       vcpu_id_ = -1;
   int                       fd_ = -1;
   char                      name_[16];
-  kvm_run*                  kvm_run_;
-  kvm_coalesced_mmio_ring*  mmio_ring_;
+  kvm_run*                  kvm_run_ = nullptr;
+  kvm_coalesced_mmio_ring*  mmio_ring_ = nullptr;
   std::thread               thread_;
   bool                      single_step_ = false;
   VcpuState                 default_state_;
