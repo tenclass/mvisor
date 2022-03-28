@@ -3,8 +3,8 @@ base: q35.yaml
 
 machine:
   memory: 8G
-  vcpu: 8
-  debug: No
+  vcpu: 4
+  debug: Yes
   # Turn off hypervisor if it's Windows
   hypervisor: Yes
 
@@ -12,15 +12,16 @@ objects:
   - class: ahci-cdrom
     image: /mnt/iso/ubuntu-20.04.1-desktop-amd64.iso
 
-  # - class: ahci-disk
-  #   image: /data/win10.qcow2
-  #   snapshot: Yes
+  - class: ahci-disk
+    image: /data/win10.qcow2
+    snapshot: Yes
 
   - class: virtio-block
-    image: /data/empty.qcow2
+    image: /data/ubuntu.qcow2
+    snapshot: Yes
 
-  # - name: nvidia-vgpu
-  #   class: vfio-pci
-  #   parent: pci-host
-  #   debug: No
-  #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b
+  - name: nvidia-vgpu
+    class: vfio-pci
+    parent: pci-host
+    debug: No
+    sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b

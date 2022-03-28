@@ -76,6 +76,7 @@ class Vcpu {
   void Process();
   void ProcessIo();
   void ProcessMmio();
+  void ProcessHyperV();
   void ExecuteTasks();
   void SaveStateTo(VcpuState& state);
   void LoadStateFrom(VcpuState& state);
@@ -93,6 +94,8 @@ class Vcpu {
   VcpuState                 default_state_;
   std::deque<VcpuTask>      tasks_;
   std::mutex                mutex_;
+  std::set<uint32_t>        msr_indices_;
+  uint32_t                  hyperv_features_;
 };
 
 #endif // _MVISOR_VCPU_H

@@ -113,6 +113,9 @@ class Cmos : public Device {
   } 
 
   bool LoadState(MigrationReader* reader) {
+    if (!Device::LoadState(reader)) {
+      return false;
+    }
     CmosState state;
     if (!reader->ReadProtobuf("CMOS", state)) {
       return false;
@@ -120,7 +123,9 @@ class Cmos : public Device {
     non_maskable_interrupt_disabled_ = state.nmi_disabled();
     cmos_index_ = state.index();
     memcpy(cmos_data_, state.data().data(), sizeof(cmos_data_));
-    return Device::LoadState(reader);
+  
+    UpdateRtcTimer();
+    return true;
   }
 
   /* always get time from host system, guest os cannot change date time now */
@@ -164,11 +169,15 @@ class Cmos : public Device {
     }
     uint period = 1 << (period_code - 1);
     uint64_t period_ms = std::max(1u, period * 10000 / 32768); // use 32k Hz clock rate
-    
-    if (rtc_timer_ == nullptr) {
-      rtc_timer_ = manager_->io()->AddTimer(period_ms, true, std::bind(&Cmos::OnRtcTimer, this));
+
+    if (cmos_data_[RTC_REG_B] & 0x40) {
+      if (rtc_timer_ == nullptr) {
+        rtc_timer_ = manager_->io()->AddTimer(period_ms, true, std::bind(&Cmos::OnRtcTimer, this));
+      } else {
+        manager_->io()->ModifyTimer(rtc_timer_, period_ms);
+      }
     } else {
-      manager_->io()->ModifyTimer(rtc_timer_, period_ms);
+      DisableTimer(&rtc_timer_);
     }
   }
 
@@ -214,9 +223,7 @@ class Cmos : public Device {
       case RTC_REG_B:
         cmos_data_[RTC_REG_B] = data[0];
         /* check if RTC interrupt flag is enabled */
-        if (cmos_data_[RTC_REG_B] & 0x40) {
-          UpdateRtcTimer();
-        }
+        UpdateRtcTimer();
         break;
       case RTC_REG_C:
       case RTC_REG_D:
