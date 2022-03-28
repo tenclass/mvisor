@@ -288,6 +288,23 @@ class Qxl : public Vga, public DisplayResizeInterface {
     SPICE_RING_INIT(&qxl_ram_->release_ring);
   }
 
+  /* Setup ioeventfd for notify commands, reduce IO operations */
+  virtual bool ActivatePciBar(uint8_t index) {
+    if (index == 3) {
+      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
+      manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
+    }
+    return Vga::ActivatePciBar(index);
+  }
+
+  virtual bool DeactivatePciBar(uint8_t index) {
+    if (index == 3) {
+      manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
+      manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
+    }
+    return Vga::DeactivatePciBar(index);
+  }
+
   virtual void UpdateDisplayMode() {
     /* Prevent from calling AcquireUpdate() when setting mode */
     std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -414,11 +431,11 @@ class Qxl : public Vga, public DisplayResizeInterface {
         CreatePrimarySurface(qxl_ram_->create_surface);
         break;
       case QXL_IO_DESTROY_PRIMARY:
+        FlushCommandsAndResources(true);
         DestroyPrimarySurface();
         break;
       case QXL_IO_NOTIFY_OOM:
-        FetchCommands();
-        FreeGuestResources();
+        FlushCommandsAndResources(false);
         break;
       case QXL_IO_UPDATE_IRQ:
         UpdateIrqLevel();
@@ -438,6 +455,32 @@ class Qxl : public Vga, public DisplayResizeInterface {
       }
     } else {
       Vga::Write(resource, offset, data, size);
+    }
+  }
+
+  void FlushCommandsAndResources(bool destroy_primary = false) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+    /* Fetch any commands on ring */
+    FetchCommands();
+
+    /* Remove all drawed objects */
+    uint released = 0;
+    for (auto it = drawables_.begin(); it != drawables_.end();) {
+      if (it->drawed || (destroy_primary && !it->drawing)) {
+        ReleaseGuestResource(&it->qxl_drawable->release_info);
+        it = drawables_.erase(it);
+        ++released;
+      } else {
+        ++it;
+      }
+    }
+
+    /* Free released resources */
+    FreeGuestResources();
+
+    if (debug_) {
+      MV_LOG("drawables released=%u current=%lu", released, drawables_.size());
     }
   }
 
@@ -618,6 +661,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
   }
 
   void FetchCommands() {
+    auto start_time = std::chrono::steady_clock::now();
+
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     QXLCommand command;
@@ -639,6 +684,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
     while (FetchCursorCommand(command)) {
       MV_ASSERT(command.type == QXL_CMD_CURSOR);
       ParseCursorCommand(command.data);
+    }
+
+    auto delta = std::chrono::steady_clock::now() - start_time;
+    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(delta).count();
+    if (delta_ms > 5) {
+      MV_LOG("duration=0x%lu ms", delta_ms);
     }
   }
 

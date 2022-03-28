@@ -4,8 +4,9 @@ base: q35.yaml
 machine:
   memory: 8G
   vcpu: 4
+  # Turn on BIOS output and performance measurement
   debug: Yes
-  # Turn off hypervisor if it's Windows
+  # Turn on hypervisor to lower CPU usage (Hyper-V is used for Windows)
   hypervisor: Yes
 
 objects:
@@ -20,8 +21,8 @@ objects:
     image: /data/ubuntu.qcow2
     snapshot: Yes
 
-  - name: nvidia-vgpu
-    class: vfio-pci
-    parent: pci-host
-    debug: No
-    sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b
+  # - name: nvidia-vgpu
+  #   class: vfio-pci
+  #   parent: pci-host
+  #   debug: No
+  #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b

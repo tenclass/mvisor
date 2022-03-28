@@ -69,6 +69,7 @@ Mar 2022
 1. CPU migration ✅
 2. VFIO migration ✅
 3. Migration to compressed file
+4. Hyper-V enlightenments ✅
 
 Milestone 4: Virtualization Management
 Apr 2022
