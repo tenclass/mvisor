@@ -63,6 +63,7 @@ class Vcpu {
   std::thread& thread() { return thread_; }
   static Vcpu* current_vcpu() { return current_vcpu_; }
   const char* name() { return name_; }
+  uint64_t cpuid_features() { return cpuid_features_; }
 
  private:
   static void SignalHandler(int signum);
@@ -95,7 +96,8 @@ class Vcpu {
   std::deque<VcpuTask>      tasks_;
   std::mutex                mutex_;
   std::set<uint32_t>        msr_indices_;
-  uint32_t                  hyperv_features_;
+  uint32_t                  hyperv_features_ = 0;
+  uint64_t                  cpuid_features_ = 0;
 };
 
 #endif // _MVISOR_VCPU_H

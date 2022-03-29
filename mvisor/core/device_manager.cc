@@ -62,9 +62,6 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
    * 2. register IO handlers
    */
   root_->Connect();
-
-  /* Call Reset() on all devices after Connect() */
-  ResetDevices();
 }
 
 DeviceManager::~DeviceManager() {

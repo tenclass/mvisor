@@ -140,10 +140,6 @@ class FirmwareConfig : public Device {
   }
 
   void InitializeFiles () {
-    /* Set VMX ON and VM is outside of SMX */
-    uint64_t feature_control = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
-    AddConfigFile("etc/msr_feature_control", &feature_control, sizeof(feature_control));
-
     AddConfigFile("bios-geometry", nullptr, 0);
 
     std::string smbios_anchor, smbios_table;
@@ -151,6 +147,14 @@ class FirmwareConfig : public Device {
     smbios.GetTables(smbios_anchor, smbios_table); 
     AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
     AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
+
+    /* disable S3 S4 (suspend / hibernate) */
+    bool disable_s3 = true, disable_s4 = true;
+    uint8_t suspend[6] = {128, 0, 0, 129, 128, 128};
+    suspend[3] = 1 | (uint(!disable_s3) << 7);
+    suspend[4] = 2 | (uint(!disable_s4) << 7);
+    AddConfigFile("etc/system-states", suspend, sizeof(suspend));
+    
   }
 
   void InitializeFileDir() {
@@ -212,6 +216,15 @@ class FirmwareConfig : public Device {
     } else {
       SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
     }
+
+    /* check VMX after vcpu started */
+    auto vcpu = manager_->machine()->first_vcpu();
+    MV_ASSERT(vcpu);
+    if (vcpu->cpuid_features() & (1U << 5)) {
+      uint64_t feature_control = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
+      AddConfigFile("etc/msr_feature_control", &feature_control, sizeof(feature_control));
+    }
+
   }
 
   bool SaveState(MigrationWriter* writer) {

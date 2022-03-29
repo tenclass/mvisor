@@ -65,6 +65,7 @@ class Machine {
   inline bool debug() { return debug_; }
   inline const std::string& guest_os() const { return guest_os_; }
   inline void set_guest_os(std::string os) { guest_os_ = os; }
+  inline Vcpu* first_vcpu() { return vcpus_.size() ? vcpus_[0] : nullptr; }
 
  private:
   friend class IoThread;
@@ -89,9 +90,6 @@ class Machine {
   DeviceManager* device_manager_;
   Configuration* config_;
   IoThread* io_thread_;
-
-  uint32_t cpuid_version_ = 0;
-  uint32_t cpuid_features_ = 0;
 
   std::map<std::string, Object*> objects_;
   bool debug_ = false;

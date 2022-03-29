@@ -108,8 +108,7 @@ void Vcpu::SetupCpuid() {
         entry->ecx &= ~(1 << 31); // disable hypervisor mode now
       }
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
-      machine_->cpuid_version_ = entry->eax;
-      machine_->cpuid_features_ = entry->edx;
+      cpuid_features_ = (uint64_t(entry->edx) << 32) | entry->ecx;
       break;
     case 0x6: // Thermal and Power Management Leaf
       entry->ecx = entry->ecx & ~(1 << 3); // don't touch MSR IA32_ENERGY_PERF_BIAS(0x1B0)
@@ -187,7 +186,7 @@ void Vcpu::SetupCpuid() {
 }
 
 void Vcpu::SetupMachineCheckException() {
-  if ((machine_->cpuid_features_ & 0x4080) != 0x4080) {
+  if (((cpuid_features_ >> 32) & 0x4080) != 0x4080) {
     /* MCE / MCA not supported */
     return;
   }

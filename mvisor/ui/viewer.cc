@@ -260,7 +260,8 @@ void Viewer::LookupDevices() {
 int Viewer::MainLoop() {
   SetThreadName("mvisor-viewer");
 
-  auto frame_interval_us = std::chrono::microseconds(1000000 / 30);
+  int fps = 64;
+  auto frame_interval_us = std::chrono::microseconds(1000000 / fps);
   // Loop until all vcpu exits
   while (machine_->IsValid()) {
     auto frame_start_time = std::chrono::steady_clock::now();

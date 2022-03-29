@@ -143,6 +143,8 @@ void Machine::Run() {
   if (config_->snapshot()) {
     auto path = std::filesystem::path(config_->path());
     Load(path.parent_path());
+  } else {
+    device_manager_->ResetDevices();
   }
   
   /* Set paused = false */
