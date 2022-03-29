@@ -234,6 +234,50 @@ PointerInputInterface* Viewer::GetActivePointer() {
   return nullptr;
 }
 
+void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
+  switch (state)
+  {
+  case kPlaybackStart: {
+    int err;
+    if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+      MV_PANIC("snd_pcm_open error: %s", snd_strerror(err));
+    }
+    playback_->GetPlaybackFormat(&playback_format_.format, &playback_format_.channels,
+      &playback_format_.frequency, &playback_format_.interval_ms);
+    err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
+      playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 2);
+    if (err < 0) {
+      MV_PANIC("snd_pcm_set_params error: %s\n", snd_strerror(err));
+    }
+    break;
+  }
+  case kPlaybackStop: {
+    if (!pcm_playback_)
+      break;
+    int err;
+    /* pass the remaining samples, otherwise they're dropped in close */
+    err = snd_pcm_drain(pcm_playback_);
+    if (err < 0)
+      MV_PANIC("snd_pcm_drain failed: %s", snd_strerror(err));
+    snd_pcm_close(pcm_playback_);
+    pcm_playback_ = nullptr;
+    break;
+  }
+  case kPlaybackData: {
+    if (!pcm_playback_)
+      break;
+    /* assume format is s16le */
+    auto frames = snd_pcm_writei(pcm_playback_, iov.iov_base, iov.iov_len / playback_format_.channels / 2);
+    if (frames < 0)
+      frames = snd_pcm_recover(pcm_playback_, frames, 0);
+    if (frames < 0) {
+      MV_LOG("snd_pcm_writei failed: %s\n", snd_strerror(frames));
+    }
+    break;
+  }
+  }
+}
+
 void Viewer::LookupDevices() {
   keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2"));
   display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Qxl"));
@@ -241,6 +285,7 @@ void Viewer::LookupDevices() {
     display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Vga"));
     MV_ASSERT(display_);
   }
+  playback_ = dynamic_cast<PlaybackInterface*>(machine_->device_manager()->LookupDeviceByClass("HdaDuplex"));
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
     pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));
   }
@@ -252,6 +297,11 @@ void Viewer::LookupDevices() {
   display_->RegisterDisplayChangeListener([this]() {
     requested_update_window_ = true;
   });
+  if (playback_) {
+    playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
+      OnPlayback(state, iov);
+    });
+  }
 }
 
 /* Reference about SDL-2:

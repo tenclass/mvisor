@@ -80,7 +80,7 @@ Apr 2022
 For CentOS 8,
 
 ```
-yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel
+yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel
 make -j8
 ```
 

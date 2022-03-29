@@ -91,7 +91,17 @@ class DisplayInterface {
   virtual void RegisterDisplayChangeListener(DisplayChangeListener callback) = 0;
 };
 
-
+enum PlaybackState {
+  kPlaybackStart,
+  kPlaybackStop,
+  kPlaybackData
+};
+typedef std::function <void(PlaybackState state, struct iovec iov)> PlaybackListener;
+class PlaybackInterface {
+ public:
+  virtual void GetPlaybackFormat(uint* format, uint* channels, uint* frequency, uint* interval_ms) = 0;
+  virtual void RegisterPlaybackListener(PlaybackListener callback) = 0;
+};
 
 class SerialPortInterface;
 class SerialDeviceInterface {

@@ -31,8 +31,9 @@
 #include "device.h"
 #include "hda_internal.h"
 #include "device_manager.h"
-#include "logger.h"
+#include "device_interface.h"
 #include "states/hda_duplex.pb.h"
+#include "logger.h"
 
 #define HDA_TIMER_INTERVAL_MS (10) // 10ms
 #define HDA_STREAM_BUFFER_SIZE 8192
@@ -68,13 +69,14 @@ struct HdaNode {
   HdaStream*  stream;
 };
 
-class HdaDuplex : public Device, public HdaCodecInterface {
+class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterface {
  private:
   uint32_t                  subsystem_id_;
   uint32_t                  pcm_formats_;
   std::vector<HdaNode>      nodes_;
   std::array<HdaStream, 2>  streams_ = { 0 };
   FILE*                     fp_output_ = nullptr;
+  std::vector<PlaybackListener> playback_listerns_;
 
  public:
   HdaDuplex() {
@@ -370,8 +372,8 @@ class HdaDuplex : public Device, public HdaCodecInterface {
   void OnStreamTimer(HdaStream* stream) {
     size_t transferred = stream->transfer_callback(stream->buffer, HDA_STREAM_BUFFER_SIZE);
     stream->position += transferred;
-    if (stream->output && fp_output_) {
-      fwrite(stream->buffer, transferred, 1, fp_output_);
+    if (stream->output) {
+      NotifyPlayback(kPlaybackData, stream->buffer, transferred);
     }
 
     auto written_ms = stream->position * 1000 / stream->bytes_per_second;
@@ -405,6 +407,9 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     }
 
     if (running) {
+      if (stream->output) {
+        NotifyPlayback(kPlaybackStart, nullptr, 0);
+      }
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
       MV_ASSERT(stream->timer == nullptr);
@@ -412,6 +417,9 @@ class HdaDuplex : public Device, public HdaCodecInterface {
         OnStreamTimer(stream);
       });
     } else {
+      if (stream->output) {
+        NotifyPlayback(kPlaybackStop, nullptr, 0);
+      }
       MV_ASSERT(stream->timer);
       manager_->io()->RemoveTimer(stream->timer);
       stream->timer = nullptr;
@@ -441,6 +449,27 @@ class HdaDuplex : public Device, public HdaCodecInterface {
     if (stream) {
       SetStreamRunning(stream, false);
     }
+  }
+
+  void NotifyPlayback(PlaybackState state, void* data, size_t length) {
+    for (auto& cb : playback_listerns_) {
+      cb(state, iovec {
+        .iov_base = data,
+        .iov_len = length
+      });
+    }
+  }
+
+  void GetPlaybackFormat(uint* format, uint* channels, uint* frequency, uint* interval_ms) {
+    auto& stream = streams_[0];
+    *format = 2;
+    *channels = stream.nchannels;
+    *frequency = stream.frequency;
+    *interval_ms = HDA_TIMER_INTERVAL_MS;
+  }
+
+  void RegisterPlaybackListener(PlaybackListener callback) {
+    playback_listerns_.push_back(callback);
   }
 };
 

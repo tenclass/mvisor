@@ -20,11 +20,14 @@
 #define _MVISOR_VIEWER_H
 
 #include <SDL2/SDL.h>
+#include <alsa/asoundlib.h>
+
+#include <mutex>
+#include <deque>
+
 #include "machine.h"
 #include "device_manager.h"
 #include "device_interface.h"
-#include <mutex>
-#include <deque>
 
 
 struct PendingResize {
@@ -32,6 +35,13 @@ struct PendingResize {
   int width;
   int height;
   std::chrono::steady_clock::time_point time;
+};
+
+struct PlaybackFormat {
+  uint format;
+  uint channels;
+  uint frequency;
+  uint interval_ms;
 };
 
 class Viewer {
@@ -52,12 +62,15 @@ class Viewer {
   void HandleEvent(const SDL_Event& event);
   PointerInputInterface* GetActivePointer();
   void SendPointerEvent();
+  void OnPlayback(PlaybackState state, struct iovec& iov);
 
   Machine* machine_;
   DisplayInterface* display_;
+  PlaybackInterface* playback_;
   KeyboardInputInterface* keyboard_;
   std::vector<PointerInputInterface*> pointers_;
   std::vector<DisplayResizeInterface*> resizers_;
+  PlaybackFormat playback_format_;
 
   SDL_Window* window_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;
@@ -74,6 +87,8 @@ class Viewer {
 
   PointerEvent pointer_state_ = { 0 };
   PendingResize pending_resize_;
+
+  snd_pcm_t* pcm_playback_ = nullptr;
 };
 
 #endif // _MVISOR_VIEWER_H

@@ -1,7 +1,7 @@
 PROTOC = protoc
 INCLUDE_DIRS := ./include /usr/include
 LIBS := stdc++ stdc++fs
-LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z
+LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound
 MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on
