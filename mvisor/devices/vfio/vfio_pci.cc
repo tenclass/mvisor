@@ -30,7 +30,6 @@
 #include "logger.h"
 
 VfioPci::VfioPci() {
-  devfn_ = PCI_MAKE_DEVFN(7, 0);
   for (auto &interrupt : interrupts_) {
     interrupt.event_fd = -1;
     interrupt.gsi = -1;

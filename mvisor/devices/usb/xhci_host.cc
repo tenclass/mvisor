@@ -117,8 +117,6 @@ class XhciHost : public PciDevice {
 
  public:
   XhciHost() {
-    devfn_ = PCI_MAKE_DEVFN(3, 0);
-    
     pci_header_.vendor_id = 0x1B36;
     pci_header_.device_id = 0x000D;
     pci_header_.class_code = 0x0C0330;

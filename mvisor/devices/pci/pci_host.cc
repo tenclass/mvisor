@@ -28,36 +28,17 @@
 #define MCH_PCIEXBAR                0x60
 #define MCH_PCIEXBAR_SIZE           0x04
 
-/*
- * PCI express ECAM (Enhanced Configuration Address Mapping) format.
- * AKA mmcfg address
- * bit 20 - 28: bus number
- * bit 15 - 19: device number
- * bit 12 - 14: function number
- * bit  0 - 11: offset in configuration space of a given device
- */
-#define PCIE_MMCFG_SIZE_MAX             (1ULL << 29)
-#define PCIE_MMCFG_SIZE_MIN             (1ULL << 20)
-#define PCIE_MMCFG_BUS_BIT              20
-#define PCIE_MMCFG_BUS_MASK             0x1ff
-#define PCIE_MMCFG_DEVFN_BIT            12
-#define PCIE_MMCFG_DEVFN_MASK           0xff
-#define PCIE_MMCFG_CONFOFFSET_MASK      0xfff
-#define PCIE_MMCFG_BUS(addr)            (((addr) >> PCIE_MMCFG_BUS_BIT) & \
-                                         PCIE_MMCFG_BUS_MASK)
-#define PCIE_MMCFG_DEVFN(addr)          (((addr) >> PCIE_MMCFG_DEVFN_BIT) & \
-                                         PCIE_MMCFG_DEVFN_MASK)
-#define PCIE_MMCFG_CONFOFFSET(addr)     ((addr) & PCIE_MMCFG_CONFOFFSET_MASK)
-
 class PciHost : public PciDevice {
  private:
   uint64_t          pcie_xbar_base_ = 0;
-  PciConfigAddress  config_addr_;
+  PciConfigAddress  config_;
 
  public:
   PciHost() {
-    devfn_ = PCI_MAKE_DEVFN(0, 0);
+    slot_ = 0;
+    function_ = 0;
     is_pcie_ = true;
+    set_parent_name("system-root");
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x29C0;
@@ -72,7 +53,7 @@ class PciHost : public PciDevice {
 
   virtual bool SaveState(MigrationWriter* writer) {
     MchState state;
-    state.set_config(config_addr_.data);
+    state.set_config(config_.value);
     writer->WriteProtobuf("MCH", state);
     return PciDevice::SaveState(writer);
   }
@@ -85,7 +66,7 @@ class PciHost : public PciDevice {
     if (!reader->ReadProtobuf("MCH", state)) {
       return false;
     }
-    config_addr_.data = state.config();
+    config_.value = state.config();
     MchUpdatePcieXBar();
     return true;
   }
@@ -109,31 +90,37 @@ class PciHost : public PciDevice {
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == MCH_CONFIG_ADDR) {
-      uint8_t* pointer = (uint8_t*)&config_addr_.data + offset;
-      memcpy(pointer, data, size);
+      memcpy(config_.data + offset, data, size);
     
     } else if (resource->base == MCH_CONFIG_DATA) {
       MV_ASSERT(size <= 4);
       
-      PciDevice* pci_device = manager_->LookupPciDevice(config_addr_.bus, config_addr_.devfn);
-      if (pci_device) {
-        config_addr_.reg_offset = offset;
-        pci_device->WritePciConfigSpace(
-          config_addr_.data & PCI_DEVICE_CONFIG_MASK, data, size);
+      PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
+      if (pci) {
+        config_.reg_offset = offset;
+        pci->WritePciConfigSpace(config_.value & 0xFF, data, size);
       } else {
-        MV_LOG("failed to lookup pci bus=0x%x devfn=0x%02x",
-          config_addr_.bus, config_addr_.devfn);
+        MV_LOG("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
       }
     
     } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
-      uint8_t bus = PCIE_MMCFG_BUS(resource->base + offset);
-      uint8_t devfn = PCIE_MMCFG_DEVFN(resource->base + offset);
-      PciDevice* pci_device = manager_->LookupPciDevice(bus, devfn);
-      uint64_t address = PCIE_MMCFG_CONFOFFSET(resource->base + offset);
-      if (pci_device) {
-        pci_device->WritePciConfigSpace(address, data, size);
+      /*
+      * PCI express ECAM (Enhanced Configuration Address Mapping) format.
+      * AKA mmcfg address
+      * bit 20 - 28: bus number
+      * bit 15 - 19: device number
+      * bit 12 - 14: function number
+      * bit  0 - 11: offset in configuration space of a given device
+      */
+      uint32_t addr = offset;
+      uint16_t bus = (addr >> 20) & 0x1FF;
+      uint8_t slot = (addr >> 15) & 0x1F;
+      uint8_t function = (addr >> 12) & 0x7;
+      PciDevice* pci = manager_->LookupPciDevice(bus, slot, function);
+      if (pci) {
+        pci->WritePciConfigSpace(addr & 0xFFF, data, size);
       } else {
-        MV_LOG("failed to lookup pci bus=0x%x devfn=0x%02x", bus, devfn);
+        MV_LOG("failed to lookup pci %x:%x.%x offset=0x%lx", bus, slot, function, offset);
       }
     
     } else {
@@ -144,31 +131,30 @@ class PciHost : public PciDevice {
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == MCH_CONFIG_ADDR) {
-      uint8_t* pointer = (uint8_t*)&config_addr_.data + offset;
-      memcpy(data, pointer, size);
+      memcpy(data, config_.data + offset, size);
     
     } else if (resource->base == MCH_CONFIG_DATA) {
       if (size > 4)
         size = 4;
       
-      PciDevice* pci_device = manager_->LookupPciDevice(config_addr_.bus, config_addr_.devfn);
-      if (pci_device) {
-        config_addr_.reg_offset = offset;
-        pci_device->ReadPciConfigSpace(
-          config_addr_.data & PCI_DEVICE_CONFIG_MASK, data, size);
+      PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
+      if (pci) {
+        config_.reg_offset = offset;
+        pci->ReadPciConfigSpace(config_.value & 0xFF, data, size);
       } else {
-        memset(data, 0xff, size);
+        memset(data, 0xFF, size);
       }
     
     } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
-      uint8_t bus = PCIE_MMCFG_BUS(resource->base + offset);
-      uint8_t devfn = PCIE_MMCFG_DEVFN(resource->base + offset);
-      PciDevice* pci_device = manager_->LookupPciDevice(bus, devfn);
-      uint64_t address = PCIE_MMCFG_CONFOFFSET(resource->base + offset);
-      if (pci_device) {
-        pci_device->ReadPciConfigSpace(address, data, size);
+      uint32_t addr = offset;
+      uint16_t bus = (addr >> 20) & 0x1FF;
+      uint8_t slot = (addr >> 15) & 0x1F;
+      uint8_t function = (addr >> 12) & 0x7;
+      PciDevice* pci = manager_->LookupPciDevice(bus, slot, function);
+      if (pci) {
+        pci->ReadPciConfigSpace(addr & 0xFFF, data, size);
       } else {
-        memset(data, 0xff, size);
+        memset(data, 0xFF, size);
       }
     
     } else {

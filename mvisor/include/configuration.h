@@ -46,9 +46,12 @@ class Configuration {
   void LoadObjects(const YAML::Node& node);
   void SaveMachine(YAML::Node& node);
   void SetObjectKeyValue(Object* object, std::string key, const YAML::Node& value);
+  Object* CreateObject(std::string class_name, std::string name = "");
+  Object* GetOrCreateObject(std::string class_name, std::string name);
+  std::string GenerateObjectName(std::string class_name);
+  void CreateParents(Object* object);
 
   Machine*    machine_;
-  Device*     root_;
   std::set<std::string> directories_;
   bool        snapshot_;
   std::string path_;

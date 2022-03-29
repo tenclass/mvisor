@@ -65,7 +65,7 @@ void register_class(int type, const char* name, const char* source_path, ClassCr
 Object* realize_class(const char* name) {
   auto it = classes->find(name);
   if (it == classes->end()) {
-    MV_PANIC("class not found %s", name);
+    MV_PANIC("object class not found %s", name);
   }
   Object* o = it->second->create();
   o->set_id(++last_object_id);

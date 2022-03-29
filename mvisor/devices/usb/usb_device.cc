@@ -25,6 +25,10 @@
 #include "device_manager.h"
 #include "states/usb_device.pb.h"
 
+UsbDevice::UsbDevice() {
+  set_parent_name("xhci-host");
+}
+
 void UsbDevice::Reset() {
   configuration_value_ = 0;
   config_ = nullptr;

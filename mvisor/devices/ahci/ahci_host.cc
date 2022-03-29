@@ -36,7 +36,8 @@
 
 AhciHost::AhciHost() {
   /* FIXME: should gernerated by parent pci device */
-  devfn_ = PCI_MAKE_DEVFN(31, 2);
+  slot_ = 31;
+  function_ =  2;
   
   /* PCI config */
   pci_header_.vendor_id = 0x8086;
@@ -151,7 +152,9 @@ void AhciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data,
   
   if (offset >= 0x100) {
     int port = (offset - 0x100) >> 7;
-    ports_[port]->Write(offset & 0x7f, value);
+    if (ports_[port]) {
+      ports_[port]->Write(offset & 0x7f, value);
+    }
   } else {
     switch (offset / 4)
     {

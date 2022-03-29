@@ -88,15 +88,80 @@ bool Configuration::LoadFile(std::string path) {
   if (config["machine"]) {
     LoadMachine(config["machine"]);
   }
+
   if (config["objects"]) {
     LoadObjects(config["objects"]);
   }
+
   if (config["snapshot"]) {
     snapshot_ = config["snapshot"].as<bool>();
   } else {
     snapshot_ = false;
   }
   return true;
+}
+
+Object* Configuration::CreateObject(std::string class_name, std::string name) {
+  auto &objects = machine_->objects_;
+  MV_ASSERT(objects.find(name) == objects.end());
+
+  auto object = Object::Create(class_name.c_str());
+  object->set_name(name.c_str());
+  objects[name] = object;
+  return object;
+}
+
+Object* Configuration::GetOrCreateObject(std::string class_name, std::string name) {
+  auto &objects = machine_->objects_;
+  auto it = objects.find(name);
+  Object* object;
+  if (it == objects.end()) {
+    object = CreateObject(class_name, name);
+  } else {
+    object = it->second;
+  }
+  return object;
+}
+
+std::string Configuration::GenerateObjectName(std::string class_name) {
+  auto &objects = machine_->objects_;
+
+  /* try to use class name as name */
+  if(objects.find(class_name) == objects.end()) {
+    return class_name;
+  }
+
+  for (int index = 1; index < 256; index++) {
+    char name[100];
+    sprintf(name, "%s-%d", class_name.c_str(), index);
+    if (objects.find(name) == objects.end()) {
+      return name;
+    }
+  }
+  /* never get here */
+  MV_PANIC("failed to set object name of %s", class_name.c_str());
+  return class_name;
+}
+
+/* Make sure all objects are linked. If parent not found, try to create one */
+void Configuration::CreateParents(Object* object) {
+  auto &objects = machine_->objects_;
+
+  MV_ASSERT(!object->parent());
+  if (!object->parent_name()[0]) {
+    return;
+  }
+  
+  auto it = objects.find(object->parent_name());
+  if (it == objects.end()) {
+    auto parent = CreateObject(object->parent_name(), object->parent_name());
+    parent->AddChild(object);
+    if (!parent->parent()) {
+      CreateParents(parent);
+    }
+  } else {
+    it->second->AddChild(object);
+  }
 }
 
 void Configuration::SetObjectKeyValue(Object* object, std::string key, const YAML::Node& value) {
@@ -141,12 +206,7 @@ void Configuration::LoadMachine(const YAML::Node& node) {
 }
 
 void Configuration::LoadObjects(const YAML::Node& objects_node) {
-  auto &objects = machine_->objects_;
-  struct NodeObject {
-    YAML::Node node;
-    Object* object;
-  };
-  std::vector<NodeObject> v;
+  std::vector<Object*> created;
 
   /* Create objects */
   for (auto it = objects_node.begin(); it != objects_node.end(); it++) {
@@ -156,65 +216,32 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
     if (node["name"]) {
       name = node["name"].as<string>();
     } else {
-      name = class_name;
+      name = GenerateObjectName(class_name);
     }
-    auto objects_it = objects.find(name);
-    Object* object;
-    if (objects_it == objects.end()) {
-      object = Object::Create(class_name.c_str());
-      object->set_name(name.c_str());
-      objects[name] = object;
-    } else {
-      object = objects_it->second;
-    }
-    v.emplace_back(NodeObject { .node = node, .object = object });
+    auto object = GetOrCreateObject(class_name, name);
 
     /* Load object properties */
     for (auto it2 = node.begin(); it2 != node.end(); it2++) {
       string key = it2->first.as<string>();
       auto value = it2->second;
-      if (key == "name" || key == "class" || key == "children" || key == "parent") {
+      if (key == "name" || key == "class") {
         continue;
       }
       if (key == "debug") {
         object->set_debug(value.as<bool>());
         continue;
+      } else if (key == "parent") {
+        object->set_parent_name(value.as<string>().c_str());
+        continue;
       }
       SetObjectKeyValue(object, key, value);
     }
-  }
-  
-  /* Add children */
-  for (auto &node_object : v) {
-    if (node_object.node["children"]) {
-      auto children_node = node_object.node["children"];
-      for (auto it = children_node.begin(); it != children_node.end(); it++) {
-        /* If object by name not found, try to create one with class name */
-        auto name = it->as<string>();
-        auto objects_it = objects.find(name);
-        Object* object;
-        if (objects_it == objects.end()) {
-          object = Object::Create(name.c_str());
-          objects[name] = object;
-        } else {
-          object = objects_it->second;
-        }
-        node_object.object->AddChild(object);
-      }
-    }
+
+    created.push_back(object);
   }
 
-  /* Add to parent */
-  for (auto &node_object : v) {
-    if (node_object.node["parent"]) {
-      auto parent = node_object.node["parent"].as<string>();
-      auto objects_it = objects.find(parent);
-      if (objects_it == objects.end()) {
-        MV_PANIC("Object %s has invalid parent value %s", node_object.object->name(), parent.c_str());
-      } else {
-        objects_it->second->AddChild(node_object.object);
-      }
-    }
+  for (auto object : created) {
+    CreateParents(object);
   }
 }
 

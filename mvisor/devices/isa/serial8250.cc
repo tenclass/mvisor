@@ -158,6 +158,8 @@ class Serial8250 : public Device {
 
  public:
   Serial8250() {
+    set_parent_name("ich9-lpc");
+
     bzero(&consoles_, sizeof(consoles_));
     AddConsole(0, "COM 1", 0x3F8, 4);
     AddConsole(1, "COM 2", 0x2F8, 3);

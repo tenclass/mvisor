@@ -43,6 +43,7 @@ class Object {
   inline const char* classname() const { return classname_; }
   inline bool debug() const { return debug_; }
   inline const Object* parent() const { return parent_; }
+  inline const char* parent_name() const { return parent_name_; }
   inline const std::vector<Object*>& children() const { return children_; }
   inline bool has_key(std::string key) const { return key_values_.find(key) != key_values_.end(); }
   inline Value& operator[](std::string key) { return key_values_[key]; }
@@ -51,13 +52,15 @@ class Object {
   void set_id(uint id) { id_ = id; }
   void set_debug(bool debug) { debug_ = debug; }
   void set_name(const char* name);
-  void set_classname(const char* classname);  
+  void set_classname(const char* classname);
+  void set_parent_name(const char* parent_name);
 
  protected:
   uint id_ = 0;
   bool debug_ = false;
   char name_[OBJECT_MAX_NAME_LENGTH];
   char classname_[OBJECT_MAX_NAME_LENGTH];
+  char parent_name_[OBJECT_MAX_NAME_LENGTH];
   std::map<std::string, Value> key_values_;
 
   /* Object topology */

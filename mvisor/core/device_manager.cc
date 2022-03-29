@@ -35,7 +35,9 @@
 /* SystemRoot is a motherboard that holds all the funcational devices */
 class SystemRoot : public Device {
  public:
-  SystemRoot() {}
+  SystemRoot() {
+    set_parent_name("");
+  }
  private:
   friend class DeviceManager;
 };
@@ -93,6 +95,7 @@ void DeviceManager::PrintDevices() {
         break;
       case kIoResourceTypeMmio:
         MV_LOG("\tMMIO address 0x%016lx-0x016%lx %d", resource->base, resource->base + resource->length - 1, resource->enabled);
+        break;
       case kIoResourceTypeRam:
         MV_LOG("\tRAM  address 0x%016lx-0x016%lx %d", resource->base, resource->base + resource->length - 1, resource->enabled);
         break;
@@ -110,10 +113,10 @@ Device* DeviceManager::LookupDeviceByClass(const std::string class_name) {
   return nullptr;
 }
 
-PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
+PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t slot, uint8_t function) {
   for (auto device : registered_devices_) {
     PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
-    if (pci_device && pci_device->bus_ == bus && pci_device->devfn_ == devfn) {
+    if (pci_device && pci_device->bus_ == bus && pci_device->slot_ == slot && pci_device->function_ == function) {
       return pci_device;
     }
   }
@@ -123,11 +126,36 @@ PciDevice* DeviceManager::LookupPciDevice(uint16_t bus, uint8_t devfn) {
 
 void DeviceManager::RegisterDevice(Device* device) {
   // Check devfn conflicts or reassign it
-  PciDevice* pci_device = dynamic_cast<PciDevice*>(device);
-  if (pci_device) {
-    if (LookupPciDevice(pci_device->bus(), pci_device->devfn())) {
-      MV_PANIC("PCI device function %x conflicts", pci_device->devfn());
+  PciDevice* pci = dynamic_cast<PciDevice*>(device);
+  if (pci) {
+    /* Auto generate pci address */
+    if (pci->slot_ == 0xFF) {
+      auto parent = dynamic_cast<const PciDevice*>(pci->parent());
+      /* Check if Multi-function */
+      if (parent && (parent->pci_header_.header_type & 0x80)) {
+        pci->slot_ = parent->slot_;
+        for (uint i = 0; i < 8; i++) {
+          if (!LookupPciDevice(pci->bus_, pci->slot_, i)) {
+            pci->function_ = i;
+            break;
+          }
+        }
+      } else {
+        for (uint i = 1; i < 0x1F; i++) {
+          if (!LookupPciDevice(pci->bus_, i, pci->function_)) {
+            pci->slot_ = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (LookupPciDevice(pci->bus_, pci->slot_, pci->function_)) {
+      MV_PANIC("PCI device %x.%x conflicts", pci->slot_, pci->function_);
       return;
+    }
+    if (machine_->debug_) {
+      MV_LOG("register PCI %s at %x:%x.%x", pci->name_, pci->bus_, pci->slot_, pci->function_);
     }
   }
 
@@ -215,6 +243,7 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource* resour
   } else if (resource->type == kIoResourceTypeMmio) {
     for (auto it = mmio_handlers_.begin(); it != mmio_handlers_.end(); it++) {
       if ((*it)->device == device && (*it)->resource->base == resource->base) {
+        machine_->memory_manager()->Unmap(&(*it)->memory_region);
         delete *it;
         mmio_handlers_.erase(it);
         break;

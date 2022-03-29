@@ -25,6 +25,9 @@
 
 Device::Device() {
   strcpy(name_, "unknown");
+
+  /* If the device is not specified a default parent, attach it to the top system-root */
+  set_parent_name("system-root");
 }
 
 Device::~Device() {
@@ -49,7 +52,7 @@ void Device::Connect() {
   connected_ = true;
   manager_->RegisterDevice(this);
   for (auto resource : io_resources_) {
-    manager_->RegisterIoHandler(this, resource);
+    SetIoResourceEnabled(resource, true);
   }
   if (parent_ && manager_->machine()->debug()) {
     MV_LOG("%s <= %s", parent_->name(), name_);
@@ -69,8 +72,10 @@ void Device::Disconnect() {
     }
   }
 
-  for (auto &io_resource : io_resources_) {
-    manager_->UnregisterIoHandler(this, io_resource);
+  for (auto resource : io_resources_) {
+    if (resource->enabled) {
+      SetIoResourceEnabled(resource, false);
+    }
   }
   manager_->UnregisterDevice(this);
 }
@@ -116,6 +121,7 @@ void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
       if (connected_) {
         SetIoResourceEnabled(resource, false);
       }
+      MV_ASSERT(!resource->enabled);
       io_resources_.erase(it);
       return;
     }

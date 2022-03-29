@@ -128,7 +128,8 @@ class Ich9Lpc : public PciDevice {
 
  public:
   Ich9Lpc() {
-    devfn_ = PCI_MAKE_DEVFN(31, 0);
+    slot_ = 31;
+    function_ = 0;
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x2918;
@@ -139,6 +140,9 @@ class Ich9Lpc : public PciDevice {
     pci_header_.subsys_id = 0x1100;
 
     AddIoResource(kIoResourceTypePio, 0xB2, 2, "LPC APM");
+
+    /* https://qemu.readthedocs.io/en/v6.2.0/specs/acpi_pci_hotplug.html */
+    AddIoResource(kIoResourceTypePio, 0xAE00, 20, "ACPI PCI HOTPLUG");
   }
 
   bool SaveState(MigrationWriter* writer) {
@@ -196,6 +200,12 @@ class Ich9Lpc : public PciDevice {
         *data = apm.control();
       } else {
         *data = apm.status();
+      }
+      return;
+    } else if (resource->base == 0xAE00) { // ACPI PCI HOTPLUG
+      if (offset == 0x0C) { // PCI removability status
+        /* disable all PCIs hotplug */
+        bzero(data, size);
       }
       return;
     }

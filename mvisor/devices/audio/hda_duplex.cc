@@ -77,6 +77,10 @@ class HdaDuplex : public Device, public HdaCodecInterface {
   FILE*                     fp_output_ = nullptr;
 
  public:
+  HdaDuplex() {
+    set_parent_name("ich9-hda");
+  }
+
   void Connect() {
     Device::Connect();
     if (debug_) {

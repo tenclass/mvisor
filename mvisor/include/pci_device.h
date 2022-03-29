@@ -111,15 +111,15 @@ union PciConfigAddress {
   struct {
     unsigned reg_offset  : 2;  /* 1  .. 0  */
     unsigned reg_number  : 6;  /* 7  .. 2  */
-    unsigned devfn       : 8;
+    unsigned function    : 3;  /* 10 .. 8 */
+    unsigned slot        : 5;  /* 15 .. 11 */
     unsigned bus         : 8;  /* 23 .. 16 */
     unsigned reserved    : 7;  /* 30 .. 24 */
     unsigned enabled     : 1;  /* 31       */
   };
-  uint32_t data;
+  uint8_t   data[4];
+  uint32_t  value;
 };
-
-#define PCI_MAKE_DEVFN(device, function) ((device << 3) | function)
 
 #define PCI_BAR_OFFSET(b) (offsetof(struct PciConfigHeader, bars[b]))
 #define PCI_DEVICE_CONFIG_SIZE 256
@@ -128,7 +128,7 @@ union PciConfigAddress {
 #define PCIE_DEVICE_CONFIG_SIZE 0x1000
 
 #define Q35_MASK(bit, ms_bit, ls_bit) \
-((uint##bit##_t)(((1ULL << ((ms_bit) + 1)) - 1) & ~((1ULL << ls_bit) - 1)))
+  ((uint##bit##_t)(((1ULL << ((ms_bit) + 1)) - 1) & ~((1ULL << ls_bit) - 1)))
 
 struct PciConfigHeader {
   /* Configuration space, as seen by the guest */
@@ -204,7 +204,8 @@ class PciDevice : public Device {
   virtual void Disconnect();
 
   uint8_t bus() { return bus_; }
-  uint8_t devfn() { return devfn_; }
+  uint8_t slot() { return slot_; }
+  uint8_t function() { return function_; }
   const PciConfigHeader& pci_header() { return pci_header_; }
   const PciBarInfo& pci_bar(uint8_t index) { return pci_bars_[index]; }
   uint    pci_config_size() { return is_pcie_ ? PCIE_DEVICE_CONFIG_SIZE : PCI_DEVICE_CONFIG_SIZE; }
@@ -237,8 +238,9 @@ class PciDevice : public Device {
   void SignalMsi(int vector = 0);
   void SetIrq(uint level);
 
-  uint8_t           devfn_;
-  uint8_t           bus_;
+  uint16_t          bus_;
+  uint8_t           slot_;
+  uint8_t           function_;
   PciConfigHeader   pci_header_;
   PciBarInfo        pci_bars_[PCI_BAR_NUMS];
   PciRomBarInfo     pci_rom_;

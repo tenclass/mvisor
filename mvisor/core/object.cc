@@ -35,6 +35,10 @@ void Object::set_classname(const char* classname) {
   strncpy(classname_, classname, OBJECT_MAX_NAME_LENGTH - 1);
 }
 
+void Object::set_parent_name(const char* parent_name) {
+  strncpy(parent_name_, parent_name, OBJECT_MAX_NAME_LENGTH - 1);
+}
+
 Object::Object() {
 
 }

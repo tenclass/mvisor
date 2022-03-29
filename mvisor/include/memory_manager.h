@@ -30,7 +30,8 @@
 enum MemoryType {
   kMemoryTypeReserved = 0,
   kMemoryTypeRam = 1,
-  kMemoryTypeDevice = 2
+  kMemoryTypeDevice = 2,
+  kMemoryTypeRom = 3
 };
 
 struct MemoryRegion {

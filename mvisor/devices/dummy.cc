@@ -25,6 +25,8 @@
 class DummyDevice : public Device {
  public:
   DummyDevice() {
+    set_parent_name("ich9-lpc");
+
     /* Legacy ioport setup */
   
     /* 0000 - 001F - DMA1 controller */
@@ -92,11 +94,11 @@ class DummyDevice : public Device {
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     // Do nothing
-    /*
-    MV_LOG("%s ignore %s read base=0x%lx offset=0x%lx size=%d",
-      resource->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
-      resource->name, resource->base, offset, size);
-    */
+    if (manager_->machine()->debug()) {
+      MV_LOG("%s ignore %s read base=0x%lx offset=0x%lx size=%d",
+        resource->type == kIoResourceTypeMmio ? "MMIO" : "PIO",
+        resource->name, resource->base, offset, size);
+    }
     if (resource->type == kIoResourceTypePio) {
       memset(data, 0xFF, size);
     } else {

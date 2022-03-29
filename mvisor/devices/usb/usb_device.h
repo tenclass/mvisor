@@ -70,15 +70,17 @@ struct UsbPacket {
 
 class UsbDevice : public Device {
  public:
-  int speed() { return speed_; }
-  bool configured() { return configuration_value_ > 0; }
+  UsbDevice();
+  virtual void Reset();
+  virtual bool SaveState(MigrationWriter* writer);
+  virtual bool LoadState(MigrationReader* reader);
+
   UsbPacket* CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete);
   bool HandlePacket(UsbPacket* packet);
   void CancelPacket(UsbPacket* packet);
 
-  virtual void Reset();
-  virtual bool SaveState(MigrationWriter* writer);
-  virtual bool LoadState(MigrationReader* reader);
+  int speed() { return speed_; }
+  bool configured() { return configuration_value_ > 0; }
 
  protected:
   int                               speed_;

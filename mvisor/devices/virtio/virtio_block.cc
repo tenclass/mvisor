@@ -33,7 +33,6 @@ class VirtioBlock : public VirtioPci {
 
  public:
   VirtioBlock() {
-    devfn_ = PCI_MAKE_DEVFN(6, 0);
     pci_header_.class_code = 0x010000;
     pci_header_.device_id = 0x1001;
     pci_header_.subsys_id = 0x0002;

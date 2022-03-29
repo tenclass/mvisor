@@ -75,7 +75,6 @@ class Machine {
 
   void InitializeKvm();
   void CreateArchRelated();
-  void CreateVcpu();
 
   bool valid_ = true;
   bool paused_ = true;

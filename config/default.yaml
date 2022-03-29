@@ -10,10 +10,21 @@ machine:
   hypervisor: Yes
 
 objects:
+  - class: qxl
+  - class: spice-agent
+  - class: usb-tablet
+
+  - class: virtio-network
+    backend: uip
+    mac: 00:50:00:11:22:33
+
   - class: ahci-cdrom
     image: /mnt/iso/ubuntu-20.04.1-desktop-amd64.iso
+  
+  - class: ahci-cdrom
+    image: /mnt/iso/virtio.iso
 
-  - class: ahci-disk
+  - class: virtio-block
     image: /data/win10.qcow2
     snapshot: Yes
 
@@ -21,8 +32,5 @@ objects:
     image: /data/ubuntu.qcow2
     snapshot: Yes
 
-  # - name: nvidia-vgpu
-  #   class: vfio-pci
-  #   parent: pci-host
-  #   debug: No
+  # - class: vfio-pci
   #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b

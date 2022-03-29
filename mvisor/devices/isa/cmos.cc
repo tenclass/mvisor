@@ -66,6 +66,8 @@ class Cmos : public Device {
  public:
 
   Cmos() {
+    set_parent_name("ich9-lpc");
+
     AddIoResource(kIoResourceTypePio, RTC_BASE_ADDRESS, 2, "CMOS");
   }
 

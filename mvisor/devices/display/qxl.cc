@@ -65,9 +65,9 @@ struct Drawable
 class Qxl : public Vga, public DisplayResizeInterface {
  private:
   uint32_t  qxl_rom_size_;
-  void*     qxl_rom_base_;
+  void*     qxl_rom_base_ = nullptr;
   uint32_t  qxl_vram32_size_;
-  uint8_t*  qxl_vram32_base_;
+  uint8_t*  qxl_vram32_base_ = nullptr;
 
   QXLRom*   qxl_rom_;
   QXLModes* qxl_modes_;
@@ -88,6 +88,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
  public:
   Qxl() {
+    default_rom_path_ = "../share/vgabios-qxl.bin";
+
     pci_header_.vendor_id = 0x1B36;
     pci_header_.device_id = 0x0100;
     pci_header_.revision_id = 5;
@@ -418,6 +420,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
           MV_LOG("QXL_IO_UPDATE_AREA not implemented");
         }
         break;
+      case QXL_IO_UPDATE_IRQ:
+        UpdateIrqLevel();
+        break;
+      case QXL_IO_NOTIFY_OOM:
+        FlushCommandsAndResources(false);
+        break;
       case QXL_IO_RESET:
         Reset();
         UpdateIrqLevel();
@@ -433,12 +441,6 @@ class Qxl : public Vga, public DisplayResizeInterface {
       case QXL_IO_DESTROY_PRIMARY:
         FlushCommandsAndResources(true);
         DestroyPrimarySurface();
-        break;
-      case QXL_IO_NOTIFY_OOM:
-        FlushCommandsAndResources(false);
-        break;
-      case QXL_IO_UPDATE_IRQ:
-        UpdateIrqLevel();
         break;
       case QXL_IO_MONITORS_CONFIG_ASYNC:
         break;
@@ -625,7 +627,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
   }
 
-  /* Lock the drawables and translate to display partial object */
+  /* Lock the drawables and translate to display partial bitmaps */
   virtual bool AcquireUpdate(DisplayUpdate& update) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (mode_ != kDisplayQxlMode) {
@@ -661,8 +663,6 @@ class Qxl : public Vga, public DisplayResizeInterface {
   }
 
   void FetchCommands() {
-    auto start_time = std::chrono::steady_clock::now();
-
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     QXLCommand command;
@@ -680,16 +680,9 @@ class Qxl : public Vga, public DisplayResizeInterface {
         break;
       }
     }
-
     while (FetchCursorCommand(command)) {
       MV_ASSERT(command.type == QXL_CMD_CURSOR);
       ParseCursorCommand(command.data);
-    }
-
-    auto delta = std::chrono::steady_clock::now() - start_time;
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(delta).count();
-    if (delta_ms > 5) {
-      MV_LOG("duration=0x%lu ms", delta_ms);
     }
   }
 

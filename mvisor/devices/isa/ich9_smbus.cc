@@ -21,7 +21,8 @@
 class Ich9Smbus : public PciDevice {
  public:
   Ich9Smbus() {
-    devfn_ = PCI_MAKE_DEVFN(31, 3);
+    slot_ = 31;
+    function_ = 3;
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x2930;

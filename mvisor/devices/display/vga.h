@@ -79,7 +79,7 @@ class Vga : public PciDevice, public DisplayInterface {
 
  protected:
   uint32_t    vram_size_;
-  uint8_t*    vram_base_;
+  uint8_t*    vram_base_ = nullptr;
   uint32_t    vga_mem_size_;
   DisplayMode mode_;
   uint        width_;
@@ -88,6 +88,7 @@ class Vga : public PciDevice, public DisplayInterface {
   uint        stride_;
   std::string vga_surface_;
   std::recursive_mutex      mutex_;
+  std::string default_rom_path_;
 
   void NotifyDisplayModeChange();
   virtual void UpdateDisplayMode();

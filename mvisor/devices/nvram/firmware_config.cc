@@ -203,10 +203,10 @@ class FirmwareConfig : public Device {
     AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "Config DMA");
   }
 
-  void Connect() {
+  void Reset() {
+    config_.clear();
+    files_.clear();
     InitializeConfig();
-
-    Device::Connect();
   }
 
   bool SaveState(MigrationWriter* writer) {

@@ -289,11 +289,11 @@ class PciDeviceState : public ::google::protobuf::Message /* @@protoc_insertion_
   ::google::protobuf::uint32 bus() const;
   void set_bus(::google::protobuf::uint32 value);
 
-  // uint32 device = 2;
-  void clear_device();
-  static const int kDeviceFieldNumber = 2;
-  ::google::protobuf::uint32 device() const;
-  void set_device(::google::protobuf::uint32 value);
+  // uint32 slot = 2;
+  void clear_slot();
+  static const int kSlotFieldNumber = 2;
+  ::google::protobuf::uint32 slot() const;
+  void set_slot(::google::protobuf::uint32 value);
 
   // uint32 function = 3;
   void clear_function();
@@ -314,7 +314,7 @@ class PciDeviceState : public ::google::protobuf::Message /* @@protoc_insertion_
   ::google::protobuf::RepeatedPtrField< ::PciDeviceState_MsiXTableEntry > msix_entries_;
   ::google::protobuf::internal::ArenaStringPtr config_space_;
   ::google::protobuf::uint32 bus_;
-  ::google::protobuf::uint32 device_;
+  ::google::protobuf::uint32 slot_;
   ::google::protobuf::uint32 function_;
   bool pcie_;
   mutable int _cached_size_;
@@ -392,18 +392,18 @@ inline void PciDeviceState::set_bus(::google::protobuf::uint32 value) {
   // @@protoc_insertion_point(field_set:PciDeviceState.bus)
 }
 
-// uint32 device = 2;
-inline void PciDeviceState::clear_device() {
-  device_ = 0u;
+// uint32 slot = 2;
+inline void PciDeviceState::clear_slot() {
+  slot_ = 0u;
 }
-inline ::google::protobuf::uint32 PciDeviceState::device() const {
-  // @@protoc_insertion_point(field_get:PciDeviceState.device)
-  return device_;
+inline ::google::protobuf::uint32 PciDeviceState::slot() const {
+  // @@protoc_insertion_point(field_get:PciDeviceState.slot)
+  return slot_;
 }
-inline void PciDeviceState::set_device(::google::protobuf::uint32 value) {
+inline void PciDeviceState::set_slot(::google::protobuf::uint32 value) {
   
-  device_ = value;
-  // @@protoc_insertion_point(field_set:PciDeviceState.device)
+  slot_ = value;
+  // @@protoc_insertion_point(field_set:PciDeviceState.slot)
 }
 
 // uint32 function = 3;

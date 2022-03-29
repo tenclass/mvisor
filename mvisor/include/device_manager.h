@@ -83,7 +83,7 @@ class DeviceManager {
 
   void PrintDevices();
   Device* LookupDeviceByClass(const std::string class_name);
-  PciDevice* LookupPciDevice(uint16_t bus, uint8_t devfn);
+  PciDevice* LookupPciDevice(uint16_t bus, uint8_t slot, uint8_t function);
 
   /* call by machine */
   void HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is_write, uint32_t count, bool ioeventfd = false);

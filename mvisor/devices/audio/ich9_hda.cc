@@ -47,7 +47,8 @@ class Ich9Hda : public PciDevice {
 
  public:
   Ich9Hda() {
-    devfn_ = PCI_MAKE_DEVFN(27, 0);
+    slot_ = 27;
+    function_ = 0;
     
     pci_header_.vendor_id = 0x8086;
     pci_header_.device_id = 0x293E;

@@ -1,74 +1,22 @@
 name: q35-machine
 
 machine:
-  memory: 2G
+  memory: 4G
   vcpu: 4
   bios: ../share/bios-256k.bin
 
 objects:
   - class: system-root
-    children:
-      - pci-host
-      - pci-hotplug
-      - firmware-config
-      - dummy-device
-      - debug-console
-
+  - class: dummy-device
+  - class: debug-console
+  - class: firmware-config
   - class: pci-host
-    children:
-      - ich9-lpc
-      - ich9-hda
-      # - ich9-smbus
-      - ahci-host
-      - xhci-host
-      - qxl
-      - virtio-console
-      - virtio-block
-      - virtio-network
 
   - class: ich9-lpc
-    children:
-      - cmos
-      - ps2
-  
-  - class: ich9-hda
-    debug: No
-    children:
-      - hda-duplex
-    
-  - class: hda-duplex
-    debug: No
+  - class: cmos
+  - class: ps2
 
   - class: ahci-host
-    debug: No
-    children:
-      - ahci-cdrom
-      - ahci-disk
 
-  - class: ahci-cdrom
-    debug: No
-  
-  - class: xhci-host
-    debug: No
-    children:
-      - usb-tablet
-    
-  - class: usb-tablet
-    debug: No
-  
-  - class: qxl
-    rom: ../share/vgabios-qxl.bin
-    debug: No
-
-  - class: vga
-    rom: ../share/vgabios-stdvga.bin
-    debug: No
-
-  - class: virtio-console
-    children:
-      - spice-agent
-
-  - class: virtio-network
-    backend: uip
-    mac: 00:50:00:11:22:33
-    debug: No
+  - class: ich9-hda
+  - class: hda-duplex

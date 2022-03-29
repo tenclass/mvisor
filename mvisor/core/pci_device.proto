@@ -8,7 +8,7 @@ message PciDeviceState {
   }
 
   uint32  bus                           = 1;
-  uint32  device                        = 2;
+  uint32  slot                          = 2;
   uint32  function                      = 3;
   bytes   config_space                  = 4;
   repeated MsiXTableEntry msix_entries  = 5;

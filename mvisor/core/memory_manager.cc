@@ -191,7 +191,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
 
   // Commit the pending slots to KVM
   for (auto slot : pending_remove) {
-    if (slot->type == kMemoryTypeRam) {
+    if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
       UpdateKvmSlot(slot, true);
       free_slots_.insert(slot->id);
     }
@@ -202,7 +202,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
     delete slot;
   }
   for (auto slot : pending_add) {
-    if (slot->type == kMemoryTypeRam) {
+    if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
       UpdateKvmSlot(slot, false);
     }
     // tell listeners we have new slots
@@ -219,7 +219,7 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   region->host = host;
   region->size = size;
   region->type = type;
-  region->flags = 0;
+  region->flags = type == kMemoryTypeRom ? KVM_MEM_READONLY : 0;
   strncpy(region->name, name, 20 - 1);
 
   if (machine_->debug_) {
@@ -244,7 +244,7 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ) {
     auto slot = it->second;
     if (slot->region == region) {
-      if (slot->type == kMemoryTypeRam) {
+      if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
         UpdateKvmSlot(slot, true);
         free_slots_.insert(slot->id);
       }

@@ -25,6 +25,7 @@
 
 
 IdeStorageDevice::IdeStorageDevice() {
+  set_parent_name("ahci-host");
   image_ = nullptr;
   bzero(&drive_info_, sizeof(drive_info_));
   bzero(&regs_, sizeof(regs_));

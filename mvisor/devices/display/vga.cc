@@ -45,7 +45,7 @@
 
 
 Vga::Vga() {
-  devfn_ = PCI_MAKE_DEVFN(2, 0);
+  default_rom_path_ = "../share/vgabios-stdvga.bin";
   
   /* PCI config */
   pci_header_.vendor_id = 0x1234;
@@ -157,9 +157,13 @@ bool Vga::LoadState(MigrationReader* reader) {
 
 void Vga::Connect() {
   /* Initialize rom data and rom bar size */
-  if (!pci_rom_.data && has_key("rom")) {
-    std::string path = std::get<std::string>(key_values_["rom"]);
-    LoadRomFile(path.c_str());
+  if (!pci_rom_.data) {
+    if (has_key("rom")) {
+      std::string path = std::get<std::string>(key_values_["rom"]);
+      LoadRomFile(path.c_str());
+    } else {
+      LoadRomFile(default_rom_path_.c_str());
+    }
   }
   if (!vram_base_) {
     if (has_key("vram_size")) {

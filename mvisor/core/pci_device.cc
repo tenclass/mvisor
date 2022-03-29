@@ -27,8 +27,12 @@
 
 
 PciDevice::PciDevice() {
+  /* A pci device should be attached to pci bus, except it's a pci host controller */
+  set_parent_name("pci-host");
+
   bus_ = 0;
-  devfn_ = 0;
+  slot_ = 0xFF;
+  function_ = 0;
   bzero(&pci_header_, sizeof(pci_header_));
   bzero(&pci_bars_, sizeof(pci_bars_));
   bzero(&pci_rom_, sizeof(pci_rom_));
@@ -141,14 +145,13 @@ void PciDevice::SetIrq(uint level) {
     return;
   }
 
-  uint8_t slot = devfn_ >> 3;
   uint8_t intx = pci_header_.irq_pin - 1;
-  uint8_t pirq = (slot + intx) % 4 + 4;
+  uint8_t pirq = (slot_ + intx) % 4 + 4;
 
   /* For ICH9 special devices, we should read the configuration from LPC RCBA */
-  if (slot == 30) {
+  if (slot_ == 30) {
     pirq = (intx % 4) + 4;
-  } else if (slot >= 25) {
+  } else if (slot_ >= 25) {
     MV_ASSERT(pci_header_.irq_pin == 1);
     pirq = intx % 4;
   }
@@ -259,8 +262,7 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
     mm->Unmap(&pci_rom_.mapped_region);
   }
 
-  pci_rom_.mapped_region = mm->Map(address, pci_rom_.size, pci_rom_.data,
-    kMemoryTypeRam, "PCI ROM");
+  pci_rom_.mapped_region = mm->Map(address, pci_rom_.size, pci_rom_.data, kMemoryTypeRom, "PCI ROM");
 }
 
 /* Handle IO, MMIO ON or OFF */
@@ -411,8 +413,8 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
 bool PciDevice::SaveState(MigrationWriter* writer) {
   PciDeviceState state;
   state.set_bus(bus_);
-  state.set_device(devfn_ >> 3);
-  state.set_function(devfn_ & 0b11);
+  state.set_slot(slot_);
+  state.set_function(function_);
   state.set_pcie(is_pcie_);
   state.set_config_space(pci_header_.data, pci_config_size());
 
@@ -436,7 +438,8 @@ bool PciDevice::LoadState(MigrationReader* reader) {
     return false;
   }
   bus_ = state.bus();
-  devfn_ = PCI_MAKE_DEVFN(state.device(), state.function());
+  slot_ = state.slot();
+  function_ = state.function();
   is_pcie_ = state.pcie();
   auto& config_space = state.config_space();
   memcpy(pci_header_.data, config_space.data(), pci_config_size());

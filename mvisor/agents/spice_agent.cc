@@ -47,6 +47,8 @@ class SpiceAgent : public Object, public SerialPortInterface,
 
  public:
   SpiceAgent() {
+    set_parent_name("virtio-console");
+  
     strcpy(port_name_, "com.redhat.spice.0");
     pending_resize_event_ = false;
     last_send_mouse_time_ = steady_clock::now();
