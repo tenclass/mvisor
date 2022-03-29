@@ -131,12 +131,7 @@ class FirmwareConfig : public Device {
     SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
     SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
     SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
-
-    if (manager_->io()->GetDiskImageCount() > 1) {
-      SetConfigUInt16(FW_CFG_BOOT_MENU, 2); // show menu if more than 1 drives
-    } else {
-      SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
-    }
+    SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
 
     InitializeE820Table();
 
@@ -203,10 +198,20 @@ class FirmwareConfig : public Device {
     AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "Config DMA");
   }
 
-  void Reset() {
-    config_.clear();
-    files_.clear();
+  void Connect() {
+    Device::Connect();
     InitializeConfig();
+  }
+
+  void Reset() {
+    Device::Reset();
+
+    /* show menu if more than 1 drives */
+    if (manager_->io()->GetDiskImageCount() > 1) {
+      SetConfigUInt16(FW_CFG_BOOT_MENU, 2);
+    } else {
+      SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
+    }
   }
 
   bool SaveState(MigrationWriter* writer) {

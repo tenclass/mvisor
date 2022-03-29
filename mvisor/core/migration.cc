@@ -151,7 +151,9 @@ int MigrationReader::BeginRead(std::string tag) {
   MV_ASSERT(fd_ == -1);
   auto full_path = path(base_path_) / prefix_ / tag;
   fd_ = open(full_path.c_str(), O_RDONLY);
-  MV_ASSERT(fd_ != -1);
+  if (fd_ == -1) {
+    MV_PANIC("failed to read %s", full_path.c_str());
+  }
 
   struct stat st;
   fstat(fd_, &st);

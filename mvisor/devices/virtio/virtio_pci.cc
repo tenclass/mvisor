@@ -267,7 +267,7 @@ void VirtioPci::NotifyQueue(VirtQueue& vq) {
   isr_status_ = 1;
   /* Make sure MSI X Enabled */
   if (vq.msix_vector == VIRTIO_MSI_NO_VECTOR) {
-    MV_PANIC("MSI X is not enabled");
+    return;
   }
   if (msi_config_.enabled) {
     SignalMsi(vq.msix_vector);
