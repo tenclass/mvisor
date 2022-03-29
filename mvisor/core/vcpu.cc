@@ -170,7 +170,8 @@ void Vcpu::SetupCpuid() {
       }
       break;
     case 0x40000004: // HV_CPUID_ENLIGHTMENT_INFO
-      entry->eax = HV_APIC_ACCESS_RECOMMENDED | HV_RELAXED_TIMING_RECOMMENDED;
+      entry->eax = HV_APIC_ACCESS_RECOMMENDED | HV_RELAXED_TIMING_RECOMMENDED |
+        HV_CLUSTER_IPI_RECOMMENDED | HV_REMOTE_TLB_FLUSH_RECOMMENDED;
       break;
     default:
       entry->function = 0; // disabled
