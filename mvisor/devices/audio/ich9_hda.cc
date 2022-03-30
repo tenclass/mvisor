@@ -250,7 +250,10 @@ class Ich9Hda : public PciDevice {
       if ((old & ICH6_RBSTS_IRQ) && !(regs_.rirb_status & ICH6_RBSTS_IRQ)) {
         // cleared ICH6_RBSTS_IRQ
         rirb_counter_ = 0;
-        PopCorbEntries();
+        /* Calling codecs is async */
+        manager_->io()->Schedule([this]() {
+          PopCorbEntries();
+        });
       }
       break;
     }
@@ -262,7 +265,10 @@ class Ich9Hda : public PciDevice {
     case offsetof(Ich9HdaRegisters, corb_write_pointer):
     case offsetof(Ich9HdaRegisters, corb_control):
       memcpy((uint8_t*)&regs_ + offset, data, size);
-      PopCorbEntries();
+      /* Calling codecs is async */
+      manager_->io()->Schedule([this]() {
+        PopCorbEntries();
+      });
       break;
     case offsetof(Ich9HdaRegisters, rirb_write_pointer):
       memcpy((uint8_t*)&regs_ + offset, data, size);
@@ -383,7 +389,10 @@ class Ich9Hda : public PciDevice {
     }
 
     if ((stream.control & 0x02) != (old_control & 0x02)) {
-      StartStopStream(index);
+      /* Calling codecs is async */
+      manager_->io()->Schedule([this, index]() {
+        StartStopStream(index);
+      });
     }
     CheckIrqLevel();
   }

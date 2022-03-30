@@ -286,6 +286,9 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
   if (ret < 0) {
     MV_PANIC("failed to register io event, ret=%d", ret);
   }
+  if (machine_->debug_) {
+    MV_LOG("%s register IO event address=0x%lx length=%lu fd=%d", device->name(), address, length, event->fd);
+  }
 
   io()->StartPolling(event->fd, EPOLLIN, [event, this](int events) {
     uint64_t tmp;
@@ -485,6 +488,7 @@ void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int 
   }
 
   if (machine_->debug()) {
+    machine_->memory_manager()->PrintMemoryScope();
     MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
       is_write ? "write" : "read", addr, size, *(uint64_t*)data);
   }

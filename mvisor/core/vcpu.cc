@@ -220,8 +220,8 @@ void Vcpu::SetupModelSpecificRegisters() {
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
     msr_indices_.insert(HV_X64_MSR_SCONTROL);
     msr_indices_.insert(HV_X64_MSR_SVERSION);
-    msr_indices_.insert(HV_X64_MSR_SIEFP);
     msr_indices_.insert(HV_X64_MSR_SIMP);
+    msr_indices_.insert(HV_X64_MSR_SIEFP);
 
     for (uint i = 0; i < HV_SINT_COUNT; i++) {
       msr_indices_.insert(HV_X64_MSR_SINT0 + i);
@@ -247,6 +247,9 @@ void Vcpu::SetupModelSpecificRegisters() {
 
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
     msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SVERSION, HV_SYNIC_VERSION);
+    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SCONTROL, 0);
+    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIMP, 0);
+    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIEFP, 0);
   }
 
 	msrs.msrs.nmsrs = index;
@@ -299,15 +302,26 @@ void Vcpu::ProcessHyperV() {
       if (machine_->debug_) {
         MV_LOG("msr_hv_synic_control = 0x%lx", hyperv_exit.u.synic.control);
       }
+      hyperv_synic_.enabled = hyperv_exit.u.synic.control & 1;
       break;
     case HV_X64_MSR_SIMP:
       if (machine_->debug_) {
         MV_LOG("msr_hv_synic_msg_page = 0x%lx", hyperv_exit.u.synic.msg_page);
       }
+      if (hyperv_exit.u.synic.msg_page & 1) {
+        hyperv_synic_.message_address = hyperv_exit.u.synic.msg_page & 0xFFF;
+      } else {
+        hyperv_synic_.message_address = 0;
+      }
       break;
     case HV_X64_MSR_SIEFP:
       if (machine_->debug_) {
         MV_LOG("msr_hv_synic_evt_page = 0x%lx", hyperv_exit.u.synic.evt_page);
+      }
+      if (hyperv_exit.u.synic.evt_page & 1) {
+        hyperv_synic_.message_address = hyperv_exit.u.synic.evt_page & 0xFFF;
+      } else {
+        hyperv_synic_.event_address = 0;
       }
       break;
     default:

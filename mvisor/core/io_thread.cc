@@ -223,6 +223,10 @@ int IoThread::CheckTimers() {
   mutex_.unlock();
   
   for (auto timer : triggered) {
+    /* better check again, in case of removing a timer in during a timer event */
+    if (timer->removed) {
+      continue;
+    }
     timer->callback();
     if (!timer->permanent) {
       timer->removed = true;

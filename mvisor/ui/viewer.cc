@@ -244,6 +244,7 @@ void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
     }
     playback_->GetPlaybackFormat(&playback_format_.format, &playback_format_.channels,
       &playback_format_.frequency, &playback_format_.interval_ms);
+    /* set the latency to 2 times of interval to buffer some more data */
     err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
       playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 2);
     if (err < 0) {

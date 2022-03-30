@@ -25,6 +25,7 @@
 #include <functional>
 #include <mutex>
 
+#include "hyperv/hyperv.h"
 #include "migration.h"
 #include "states/vcpu.pb.h"
 
@@ -35,6 +36,14 @@ class Machine;
 typedef std::function<void(void)> VoidCallback;
 struct VcpuTask {
   VoidCallback   callback;
+};
+
+struct HyperVSynic {
+  bool                      enabled;
+  uint64_t                  message_address;
+  uint64_t                  event_address;
+  hyperv_message_page*      message_page;
+  hyperv_event_flags_page*  event_flags_page;
 };
 
 class Vcpu {
@@ -98,6 +107,7 @@ class Vcpu {
   std::set<uint32_t>        msr_indices_;
   uint32_t                  hyperv_features_ = 0;
   uint64_t                  cpuid_features_ = 0;
+  HyperVSynic               hyperv_synic_ = { 0 };
 };
 
 #endif // _MVISOR_VCPU_H

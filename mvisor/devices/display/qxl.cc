@@ -337,7 +337,10 @@ class Qxl : public Vga, public DisplayResizeInterface {
     auto old_pending = __atomic_fetch_or(&qxl_ram_->int_pending, interrupt, __ATOMIC_SEQ_CST);
     if (old_pending & interrupt)
       return;
-    UpdateIrqLevel();
+    /* This might be called by UI thread, make sure io thread handles IRQ */
+    manager_->io()->Schedule([this]() {
+      UpdateIrqLevel();
+    });
   }
 
   void UpdateIrqLevel() {
@@ -424,6 +427,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
         UpdateIrqLevel();
         break;
       case QXL_IO_NOTIFY_OOM:
+        MV_LOG("QXL_IO_NOTIFY_OOM drawables=%lu", drawables_.size());
         FlushCommandsAndResources(false);
         break;
       case QXL_IO_RESET:
@@ -680,6 +684,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
         break;
       }
     }
+    RemoveInvisibleDrawables();
+
     while (FetchCursorCommand(command)) {
       MV_ASSERT(command.type == QXL_CMD_CURSOR);
       ParseCursorCommand(command.data);
@@ -810,7 +816,6 @@ class Qxl : public Vga, public DisplayResizeInterface {
       .slot_address = slot_address,
       .qxl_drawable = qxl_drawable
     });
-    RemoveInvisibleDrawables();
   }
 
   void ParseCursorCommand(uint64_t slot_address) {
