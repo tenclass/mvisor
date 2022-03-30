@@ -183,7 +183,7 @@ void UsbDevice::NotifyEndpoint(uint endpoint_address) {
     };
   
     if (!endpoint->timer) {
-      endpoint->timer = manager_->io()->AddTimer(20, true, timer_callback);
+      endpoint->timer = manager_->io()->AddTimer(endpoint->interval, true, timer_callback);
     }
   } else {
     MV_PANIC("endpoint not found 0x%x", endpoint_address);
@@ -411,11 +411,17 @@ int UsbDevice::SetConfiguration(uint value) {
         for (uint k = 0; k < interface->bNumEndpoints; k++) {
           auto desc = &interface->endpoints[k];
           /* create endpoint */
-          endpoints_.push_back(new UsbEndpoint {
+          auto endpoint = new UsbEndpoint {
             .address = desc->bEndpointAddress,
             .type = UsbEndpointType(desc->bmAttributes & 3),
-            .interface = j
-          });
+            .interface = j,
+          };
+          endpoint->interval = (1 << (desc->bInterval - 1)) * 125 / 1000;
+          if (endpoint->interval < 1 || endpoint->interval > 1000) {
+            MV_LOG("invalid interval=%u", endpoint->interval);
+            endpoint->interval = 1;
+          }
+          endpoints_.push_back(endpoint);
         }
       }
     }

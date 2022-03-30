@@ -473,8 +473,10 @@ bool PciDevice::LoadState(MigrationReader* reader) {
   if (msi_config_.length) {
     if (msi_config_.is_msix) {
       msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
-    } else {
+    } else if (msi_config_.is_64bit) {
       msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
+    } else {
+      msi_config_.enabled = msi_config_.msi32->control & PCI_MSI_FLAGS_ENABLE;
     }
   }
   return true;

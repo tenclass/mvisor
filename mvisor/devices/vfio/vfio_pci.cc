@@ -105,10 +105,6 @@ void VfioPci::SetupPciConfiguration() {
   if (ret < (int)config_size) {
     MV_PANIC("failed to read device config space, ret=%d", ret);
   }
-  /* Disable IRQ, use MSI instead, should we update the vfio device ??? */
-  pci_header_.irq_pin = 0;
-  pci_header_.irq_line = 0;
-  pci_header_.command = PCI_COMMAND_INTX_DISABLE;
   /* Multifunction is not supported yet */
   pci_header_.header_type &= ~PCI_MULTI_FUNCTION;
   MV_ASSERT(pci_header_.header_type == PCI_HEADER_TYPE_NORMAL);
@@ -121,12 +117,20 @@ void VfioPci::SetupPciConfiguration() {
     auto &bar = pci_header_.bars[i];
     if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
       AddPciBar(i, bar_region.size, kIoResourceTypePio);
+      pci_bars_[i].address = pci_header_.bars[i] & pci_bars_[i].address_mask;
+      if (pci_bars_[i].address && pci_header_.command & PCI_COMMAND_IO) {
+        ActivatePciBar(i);
+      }
     } else {
       /* 64bit bar is not supported yet */
       if (bar & PCI_BASE_ADDRESS_MEM_TYPE_64) {
         bar &= ~PCI_BASE_ADDRESS_MEM_TYPE_64;
       }
       AddPciBar(i, bar_region.size, kIoResourceTypeMmio);
+      pci_bars_[i].address = pci_header_.bars[i] & pci_bars_[i].address_mask;
+      if (pci_bars_[i].address && pci_header_.command & PCI_COMMAND_MEMORY) {
+        ActivatePciBar(i);
+      }
     }
   }
 
@@ -146,9 +150,11 @@ void VfioPci::SetupPciConfiguration() {
         if (msi_config_.is_64bit) {
           msi_config_.msi64 = (MsiCapability64*)cap;
           msi_config_.length = sizeof(MsiCapability64);
+          msi_config_.enabled = msi_config_.msi64->control & PCI_MSIX_FLAGS_ENABLE;
         } else {
           msi_config_.msi32 = (MsiCapability32*)cap;
           msi_config_.length = sizeof(MsiCapability32);
+          msi_config_.enabled = msi_config_.msi32->control & PCI_MSI_FLAGS_ENABLE;
         }
         break;
       }
@@ -169,11 +175,6 @@ void VfioPci::SetupPciConfiguration() {
       }
       pos = cap->next;
     }
-  }
-
-  /* Update changes to device */
-  for (int i = 0; i < PCI_DEVICE_CONFIG_SIZE; i += 2) {
-    pwrite(device_fd_, &pci_header_.data[i], 2, config_region.offset + i);
   }
 }
 
@@ -579,9 +580,9 @@ void VfioPci::UpdateMsiRoutes() {
     auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);
     if (debug_) {
       MV_LOG("update MSI %d eventfd=%d ret=%d", vector, event_fd, ret);
-    }
-    if (ret < 0) {
-      MV_PANIC("failed to set MSI %u event_fd=%d", vector, event_fd);
+      if (ret < 0) {
+        MV_LOG("failed to set MSI %u event_fd=%d", vector, event_fd);
+      }
     }
   }
 }

@@ -47,6 +47,9 @@ vfio: all
 	echo "c2e088ba-954f-11ec-8584-525400666f2b" > /sys/class/mdev_bus/0000:3b:00.0/mdev_supported_types/nvidia-231/create
 	$(EXECUTABLE)
 
+gvt:
+	echo "c2e088ba-954f-11ec-8584-525400666f2b" > /sys/class/mdev_bus/0000:00:02.0/mdev_supported_types/i915-GVTg_V5_4/create
+
 all: $(EXECUTABLE)
 
 proto: $(MV_PROTOBUF_CC)
