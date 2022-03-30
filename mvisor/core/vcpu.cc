@@ -539,14 +539,6 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   kvm_guest_debug debug;
   MV_ASSERT(ioctl(fd_, KVM_GET_DEBUGREGS, &debug) == 0);
   state.set_debug_regs(&debug, sizeof(debug));
-  
-  /* CPUID */
-  struct {
-    struct kvm_cpuid2 cpuid2;
-    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
-  MV_ASSERT(ioctl(fd_, KVM_GET_CPUID2, &cpuid) == 0);
-  state.set_cpuid(&cpuid, sizeof(cpuid));
 }
 
 void Vcpu::LoadStateFrom(VcpuState& state) {
@@ -607,14 +599,6 @@ void Vcpu::LoadStateFrom(VcpuState& state) {
   kvm_guest_debug debug;
   memcpy(&debug, state.debug_regs().data(), sizeof(debug));
   MV_ASSERT(ioctl(fd_, KVM_SET_GUEST_DEBUG, &debug) == 0);
-
-  /* CPUID */
-  struct {
-    struct kvm_cpuid2 cpuid2;
-    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } cpuid;
-  memcpy(&cpuid, state.cpuid().data(), sizeof(cpuid));
-  MV_ASSERT(ioctl(fd_, KVM_SET_CPUID2, &cpuid) == 0);
 }
 
 bool Vcpu::SaveState(MigrationWriter* writer) {
