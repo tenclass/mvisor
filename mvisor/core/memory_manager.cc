@@ -299,7 +299,7 @@ uint64_t MemoryManager::HostToGuestAddress(void* host) {
 
 /* Used for debugging */
 void MemoryManager::PrintMemoryScope() {
-  static const char* type_strings[] = { "Reserved", "RAM", "Device" };
+  static const char* type_strings[] = { "Reserved", "RAM", "Device", "ROM", "Unknown" };
   std::shared_lock lock(mutex_);
   MV_LOG("%lu memory slots", kvm_slots_.size());
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
