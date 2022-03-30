@@ -88,6 +88,7 @@ class Viewer {
   PointerEvent pointer_state_ = { 0 };
   PendingResize pending_resize_;
 
+  bool pcm_playback_error_ = false;
   snd_pcm_t* pcm_playback_ = nullptr;
 };
 

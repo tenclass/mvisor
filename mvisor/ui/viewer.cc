@@ -235,12 +235,17 @@ PointerInputInterface* Viewer::GetActivePointer() {
 }
 
 void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
+  if (pcm_playback_error_) {
+    return;
+  }
   switch (state)
   {
   case kPlaybackStart: {
     int err;
     if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
-      MV_PANIC("snd_pcm_open error: %s", snd_strerror(err));
+      MV_LOG("snd_pcm_open error: %s", snd_strerror(err));
+      pcm_playback_error_ = true;
+      break;
     }
     playback_->GetPlaybackFormat(&playback_format_.format, &playback_format_.channels,
       &playback_format_.frequency, &playback_format_.interval_ms);
