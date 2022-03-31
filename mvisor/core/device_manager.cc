@@ -489,7 +489,7 @@ void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int 
 
   if (machine_->debug()) {
     machine_->memory_manager()->PrintMemoryScope();
-    MV_LOG("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
+    MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
       is_write ? "write" : "read", addr, size, *(uint64_t*)data);
   }
 }

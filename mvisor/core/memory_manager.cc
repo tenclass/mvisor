@@ -117,8 +117,11 @@ void MemoryManager::LoadBiosFile() {
   Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
 }
 
-void MemoryManager::ResetBios() {
+void MemoryManager::Reset() {
+  /* Reset BIOS data */
   memcpy(bios_data_, bios_backup_, bios_size_);
+  /* Reset 64KB low memory, or Windows 11 complains about some data at 0x6D80 when reboots */
+  bzero(ram_host_, 0x10000);
 }
 
 /* Don't call this funciton, use Map and Unmap */

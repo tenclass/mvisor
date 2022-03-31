@@ -175,7 +175,7 @@ void Machine::Quit() {
  * FIXME: vCPU 0 sometimes hangs (CPU 100%) after reset
  */
 void Machine::Reset() {
-  memory_manager_->ResetBios();
+  memory_manager_->Reset();
   device_manager_->ResetDevices();
 
   if (debug_) {

@@ -66,7 +66,7 @@ class MemoryManager {
 
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   void Unmap(const MemoryRegion** region);
-  void ResetBios();
+  void Reset();
 
   /* Used for migration */
   bool SaveState(MigrationWriter* writer);
