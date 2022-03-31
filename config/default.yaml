@@ -3,9 +3,9 @@ base: q35.yaml
 
 machine:
   memory: 8G
-  vcpu: 4
+  vcpu: 8
   # Turn on BIOS output and performance measurement
-  debug: Yes
+  debug: No
   # Turn on hypervisor to lower CPU usage (Hyper-V is used for Windows)
   hypervisor: Yes
 
@@ -18,19 +18,20 @@ objects:
     backend: uip
     mac: 00:50:00:11:22:33
 
-  - class: ahci-cdrom
-    image: /mnt/iso/ubuntu-20.04.1-desktop-amd64.iso
+  - class: ahci-cdrom 
+    image: /data/ubuntu-21.10-desktop-amd64.iso
   
   - class: ahci-cdrom
-    image: /mnt/iso/virtio.iso
+    image: /data/virtio.iso
 
   - class: virtio-block
-    image: /data/win10.qcow2
-    snapshot: Yes
+    image: /data/win11.qcow2
+    snapshot: No
 
   - class: virtio-block
-    image: /data/ubuntu.qcow2
-    snapshot: Yes
+    image: /data/empty.qcow2
+    snapshot: No
 
   # - class: vfio-pci
   #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b
+  #   debug: Yes

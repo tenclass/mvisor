@@ -16,7 +16,5 @@ objects:
   - class: cmos
   - class: ps2
 
-  - class: ahci-host
-
   - class: ich9-hda
   - class: hda-duplex

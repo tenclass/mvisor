@@ -242,16 +242,16 @@ void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
   {
   case kPlaybackStart: {
     int err;
-    if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+    if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0) {
       MV_LOG("snd_pcm_open error: %s", snd_strerror(err));
       pcm_playback_error_ = true;
       break;
     }
     playback_->GetPlaybackFormat(&playback_format_.format, &playback_format_.channels,
       &playback_format_.frequency, &playback_format_.interval_ms);
-    /* set the latency to 2 times of interval to buffer some more data */
+    /* set the latency to 10 times of interval to buffer some more data */
     err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
-      playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 2);
+      playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 10);
     if (err < 0) {
       MV_PANIC("snd_pcm_set_params error: %s\n", snd_strerror(err));
     }
