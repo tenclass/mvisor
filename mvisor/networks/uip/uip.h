@@ -29,11 +29,11 @@
 #include <ctime>
 #include "io_thread.h"
 
-#define UIP_MAX_BUFFER_SIZE (64*1024 + 16)
-#define UIP_MAX_UDP_PAYLOAD (64*1024 - 20 - 8)
-#define UIP_MAX_TCP_PAYLOAD (64*1024 - 144)
+#define UIP_MAX_BUFFER_SIZE         (4096 - 16)
+#define UIP_MAX_UDP_PAYLOAD(packet) (packet->mtu - 20 - 8)
+#define UIP_MAX_TCP_PAYLOAD(packet) (packet->mtu - 144)
 
-#define REDIRECT_TIMEOUT_SECONDS (120)
+#define REDIRECT_TIMEOUT_SECONDS    (120)
 
 struct PseudoHeader {
   uint32_t sip;
@@ -48,6 +48,7 @@ class Ipv4Socket;
 struct Ipv4Packet {
   Ipv4Socket*   socket;
   uint8_t       buffer[UIP_MAX_BUFFER_SIZE];
+  int           mtu;
   ethhdr*       eth;
   iphdr*        ip;
   udphdr*       udp;

@@ -26,19 +26,9 @@
 
 #define DEFAULT_QUEUE_SIZE 256
 
-struct RxMode {
-  bool  promisc;
-  bool  all_multicast;
-  bool  all_unicast;
-  bool  no_multicast;
-  bool  no_unicast;
-  bool  no_broadcast;
-};
-
 class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
  private:
   virtio_net_config         net_config_;
-  RxMode                    rx_mode_;
   std::set<MacAddress>      mac_table_;
   NetworkBackendInterface*  backend_ = nullptr;
 
@@ -53,18 +43,21 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     AddMsiXCapability(1, 4, 0, 0x1000);
     
     device_features_ |=
+      (1UL << VIRTIO_NET_F_MTU) |
       (1UL << VIRTIO_NET_F_MAC) |
-      (1UL << VIRTIO_NET_F_MRG_RXBUF) |
-      (1UL << VIRTIO_NET_F_STATUS) |
       (1UL << VIRTIO_NET_F_CTRL_VQ) |
-      (1UL << VIRTIO_NET_F_CTRL_RX) |
-      (1UL << VIRTIO_NET_F_CTRL_VLAN) |
-      (1UL << VIRTIO_NET_F_CTRL_RX_EXTRA) |
+      (1UL << VIRTIO_NET_F_STATUS) |
+      (1UL << VIRTIO_NET_F_SPEED_DUPLEX) |
       (1UL << VIRTIO_NET_F_GUEST_ANNOUNCE);
 
     bzero(&net_config_, sizeof(net_config_));
     GenerateRandomMac(net_config_.mac);
     net_config_.status = VIRTIO_NET_S_LINK_UP;
+    net_config_.duplex = 1;
+    net_config_.speed = 1000;
+
+    /* use big packet */
+    net_config_.mtu = 4080;
   }
 
   void GenerateRandomMac(uint8_t mac[6]) {
@@ -103,7 +96,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       MV_ASSERT(backend_);
       MacAddress mac;
       memcpy(mac.data, net_config_.mac, sizeof(mac.data));
-      backend_->Initialize(this, mac);
+      backend_->Initialize(this, mac, net_config_.mtu);
     } else {
       MV_PANIC("network backend is not set");
     }
@@ -160,6 +153,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     NotifyQueue(vq);
   }
 
+
   virtual bool WriteBuffer(void* buffer, size_t size) {
     VirtQueue& vq = queues_[0];
     MV_ASSERT(vq.enabled);
@@ -186,7 +180,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
         bzero(net_header, net_header_length);
         element->length += net_header_length;
 
-        /* Windows driver has standalone buffer for virtio net header */ 
+        /* Big packet mode has standalone buffer for virtio net header */ 
         if (iov.iov_len == net_header_length) {
           element->vector.pop_front();
         } else {
@@ -206,7 +200,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
       elements.push_back(element);
       if (offset < size) {
-        MV_LOG("offset=%lu size=%lu", offset, size);
+        MV_PANIC("mergeable rxbuf mode is not supported yet. offset=%lu size=%lu", offset, size);
       }
     }
 
@@ -231,7 +225,6 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
     backend_->OnFrameFromGuest(vector);
   }
-
   void HandleControl(VirtQueue& vq, VirtElement* element) {
     auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 3);
@@ -249,70 +242,12 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
     switch (control->cls)
     {
-    case VIRTIO_NET_CTRL_RX:
-      MV_ASSERT(iov.iov_len >= 1);
-      *status = ControlRxMode(control->cmd, *(uint8_t*)iov.iov_base);
-      break;
-    case VIRTIO_NET_CTRL_MAC:
-      *status = ControlMacTable(control->cmd, (virtio_net_ctrl_mac*)iov.iov_base);
-      break;
-    case VIRTIO_NET_CTRL_VLAN:
-      if (iov.iov_len == 2) {
-        *status = ControlVlanTable(control->cmd, *(uint16_t*)iov.iov_base);
-      } else {
-        *status = VIRTIO_NET_ERR;
-      }
-      break;
     default:
+      *status = VIRTIO_NET_ERR;
+      DumpHex(iov.iov_base, iov.iov_len);
       MV_PANIC("unhandled control class=0x%x command=0x%x", control->cls, control->cmd);
       break;
     }
-  }
-
-  uint8_t ControlMacTable(uint8_t command, virtio_net_ctrl_mac* table) {
-    if (command == VIRTIO_NET_CTRL_MAC_TABLE_SET) {
-      for (uint32_t i = 0; i < table->entries; i++) {
-        MacAddress mac;
-        memcpy(mac.data, table->macs[i], sizeof(table->macs[i]));
-        mac_table_.insert(mac);
-      }
-      return VIRTIO_NET_OK;
-    } else {
-      MV_PANIC("unhandled command=0x%x", command);
-    }
-    return VIRTIO_NET_ERR;
-  }
-
-  uint8_t ControlVlanTable(uint8_t command, uint16_t vlan_id) {
-    /* FIXME: Not documented */
-    return VIRTIO_NET_ERR;
-  }
-
-  uint8_t ControlRxMode(uint8_t command, uint8_t on) {
-    switch (command)
-    {
-    case VIRTIO_NET_CTRL_RX_PROMISC:
-      rx_mode_.promisc = on;
-      break;
-    case VIRTIO_NET_CTRL_RX_ALLMULTI:
-      rx_mode_.all_multicast = on;
-      break;
-    case VIRTIO_NET_CTRL_RX_ALLUNI:
-      rx_mode_.all_unicast = on;
-      break;
-    case VIRTIO_NET_CTRL_RX_NOMULTI:
-      rx_mode_.no_multicast = on;
-      break;
-    case VIRTIO_NET_CTRL_RX_NOUNI:
-      rx_mode_.no_unicast = on;
-      break;
-    case VIRTIO_NET_CTRL_RX_NOBCAST:
-      rx_mode_.no_broadcast = on;
-      break;
-    default:
-      return VIRTIO_NET_ERR;
-    }
-    return VIRTIO_NET_OK;
   }
 };
 

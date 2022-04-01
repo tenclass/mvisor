@@ -152,7 +152,7 @@ class NetworkDeviceInterface {
 struct Ipv4Packet;
 class NetworkBackendInterface {
  public:
-  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) = 0;
+  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac, int mtu) = 0;
   virtual void Reset() = 0;
   virtual void OnFrameFromGuest(std::deque<iovec>& vector) = 0;
   virtual bool OnPacketFromHost(Ipv4Packet* packet) = 0;

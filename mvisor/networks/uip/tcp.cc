@@ -120,7 +120,7 @@ uint16_t TcpSocket::CalculateTcpChecksum(Ipv4Packet* packet) {
 
   ip = packet->ip;
   tcp_len = ntohs(ip->tot_len) - ip->ihl * 4;
-  MV_ASSERT(tcp_len <= UIP_MAX_TCP_PAYLOAD + 20);
+  MV_ASSERT(tcp_len <= UIP_MAX_TCP_PAYLOAD(packet) + 20);
 
   hdr.sip = ip->saddr;
   hdr.dip  = ip->daddr;
@@ -171,7 +171,7 @@ void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {
   if (tcp->rst) {
     tcp->window = 0;
   } else {
-    tcp->window = htons(UIP_MAX_TCP_PAYLOAD);
+    tcp->window = htons(UIP_MAX_TCP_PAYLOAD(packet));
   }
   tcp->check = 0;
   tcp->urg_ptr = 0;

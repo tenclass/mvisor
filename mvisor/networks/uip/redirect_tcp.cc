@@ -165,9 +165,6 @@ void RedirectTcpSocket::StartReading() {
   while (can_read()) {
     /* Check if controlled by TCP window */
     int available = (int)(window_size_ - (seq_host_ - guest_acked_));
-    if (available > UIP_MAX_TCP_PAYLOAD) {
-      available = UIP_MAX_TCP_PAYLOAD;
-    }
     if (available <= 0) {
       return;
     }
@@ -182,9 +179,11 @@ void RedirectTcpSocket::StartReading() {
     }
 
     /* FIXME: Limit packet size for Linux driver */
-    auto recv_size = available < 1440 ? available : 1440;
+    if (available > UIP_MAX_TCP_PAYLOAD(packet)) {
+      available = UIP_MAX_TCP_PAYLOAD(packet);
+    }
 
-    int ret = recv(fd_, packet->data, recv_size, 0);
+    int ret = recv(fd_, packet->data, available, 0);
     if (ret <= 0) {
       packet->Release();
       if (ret < 0 && errno == EAGAIN) {

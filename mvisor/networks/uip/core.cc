@@ -51,15 +51,16 @@ struct ArpMessage {
 
 class Uip : public Object, public NetworkBackendInterface {
  private:
-  MacAddress router_mac_;
-  uint32_t router_ip_;
-  uint32_t router_subnet_mask_;
-  uint32_t guest_ip_;
+  MacAddress            router_mac_;
+  uint32_t              router_ip_;
+  uint32_t              router_subnet_mask_;
+  uint32_t              guest_ip_;
   std::list<TcpSocket*> tcp_sockets_;
   std::list<UdpSocket*> udp_sockets_;
-  IoTimer* timer_ = nullptr;
-  Device* real_device_ = nullptr;
+  IoTimer*              timer_ = nullptr;
+  Device*               real_device_ = nullptr;
   std::vector<Ipv4Packet*> queued_packets_;
+  uint                  mtu_;
 
  public:
   Uip() {
@@ -75,10 +76,12 @@ class Uip : public Object, public NetworkBackendInterface {
    * Router MAC: 5255C0A80001
    * Router IP: 192.168.128.1
    */
-  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
+  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac, int mtu) {
     device_ = device;
     guest_mac_ = mac;
     memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", ETH_ALEN);
+    mtu_ = mtu;
+    MV_ASSERT(mtu_ + 16 <= 4096);
 
     // Assign IP 192.168.128.100 to machine
     // FIXME: should be configurable
@@ -152,10 +155,6 @@ class Uip : public Object, public NetworkBackendInterface {
       copied += v.iov_len;
     }
 
-    // if (real_device_->debug()) {
-    //   MV_LOG("[guest] %lu bytes", copied);
-    //   DumpHex(packet->buffer, copied);
-    // }
     packet->eth = (ethhdr*)packet->buffer;
     ParseEthPacket(packet);
   }
@@ -167,10 +166,6 @@ class Uip : public Object, public NetworkBackendInterface {
     memcpy(eth->h_dest, guest_mac_.data, sizeof(eth->h_dest));
     memcpy(eth->h_source, router_mac_.data, sizeof(eth->h_source));
 
-    // if (real_device_->debug()) {
-    //   MV_LOG("[host] %lu bytes", size);
-    //   DumpHex(buffer, size);
-    // }
     return device_->WriteBuffer(buffer, size);
   }
 
@@ -191,6 +186,7 @@ class Uip : public Object, public NetworkBackendInterface {
       return nullptr;
     }
     Ipv4Packet* packet = new Ipv4Packet;
+    packet->mtu = mtu_;
     packet->eth = (ethhdr*)packet->buffer;
     packet->ip = (iphdr*)&packet->eth[1];
     packet->data = (void*)&packet->ip[1];
