@@ -51,11 +51,14 @@ struct HdaStream {
   uint32_t  nchannels;
   uint32_t  frequency;
   size_t    bytes_per_second;
+  size_t    bytes_per_frame;
 
   IoTimer*  timer;
   IoTimePoint start_time;
   TransferCallback transfer_callback;
   uint8_t   buffer[HDA_STREAM_BUFFER_SIZE];
+  size_t    buffer_pointer;
+  bool      first_buffer;
 };
 
 struct HdaNode {
@@ -350,6 +353,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   }
 
   void SetupStream(HdaStream* stream) {
+    stream->frequency = 0;
+    stream->channel = 0;
+    stream->bytes_per_second = stream->bytes_per_frame = 0;
     if (stream->format & AC_FMT_TYPE_NON_PCM) {
       return;
     }
@@ -367,31 +373,43 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     stream->frequency = stream->frequency * (mul + 1) / (div + 1);
     stream->nchannels = ((stream->format & AC_FMT_CHAN_MASK) >> AC_FMT_CHAN_SHIFT) + 1;
     stream->bytes_per_second = 2LL * stream->nchannels * stream->frequency;
+    stream->bytes_per_frame = stream->bytes_per_second / (1000 / HDA_TIMER_INTERVAL_MS);
   }
 
   void OnStreamTimer(HdaStream* stream) {
-    size_t transferred = stream->transfer_callback(stream->buffer, HDA_STREAM_BUFFER_SIZE);
-    stream->position += transferred;
     if (stream->output) {
-      NotifyPlayback(kPlaybackData, stream->buffer, transferred);
+      /* To prevent underrun, notify after the second frame is ready */
+      auto buffer_size = stream->first_buffer ? HDA_STREAM_BUFFER_SIZE : stream->bytes_per_frame;
+      auto to_transfer = buffer_size - stream->buffer_pointer;
+      size_t bytes = stream->transfer_callback(&stream->buffer[stream->buffer_pointer], to_transfer);
+      stream->position += bytes;
+      stream->buffer_pointer += bytes;
+
+      if (stream->buffer_pointer >= buffer_size) {
+        NotifyPlayback(kPlaybackData, stream->buffer, stream->buffer_pointer);
+        stream->buffer_pointer = 0;
+        stream->first_buffer = false;
+      }
+    } else {
+      /* no data input now, but move position to fix the timer interval */
+      stream->position += stream->bytes_per_frame;
     }
 
-    auto written_ms = stream->position * 1000 / stream->bytes_per_second;
     auto started_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - stream->start_time).count();
-    int next_interval = written_ms - started_ms;
-    if (next_interval < 0) {
+    auto current_ms = stream->position * 1000 / stream->bytes_per_second;
+    long next_interval = current_ms - started_ms;
+    if (next_interval < 1) {
       /* If we cannot catch up, reset timer */
-      if (next_interval < -20) {
-        if (debug_) {
-          MV_LOG("reset timer, interval=%dms", next_interval);
-        }
+      if (next_interval < -100) {
+        MV_LOG("stream[%d] reset timer, interval=%dms", stream->id, next_interval);
         stream->position = 0;
         stream->start_time = std::chrono::steady_clock::now();
       }
       next_interval = 1;
     }
 
+    // MV_LOG("stream[%d] next interval=%lu", stream->id, next_interval);
     if (stream->timer->interval_ms != next_interval) {
       manager_->io()->ModifyTimer(stream->timer, next_interval);
     }
@@ -403,13 +421,14 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     }
     stream->running = running;
     if (debug_) {
-      MV_LOG("set stream running: %d", running ? 1 : 0);
+      MV_LOG("set stream[%d] running=%d", stream->id, running ? 1 : 0);
     }
 
     if (running) {
       if (stream->output) {
         NotifyPlayback(kPlaybackStart, nullptr, 0);
       }
+      stream->first_buffer = true;
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
       MV_ASSERT(stream->timer == nullptr);

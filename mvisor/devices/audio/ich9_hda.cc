@@ -250,10 +250,7 @@ class Ich9Hda : public PciDevice {
       if ((old & ICH6_RBSTS_IRQ) && !(regs_.rirb_status & ICH6_RBSTS_IRQ)) {
         // cleared ICH6_RBSTS_IRQ
         rirb_counter_ = 0;
-        /* Calling codecs is async */
-        manager_->io()->Schedule([this]() {
-          PopCorbEntries();
-        });
+        PopCorbEntries();
       }
       break;
     }
@@ -265,10 +262,7 @@ class Ich9Hda : public PciDevice {
     case offsetof(Ich9HdaRegisters, corb_write_pointer):
     case offsetof(Ich9HdaRegisters, corb_control):
       memcpy((uint8_t*)&regs_ + offset, data, size);
-      /* Calling codecs is async */
-      manager_->io()->Schedule([this]() {
-        PopCorbEntries();
-      });
+      PopCorbEntries();
       break;
     case offsetof(Ich9HdaRegisters, rirb_write_pointer):
       memcpy((uint8_t*)&regs_ + offset, data, size);
@@ -319,38 +313,53 @@ class Ich9Hda : public PciDevice {
     auto &stream_state = stream_states_[index];
     MV_ASSERT(stream_state.buffers_index <= stream.last_valid_index);
 
-    auto &entry = stream_state.buffers[stream_state.buffers_index];
-    if (length > entry.length - entry.read_counter) {
-      length = entry.length - entry.read_counter;
-    }
-
-    /* IN or OUT */
-    if (index >= 4) {
-      memcpy(destination, entry.data + entry.read_counter, length);
-    } else {
-      memcpy(entry.data + entry.read_counter, destination, length);
-    }
-    stream.link_position_in_buffer += length;
-    entry.read_counter += length;
-
-    /* Check if we should read next buffer */
-    if (entry.read_counter == entry.length) {
-      entry.read_counter = 0;
-      stream_state.buffers_index++;
-
-      if (stream_state.buffers_index > stream.last_valid_index) {
-        stream.link_position_in_buffer = 0;
-        stream_state.buffers_index = 0;
+    bool interrupt = false;
+    size_t copied = 0;
+    while (copied < length) {
+      auto &entry = stream_state.buffers[stream_state.buffers_index];
+      size_t to_copy = length - copied;
+      if (to_copy > entry.length - entry.read_counter) {
+        to_copy = entry.length - entry.read_counter;
       }
-      if (entry.interrupt_on_completion) {
-        stream.status |= 1 << 2;
-        CheckIrqLevel();
+
+      /* IN or OUT */
+      if (index >= 4) {
+        memcpy(&destination[copied], entry.data + entry.read_counter, to_copy);
+      } else {
+        memcpy(entry.data + entry.read_counter, &destination[copied], to_copy);
       }
+      stream.link_position_in_buffer += to_copy;
+      entry.read_counter += to_copy;
+      copied += to_copy;
+
+      /* Check if we should read next buffer */
+      if (entry.read_counter == entry.length) {
+        entry.read_counter = 0;
+        stream_state.buffers_index++;
+
+        if (stream_state.buffers_index > stream.last_valid_index) {
+          stream.link_position_in_buffer = 0;
+          stream_state.buffers_index = 0;
+        }
+        if (entry.interrupt_on_completion) {
+          interrupt = true;
+          break;
+        }
+      }
+    }
+    /* Linux uses this */
+    if(regs_.dp_base & 1) {
+      auto ptr = (uint32_t*)manager_->TranslateGuestMemory(regs_.dp_base & ~1);
+      ptr[0] = stream.link_position_in_buffer;
+    }
+    if (interrupt) {
+      stream.status |= 1 << 2;
+      CheckIrqLevel();
     }
     if (debug_) {
-      MV_LOG("stream[%d] nr=%d dma transferred %d bytes", index, stream.stream_id, length);
+      MV_LOG("stream[%d] nr=%d dma transferred %d bytes", index, stream.stream_id, copied);
     }
-    return length;
+    return copied;
   }
 
   void StartStopStream(uint64_t index) {
@@ -416,6 +425,8 @@ class Ich9Hda : public PciDevice {
   }
 
   void PopCorbEntries() {
+    MV_ASSERT((regs_.ics & ICH6_IRS_BUSY) == 0);
+
     while (true) {
       if (!(regs_.corb_control & ICH6_CORBCTL_RUN)) {
         return;
@@ -432,7 +443,11 @@ class Ich9Hda : public PciDevice {
       uint64_t addr = ((uint64_t)regs_.corb_base1 << 32) + regs_.corb_base0;
       uint32_t* ptr = (uint32_t*)manager_->TranslateGuestMemory(addr + 4 * read_pointer);
       regs_.corb_read_pointer = read_pointer;
-      ParseCorbEntry(*ptr);
+      uint32_t entry = *ptr;
+      /* Calling codecs asynchronously */
+      manager_->io()->Schedule([this, entry]() {
+        ParseCorbEntry(entry);
+      });
     }
   }
 

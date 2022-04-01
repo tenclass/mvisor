@@ -248,7 +248,6 @@ class Ps2 : public Device, public KeyboardInputInterface {
       case 0xE1:
         /* Linux uses these commands, why ??? */
         PushMouse(0xFE);
-        manager_->machine()->set_guest_os("Linux");
         break;
       case 0xE6:
         mouse_.scaling = 1;

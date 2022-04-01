@@ -241,39 +241,42 @@ void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
   switch (state)
   {
   case kPlaybackStart: {
-    int err;
-    if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0) {
-      MV_LOG("snd_pcm_open error: %s", snd_strerror(err));
-      pcm_playback_error_ = true;
-      break;
-    }
     playback_->GetPlaybackFormat(&playback_format_.format, &playback_format_.channels,
       &playback_format_.frequency, &playback_format_.interval_ms);
-    /* set the latency to 10 times of interval to buffer some more data */
-    err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
-      playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 10);
-    if (err < 0) {
-      MV_PANIC("snd_pcm_set_params error: %s\n", snd_strerror(err));
-    }
     break;
   }
   case kPlaybackStop: {
     if (!pcm_playback_)
       break;
-    int err;
-    /* pass the remaining samples, otherwise they're dropped in close */
-    err = snd_pcm_drain(pcm_playback_);
-    if (err < 0)
-      MV_PANIC("snd_pcm_drain failed: %s", snd_strerror(err));
     snd_pcm_close(pcm_playback_);
     pcm_playback_ = nullptr;
     break;
   }
   case kPlaybackData: {
-    if (!pcm_playback_)
-      break;
+    if (!pcm_playback_) {
+      if (!playback_format_.frequency || !playback_format_.channels) {
+        break;
+      }
+
+      int err;
+      MV_ASSERT(pcm_playback_ == nullptr);
+      if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0) {
+        MV_LOG("snd_pcm_open error: %s", snd_strerror(err));
+        pcm_playback_error_ = true;
+        break;
+      }
+      /* set the latency to 10 times of interval to buffer some more data */
+      err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
+        playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 10);
+      if (err < 0) {
+        MV_PANIC("snd_pcm_set_params error: %s\n", snd_strerror(err));
+      }
+    }
     /* assume format is s16le */
     auto frames = snd_pcm_writei(pcm_playback_, iov.iov_base, iov.iov_len / playback_format_.channels / 2);
+    if (frames < 0) {
+      MV_LOG("snd_pcm_writei failed: %s\n", snd_strerror(frames));
+    }
     if (frames < 0)
       frames = snd_pcm_recover(pcm_playback_, frames, 0);
     if (frames < 0) {
@@ -332,11 +335,11 @@ int Viewer::MainLoop() {
     if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
       pending_resize_.triggered = false;
       for (auto resizer : resizers_) {
-        if (machine_->guest_os() == "Linux" && std::string("SpiceAgent") == dynamic_cast<Object*>(resizer)->classname()) {
-          /* FIXME: spice agent resize is not working on Linux */
-          continue;
-        }
         if (resizer->Resize(pending_resize_.width, pending_resize_.height)) {
+          if (machine_->debug()) {
+            MV_LOG("%s resize to %dx%d", dynamic_cast<Object*>(resizer)->name(),
+              pending_resize_.width, pending_resize_.height);
+          }
           break;
         }
       }

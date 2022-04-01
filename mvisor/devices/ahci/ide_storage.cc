@@ -96,7 +96,7 @@ void IdeStorageDevice::CompleteCommand() {
   io_complete_();
 }
 
-void IdeStorageDevice::StartCommand(VoidCallback iocp) {
+bool IdeStorageDevice::StartCommand(VoidCallback iocp) {
   MV_ASSERT(IsAvailable());
 
   regs_.error = 0;
@@ -106,7 +106,7 @@ void IdeStorageDevice::StartCommand(VoidCallback iocp) {
   if (regs_.status & (ATA_SR_BSY)) {
     if (regs_.command != ATA_CMD_DEVICE_RESET || type_ != kIdeStorageTypeCdrom) {
       MV_PANIC("invalid command 0x%x while busy", regs_.command);
-      return;
+      return false;
     }
   }
 
@@ -123,6 +123,7 @@ void IdeStorageDevice::StartCommand(VoidCallback iocp) {
   } else {
     MV_PANIC("unknown command 0x%x", regs_.command);
   }
+  return io_async_;
 }
 
 /* Set Error and end this command */

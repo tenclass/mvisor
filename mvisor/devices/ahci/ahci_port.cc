@@ -167,7 +167,8 @@ bool AhciPort::HandleCommand(int slot) {
 
   /* We have only one DMA engine each drive.
    * when async IO is running by IO thread, we should wait for the slot */
-  drive_->StartCommand([this, io, command_, slot, regs]() {
+  bool should_wait = drive_->StartCommand([this, io, command_, slot, regs]() {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
     if (io->nbytes <= 0 || io->dma_status) {
       UpdateRegisterD2H();
     } else {
@@ -178,12 +179,13 @@ bool AhciPort::HandleCommand(int slot) {
     if (busy_slot_ != -1) {
       port_control_.command_issue &= ~(1U << busy_slot_);
       busy_slot_ = -1;
+      lock.unlock();
       /* Check next command */
       CheckCommand();
     }
   });
 
-  if (regs->status & 0x80) { // BUSY
+  if (should_wait) { // BUSY
     busy_slot_ = slot;
     return false;
   }
@@ -268,7 +270,7 @@ void AhciPort::CheckEngines() {
 }
 
 void AhciPort::Write(uint64_t offset, uint32_t value) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
@@ -319,9 +321,7 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
       UpdateInitD2H();
     }
 
-    manager_->io()->Schedule([this](){
-      CheckCommand();
-    });
+    CheckCommand();
     break;
   case kAhciPortRegTaskFileData:
   case kAhciPortRegSignature:
@@ -343,9 +343,7 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     break;
   case kAhciPortRegCommandIssue:
     port_control_.command_issue |= value;
-    manager_->io()->Schedule([this](){
-      CheckCommand();
-    });
+    CheckCommand();
     break;
   default:
     MV_PANIC("not implemented reg index = %x", reg_index);

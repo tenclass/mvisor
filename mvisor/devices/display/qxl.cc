@@ -97,7 +97,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
     
     /* Bar 1: Windows driver uses this block of memory as a normal memslot
      * Linux driver named it surface RAM */
-    qxl_vram32_size_ = _MB(8);
+    qxl_vram32_size_ = _MB(16);
     qxl_vram32_base_ = (uint8_t*)valloc(qxl_vram32_size_);
     pci_bars_[1].host_memory = qxl_vram32_base_;
 

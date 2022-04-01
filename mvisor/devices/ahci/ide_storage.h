@@ -99,7 +99,7 @@ class IdeStorageDevice : public Device {
   void Reset();
   bool IsAvailable();
 
-  virtual void StartCommand(VoidCallback iocp);
+  virtual bool StartCommand(VoidCallback iocp);
   virtual void AbortCommand();
   virtual void CompleteCommand();
 

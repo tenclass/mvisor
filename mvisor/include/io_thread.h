@@ -24,6 +24,7 @@
 
 #include <deque>
 #include <set>
+#include <list>
 #include <unordered_map>
 #include <thread>
 #include <functional>
@@ -87,7 +88,7 @@ class IoThread {
   std::recursive_mutex  mutex_;
   int                   event_fd_;
   int                   epoll_fd_;
-  std::set<IoTimer*>    timers_;
+  std::list<IoTimer*>   timers_;
   std::set<DiskImage*>  disk_images_;
   std::unordered_map<int, EpollEvent*>  epoll_events_;
 };

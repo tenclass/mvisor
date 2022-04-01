@@ -58,7 +58,7 @@ Vga::Vga() {
   
 
   /* Bar 0: 256MB VRAM */
-  vga_mem_size_ = _MB(16);
+  vga_mem_size_ = _MB(32);
   vram_size_ = _MB(256);
 
   AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* vgamem */

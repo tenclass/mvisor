@@ -178,7 +178,7 @@ IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callba
   timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  timers_.insert(timer);
+  timers_.push_back(timer);
 
   /* Wakeup io thread and recalculate the timeout */
   Kick();

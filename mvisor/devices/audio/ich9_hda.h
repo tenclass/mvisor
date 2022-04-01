@@ -65,7 +65,7 @@ struct Ich9HdaRegisters {
   /* 0x30-0x40 misc */
   uint32_t  wall_clock_counter;
   uint8_t   pad3[0xC];
-  /* 0x40-0x80 dma engine */
+  /* 0x40-0x60 dma engine */
   uint32_t  corb_base0;
   uint32_t  corb_base1;
   uint16_t  corb_write_pointer;
@@ -82,7 +82,13 @@ struct Ich9HdaRegisters {
   uint8_t   rirb_status;
   uint8_t   rirb_size;
   uint8_t   pad5[0x1];
-  uint8_t   pad6[0x20];
+  /* 0x60-0x80 not used */
+  uint32_t  icw;
+  uint32_t  irr;
+  uint32_t  ics;
+  uint8_t   pad6[0x4];
+  uint64_t  dp_base;
+  uint8_t   pad7[0x8];
   /* 0x80-0x180 streams */
   Ich9HdaStream streams[8];
 } __attribute__((packed));
