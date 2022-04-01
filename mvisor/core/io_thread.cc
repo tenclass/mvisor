@@ -285,6 +285,9 @@ bool IoThread::SaveDiskImage(MigrationWriter* writer) {
     auto& device = *image->deivce();
     if (image->readonly())
       continue;
+    if (!image->snapshot())
+      continue;
+    /* Only copy snapshot image */
     writer->SetPrefix(device.name());
     auto new_path = writer->base_path() + "/" + device.name();
     if (!std::filesystem::exists(new_path)) {

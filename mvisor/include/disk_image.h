@@ -60,6 +60,7 @@ class DiskImage : public Object {
   inline bool readonly() { return readonly_; }
   inline const std::string& filepath() const { return filepath_; }
   inline Device* deivce() { return device_; }
+  inline bool snapshot() { return snapshot_; }
 
   /* Always use this static method to create a DiskImage */
 
