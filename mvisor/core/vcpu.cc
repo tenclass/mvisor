@@ -36,7 +36,7 @@
 
 #define MSR_IA32_TSC                  0x10
 #define MSR_IA32_UCODE_REV            0x8B
-#define KVM_MSR_ENTRY(_index, _data) 	(struct kvm_msr_entry) { .index = _index, .data = _data }
+#define KVM_MSR_ENTRY(_index, _data)  (struct kvm_msr_entry) { .index = _index, .data = _data }
 
 /* Use Vcpu::current_vcpu() */
 __thread Vcpu* Vcpu::current_vcpu_ = nullptr;
@@ -240,10 +240,10 @@ void Vcpu::SetupModelSpecificRegisters() {
     kvm_msrs      msrs;
     kvm_msr_entry entries[100];
   } msrs = { 0 };
-	uint index = 0;
+  uint index = 0;
 
   msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_TSC, 0);
-	msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_UCODE_REV, GetSupportedMsrFeature(MSR_IA32_UCODE_REV));
+  msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_UCODE_REV, GetSupportedMsrFeature(MSR_IA32_UCODE_REV));
 
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
     msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SVERSION, HV_SYNIC_VERSION);
@@ -252,10 +252,10 @@ void Vcpu::SetupModelSpecificRegisters() {
     msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIEFP, 0);
   }
 
-	msrs.msrs.nmsrs = index;
+  msrs.msrs.nmsrs = index;
   auto ret = ioctl(fd_, KVM_SET_MSRS, &msrs);
-	if (ret < 0)
-		MV_PANIC("KVM_SET_MSRS failed");
+  if (ret < 0)
+    MV_PANIC("KVM_SET_MSRS failed");
 }
 
 /* Used for debugging sometimes */

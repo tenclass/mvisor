@@ -29,8 +29,8 @@
  * expects that for autodetection.
  */
 #define FIFO_LEN            64
-#define FIFO_MASK	          (FIFO_LEN - 1)
-#define UART_IIR_TYPE_BITS	0xC0
+#define FIFO_MASK           (FIFO_LEN - 1)
+#define UART_IIR_TYPE_BITS  0xC0
 
 struct Console {
   uint          index;
