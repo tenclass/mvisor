@@ -24,7 +24,7 @@
 #include "ahci_port.h"
 #include "ata_interval.h"
 #include "disk_image.h"
-#include "states/ahci_cdrom.pb.h"
+#include "pb/ahci_cdrom.pb.h"
 
 /*
  *  SENSE KEYS

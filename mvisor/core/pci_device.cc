@@ -23,7 +23,7 @@
 #include <sys/stat.h>
 #include "logger.h"
 #include "machine.h"
-#include "states/pci_device.pb.h"
+#include "pb/pci_device.pb.h"
 
 
 PciDevice::PciDevice() {

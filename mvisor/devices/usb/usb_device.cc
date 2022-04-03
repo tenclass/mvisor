@@ -23,7 +23,7 @@
 #include "usb.h"
 #include "logger.h"
 #include "device_manager.h"
-#include "states/usb_device.pb.h"
+#include "pb/usb_device.pb.h"
 
 UsbDevice::UsbDevice() {
   set_parent_name("xhci-host");

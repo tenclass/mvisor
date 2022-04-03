@@ -22,7 +22,7 @@
 #include "device_manager.h"
 #include "machine.h"
 #include "device_interface.h"
-#include "states/ps2.pb.h"
+#include "pb/ps2.pb.h"
 
 #define STATUS_OFULL    0x01
 #define STATUS_SYSFLAG  0x04

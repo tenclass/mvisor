@@ -22,7 +22,7 @@
 #include <ctime>
 #include "logger.h"
 #include "device_manager.h"
-#include "states/cmos.pb.h"
+#include "pb/cmos.pb.h"
 
 #define RTC_BASE_ADDRESS 0x70
 

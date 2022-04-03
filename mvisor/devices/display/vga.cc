@@ -31,7 +31,7 @@
 #include "logger.h"
 #include "vbe.h"
 #include "vga.font.inc"
-#include "states/vga.pb.h"
+#include "pb/vga.pb.h"
 
 #define VGA_PIO_BASE    0x3C0
 #define VGA_PIO_SIZE    0x20

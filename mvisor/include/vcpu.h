@@ -27,7 +27,7 @@
 
 #include "hyperv/hyperv.h"
 #include "migration.h"
-#include "states/vcpu.pb.h"
+#include "pb/vcpu.pb.h"
 
 #define SIG_USER_INTERRUPT (SIGRTMIN + 0)
 

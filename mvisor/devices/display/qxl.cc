@@ -32,7 +32,7 @@
 #include "spice/qxl_dev.h"
 #include "qxl.modes.inc"
 #include "machine.h"
-#include "states/qxl.pb.h"
+#include "pb/qxl.pb.h"
 
 #define NUM_MEMSLOTS 8
 #define MEMSLOT_GENERATION_BITS 8

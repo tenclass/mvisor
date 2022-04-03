@@ -27,7 +27,7 @@
 #include "device_manager.h"
 #include "hda_codec.h"
 #include "hda_internal.h"
-#include "states/ich9_hda.pb.h"
+#include "pb/ich9_hda.pb.h"
 
 using namespace std::chrono;
 

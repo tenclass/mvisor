@@ -32,7 +32,7 @@
 #include "hda_internal.h"
 #include "device_manager.h"
 #include "device_interface.h"
-#include "states/hda_duplex.pb.h"
+#include "pb/hda_duplex.pb.h"
 #include "logger.h"
 
 #define HDA_TIMER_INTERVAL_MS (10) // 10ms

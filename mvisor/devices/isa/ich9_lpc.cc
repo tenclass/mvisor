@@ -24,7 +24,7 @@
 #include "pci_device.h"
 #include "device_manager.h"
 #include "machine.h"
-#include "states/ich9_lpc.pb.h"
+#include "pb/ich9_lpc.pb.h"
 
 #define ICH9_LPC_PMBASE                         0x40
 #define ICH9_LPC_PMBASE_BASE_ADDRESS_MASK       Q35_MASK(32, 15, 7)

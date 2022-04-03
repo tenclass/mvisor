@@ -30,7 +30,7 @@
 #include "xhci_internal.h"
 #include "usb.h"
 #include "logger.h"
-#include "states/xhci_host.pb.h"
+#include "pb/xhci_host.pb.h"
 
 using namespace std::chrono;
 

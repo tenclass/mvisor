@@ -25,7 +25,7 @@
 #include "logger.h"
 #include "device_manager.h"
 #include "virtio_pci.h"
-#include "states/virtio_console.pb.h"
+#include "pb/virtio_console.pb.h"
 
 class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
  private:

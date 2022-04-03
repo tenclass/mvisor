@@ -50,6 +50,9 @@ vfio: all
 gvt:
 	echo "c2e088ba-954f-11ec-8584-525400666f2b" > /sys/class/mdev_bus/0000:00:02.0/mdev_supported_types/i915-GVTg_V5_4/create
 
+sweet_js:
+	$(PROTOC) --js_out=import_style=commonjs,binary:. sweet/sweet.proto
+
 all: $(EXECUTABLE)
 
 proto: $(MV_PROTOBUF_CC)
@@ -68,7 +71,7 @@ $(BUILD_DIR)/ui/keymap.o: $(BUILD_DIR)/ui/%.o: ui/%.c
 
 $(MV_PROTOBUF_CC): $(BUILD_DIR)/%.pb.cc: %.proto
 	$(PROTOC) -I$(dir $<) --cpp_out=$(dir $@) $<
-	cp $(subst .cc,.h,$@) ./include/states/
+	cp $(subst .cc,.h,$@) ./include/pb/
 
 .cc.o:
 	$(CC) $(CCFLAGS) -c -o $@ $<

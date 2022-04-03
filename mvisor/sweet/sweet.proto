@@ -1,0 +1,119 @@
+syntax = "proto3";
+package SweetProtocol;
+
+message QueryStatusResponse {
+  bool      debug       = 1;
+  bool      paused      = 2;
+  bool      hypervisor  = 3;
+  uint32    vcpu_count  = 4;
+  uint64    memory_size = 5;
+  string    name        = 6;
+  string    uuid        = 7;
+  string    config_path = 8;
+
+  /* capabilities */
+  bool      spice_agent     = 1001;
+  bool      tenclass_agent  = 1002;
+}
+
+message SendKeyboardInputCommand {
+  uint32    scancode    = 1;
+  bool      pressed     = 2;
+}
+
+message SendPointerInputCommand {
+  enum PointerButtonBit {
+    LEFT    = 0;
+    MIDDLE  = 1;
+    RIGHT   = 2;
+  }
+
+  uint32    buttons     = 1;
+  uint32    x           = 2;
+  uint32    y           = 3;
+  uint32    z           = 4;
+}
+
+message QueryScreeenshotCommand {
+  string    format      = 1;
+  uint32    width       = 2;
+  uint32    height      = 3;
+}
+
+message QueryScreenshotResponse {
+  string    format      = 1;
+  uint32    width       = 2;
+  uint32    height      = 3;
+  bytes     data        = 4;
+}
+
+message ConfigMonitorsCommand {
+  message Monitor {
+    uint32  index   = 1;
+    uint32  left    = 2;
+    uint32  top     = 3;
+    uint32  width   = 4;
+    uint32  height  = 5;
+    uint32  depth   = 6;
+  }
+  uint32            count     = 1;
+  repeated Monitor  monitors  = 2;
+}
+
+message SetCursorEvent {
+  message CursorShape {
+    uint32  width     = 1;
+    uint32  height    = 2;
+    int32   hotspot_x = 3;
+    int32   hotspot_y = 4;
+    uint32  type      = 5;
+    bytes   data      = 6;
+  }
+
+  bool        visible   = 1;
+  int32       x         = 2;
+  int32       y         = 3;
+  CursorShape shape     = 4;
+}
+
+message ConnectDisplayCommand {
+  /* x264 / x265 / av1 */
+  string    codec       = 1;
+  /* baseline / main / high */
+  string    profile     = 2;
+  /* ultrafast / superfast / veryfast / faster / fast */
+  string    speed       = 3;
+  /* vbr / cbr */
+  string    rate_control= 4;
+  /* for QXL, 16 / 32 / 64 */
+  uint32    fps         = 5;
+  /* for vbr, it's max bitrate */
+  uint32    bitrate     = 6;
+  /* for vbr, minimal quality */
+  uint32    qmin        = 7;
+  /* number of sliced-threads */
+  uint32    threads     = 8;
+  /* codec specific flags, for x264, 1: fast decode, 2: cabac, 4: num_ref_frames=3 */
+  uint32    flags       = 9;
+}
+
+message ConnectPlaybackCommand {
+  /* pcm / opus */
+  string    codec       = 1;
+}
+
+message DisplayStreamStartEvent {
+  uint32    display_id  = 1;
+  uint32    width       = 2;
+  uint32    height      = 3;
+  uint32    codec       = 5;
+}
+
+message PlaybackStartEvent {
+  uint32    playback_id = 1;
+  uint32    codec       = 2;
+  uint32    format      = 3;
+  uint32    channels    = 4;
+  uint32    frequency   = 5;
+}
+

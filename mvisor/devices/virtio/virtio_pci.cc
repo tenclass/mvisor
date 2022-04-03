@@ -23,7 +23,7 @@
 
 #include "logger.h"
 #include "device_manager.h"
-#include "states/virtio_pci.pb.h"
+#include "pb/virtio_pci.pb.h"
 
 VirtioPci::VirtioPci() {
     pci_header_.vendor_id = 0x1AF4;

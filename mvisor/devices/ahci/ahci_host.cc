@@ -27,7 +27,7 @@
 #include "ahci_internal.h"
 #include "machine.h"
 #include "linux/kvm.h"
-#include "states/ahci_host.pb.h"
+#include "pb/ahci_host.pb.h"
 
 /* Reference:
  * https://wiki.osdev.org/AHCI
