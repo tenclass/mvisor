@@ -284,14 +284,14 @@ void Machine::Save(std::string path) {
   MV_LOG("start saving");
 
   MigrationWriter writer(path);
-  /* Save vcpu states */
-  for (auto vcpu : vcpus_) {
-    vcpu->SaveState(&writer);
-  }
   /* Save device states */
   if (!device_manager_->SaveState(&writer)) {
     MV_PANIC("failed to save device states");
     return;
+  }
+  /* Save vcpu states */
+  for (auto vcpu : vcpus_) {
+    vcpu->SaveState(&writer);
   }
   /* Save system RAM */
   if (!memory_manager_->SaveState(&writer)) {

@@ -83,6 +83,10 @@ void MemoryManager::InitializeSystemRam() {
     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   MV_ASSERT(ram_host_ != MAP_FAILED);
 
+  /* Make host RAM mergeable */
+  MV_ASSERT(madvise(ram_host_, machine_->ram_size_, MADV_MERGEABLE) == 0);
+  MV_ASSERT(madvise(ram_host_, machine_->ram_size_, MADV_DONTDUMP) == 0);
+
   /* Don't map MMIO region */
   const uint64_t low_ram_upper_bound = 2 * (1LL << 30);
   const uint64_t high_ram_lower_bound = 1LL << 32;
@@ -374,5 +378,8 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
     MV_PANIC("failed to map memory");
   }
   reader->EndRead("RAM");
+
+  /* Make host RAM DONTDUMP */
+  madvise(ram_host_, machine_->ram_size_, MADV_DONTDUMP);
   return true;
 }

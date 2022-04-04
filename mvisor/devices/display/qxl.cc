@@ -143,7 +143,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
   }
 
   virtual bool SaveState(MigrationWriter* writer) {
-    /* Add all free_sources to release ring */
+    /* Add all free_sources to release ring, this causes interrupts :( */
     FreeGuestResources();
   
     QxlState state;
@@ -350,10 +350,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
     auto old_pending = __atomic_fetch_or(&qxl_ram_->int_pending, interrupt, __ATOMIC_SEQ_CST);
     if (old_pending & interrupt)
       return;
-    /* This might be called by UI thread, make sure io thread handles IRQ */
-    manager_->io()->Schedule([this]() {
-      UpdateIrqLevel();
-    });
+    UpdateIrqLevel();
   }
 
   void UpdateIrqLevel() {
