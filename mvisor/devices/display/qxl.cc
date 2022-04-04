@@ -59,7 +59,12 @@ struct Drawable
   uint64_t        slot_address;
   QXLDrawable*    qxl_drawable;
   bool            drawed;
-  bool            drawing;
+  int             references;
+};
+
+struct DrawRect {
+  QXLRect         rect;
+  Drawable*       drawable;
 };
 
 class Qxl : public Vga, public DisplayResizeInterface {
@@ -84,12 +89,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
   std::map<uint, Surface>       surfaces_;
   std::vector<QXLReleaseInfo*>  free_resources_;
   DisplayMouseCursor            current_cursor_;
-  std::list<Drawable>           drawables_;
+  std::list<Drawable*>          drawables_;
+  std::list<DrawRect>           draw_rects_;
 
  public:
   Qxl() {
     default_rom_path_ = "../share/vgabios-qxl.bin";
-
     pci_header_.vendor_id = 0x1B36;
     pci_header_.device_id = 0x0100;
     pci_header_.revision_id = 5;
@@ -130,7 +135,11 @@ class Qxl : public Vga, public DisplayResizeInterface {
     current_cursor_.visible = false;
     surfaces_.clear();
     free_resources_.clear();
+    for (auto drawable : drawables_) {
+      delete drawable;
+    }
     drawables_.clear();
+    draw_rects_.clear();
   }
 
   virtual bool SaveState(MigrationWriter* writer) {
@@ -169,7 +178,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
     for (auto& drawable: drawables_) {
       auto dr = state.add_drawbles();
-      dr->set_slot_address(drawable.slot_address);
+      dr->set_slot_address(drawable->slot_address);
     }
 
     writer->WriteProtobuf("QXL", state);
@@ -227,10 +236,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
     for (int i = 0; i < state.drawbles_size(); i++) {
       auto& dr = state.drawbles(i);
-      drawables_.push_back(Drawable {
-        .slot_address = dr.slot_address(),
-        .qxl_drawable = (QXLDrawable*)GetMemSlotAddress(dr.slot_address())
-      });
+      ParseDrawCommand(dr.slot_address());
     }
     return true;
   }
@@ -416,7 +422,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       {
       case QXL_IO_NOTIFY_CMD:
       case QXL_IO_NOTIFY_CURSOR:
-        FetchCommands();
+        NotifyDisplayUpdate();
         break;
       case QXL_IO_UPDATE_AREA:
         if (debug_) {
@@ -470,24 +476,19 @@ class Qxl : public Vga, public DisplayResizeInterface {
     /* Fetch any commands on ring */
     FetchCommands();
 
-    /* Remove all drawed objects */
-    uint released = 0;
-    for (auto it = drawables_.begin(); it != drawables_.end();) {
-      if (it->drawed || (destroy_primary && !it->drawing)) {
-        ReleaseGuestResource(&it->qxl_drawable->release_info);
-        it = drawables_.erase(it);
-        ++released;
-      } else {
-        ++it;
-      }
+    /* Remove all drawables */
+    if (debug_) {
+      MV_LOG("force remove drawables=%lu", drawables_.size());
     }
+    for (auto it = drawables_.begin(); it != drawables_.end();) {
+      ReleaseGuestResource(&(*it)->qxl_drawable->release_info);
+      delete *it;
+      it = drawables_.erase(it);
+    }
+    draw_rects_.clear();
 
     /* Free released resources */
     FreeGuestResources();
-
-    if (debug_) {
-      MV_LOG("drawables released=%u current=%lu", released, drawables_.size());
-    }
   }
 
   void AddMemSlot(int slot_id, QXLMemSlot& slot) {
@@ -601,7 +602,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
     QXLReleaseRing* ring = &qxl_ram_->release_ring;
     if (SPICE_RING_IS_FULL(ring)) {
       /* ring full, cannot push */
-      MV_LOG("ring is full, failed to push item");
+      MV_LOG("release ring is full, free resources count=%lu", free_resources_.size());
       return;
     }
     auto *el = SPICE_RING_PROD_ITEM(ring);
@@ -640,12 +641,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
     
     FetchCommands();
 
-    for (auto& drawable : drawables_) {
-      if (drawable.drawed)
+    for (auto drawable : drawables_) {
+      if (drawable->drawed)
         continue;
       
-      drawable.drawing = true;
       ParseDrawble(drawable, update.partials);
+      drawable->drawed = true;
     }
     update.cursor = current_cursor_;
     return true;
@@ -657,18 +658,9 @@ class Qxl : public Vga, public DisplayResizeInterface {
     if (mode_ != kDisplayQxlMode) {
       return Vga::ReleaseUpdate();
     }
-
-    for (auto& drawable : drawables_) {
-      if (drawable.drawing) {
-        drawable.drawing = false;
-        drawable.drawed = true;
-      }
-    }
   }
 
   void FetchCommands() {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
-
     QXLCommand command;
     while (FetchGraphicsCommand(command)) {
       switch (command.type)
@@ -684,7 +676,6 @@ class Qxl : public Vga, public DisplayResizeInterface {
         break;
       }
     }
-    RemoveInvisibleDrawables();
 
     while (FetchCursorCommand(command)) {
       MV_ASSERT(command.type == QXL_CMD_CURSOR);
@@ -761,61 +752,76 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
   }
 
-  void PushNonOverlappingRects(std::vector<QXLRect>& rects, int left, int top, int right, int bottom) {
+  void PushDrawableRect(Drawable* drawable, int top, int left, int bottom, int right) {
     if (left >= right || top >= bottom) {
       /* Invalid */
       return;
     }
 
-    // 扫描是否跟已有矩形有交集
-    for (size_t i = 0; i < rects.size(); i++) {
-      auto r = rects[i];
+    for (auto it = draw_rects_.begin(); it != draw_rects_.end();) {
+      auto& r = it->rect;
+      /* Check if intersected.
+       * Always cut the rectangle horizontally to get best performance of bliting */
       if (r.left < right && r.right > left && r.top < bottom && r.bottom > top) {
-        if (r.left > left)
-          PushNonOverlappingRects(rects, left, std::max(top, r.top), r.left, std::min(bottom, r.bottom));
-        if (r.right < right)
-          PushNonOverlappingRects(rects, r.right, std::max(top, r.top), right, std::min(bottom, r.bottom));
-        if (r.top > top)
-          PushNonOverlappingRects(rects, left, top, right, r.top);
-        if (r.bottom < bottom)
-          PushNonOverlappingRects(rects, left, r.bottom, right, bottom);
-        return;
-      }
-    }
-  
-    // 无交集则增加新矩形
-    rects.emplace_back(QXLRect {
-      .top = top, .left = left, .bottom = bottom, .right = right
-    });
-  }
+        if (r.top < top) {
+          draw_rects_.push_back(DrawRect {
+            .rect = { r.top, r.left, top, r.right },
+            .drawable = it->drawable
+          });
+          ++it->drawable->references;
+        }
+        if (r.bottom > bottom) {
+          draw_rects_.push_back(DrawRect {
+            .rect = { bottom, r.left, r.bottom, r.right },
+            .drawable = it->drawable
+          });
+          ++it->drawable->references;
+        }
+        if (r.left < left) {
+          draw_rects_.push_back(DrawRect {
+            .rect = { std::max(top, r.top), r.left, std::min(r.bottom, bottom), left },
+            .drawable = it->drawable
+          });
+          ++it->drawable->references;
+        }
+        if (r.right > right) {
+          draw_rects_.push_back(DrawRect {
+            .rect = { std::max(top, r.top), right, std::min(r.bottom, bottom), r.right },
+            .drawable = it->drawable
+          });
+          ++it->drawable->references;
+        }
 
-  void RemoveInvisibleDrawables() {
-    std::vector<QXLRect> draw_rects;
-    size_t last_rects_count = 0;
-
-    /* Iterate the drawables from top to bottm, and add non-overlapping rectangle to draw_rects,
-     * If no rects are added, that drawable is discardable */
-    for (auto it = drawables_.rbegin(); it != drawables_.rend();) {
-      auto qxl_drawable = it->qxl_drawable;
-      auto& bbox = qxl_drawable->bbox;
-
-      PushNonOverlappingRects(draw_rects, bbox.left, bbox.top, bbox.right, bbox.bottom);
-      if (draw_rects.size() == last_rects_count && !it->drawing) {
-        ReleaseGuestResource(&qxl_drawable->release_info);
-        it = decltype(it)(drawables_.erase(std::next(it).base()));
+        /* The intersection part will be removed. If it's the last part of drawable, remove the drawable */
+        if (--it->drawable->references <= 0) {
+          ReleaseGuestResource(&it->drawable->qxl_drawable->release_info);
+          drawables_.remove(it->drawable);
+          delete it->drawable;
+        }
+        it = draw_rects_.erase(it);
       } else {
-        last_rects_count = draw_rects.size();
         ++it;
       }
     }
+  
+    draw_rects_.push_back(DrawRect {
+      .rect = { top, left, bottom, right },
+      .drawable = drawable,
+    });
+    drawable->references = 1;
   }
 
   void ParseDrawCommand(uint64_t slot_address) {
     auto qxl_drawable = (QXLDrawable*)GetMemSlotAddress(slot_address);
-    drawables_.push_back(Drawable {
+    auto drawable = new Drawable {
       .slot_address = slot_address,
       .qxl_drawable = qxl_drawable
-    });
+    };
+    drawables_.push_back(drawable);
+
+    /* Push the rect of drawable and remove possible invisible items */
+    auto& bbox = qxl_drawable->bbox;
+    PushDrawableRect(drawable, bbox.top, bbox.left, bbox.bottom, bbox.right);
   }
 
   void ParseCursorCommand(uint64_t slot_address) {
@@ -859,8 +865,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
     ReleaseGuestResource(&cursor_cmd->release_info);
   }
 
-  void ParseDrawble(Drawable& drawable, std::vector<DisplayPartialBitmap>& partials) {
-    auto qxl_drawable = drawable.qxl_drawable;
+  void ParseDrawble(Drawable* drawable, std::vector<DisplayPartialBitmap>& partials) {
+    auto qxl_drawable = drawable->qxl_drawable;
     auto partial = DisplayPartialBitmap {
       .width = uint(qxl_drawable->bbox.right - qxl_drawable->bbox.left),
       .height = uint(qxl_drawable->bbox.bottom - qxl_drawable->bbox.top),

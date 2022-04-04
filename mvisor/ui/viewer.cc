@@ -34,7 +34,7 @@ Viewer::~Viewer() {
 }
 
 void Viewer::DestroyWindow() {
-  if (screen_texture_) {
+  if (screen_surface_) {
     if (palette_) {
       SDL_FreePalette(palette_);
       palette_ = nullptr;
@@ -43,10 +43,10 @@ void Viewer::DestroyWindow() {
       SDL_FreeCursor(cursor_);
       cursor_ = nullptr;
     }
-    SDL_DestroyTexture(screen_texture_);
+    SDL_FreeSurface(screen_surface_);
     SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);
-    screen_texture_ = nullptr;
+    screen_surface_ = nullptr;
     renderer_ = nullptr;
     window_ = nullptr;
   }
@@ -65,25 +65,21 @@ void Viewer::CreateWindow() {
   switch (bpp_)
   {
   case 32:
-    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
-      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 32, SDL_PIXELFORMAT_BGRA32);
     break;
   case 24:
-    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGR24,
-      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 24, SDL_PIXELFORMAT_BGR24);
     break;
   case 16:
-    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGR565,
-      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 16, SDL_PIXELFORMAT_BGR565);
     break;
   case 8:
-    screen_texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_BGRA32,
-      SDL_TEXTUREACCESS_STREAMING, width_, height_);
+    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 32, SDL_PIXELFORMAT_BGRA32);
     break;
   default:
     MV_PANIC("unsupported video bpp=%d", bpp_);
   }
-  MV_ASSERT(screen_texture_);
+  MV_ASSERT(screen_surface_);
   if (bpp_ == 8) {
     palette_ = SDL_AllocPalette(256);
     SDL_Color colors[256];
@@ -105,9 +101,8 @@ void Viewer::UpdateCaption() {
 }
 
 void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
-  uint8_t* dst;
-  int dst_stride;
-  SDL_LockTexture(screen_texture_, NULL, (void**)&dst, &dst_stride);
+  auto dst = (uint8_t*)screen_surface_->pixels;
+  int dst_stride = screen_surface_->pitch;
   uint8_t* dst_end = dst + dst_stride * height_;
 
   if (partial->flip) {
@@ -132,7 +127,6 @@ void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
     }
     ++src_index;
   }
-  SDL_UnlockTexture(screen_texture_);
 }
 
 void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
@@ -141,9 +135,9 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
   auto surface_8bit = SDL_CreateRGBSurfaceWithFormatFrom(partial->vector[0].iov_base,
     partial->width, partial->height, bpp_, partial->stride, SDL_PIXELFORMAT_INDEX8);
   SDL_SetSurfacePalette(surface_8bit, palette_);
-  auto surface_32bit = SDL_ConvertSurfaceFormat(surface_8bit, SDL_PIXELFORMAT_BGRA32, 0);
-  SDL_UpdateTexture(screen_texture_, nullptr, surface_32bit->pixels, surface_32bit->pitch);
-  SDL_FreeSurface(surface_32bit);
+  if (screen_surface_)
+    SDL_FreeSurface(screen_surface_);
+  screen_surface_ = SDL_ConvertSurfaceFormat(surface_8bit, SDL_PIXELFORMAT_BGRA32, 0);
   SDL_FreeSurface(surface_8bit);
 }
 
@@ -217,8 +211,10 @@ void Viewer::Render() {
   }
 
   if (!update.partials.empty()) {
-    SDL_RenderCopy(renderer_, screen_texture_, nullptr, nullptr);
+    auto screen_texture = SDL_CreateTextureFromSurface(renderer_, screen_surface_);
+    SDL_RenderCopy(renderer_, screen_texture, nullptr, nullptr);
     SDL_RenderPresent(renderer_);
+    SDL_DestroyTexture(screen_texture);
   }
 }
 
@@ -303,8 +299,14 @@ void Viewer::LookupDevices() {
   }
   MV_ASSERT(display_);
 
-  display_->RegisterDisplayChangeListener([this]() {
+  display_->RegisterDisplayModeChangeListener([this]() {
     requested_update_window_ = true;
+    SDL_Event event = { .type = SDL_USEREVENT };
+    SDL_PushEvent(&event);
+  });
+  display_->RegisterDisplayUpdateListener([this]() {
+    SDL_Event event = { .type = SDL_USEREVENT };
+    SDL_PushEvent(&event);
   });
   if (playback_) {
     playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
@@ -319,20 +321,17 @@ void Viewer::LookupDevices() {
 int Viewer::MainLoop() {
   SetThreadName("mvisor-viewer");
 
-  int fps = 64;
-  auto frame_interval_us = std::chrono::microseconds(1000000 / fps);
   // Loop until all vcpu exits
+  SDL_Event event;
   while (machine_->IsValid()) {
     auto frame_start_time = std::chrono::steady_clock::now();
-    Render();
-
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
+    auto ret = SDL_WaitEventTimeout(&event, 300);
+    if (ret == 1) {
       HandleEvent(event);
     }
 
     /* Check viewer window resize */
-    if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(300)) {
+    if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(200)) {
       pending_resize_.triggered = false;
       for (auto resizer : resizers_) {
         if (resizer->Resize(pending_resize_.width, pending_resize_.height)) {
@@ -343,12 +342,6 @@ int Viewer::MainLoop() {
           break;
         }
       }
-    }
-
-    /* Keep display FPS */
-    auto frame_cost_us = std::chrono::steady_clock::now() - frame_start_time;
-    if (frame_cost_us < frame_interval_us) {
-      std::this_thread::sleep_for(frame_interval_us - frame_cost_us);
     }
   }
   return 0;
@@ -374,6 +367,9 @@ void Viewer::HandleEvent(const SDL_Event& event) {
 
   switch (event.type)
   {
+  case SDL_USEREVENT:
+    Render();
+    break;
   case SDL_KEYDOWN:
     if (event.key.keysym.sym == SDLK_PAUSE) {
       if (machine_->IsPaused()) {

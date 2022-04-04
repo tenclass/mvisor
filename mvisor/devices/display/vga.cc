@@ -177,6 +177,8 @@ void Vga::Connect() {
   }
 
   PciDevice::Connect();
+
+  refresh_timer_ = manager_->io()->AddTimer(1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
 }
 
 void Vga::Disconnect() {
@@ -184,8 +186,17 @@ void Vga::Disconnect() {
     munmap((void*)vram_base_, vram_size_);
     vram_base_ = nullptr;
   }
+
+  manager_->io()->RemoveTimer(refresh_timer_);
+  refresh_timer_ = nullptr;
   mode_ = kDisplayUnknownMode;
   PciDevice::Disconnect();
+}
+
+void Vga::OnRefreshTimer() {
+  if (mode_ == kDisplayTextMode || mode_ == kDisplayVbeMode) {
+    NotifyDisplayUpdate();
+  }
 }
 
 void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end) {
@@ -555,13 +566,23 @@ void Vga::UpdateDisplayMode() {
 }
 
 void Vga::NotifyDisplayModeChange() {
-  for (auto &listener : display_change_listerners_) {
+  for (auto &listener : display_mode_change_listerners_) {
     listener();
   }
 }
 
-void Vga::RegisterDisplayChangeListener(DisplayChangeListener callback) {
-  display_change_listerners_.push_back(callback);
+void Vga::NotifyDisplayUpdate() {
+  for (auto &listener : display_update_listerners_) {
+    listener();
+  }
+}
+
+void Vga::RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) {
+  display_mode_change_listerners_.push_back(callback);
+}
+
+void Vga::RegisterDisplayUpdateListener(DisplayUpdateListener callback) {
+  display_update_listerners_.push_back(callback);
 }
 
 bool Vga::AcquireUpdate(DisplayUpdate& update) {

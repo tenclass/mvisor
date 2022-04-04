@@ -64,7 +64,8 @@ class Vga : public PciDevice, public DisplayInterface {
   uint8_t* vram_read_select_;
   bool     has_mapped_vga_ = false;
 
-  std::vector<DisplayChangeListener> display_change_listerners_;
+  std::vector<DisplayModeChangeListener> display_mode_change_listerners_;
+  std::vector<DisplayUpdateListener> display_update_listerners_;
 
   void VbeReadPort(uint64_t port, uint16_t* data);
   void VbeWritePort(uint64_t port, uint16_t value);
@@ -89,8 +90,11 @@ class Vga : public PciDevice, public DisplayInterface {
   std::string vga_surface_;
   std::recursive_mutex      mutex_;
   std::string default_rom_path_;
+  IoTimer*    refresh_timer_ = nullptr;
 
   void NotifyDisplayModeChange();
+  void NotifyDisplayUpdate();
+  void OnRefreshTimer();
   virtual void UpdateDisplayMode();
 
  public:
@@ -109,7 +113,8 @@ class Vga : public PciDevice, public DisplayInterface {
   virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride);
 
   const uint8_t* GetPallete() const;
-  void RegisterDisplayChangeListener(DisplayChangeListener callback);
+  virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback);
+  virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback);
   virtual bool AcquireUpdate(DisplayUpdate& update);
   virtual void ReleaseUpdate();
 };

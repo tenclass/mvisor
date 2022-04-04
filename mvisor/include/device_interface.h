@@ -81,14 +81,16 @@ struct DisplayUpdate {
   DisplayMouseCursor                 cursor;
 };
 
-typedef std::function <void(void)> DisplayChangeListener;
+typedef std::function <void(void)> DisplayModeChangeListener;
+typedef std::function <void(void)> DisplayUpdateListener;
 class DisplayInterface {
  public:
   virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) = 0;
   virtual const uint8_t* GetPallete() const = 0;
   virtual bool AcquireUpdate(DisplayUpdate& update) = 0;
   virtual void ReleaseUpdate() = 0;
-  virtual void RegisterDisplayChangeListener(DisplayChangeListener callback) = 0;
+  virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
+  virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback) = 0;
 };
 
 enum PlaybackState {

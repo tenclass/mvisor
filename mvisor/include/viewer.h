@@ -74,7 +74,7 @@ class Viewer {
 
   SDL_Window* window_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;
-  SDL_Texture* screen_texture_ = nullptr;
+  SDL_Surface* screen_surface_ = nullptr;
   SDL_Palette* palette_ = nullptr;
   SDL_Cursor* cursor_ = nullptr;
 

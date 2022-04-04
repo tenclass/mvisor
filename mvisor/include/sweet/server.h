@@ -16,19 +16,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "sweet/server.h"
-#include "connection.h"
 
-SweetServer::SweetServer(Machine* machine, std::string unix_path) :
-  machine_(machine), unix_path_(unix_path) {
+#ifndef _MVISOR_SWEET_SERVER_H
+#define _MVISOR_SWEET_SERVER_H
 
-}
+#include <list>
+#include <string>
 
-SweetServer::~SweetServer() {
+#include "machine.h"
 
-}
+class SweetConnection;
+class SweetServer {
+ public:
+  SweetServer(Machine* machine, std::string unix_path);
+  ~SweetServer();
 
-int SweetServer::MainLoop() {
-  return 0;
-}
+  int MainLoop();
 
+  inline Machine* machine() { return machine_; }
+ private:
+  Machine*                    machine_;
+  std::list<SweetConnection*> connections_;
+  std::string                 unix_path_;
+  int                         server_fd_;
+};
+
+#endif // _MVISOR_SWEET_SERVER_H
