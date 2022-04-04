@@ -176,7 +176,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       sf->set_slot_address(surface.slot_address);
     }
 
-    for (auto& drawable: drawables_) {
+    for (auto drawable: drawables_) {
       auto dr = state.add_drawbles();
       dr->set_slot_address(drawable->slot_address);
     }
@@ -237,6 +237,13 @@ class Qxl : public Vga, public DisplayResizeInterface {
     for (int i = 0; i < state.drawbles_size(); i++) {
       auto& dr = state.drawbles(i);
       ParseDrawCommand(dr.slot_address());
+    }
+
+    if (!drawables_.empty()) {
+      /* push update event after loaded */
+      manager_->io()->Schedule([this]() {
+        NotifyDisplayUpdate();
+      });
     }
     return true;
   }
@@ -649,6 +656,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       drawable->drawed = true;
     }
     update.cursor = current_cursor_;
+    // MV_LOG("drawables=%lu rects=%lu", draw_rects_.size(), draw_rects_.size());
     return true;
   }
 

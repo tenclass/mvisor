@@ -464,6 +464,16 @@ void Vga::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
 }
 
 void Vga::UpdateVRamMemoryMap() {
+  const size_t map_types[][2] = {
+    { 0xA0000, 0x20000 }, { 0xA0000, 0x10000 },
+    { 0xB0000, 0x08000 }, { 0xB8000, 0x08000 }
+  };
+  
+  /* Memory map select controls visual area while read select controls IO */
+  int index = (vga_.gfx[6] >> 2) & 0b11;
+  int read_index = vga_.gfx[4] & 0b11;
+  auto& map_type = map_types[index];
+
   if (mode_ == kDisplayVbeMode) {
     uint offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
     offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
@@ -477,21 +487,13 @@ void Vga::UpdateVRamMemoryMap() {
   
     /* Map / unmap the area as ram to accelerate */
     if (has_mapped_vga_) {
-      RemoveIoResource(kIoResourceTypeRam, VGA_MMIO_BASE);
+      RemoveIoResource(kIoResourceTypeRam, "VGA RAM");
     }
-    AddIoResource(kIoResourceTypeRam, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA RAM", vram_read_select_);
+    AddIoResource(kIoResourceTypeRam, map_type[0], map_type[1], "VGA RAM", vram_read_select_);
     has_mapped_vga_ = true;
   } else if (mode_ == kDisplayVgaMode || mode_ == kDisplayTextMode) {
-    const size_t map_types[][2] = {
-      { 0xA0000, 0x20000 }, { 0xA0000, 0x10000 },
-      { 0xB0000, 0x08000 }, { 0xB8000, 0x08000 }
-    };
-    
-    /* Memory map select controls visual area while read select controls IO */
-    int index = (vga_.gfx[6] >> 2) & 0b11;
-    int read_index = vga_.gfx[4] & 0b11;
-    vram_map_select_size_ = map_types[index][1];
-    vram_map_select_ = vram_base_ + map_types[index][0] - VGA_MMIO_BASE;
+    vram_map_select_size_ = map_type[1];
+    vram_map_select_ = vram_base_ + map_type[0] - VGA_MMIO_BASE;
     vram_read_select_ = vram_base_ + vram_map_select_size_ * read_index;
 
     if (debug_) {

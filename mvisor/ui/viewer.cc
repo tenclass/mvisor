@@ -80,6 +80,8 @@ void Viewer::CreateWindow() {
     MV_PANIC("unsupported video bpp=%d", bpp_);
   }
   MV_ASSERT(screen_surface_);
+  SDL_SetSurfaceBlendMode(screen_surface_, SDL_BLENDMODE_NONE);
+
   if (bpp_ == 8) {
     palette_ = SDL_AllocPalette(256);
     SDL_Color colors[256];
