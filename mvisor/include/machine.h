@@ -63,8 +63,13 @@ class Machine {
   inline int num_vcpus() { return num_vcpus_; }
   inline uint64_t ram_size() { return ram_size_; }
   inline bool debug() { return debug_; }
+  inline bool hypervisor() { return hypervisor_; }
   inline const std::string& guest_os() const { return guest_os_; }
+  inline const std::string& vm_name() const { return vm_name_; }
+  inline const std::string& vm_uuid() const { return vm_uuid_; }
   inline void set_guest_os(std::string os) { guest_os_ = os; }
+  inline void set_vm_name(std::string name) { vm_name_ = name; }
+  inline void set_vm_uuid(std::string uuid) { vm_uuid_ = uuid; }
   inline Vcpu* first_vcpu() { return vcpus_.size() ? vcpus_[0] : nullptr; }
 
  private:
@@ -75,7 +80,6 @@ class Machine {
   friend class Configuration;
 
   void InitializeKvm();
-  void CreateArchRelated();
 
   bool valid_ = true;
   bool paused_ = true;
@@ -95,6 +99,8 @@ class Machine {
   bool debug_ = false;
   bool hypervisor_ = false;
   std::string guest_os_;
+  std::string vm_name_;
+  std::string vm_uuid_;
 
   std::mutex mutex_;
   std::condition_variable wait_to_resume_;

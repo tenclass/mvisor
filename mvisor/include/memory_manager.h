@@ -83,6 +83,7 @@ class MemoryManager {
 
  private:
   void InitializeSystemRam();
+  void InitializeReservedMemory();
   void LoadBiosFile();
   void AddMemoryRegion(MemoryRegion* region);
   void UpdateKvmSlot(MemorySlot* slot, bool remove);

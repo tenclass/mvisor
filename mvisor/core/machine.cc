@@ -1,5 +1,6 @@
 /* 
- * MVisor
+ * MVisor - Virtual Machine Controller
+ * KVM API reference: https://www.kernel.org/doc/html/latest/virt/kvm/api.html
  * Copyright (C) 2021 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -32,12 +33,9 @@
 #include "device_interface.h"
 #include "migration.h"
 
-#define X86_EPT_IDENTITY_BASE 0xfeffc000
 
 /* The Machine class handles all the VM initialization and common operations
- * such as interrupts, start, quit, pause, resume
- * KVM API reference: https://www.kernel.org/doc/html/latest/virt/kvm/api.html
- */
+ * such as startup, quit, pause, resume */
 Machine::Machine(std::string config_path) {
   /* Load the configuration and set values of num_vcpus & ram_size */
   config_ = new Configuration(this);
@@ -47,9 +45,8 @@ Machine::Machine(std::string config_path) {
 
   InitializeKvm();
 
+  /* Initialize system RAM and BIOS ROM */
   memory_manager_ = new MemoryManager(this);
-
-  CreateArchRelated();
 
   /* Currently, a Q35 chipset mother board is implemented */
   Device* root = dynamic_cast<Device*>(LookupObjectByName("system-root"));
@@ -91,6 +88,7 @@ Machine::~Machine() {
     safe_close(&kvm_fd_);
 }
 
+/* Create KVM instance */
 void Machine::InitializeKvm() {
   kvm_fd_ = open("/dev/kvm", O_RDWR);
   MV_ASSERT(kvm_fd_ > 0);
@@ -109,34 +107,6 @@ void Machine::InitializeKvm() {
   vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
   MV_ASSERT(vm_fd_ > 0);
 }
-
-
-/*
-  * On older Intel CPUs, KVM uses vm86 mode to emulate 16-bit code directly.
-  * In order to use vm86 mode, an EPT identity map and a TSS  are needed.
-  * Since these must be part of guest physical memory, we need to allocate
-  * them, both by setting their start addresses in the kernel and by
-  * creating a corresponding e820 entry. We need 4 pages before the BIOS.
-  *
-  * Older KVM versions may not support setting the identity map base. In
-  * that case we need to stick with the default, i.e. a 256K maximum BIOS
-  * size.
-  */
-void Machine::CreateArchRelated() {
-  /* Allows up to 16M BIOSes. */
-  uint64_t identity_base = X86_EPT_IDENTITY_BASE;
-  if (ioctl(vm_fd_, KVM_SET_IDENTITY_MAP_ADDR, &identity_base) < 0) {
-    MV_PANIC("failed to set identity map address");
-  }
-
-  if (ioctl(vm_fd_, KVM_SET_TSS_ADDR, identity_base + 0x1000) < 0) {
-    MV_PANIC("failed to set tss");
-  }
-  
-  /* Map these addresses as reserved so the guest never touch it */
-  memory_manager_->Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved, "EPT+TSS");
-}
-
 
 /* Start vCPU threads and IO thread */
 void Machine::Run() {
@@ -171,9 +141,7 @@ void Machine::Quit() {
   io_thread_->Stop();
 }
 
-/* Recover BIOS data and reset all vCPU
- * FIXME: vCPU 0 sometimes hangs (CPU 100%) after reset
- */
+/* Recover BIOS data and reset all vCPU */
 void Machine::Reset() {
   memory_manager_->Reset();
   device_manager_->ResetDevices();
@@ -207,6 +175,7 @@ Object* Machine::LookupObjectByClass(std::string name) {
   return nullptr;
 }
 
+/* Find all objects that compare function returns true */
 std::vector<Object*> Machine::LookupObjects(std::function<bool (Object*)> compare) {
   std::vector<Object*> result;
   for (auto it = objects_.begin(); it != objects_.end(); it++) {

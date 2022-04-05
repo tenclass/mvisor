@@ -32,36 +32,22 @@
 #include "machine.h"
 #include "logger.h"
 
-uint MemoryManager::AllocateSlotId() {
-  auto it = free_slots_.begin();
-  uint slot_id = *it;
-  free_slots_.erase(it);
-  return slot_id;
-}
 
-void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
-  kvm_userspace_memory_region mr {
-    .slot = slot->id,
-    .flags = slot->flags,
-    .guest_phys_addr = slot->begin,
-    .memory_size = remove ? 0 : slot->end - slot->begin,
-    .userspace_addr = slot->hva
-  };
+#define X86_EPT_IDENTITY_BASE 0xFEFFC000
 
-  if (ioctl(machine_->vm_fd_, KVM_SET_USER_MEMORY_REGION, &mr) < 0) {
-    MV_PANIC("failed to set user memory region slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%d",
-      mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
-  }
-}
 
 MemoryManager::MemoryManager(const Machine* machine)
     : machine_(machine) {
+  
+  /* Get the number of slots we can allocate */
   uint max_slots = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_NR_MEMSLOTS);
   for (uint i = 0; i < max_slots; i++) {
     free_slots_.insert(i);
   }
 
+  /* Setup the system memory map for BIOS to run */
   InitializeSystemRam();
+  InitializeReservedMemory();
   LoadBiosFile();
 }
 
@@ -73,7 +59,6 @@ MemoryManager::~MemoryManager() {
     free(bios_backup_);
 }
 
-
 /* Allocate system ram for guest */
 void MemoryManager::InitializeSystemRam() {
   if (machine_->debug_)
@@ -83,7 +68,7 @@ void MemoryManager::InitializeSystemRam() {
     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   MV_ASSERT(ram_host_ != MAP_FAILED);
 
-  /* Make host RAM mergeable */
+  /* Make host RAM mergeable (for KSM) */
   MV_ASSERT(madvise(ram_host_, machine_->ram_size_, MADV_MERGEABLE) == 0);
   MV_ASSERT(madvise(ram_host_, machine_->ram_size_, MADV_DONTDUMP) == 0);
 
@@ -99,6 +84,32 @@ void MemoryManager::InitializeSystemRam() {
     Map(high_ram_lower_bound, machine_->ram_size_ - low_ram_upper_bound,
       (uint8_t*)ram_host_ + low_ram_upper_bound, kMemoryTypeRam, "System");
   }
+}
+
+/*
+  * On older Intel CPUs, KVM uses vm86 mode to emulate 16-bit code directly.
+  * In order to use vm86 mode, an EPT identity map and a TSS  are needed.
+  * Since these must be part of guest physical memory, we need to allocate
+  * them, both by setting their start addresses in the kernel and by
+  * creating a corresponding e820 entry. We need 4 pages before the BIOS.
+  *
+  * Older KVM versions may not support setting the identity map base. In
+  * that case we need to stick with the default, i.e. a 256K maximum BIOS
+  * size.
+  */
+void MemoryManager::InitializeReservedMemory() {
+  /* Allows up to 16M BIOSes. */
+  uint64_t identity_base = X86_EPT_IDENTITY_BASE;
+  if (ioctl(machine_->vm_fd_, KVM_SET_IDENTITY_MAP_ADDR, &identity_base) < 0) {
+    MV_PANIC("failed to set identity map address");
+  }
+
+  if (ioctl(machine_->vm_fd_, KVM_SET_TSS_ADDR, identity_base + 0x1000) < 0) {
+    MV_PANIC("failed to set tss");
+  }
+  
+  /* Map these addresses as reserved so the guest never touch it */
+  Map(X86_EPT_IDENTITY_BASE, 4 * PAGE_SIZE, nullptr, kMemoryTypeReserved, "EPT+TSS");
 }
 
 /* SeaBIOS is loaded into the end of 1MB and the end of 4GB */
@@ -126,6 +137,30 @@ void MemoryManager::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
   /* Reset 64KB low memory, or Windows 11 complains about some data at 0x6D80 when reboots */
   bzero(ram_host_, 0x10000);
+}
+
+/* The number of KVM slots is limited, try not to use out */
+uint MemoryManager::AllocateSlotId() {
+  MV_ASSERT(!free_slots_.empty());
+  auto it = free_slots_.begin();
+  uint slot_id = *it;
+  free_slots_.erase(it);
+  return slot_id;
+}
+
+void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
+  kvm_userspace_memory_region mr {
+    .slot = slot->id,
+    .flags = slot->flags,
+    .guest_phys_addr = slot->begin,
+    .memory_size = remove ? 0 : slot->end - slot->begin,
+    .userspace_addr = slot->hva
+  };
+
+  if (ioctl(machine_->vm_fd_, KVM_SET_USER_MEMORY_REGION, &mr) < 0) {
+    MV_PANIC("failed to set user memory region slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%d",
+      mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
+  }
 }
 
 /* Don't call this funciton, use Map and Unmap */
@@ -317,6 +352,7 @@ void MemoryManager::PrintMemoryScope() {
   }
 }
 
+/* Used to build E820 table */
 std::vector<const MemorySlot*> MemoryManager::GetMemoryFlatView() {
   std::vector<const MemorySlot*> slots;
   std::shared_lock lock(mutex_);
@@ -326,6 +362,7 @@ std::vector<const MemorySlot*> MemoryManager::GetMemoryFlatView() {
   return slots;
 }
 
+/* Vfio device tracks the memory map */
 const MemoryListener* MemoryManager::RegisterMemoryListener(MemoryListenerCallback callback) {
   auto listener = new MemoryListener {
     .callback = callback

@@ -24,6 +24,7 @@
 
 #include "machine.h"
 #include "viewer.h"
+#include "sweet/server.h"
 
 using namespace std;
 
@@ -53,40 +54,78 @@ void IntializeArguments(int argc, char* argv[]) {
   exit(1);
 }
 
-void print_help() {
-  printf("mvisor -f [config_path]\n");
+void PrintHelp() {
+  printf("mvisor -config [config_path]\n");
 }
 
 static struct option long_options[] = {
-  { "uuid", required_argument, 0, 0 }
+  { "help", no_argument, 0, 'h'},
+  { "uuid", required_argument, 0, 0 },
+  { "name", required_argument, 0, 0 },
+  { "config", required_argument, 0, 'c'},
+  { "sweet", required_argument, 0, 0}
 };
+
+static Machine*     machine = nullptr;
+static SweetServer* sweet_server = nullptr;
+static Viewer*      viewer = nullptr;
 
 int main(int argc, char* argv[])
 {
   IntializeArguments(argc, argv);
 
   std::string config_path = "../config/default.yaml";
-  int option, option_index = 0;
-  while ((option = getopt_long_only(argc, argv, "f:h", long_options, &option_index)) != -1) {
-    switch (option)
+  std::string vm_uuid, vm_name;
+  std::string sweet_path;
+
+  int option_index = 0;
+  while (getopt_long_only(argc, argv, "hc:", long_options, &option_index) != -1) {
+    switch (option_index)
     {
-    case 'f':
+    case 0:
+      PrintHelp();
+      return 0;
+    case 1:
+      vm_uuid = optarg;
+      break;
+    case 2:
+      vm_name = optarg;
+      break;
+    case 3:
       config_path = optarg;
       break;
-    case 'h':
-      print_help();
-      return 0;
-    case '?':
+    case 4:
+      sweet_path = optarg;
       break;
     }
   }
 
-  Machine* machine = new Machine(config_path);
-  Viewer* viewer = new Viewer(machine);
-  machine->Run();
+  int ret;
+  machine = new Machine(config_path);
+  machine->set_vm_uuid(vm_uuid);
+  machine->set_vm_name(vm_name.empty() ? vm_uuid : vm_name);
 
-  int ret = viewer->MainLoop();
-  delete viewer;
+  /* There are two modes to control the virtual machine,
+   * the GUI mode is to start a SDL viewwer,
+   * and the non-GUI mode is to start a sweet server
+   */
+  if (!sweet_path.empty()) {
+    sweet_server = new SweetServer(machine, sweet_path);
+    signal(SIGINT, [](int signo) {
+      machine->Quit();
+      sweet_server->Close();
+    });
+    machine->Run();
+    ret = sweet_server->MainLoop();
+    delete sweet_server;
+  } else {
+    /* SDL handles default signals */
+    viewer = new Viewer(machine);
+    machine->Run();
+    ret = viewer->MainLoop();
+    delete viewer;
+  }
+
   delete machine;
   return ret;
 }

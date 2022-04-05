@@ -31,10 +31,13 @@ run: all
 # Press F2 to save VM to /tmp/save and make load to restore the VM
 # Remember to use snapshot=Yes in disk configuration
 load: all
-	$(EXECUTABLE) -f /tmp/save/configuration.yaml
+	$(EXECUTABLE) -config /tmp/save/configuration.yaml
+
+sweet: all
+	$(EXECUTABLE) -config /tmp/save/configuration.yaml -sweet /tmp/sweet.sock
 
 debug_load: all
-	gdb -ex "handle SIG34 nostop pass" -ex "run -f /tmp/save/configuration.yaml" $(EXECUTABLE)
+	gdb -ex "handle SIG34 nostop pass" -ex "run -config /tmp/save/configuration.yaml" $(EXECUTABLE)
 
 debug: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run" $(EXECUTABLE)

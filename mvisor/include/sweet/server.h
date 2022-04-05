@@ -32,13 +32,14 @@ class SweetServer {
   ~SweetServer();
 
   int MainLoop();
+  void Close();
 
   inline Machine* machine() { return machine_; }
  private:
   Machine*                    machine_;
   std::list<SweetConnection*> connections_;
   std::string                 unix_path_;
-  int                         server_fd_;
+  int                         server_fd_ = -1;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

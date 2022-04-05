@@ -61,10 +61,10 @@ void InitDefaultsSetCursorEvent_CursorShapeImpl();
 void InitDefaultsSetCursorEvent_CursorShape();
 void InitDefaultsSetCursorEventImpl();
 void InitDefaultsSetCursorEvent();
-void InitDefaultsConnectDisplayCommandImpl();
-void InitDefaultsConnectDisplayCommand();
-void InitDefaultsConnectPlaybackCommandImpl();
-void InitDefaultsConnectPlaybackCommand();
+void InitDefaultsStartDisplayStreamCommandImpl();
+void InitDefaultsStartDisplayStreamCommand();
+void InitDefaultsStartPlaybackStreamCommandImpl();
+void InitDefaultsStartPlaybackStreamCommand();
 void InitDefaultsDisplayStreamStartEventImpl();
 void InitDefaultsDisplayStreamStartEvent();
 void InitDefaultsPlaybackStartEventImpl();
@@ -79,8 +79,8 @@ inline void InitDefaults() {
   InitDefaultsConfigMonitorsCommand();
   InitDefaultsSetCursorEvent_CursorShape();
   InitDefaultsSetCursorEvent();
-  InitDefaultsConnectDisplayCommand();
-  InitDefaultsConnectPlaybackCommand();
+  InitDefaultsStartDisplayStreamCommand();
+  InitDefaultsStartPlaybackStreamCommand();
   InitDefaultsDisplayStreamStartEvent();
   InitDefaultsPlaybackStartEvent();
 }
@@ -92,12 +92,6 @@ extern ConfigMonitorsCommandDefaultTypeInternal _ConfigMonitorsCommand_default_i
 class ConfigMonitorsCommand_Monitor;
 class ConfigMonitorsCommand_MonitorDefaultTypeInternal;
 extern ConfigMonitorsCommand_MonitorDefaultTypeInternal _ConfigMonitorsCommand_Monitor_default_instance_;
-class ConnectDisplayCommand;
-class ConnectDisplayCommandDefaultTypeInternal;
-extern ConnectDisplayCommandDefaultTypeInternal _ConnectDisplayCommand_default_instance_;
-class ConnectPlaybackCommand;
-class ConnectPlaybackCommandDefaultTypeInternal;
-extern ConnectPlaybackCommandDefaultTypeInternal _ConnectPlaybackCommand_default_instance_;
 class DisplayStreamStartEvent;
 class DisplayStreamStartEventDefaultTypeInternal;
 extern DisplayStreamStartEventDefaultTypeInternal _DisplayStreamStartEvent_default_instance_;
@@ -125,6 +119,12 @@ extern SetCursorEventDefaultTypeInternal _SetCursorEvent_default_instance_;
 class SetCursorEvent_CursorShape;
 class SetCursorEvent_CursorShapeDefaultTypeInternal;
 extern SetCursorEvent_CursorShapeDefaultTypeInternal _SetCursorEvent_CursorShape_default_instance_;
+class StartDisplayStreamCommand;
+class StartDisplayStreamCommandDefaultTypeInternal;
+extern StartDisplayStreamCommandDefaultTypeInternal _StartDisplayStreamCommand_default_instance_;
+class StartPlaybackStreamCommand;
+class StartPlaybackStreamCommandDefaultTypeInternal;
+extern StartPlaybackStreamCommandDefaultTypeInternal _StartPlaybackStreamCommand_default_instance_;
 }  // namespace SweetProtocol
 namespace SweetProtocol {
 
@@ -234,33 +234,33 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
 
   // accessors -------------------------------------------------------
 
-  // string name = 6;
-  void clear_name();
-  static const int kNameFieldNumber = 6;
-  const ::std::string& name() const;
-  void set_name(const ::std::string& value);
+  // string vm_uuid = 6;
+  void clear_vm_uuid();
+  static const int kVmUuidFieldNumber = 6;
+  const ::std::string& vm_uuid() const;
+  void set_vm_uuid(const ::std::string& value);
   #if LANG_CXX11
-  void set_name(::std::string&& value);
+  void set_vm_uuid(::std::string&& value);
   #endif
-  void set_name(const char* value);
-  void set_name(const char* value, size_t size);
-  ::std::string* mutable_name();
-  ::std::string* release_name();
-  void set_allocated_name(::std::string* name);
+  void set_vm_uuid(const char* value);
+  void set_vm_uuid(const char* value, size_t size);
+  ::std::string* mutable_vm_uuid();
+  ::std::string* release_vm_uuid();
+  void set_allocated_vm_uuid(::std::string* vm_uuid);
 
-  // string uuid = 7;
-  void clear_uuid();
-  static const int kUuidFieldNumber = 7;
-  const ::std::string& uuid() const;
-  void set_uuid(const ::std::string& value);
+  // string vm_name = 7;
+  void clear_vm_name();
+  static const int kVmNameFieldNumber = 7;
+  const ::std::string& vm_name() const;
+  void set_vm_name(const ::std::string& value);
   #if LANG_CXX11
-  void set_uuid(::std::string&& value);
+  void set_vm_name(::std::string&& value);
   #endif
-  void set_uuid(const char* value);
-  void set_uuid(const char* value, size_t size);
-  ::std::string* mutable_uuid();
-  ::std::string* release_uuid();
-  void set_allocated_uuid(::std::string* uuid);
+  void set_vm_name(const char* value);
+  void set_vm_name(const char* value, size_t size);
+  ::std::string* mutable_vm_name();
+  ::std::string* release_vm_name();
+  void set_allocated_vm_name(::std::string* vm_name);
 
   // string config_path = 8;
   void clear_config_path();
@@ -322,8 +322,8 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::internal::ArenaStringPtr name_;
-  ::google::protobuf::internal::ArenaStringPtr uuid_;
+  ::google::protobuf::internal::ArenaStringPtr vm_uuid_;
+  ::google::protobuf::internal::ArenaStringPtr vm_name_;
   ::google::protobuf::internal::ArenaStringPtr config_path_;
   ::google::protobuf::uint64 memory_size_;
   bool tenclass_agent_;
@@ -1364,24 +1364,24 @@ class SetCursorEvent : public ::google::protobuf::Message /* @@protoc_insertion_
 };
 // -------------------------------------------------------------------
 
-class ConnectDisplayCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ConnectDisplayCommand) */ {
+class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.StartDisplayStreamCommand) */ {
  public:
-  ConnectDisplayCommand();
-  virtual ~ConnectDisplayCommand();
+  StartDisplayStreamCommand();
+  virtual ~StartDisplayStreamCommand();
 
-  ConnectDisplayCommand(const ConnectDisplayCommand& from);
+  StartDisplayStreamCommand(const StartDisplayStreamCommand& from);
 
-  inline ConnectDisplayCommand& operator=(const ConnectDisplayCommand& from) {
+  inline StartDisplayStreamCommand& operator=(const StartDisplayStreamCommand& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ConnectDisplayCommand(ConnectDisplayCommand&& from) noexcept
-    : ConnectDisplayCommand() {
+  StartDisplayStreamCommand(StartDisplayStreamCommand&& from) noexcept
+    : StartDisplayStreamCommand() {
     *this = ::std::move(from);
   }
 
-  inline ConnectDisplayCommand& operator=(ConnectDisplayCommand&& from) noexcept {
+  inline StartDisplayStreamCommand& operator=(StartDisplayStreamCommand&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -1391,30 +1391,30 @@ class ConnectDisplayCommand : public ::google::protobuf::Message /* @@protoc_ins
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const ConnectDisplayCommand& default_instance();
+  static const StartDisplayStreamCommand& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ConnectDisplayCommand* internal_default_instance() {
-    return reinterpret_cast<const ConnectDisplayCommand*>(
-               &_ConnectDisplayCommand_default_instance_);
+  static inline const StartDisplayStreamCommand* internal_default_instance() {
+    return reinterpret_cast<const StartDisplayStreamCommand*>(
+               &_StartDisplayStreamCommand_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     9;
 
-  void Swap(ConnectDisplayCommand* other);
-  friend void swap(ConnectDisplayCommand& a, ConnectDisplayCommand& b) {
+  void Swap(StartDisplayStreamCommand* other);
+  friend void swap(StartDisplayStreamCommand& a, StartDisplayStreamCommand& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ConnectDisplayCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline StartDisplayStreamCommand* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  ConnectDisplayCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  StartDisplayStreamCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const ConnectDisplayCommand& from);
-  void MergeFrom(const ConnectDisplayCommand& from);
+  void CopyFrom(const StartDisplayStreamCommand& from);
+  void MergeFrom(const StartDisplayStreamCommand& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -1430,7 +1430,7 @@ class ConnectDisplayCommand : public ::google::protobuf::Message /* @@protoc_ins
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(ConnectDisplayCommand* other);
+  void InternalSwap(StartDisplayStreamCommand* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -1532,7 +1532,7 @@ class ConnectDisplayCommand : public ::google::protobuf::Message /* @@protoc_ins
   ::google::protobuf::uint32 flags() const;
   void set_flags(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.ConnectDisplayCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.StartDisplayStreamCommand)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
@@ -1547,28 +1547,28 @@ class ConnectDisplayCommand : public ::google::protobuf::Message /* @@protoc_ins
   ::google::protobuf::uint32 flags_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsConnectDisplayCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsStartDisplayStreamCommandImpl();
 };
 // -------------------------------------------------------------------
 
-class ConnectPlaybackCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ConnectPlaybackCommand) */ {
+class StartPlaybackStreamCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.StartPlaybackStreamCommand) */ {
  public:
-  ConnectPlaybackCommand();
-  virtual ~ConnectPlaybackCommand();
+  StartPlaybackStreamCommand();
+  virtual ~StartPlaybackStreamCommand();
 
-  ConnectPlaybackCommand(const ConnectPlaybackCommand& from);
+  StartPlaybackStreamCommand(const StartPlaybackStreamCommand& from);
 
-  inline ConnectPlaybackCommand& operator=(const ConnectPlaybackCommand& from) {
+  inline StartPlaybackStreamCommand& operator=(const StartPlaybackStreamCommand& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ConnectPlaybackCommand(ConnectPlaybackCommand&& from) noexcept
-    : ConnectPlaybackCommand() {
+  StartPlaybackStreamCommand(StartPlaybackStreamCommand&& from) noexcept
+    : StartPlaybackStreamCommand() {
     *this = ::std::move(from);
   }
 
-  inline ConnectPlaybackCommand& operator=(ConnectPlaybackCommand&& from) noexcept {
+  inline StartPlaybackStreamCommand& operator=(StartPlaybackStreamCommand&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -1578,30 +1578,30 @@ class ConnectPlaybackCommand : public ::google::protobuf::Message /* @@protoc_in
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const ConnectPlaybackCommand& default_instance();
+  static const StartPlaybackStreamCommand& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ConnectPlaybackCommand* internal_default_instance() {
-    return reinterpret_cast<const ConnectPlaybackCommand*>(
-               &_ConnectPlaybackCommand_default_instance_);
+  static inline const StartPlaybackStreamCommand* internal_default_instance() {
+    return reinterpret_cast<const StartPlaybackStreamCommand*>(
+               &_StartPlaybackStreamCommand_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     10;
 
-  void Swap(ConnectPlaybackCommand* other);
-  friend void swap(ConnectPlaybackCommand& a, ConnectPlaybackCommand& b) {
+  void Swap(StartPlaybackStreamCommand* other);
+  friend void swap(StartPlaybackStreamCommand& a, StartPlaybackStreamCommand& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ConnectPlaybackCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline StartPlaybackStreamCommand* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  ConnectPlaybackCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  StartPlaybackStreamCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const ConnectPlaybackCommand& from);
-  void MergeFrom(const ConnectPlaybackCommand& from);
+  void CopyFrom(const StartPlaybackStreamCommand& from);
+  void MergeFrom(const StartPlaybackStreamCommand& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -1617,7 +1617,7 @@ class ConnectPlaybackCommand : public ::google::protobuf::Message /* @@protoc_in
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(ConnectPlaybackCommand* other);
+  void InternalSwap(StartPlaybackStreamCommand* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -1647,14 +1647,14 @@ class ConnectPlaybackCommand : public ::google::protobuf::Message /* @@protoc_in
   ::std::string* release_codec();
   void set_allocated_codec(::std::string* codec);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.ConnectPlaybackCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.StartPlaybackStreamCommand)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr codec_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsConnectPlaybackCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsStartPlaybackStreamCommandImpl();
 };
 // -------------------------------------------------------------------
 
@@ -1984,110 +1984,110 @@ inline void QueryStatusResponse::set_memory_size(::google::protobuf::uint64 valu
   // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.memory_size)
 }
 
-// string name = 6;
-inline void QueryStatusResponse::clear_name() {
-  name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// string vm_uuid = 6;
+inline void QueryStatusResponse::clear_vm_uuid() {
+  vm_uuid_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& QueryStatusResponse::name() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.name)
-  return name_.GetNoArena();
+inline const ::std::string& QueryStatusResponse::vm_uuid() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.vm_uuid)
+  return vm_uuid_.GetNoArena();
 }
-inline void QueryStatusResponse::set_name(const ::std::string& value) {
+inline void QueryStatusResponse::set_vm_uuid(const ::std::string& value) {
   
-  name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.name)
+  vm_uuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.vm_uuid)
 }
 #if LANG_CXX11
-inline void QueryStatusResponse::set_name(::std::string&& value) {
+inline void QueryStatusResponse::set_vm_uuid(::std::string&& value) {
   
-  name_.SetNoArena(
+  vm_uuid_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryStatusResponse.name)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryStatusResponse.vm_uuid)
 }
 #endif
-inline void QueryStatusResponse::set_name(const char* value) {
+inline void QueryStatusResponse::set_vm_uuid(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryStatusResponse.name)
+  vm_uuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryStatusResponse.vm_uuid)
 }
-inline void QueryStatusResponse::set_name(const char* value, size_t size) {
+inline void QueryStatusResponse::set_vm_uuid(const char* value, size_t size) {
   
-  name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  vm_uuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryStatusResponse.name)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryStatusResponse.vm_uuid)
 }
-inline ::std::string* QueryStatusResponse::mutable_name() {
+inline ::std::string* QueryStatusResponse::mutable_vm_uuid() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryStatusResponse.name)
-  return name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryStatusResponse.vm_uuid)
+  return vm_uuid_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* QueryStatusResponse::release_name() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.QueryStatusResponse.name)
+inline ::std::string* QueryStatusResponse::release_vm_uuid() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.QueryStatusResponse.vm_uuid)
   
-  return name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return vm_uuid_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void QueryStatusResponse::set_allocated_name(::std::string* name) {
-  if (name != NULL) {
+inline void QueryStatusResponse::set_allocated_vm_uuid(::std::string* vm_uuid) {
+  if (vm_uuid != NULL) {
     
   } else {
     
   }
-  name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), name);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryStatusResponse.name)
+  vm_uuid_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), vm_uuid);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryStatusResponse.vm_uuid)
 }
 
-// string uuid = 7;
-inline void QueryStatusResponse::clear_uuid() {
-  uuid_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// string vm_name = 7;
+inline void QueryStatusResponse::clear_vm_name() {
+  vm_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& QueryStatusResponse::uuid() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.uuid)
-  return uuid_.GetNoArena();
+inline const ::std::string& QueryStatusResponse::vm_name() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.vm_name)
+  return vm_name_.GetNoArena();
 }
-inline void QueryStatusResponse::set_uuid(const ::std::string& value) {
+inline void QueryStatusResponse::set_vm_name(const ::std::string& value) {
   
-  uuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.uuid)
+  vm_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.vm_name)
 }
 #if LANG_CXX11
-inline void QueryStatusResponse::set_uuid(::std::string&& value) {
+inline void QueryStatusResponse::set_vm_name(::std::string&& value) {
   
-  uuid_.SetNoArena(
+  vm_name_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryStatusResponse.uuid)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryStatusResponse.vm_name)
 }
 #endif
-inline void QueryStatusResponse::set_uuid(const char* value) {
+inline void QueryStatusResponse::set_vm_name(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  uuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryStatusResponse.uuid)
+  vm_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryStatusResponse.vm_name)
 }
-inline void QueryStatusResponse::set_uuid(const char* value, size_t size) {
+inline void QueryStatusResponse::set_vm_name(const char* value, size_t size) {
   
-  uuid_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  vm_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryStatusResponse.uuid)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryStatusResponse.vm_name)
 }
-inline ::std::string* QueryStatusResponse::mutable_uuid() {
+inline ::std::string* QueryStatusResponse::mutable_vm_name() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryStatusResponse.uuid)
-  return uuid_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryStatusResponse.vm_name)
+  return vm_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* QueryStatusResponse::release_uuid() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.QueryStatusResponse.uuid)
+inline ::std::string* QueryStatusResponse::release_vm_name() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.QueryStatusResponse.vm_name)
   
-  return uuid_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return vm_name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void QueryStatusResponse::set_allocated_uuid(::std::string* uuid) {
-  if (uuid != NULL) {
+inline void QueryStatusResponse::set_allocated_vm_name(::std::string* vm_name) {
+  if (vm_name != NULL) {
     
   } else {
     
   }
-  uuid_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), uuid);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryStatusResponse.uuid)
+  vm_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), vm_name);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryStatusResponse.vm_name)
 }
 
 // string config_path = 8;
@@ -2847,345 +2847,345 @@ inline void SetCursorEvent::set_allocated_shape(::SweetProtocol::SetCursorEvent_
 
 // -------------------------------------------------------------------
 
-// ConnectDisplayCommand
+// StartDisplayStreamCommand
 
 // string codec = 1;
-inline void ConnectDisplayCommand::clear_codec() {
+inline void StartDisplayStreamCommand::clear_codec() {
   codec_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ConnectDisplayCommand::codec() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.codec)
+inline const ::std::string& StartDisplayStreamCommand::codec() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.codec)
   return codec_.GetNoArena();
 }
-inline void ConnectDisplayCommand::set_codec(const ::std::string& value) {
+inline void StartDisplayStreamCommand::set_codec(const ::std::string& value) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.codec)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.codec)
 }
 #if LANG_CXX11
-inline void ConnectDisplayCommand::set_codec(::std::string&& value) {
+inline void StartDisplayStreamCommand::set_codec(::std::string&& value) {
   
   codec_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ConnectDisplayCommand.codec)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.codec)
 }
 #endif
-inline void ConnectDisplayCommand::set_codec(const char* value) {
+inline void StartDisplayStreamCommand::set_codec(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.ConnectDisplayCommand.codec)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.codec)
 }
-inline void ConnectDisplayCommand::set_codec(const char* value, size_t size) {
+inline void StartDisplayStreamCommand::set_codec(const char* value, size_t size) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ConnectDisplayCommand.codec)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.codec)
 }
-inline ::std::string* ConnectDisplayCommand::mutable_codec() {
+inline ::std::string* StartDisplayStreamCommand::mutable_codec() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.ConnectDisplayCommand.codec)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.codec)
   return codec_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ConnectDisplayCommand::release_codec() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.ConnectDisplayCommand.codec)
+inline ::std::string* StartDisplayStreamCommand::release_codec() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.codec)
   
   return codec_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ConnectDisplayCommand::set_allocated_codec(::std::string* codec) {
+inline void StartDisplayStreamCommand::set_allocated_codec(::std::string* codec) {
   if (codec != NULL) {
     
   } else {
     
   }
   codec_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), codec);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ConnectDisplayCommand.codec)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.codec)
 }
 
 // string profile = 2;
-inline void ConnectDisplayCommand::clear_profile() {
+inline void StartDisplayStreamCommand::clear_profile() {
   profile_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ConnectDisplayCommand::profile() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.profile)
+inline const ::std::string& StartDisplayStreamCommand::profile() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.profile)
   return profile_.GetNoArena();
 }
-inline void ConnectDisplayCommand::set_profile(const ::std::string& value) {
+inline void StartDisplayStreamCommand::set_profile(const ::std::string& value) {
   
   profile_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.profile)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.profile)
 }
 #if LANG_CXX11
-inline void ConnectDisplayCommand::set_profile(::std::string&& value) {
+inline void StartDisplayStreamCommand::set_profile(::std::string&& value) {
   
   profile_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ConnectDisplayCommand.profile)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.profile)
 }
 #endif
-inline void ConnectDisplayCommand::set_profile(const char* value) {
+inline void StartDisplayStreamCommand::set_profile(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   profile_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.ConnectDisplayCommand.profile)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.profile)
 }
-inline void ConnectDisplayCommand::set_profile(const char* value, size_t size) {
+inline void StartDisplayStreamCommand::set_profile(const char* value, size_t size) {
   
   profile_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ConnectDisplayCommand.profile)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.profile)
 }
-inline ::std::string* ConnectDisplayCommand::mutable_profile() {
+inline ::std::string* StartDisplayStreamCommand::mutable_profile() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.ConnectDisplayCommand.profile)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.profile)
   return profile_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ConnectDisplayCommand::release_profile() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.ConnectDisplayCommand.profile)
+inline ::std::string* StartDisplayStreamCommand::release_profile() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.profile)
   
   return profile_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ConnectDisplayCommand::set_allocated_profile(::std::string* profile) {
+inline void StartDisplayStreamCommand::set_allocated_profile(::std::string* profile) {
   if (profile != NULL) {
     
   } else {
     
   }
   profile_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), profile);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ConnectDisplayCommand.profile)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.profile)
 }
 
 // string speed = 3;
-inline void ConnectDisplayCommand::clear_speed() {
+inline void StartDisplayStreamCommand::clear_speed() {
   speed_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ConnectDisplayCommand::speed() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.speed)
+inline const ::std::string& StartDisplayStreamCommand::speed() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.speed)
   return speed_.GetNoArena();
 }
-inline void ConnectDisplayCommand::set_speed(const ::std::string& value) {
+inline void StartDisplayStreamCommand::set_speed(const ::std::string& value) {
   
   speed_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.speed)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.speed)
 }
 #if LANG_CXX11
-inline void ConnectDisplayCommand::set_speed(::std::string&& value) {
+inline void StartDisplayStreamCommand::set_speed(::std::string&& value) {
   
   speed_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ConnectDisplayCommand.speed)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.speed)
 }
 #endif
-inline void ConnectDisplayCommand::set_speed(const char* value) {
+inline void StartDisplayStreamCommand::set_speed(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   speed_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.ConnectDisplayCommand.speed)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.speed)
 }
-inline void ConnectDisplayCommand::set_speed(const char* value, size_t size) {
+inline void StartDisplayStreamCommand::set_speed(const char* value, size_t size) {
   
   speed_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ConnectDisplayCommand.speed)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.speed)
 }
-inline ::std::string* ConnectDisplayCommand::mutable_speed() {
+inline ::std::string* StartDisplayStreamCommand::mutable_speed() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.ConnectDisplayCommand.speed)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.speed)
   return speed_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ConnectDisplayCommand::release_speed() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.ConnectDisplayCommand.speed)
+inline ::std::string* StartDisplayStreamCommand::release_speed() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.speed)
   
   return speed_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ConnectDisplayCommand::set_allocated_speed(::std::string* speed) {
+inline void StartDisplayStreamCommand::set_allocated_speed(::std::string* speed) {
   if (speed != NULL) {
     
   } else {
     
   }
   speed_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), speed);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ConnectDisplayCommand.speed)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.speed)
 }
 
 // string rate_control = 4;
-inline void ConnectDisplayCommand::clear_rate_control() {
+inline void StartDisplayStreamCommand::clear_rate_control() {
   rate_control_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ConnectDisplayCommand::rate_control() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.rate_control)
+inline const ::std::string& StartDisplayStreamCommand::rate_control() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.rate_control)
   return rate_control_.GetNoArena();
 }
-inline void ConnectDisplayCommand::set_rate_control(const ::std::string& value) {
+inline void StartDisplayStreamCommand::set_rate_control(const ::std::string& value) {
   
   rate_control_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.rate_control)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.rate_control)
 }
 #if LANG_CXX11
-inline void ConnectDisplayCommand::set_rate_control(::std::string&& value) {
+inline void StartDisplayStreamCommand::set_rate_control(::std::string&& value) {
   
   rate_control_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ConnectDisplayCommand.rate_control)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.rate_control)
 }
 #endif
-inline void ConnectDisplayCommand::set_rate_control(const char* value) {
+inline void StartDisplayStreamCommand::set_rate_control(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   rate_control_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.ConnectDisplayCommand.rate_control)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.rate_control)
 }
-inline void ConnectDisplayCommand::set_rate_control(const char* value, size_t size) {
+inline void StartDisplayStreamCommand::set_rate_control(const char* value, size_t size) {
   
   rate_control_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ConnectDisplayCommand.rate_control)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.rate_control)
 }
-inline ::std::string* ConnectDisplayCommand::mutable_rate_control() {
+inline ::std::string* StartDisplayStreamCommand::mutable_rate_control() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.ConnectDisplayCommand.rate_control)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.rate_control)
   return rate_control_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ConnectDisplayCommand::release_rate_control() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.ConnectDisplayCommand.rate_control)
+inline ::std::string* StartDisplayStreamCommand::release_rate_control() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.rate_control)
   
   return rate_control_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ConnectDisplayCommand::set_allocated_rate_control(::std::string* rate_control) {
+inline void StartDisplayStreamCommand::set_allocated_rate_control(::std::string* rate_control) {
   if (rate_control != NULL) {
     
   } else {
     
   }
   rate_control_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), rate_control);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ConnectDisplayCommand.rate_control)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.rate_control)
 }
 
 // uint32 fps = 5;
-inline void ConnectDisplayCommand::clear_fps() {
+inline void StartDisplayStreamCommand::clear_fps() {
   fps_ = 0u;
 }
-inline ::google::protobuf::uint32 ConnectDisplayCommand::fps() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.fps)
+inline ::google::protobuf::uint32 StartDisplayStreamCommand::fps() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.fps)
   return fps_;
 }
-inline void ConnectDisplayCommand::set_fps(::google::protobuf::uint32 value) {
+inline void StartDisplayStreamCommand::set_fps(::google::protobuf::uint32 value) {
   
   fps_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.fps)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.fps)
 }
 
 // uint32 bitrate = 6;
-inline void ConnectDisplayCommand::clear_bitrate() {
+inline void StartDisplayStreamCommand::clear_bitrate() {
   bitrate_ = 0u;
 }
-inline ::google::protobuf::uint32 ConnectDisplayCommand::bitrate() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.bitrate)
+inline ::google::protobuf::uint32 StartDisplayStreamCommand::bitrate() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.bitrate)
   return bitrate_;
 }
-inline void ConnectDisplayCommand::set_bitrate(::google::protobuf::uint32 value) {
+inline void StartDisplayStreamCommand::set_bitrate(::google::protobuf::uint32 value) {
   
   bitrate_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.bitrate)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.bitrate)
 }
 
 // uint32 qmin = 7;
-inline void ConnectDisplayCommand::clear_qmin() {
+inline void StartDisplayStreamCommand::clear_qmin() {
   qmin_ = 0u;
 }
-inline ::google::protobuf::uint32 ConnectDisplayCommand::qmin() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.qmin)
+inline ::google::protobuf::uint32 StartDisplayStreamCommand::qmin() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.qmin)
   return qmin_;
 }
-inline void ConnectDisplayCommand::set_qmin(::google::protobuf::uint32 value) {
+inline void StartDisplayStreamCommand::set_qmin(::google::protobuf::uint32 value) {
   
   qmin_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.qmin)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.qmin)
 }
 
 // uint32 threads = 8;
-inline void ConnectDisplayCommand::clear_threads() {
+inline void StartDisplayStreamCommand::clear_threads() {
   threads_ = 0u;
 }
-inline ::google::protobuf::uint32 ConnectDisplayCommand::threads() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.threads)
+inline ::google::protobuf::uint32 StartDisplayStreamCommand::threads() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.threads)
   return threads_;
 }
-inline void ConnectDisplayCommand::set_threads(::google::protobuf::uint32 value) {
+inline void StartDisplayStreamCommand::set_threads(::google::protobuf::uint32 value) {
   
   threads_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.threads)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.threads)
 }
 
 // uint32 flags = 9;
-inline void ConnectDisplayCommand::clear_flags() {
+inline void StartDisplayStreamCommand::clear_flags() {
   flags_ = 0u;
 }
-inline ::google::protobuf::uint32 ConnectDisplayCommand::flags() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectDisplayCommand.flags)
+inline ::google::protobuf::uint32 StartDisplayStreamCommand::flags() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.flags)
   return flags_;
 }
-inline void ConnectDisplayCommand::set_flags(::google::protobuf::uint32 value) {
+inline void StartDisplayStreamCommand::set_flags(::google::protobuf::uint32 value) {
   
   flags_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectDisplayCommand.flags)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.flags)
 }
 
 // -------------------------------------------------------------------
 
-// ConnectPlaybackCommand
+// StartPlaybackStreamCommand
 
 // string codec = 1;
-inline void ConnectPlaybackCommand::clear_codec() {
+inline void StartPlaybackStreamCommand::clear_codec() {
   codec_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& ConnectPlaybackCommand::codec() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConnectPlaybackCommand.codec)
+inline const ::std::string& StartPlaybackStreamCommand::codec() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.StartPlaybackStreamCommand.codec)
   return codec_.GetNoArena();
 }
-inline void ConnectPlaybackCommand::set_codec(const ::std::string& value) {
+inline void StartPlaybackStreamCommand::set_codec(const ::std::string& value) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConnectPlaybackCommand.codec)
+  // @@protoc_insertion_point(field_set:SweetProtocol.StartPlaybackStreamCommand.codec)
 }
 #if LANG_CXX11
-inline void ConnectPlaybackCommand::set_codec(::std::string&& value) {
+inline void StartPlaybackStreamCommand::set_codec(::std::string&& value) {
   
   codec_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ConnectPlaybackCommand.codec)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartPlaybackStreamCommand.codec)
 }
 #endif
-inline void ConnectPlaybackCommand::set_codec(const char* value) {
+inline void StartPlaybackStreamCommand::set_codec(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.ConnectPlaybackCommand.codec)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartPlaybackStreamCommand.codec)
 }
-inline void ConnectPlaybackCommand::set_codec(const char* value, size_t size) {
+inline void StartPlaybackStreamCommand::set_codec(const char* value, size_t size) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ConnectPlaybackCommand.codec)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartPlaybackStreamCommand.codec)
 }
-inline ::std::string* ConnectPlaybackCommand::mutable_codec() {
+inline ::std::string* StartPlaybackStreamCommand::mutable_codec() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.ConnectPlaybackCommand.codec)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartPlaybackStreamCommand.codec)
   return codec_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* ConnectPlaybackCommand::release_codec() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.ConnectPlaybackCommand.codec)
+inline ::std::string* StartPlaybackStreamCommand::release_codec() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.StartPlaybackStreamCommand.codec)
   
   return codec_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void ConnectPlaybackCommand::set_allocated_codec(::std::string* codec) {
+inline void StartPlaybackStreamCommand::set_allocated_codec(::std::string* codec) {
   if (codec != NULL) {
     
   } else {
     
   }
   codec_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), codec);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ConnectPlaybackCommand.codec)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartPlaybackStreamCommand.codec)
 }
 
 // -------------------------------------------------------------------

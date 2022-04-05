@@ -7,8 +7,8 @@ message QueryStatusResponse {
   bool      hypervisor  = 3;
   uint32    vcpu_count  = 4;
   uint64    memory_size = 5;
-  string    name        = 6;
-  string    uuid        = 7;
+  string    vm_uuid     = 6;
+  string    vm_name     = 7;
   string    config_path = 8;
 
   /* capabilities */
@@ -76,7 +76,7 @@ message SetCursorEvent {
   CursorShape shape     = 4;
 }
 
-message ConnectDisplayCommand {
+message StartDisplayStreamCommand {
   /* x264 / x265 / av1 */
   string    codec       = 1;
   /* baseline / main / high */
@@ -97,7 +97,7 @@ message ConnectDisplayCommand {
   uint32    flags       = 9;
 }
 
-message ConnectPlaybackCommand {
+message StartPlaybackStreamCommand {
   /* pcm / opus */
   string    codec       = 1;
 }
