@@ -175,6 +175,11 @@ class SpiceAgent : public Object, public SerialPortInterface,
   }
 
   virtual bool Resize(uint32_t width, uint32_t height) {
+    if (width & 1)
+      width++;
+    if (height & 1)
+      height++;
+
     width_ = width;
     height_ = height;
     if (!ready_) {

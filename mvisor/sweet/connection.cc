@@ -18,12 +18,11 @@
 
 #include "sweet/server.h"
 
-#include <sys/eventfd.h>
-#include <sys/poll.h>
 
 #include "connection.h"
 #include "utilities.h"
 #include "logger.h"
+#include "pb/sweet.pb.h"
 
 
 SweetConnection::SweetConnection(SweetServer* server, int fd) {
@@ -33,70 +32,72 @@ SweetConnection::SweetConnection(SweetServer* server, int fd) {
   machine_ = server->machine();
   fd_ = fd;
   MV_LOG("sweet connection created fd=%d", fd);
-
-  /* event_fd_ is for waking up the connection thread */
-  event_fd_ = eventfd(0, 0);
-  thread_ = std::thread(&SweetConnection::Process, this);
 }
 
 SweetConnection::~SweetConnection() {
-  if (thread_.joinable())
-    thread_.join();
-
-  safe_close(&event_fd_);
   safe_close(&fd_);
 }
 
-void SweetConnection::Kick() {
-  if (event_fd_ > 0) {
-    uint64_t tmp = 1;
-    write(event_fd_, &tmp, sizeof(tmp));
+bool SweetConnection::OnReceive() {
+  SweetPacketHeader header;
+  int nbytes = recv(fd_, &header, sizeof(header), MSG_WAITALL);
+  if (nbytes <= 0) {
+    MV_LOG("recv nbytes=%ld", nbytes);
+    return false;
+  }
+  
+  ParsePacket(&header);
+  return true;
+}
+
+void SweetConnection::ParsePacket(SweetPacketHeader* header) {
+  if (header->length) {
+    buffer_.resize(header->length);
+    int ret = recv(fd_, buffer_.data(), header->length, MSG_WAITALL);
+    if (ret != (int)header->length) {
+      MV_LOG("failed to recv %u bytes, ret=%d", header->length, ret);
+      return;
+    }
+  }
+
+  switch (header->type)
+  {
+  case kQueryStatus:
+    OnQueryStatus();
+    break;
+  case kStartDisplayStream:
+    OnStartDisplayStream();
+    break;
+  case kStopDisplayStream:
+    server_->StopDisplayStream();
+    break;
+  default:
+    MV_LOG("unhandled sweet type=0x%x", header->type);
   }
 }
 
-void SweetConnection::Process() {
-  SetThreadName("sweet-connection");
+bool SweetConnection::Send(uint32_t type, void* data, size_t length) {
+  /* Send() is called by encoder thread to send encoded frames */
+  std::lock_guard<std::mutex> lock(mutex_);
 
-  pollfd fds[2] = {
-    {
-      .fd = event_fd_,
-      .events = POLLIN | POLLERR
-    }, {
-      .fd = fd_,
-      .events = POLLIN | POLLERR
-    }
+  SweetPacketHeader header = {
+    .type = type,
+    .length = (uint32_t)length
   };
-
-  while (machine_->IsValid()) {
-    int ret = poll(fds, 2, -1);
-    if (ret < 0) {
-      MV_PANIC("poll ret=%d", ret);
-    }
-
-    if (fds[0].revents & POLLIN) {
-      uint64_t tmp;
-      read(event_fd_, &tmp, sizeof(tmp));
-    }
-
-    if (fds[1].revents & POLLERR) {
-      MV_LOG("fd error, break now");
-      break;
-    }
-    if (fds[1].revents & POLLIN) {
-      SweetPacketHeader header;
-      int nbytes = recv(fd_, &header, sizeof(header), MSG_WAITALL);
-      if (nbytes <= 0) {
-        MV_LOG("recv nbytes=%ld", nbytes);
-        break;
-      }
-      
-      OnReceive(&header);
-    }
+  int ret = send(fd_, &header, sizeof(header), 0);
+  if (ret != sizeof(header)) {
+    MV_LOG("failed to send message, ret=%d", ret);
+    return false;
   }
 
-  if (machine_->debug()) {
-    MV_LOG("ended");
+  if (length > 0) {
+    ret = send(fd_, data, length, 0);
+    if (ret != (int)length) {
+      MV_LOG("failed to send message, ret=%d", ret);
+      return false;
+    }
   }
+  return true;
 }
 
 bool SweetConnection::Send(uint32_t type, Message& message) {
@@ -105,37 +106,11 @@ bool SweetConnection::Send(uint32_t type, Message& message) {
     MV_LOG("failed to serialize message type=0x%x", type);
     return false;
   }
-
-  SweetPacketHeader header = {
-    .type = type,
-    .length = (uint32_t)buffer_.size()
-  };
-  int ret = send(fd_, &header, sizeof(header), 0);
-  if (ret != sizeof(header)) {
-    MV_LOG("failed to send message, ret=%d", ret);
-    return false;
-  }
-
-  ret = send(fd_, buffer_.data(), buffer_.size(), 0);
-  if (ret != (int)buffer_.size()) {
-    MV_LOG("failed to send message, ret=%d", ret);
-    return false;
-  }
-  return true;
+  return Send(type, buffer_.data(), buffer_.size());
 }
 
-void SweetConnection::OnReceive(SweetPacketHeader* header) {
-  switch (header->type)
-  {
-  case kSweetCmdQueryStatus:
-    OnQueryStatus();
-    break;
-  case kSweetCmdStartDisplayStream:
-    OnStartDisplayStream();
-    break;
-  default:
-    MV_LOG("unhandled sweet type=0x%x", header->type);
-  }
+bool SweetConnection::Send(uint32_t type) {
+  return Send(type, nullptr, 0);
 }
 
 void SweetConnection::OnQueryStatus() {
@@ -154,10 +129,28 @@ void SweetConnection::OnQueryStatus() {
     response.set_spice_agent(true);
   }
 
-  Send(kSweetResQueryStatus, response);
+  Send(kQueryStatusResponse, response);
 }
 
 void SweetConnection::OnStartDisplayStream() {
-  MV_PANIC("start display stream");
+  DisplayStreamConfig config;
+  if (config.ParseFromString(buffer_)) {
+    server_->StartDisplayStreamOnConnection(this, &config);
+  }
+}
+
+void SweetConnection::SendDisplayStreamStartEvent(uint w, uint h) {
+  DisplayStreamStartEvent event;
+  event.set_width(w);
+  event.set_height(h);
+  Send(kDisplayStreamStartEvent, event);
+}
+
+void SweetConnection::SendDisplayStreamStopEvent() {
+  Send(kDisplayStreamStopEvent);
+}
+
+void SweetConnection::SendDisplayStreamDataEvent(void* data, size_t length) {
+  Send(kDisplayStreamDataEvent, data, length);
 }
 

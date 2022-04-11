@@ -24,8 +24,13 @@
 #include <string>
 
 #include "machine.h"
+#include "device_interface.h"
+#include "pb/sweet.pb.h"
+
+using namespace SweetProtocol;
 
 class SweetConnection;
+class SweetDisplayEncoder;
 class SweetServer {
  public:
   SweetServer(Machine* machine, std::string unix_path);
@@ -33,13 +38,37 @@ class SweetServer {
 
   int MainLoop();
   void Close();
+  void WakeUp();
+
+  void StartDisplayStreamOnConnection(SweetConnection* conn, DisplayStreamConfig* config);
+  void StopDisplayStream();
 
   inline Machine* machine() { return machine_; }
  private:
+  SweetConnection* GetConnectionByFd(int fd);
+  void LookupDevices();
+  void OnEvent();
+  void OnAccept();
+  void OnPlayback(PlaybackState state, struct iovec& iov);
+  void SetDefaultConfig();
+
   Machine*                    machine_;
   std::list<SweetConnection*> connections_;
   std::string                 unix_path_;
   int                         server_fd_ = -1;
+  int                         event_fd_ = -1;
+  
+  DisplayInterface*                     display_;
+  PlaybackInterface*                    playback_;
+  KeyboardInputInterface*               keyboard_;
+  std::vector<PointerInputInterface*>   pointers_;
+  std::vector<DisplayResizeInterface*>  resizers_;
+  PlaybackFormat                        playback_format_;
+  bool                        display_mode_changed_ = false;
+  bool                        display_updated_ = false;
+  SweetDisplayEncoder*        display_encoder_ = nullptr;
+  SweetConnection*            display_connection_ = nullptr;
+  DisplayStreamConfig         display_config_;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

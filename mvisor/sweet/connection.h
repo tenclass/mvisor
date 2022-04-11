@@ -20,13 +20,13 @@
 #ifndef _MVISOR_SWEET_CONNECTION_H
 #define _MVISOR_SWEET_CONNECTION_H
 
-#include <thread>
 #include <string>
+#include <vector>
+#include <mutex>
 
 #include "machine.h"
 #include "device_interface.h"
 #include "sweet/server.h"
-#include "sweet/sweet.h"
 #include "pb/sweet.pb.h"
 
 using namespace SweetProtocol;
@@ -44,21 +44,27 @@ class SweetConnection {
  public:
   SweetConnection(SweetServer* server, int fd);
   ~SweetConnection();
-  void Kick();
+
+  int fd() { return fd_; }
+  bool OnReceive();
+
+  void SendDisplayStreamStartEvent(uint w, uint h);
+  void SendDisplayStreamStopEvent();
+  void SendDisplayStreamDataEvent(void* data, size_t length);
 
  private:
-  void Process();
+  bool Send(uint32_t type);
   bool Send(uint32_t type, Message& message);
-  void OnReceive(SweetPacketHeader* header);
-  void OnQueryStatus();
+  bool Send(uint32_t type, void* data, size_t length);
+  void ParsePacket(SweetPacketHeader* header);
+  void OnQueryStatus(); 
   void OnStartDisplayStream();
 
   Machine*      machine_;
   SweetServer*  server_;
   int           fd_ = -1;
-  int           event_fd_ = -1;
-  std::thread   thread_;
   std::string   buffer_;
+  std::mutex    mutex_;
 };
 
 #endif // _MVISOR_SWEET_CONNECTION_H

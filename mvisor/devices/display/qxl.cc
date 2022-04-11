@@ -337,12 +337,28 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
   virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) {
     if (mode_ == kDisplayQxlMode) {
-      *w = primary_surface_.create.width;
-      *h = primary_surface_.create.height;
-      *bpp = primary_surface_.bits_pp;
-      *stride = primary_surface_.abs_stride;
+      if (w)
+        *w = primary_surface_.create.width;
+      if (h)
+        *h = primary_surface_.create.height;
+      if (bpp)
+        *bpp = primary_surface_.bits_pp;
+      if (stride)
+        *stride = primary_surface_.abs_stride;
     } else {
       Vga::GetDisplayMode(w, h, bpp, stride);
+    }
+  }
+
+  virtual void Redraw() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    if (mode_ != kDisplayQxlMode) {
+      return Vga::Redraw();
+    }
+  
+    /* Reset the draw state of all drawbles */
+    for (auto drawable : drawables_) {
+      drawable->drawed = false;
     }
   }
 
@@ -371,6 +387,11 @@ class Qxl : public Vga, public DisplayResizeInterface {
     if (!width || !height) {
       return true;
     }
+
+    if (width & 1)
+      width++;
+    if (height & 1)
+      height++;
 
     bzero(&qxl_rom_->client_monitors_config, sizeof(qxl_rom_->client_monitors_config));
     qxl_rom_->client_monitors_config.count = 1;

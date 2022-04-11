@@ -117,6 +117,7 @@ class Vga : public PciDevice, public DisplayInterface {
   virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback);
   virtual bool AcquireUpdate(DisplayUpdate& update);
   virtual void ReleaseUpdate();
+  virtual void Redraw();
 };
 
 #endif // _MVISOR_DEVICES_VGA_H

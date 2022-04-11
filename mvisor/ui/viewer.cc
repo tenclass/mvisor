@@ -286,19 +286,22 @@ void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
 }
 
 void Viewer::LookupDevices() {
-  keyboard_ = dynamic_cast<KeyboardInputInterface*>(machine_->LookupObjectByClass("Ps2"));
-  display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Qxl"));
-  if (display_ == nullptr) {
-    display_ = dynamic_cast<DisplayInterface*>(machine_->device_manager()->LookupDeviceByClass("Vga"));
-    MV_ASSERT(display_);
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
+    keyboard_ = dynamic_cast<KeyboardInputInterface*>(o);
   }
-  playback_ = dynamic_cast<PlaybackInterface*>(machine_->device_manager()->LookupDeviceByClass("HdaDuplex"));
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayInterface*>(o); })) {
+    display_ = dynamic_cast<DisplayInterface*>(o);
+  }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PlaybackInterface*>(o); })) {
+    playback_ = dynamic_cast<PlaybackInterface*>(o);
+  }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
     pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayResizeInterface*>(o); })) {
     resizers_.push_back(dynamic_cast<DisplayResizeInterface*>(o));
   }
+  /* At least one display device is required for SDL viewer */
   MV_ASSERT(display_);
 
   display_->RegisterDisplayModeChangeListener([this]() {

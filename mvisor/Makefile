@@ -1,7 +1,7 @@
 PROTOC = protoc
 INCLUDE_DIRS := ./include /usr/include
 LIBS := stdc++ stdc++fs
-LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound
+LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound x264 yuv
 MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on
@@ -34,7 +34,10 @@ load: all
 	$(EXECUTABLE) -config /tmp/save/configuration.yaml
 
 sweet: all
-	$(EXECUTABLE) -config /tmp/save/configuration.yaml -sweet /tmp/sweet.sock
+	$(EXECUTABLE) -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_624d1b5e534883324a9b4f7c/sweet.sock
+
+debug_sweet: all
+	gdb -ex "handle SIG34 nostop pass" -ex "run -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_624d1b5e534883324a9b4f7c/sweet.sock" $(EXECUTABLE)
 
 debug_load: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run -config /tmp/save/configuration.yaml" $(EXECUTABLE)
@@ -55,6 +58,7 @@ gvt:
 
 sweet_js:
 	$(PROTOC) --js_out=import_style=commonjs,binary:. sweet/sweet.proto
+	cp sweet/sweet_pb.js /mnt/server/sfcloud/sfspice/
 
 all: $(EXECUTABLE)
 
