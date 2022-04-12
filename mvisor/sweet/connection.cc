@@ -71,6 +71,15 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kStopDisplayStream:
     server_->StopDisplayStream();
     break;
+  case kSendKeyboardInput:
+    OnKeyboardInput();
+    break;
+  case kSendPointerInput:
+    OnSendPointerInput();
+    break;
+  case kConfigMonitors:
+    OnConfigMonitors();
+    break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
   }
@@ -132,11 +141,74 @@ void SweetConnection::OnQueryStatus() {
   Send(kQueryStatusResponse, response);
 }
 
+void SweetConnection::OnKeyboardInput() {
+  SendKeyboardInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  if (machine_->IsPaused()) {
+    return;
+  }
+
+  uint code = input.scancode();
+  uint8_t scancode[10] = { 0 };
+  for (int i = 0; i < 10 && code; i++) {
+    scancode[i] = (uint8_t)code;
+    code >>= 8;
+  }
+  server_->keyboard()->QueueKeyboardEvent(scancode, input.modifiers());
+}
+
+void SweetConnection::OnSendPointerInput() {
+  SendPointerInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  if (machine_->IsPaused()) {
+    return;
+  }
+
+  PointerEvent event;
+  event.buttons = input.buttons();
+  event.x = input.x();
+  event.y = input.y();
+  event.z = input.z();
+
+  uint w, h;
+  server_->display()->GetDisplayMode(&w, &h, nullptr, nullptr);
+  event.screen_width = w;
+  event.screen_width = h;
+  
+  for (auto pointer : server_->pointers()) {
+    if (pointer->InputAcceptable()) {
+      pointer->QueuePointerEvent(event);
+      break;
+    }
+  }
+}
+
+void SweetConnection::OnConfigMonitors() {
+  MonitorsConfig config;
+  if (!config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  
+  MV_ASSERT(config.count() > 0);
+  auto& monitor = config.monitors(0);
+
+  for (auto resizer : server_->resizers()) {
+    if (resizer->Resize(monitor.width(), monitor.height())) {
+      break;
+    }
+  }
+}
+
 void SweetConnection::OnStartDisplayStream() {
   DisplayStreamConfig config;
-  if (config.ParseFromString(buffer_)) {
-    server_->StartDisplayStreamOnConnection(this, &config);
+  if (!config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
   }
+  server_->StartDisplayStreamOnConnection(this, &config);
 }
 
 void SweetConnection::SendDisplayStreamStartEvent(uint w, uint h) {

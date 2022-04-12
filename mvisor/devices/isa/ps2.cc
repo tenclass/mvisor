@@ -72,6 +72,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
   } mouse_;
 
   struct {
+    uint8_t leds;
     uint8_t scancode_set;
     bool    disable_scanning;
   } keyboard_;
@@ -83,6 +84,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
 
     auto keyboard = state.mutable_keyboard();
     keyboard->set_scancode_set(keyboard_.scancode_set);
+    keyboard->set_leds(keyboard_.leds);
 
     auto mouse = state.mutable_mouse();
     mouse->set_resolution(mouse_.resolution);
@@ -106,6 +108,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
     
     auto& keyboard = state.keyboard();
     keyboard_.scancode_set = keyboard.scancode_set();
+    keyboard_.leds = keyboard.leds();
 
     auto& mouse = state.mouse();
     mouse_.resolution = mouse.resolution();
@@ -430,7 +433,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
       break;
     case 0xED: // set leds
       PushKeyboard(RESPONSE_ACK);
-      if (debug_) MV_LOG("set leds %d", data);
+      keyboard_.leds = data;
       break;
     case 0xF0: // keyboard scancode set
       PushKeyboard(RESPONSE_ACK);
@@ -498,12 +501,32 @@ class Ps2 : public Device, public KeyboardInputInterface {
     }
   }
 
-  bool QueueKeyboardEvent(uint8_t scancode[10]) {
+  bool QueueKeyboardEvent(uint8_t scancode[10], uint8_t modifiers) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (keyboard_.disable_scanning) {
       return false;
     }
+
+    if (modifiers != keyboard_.leds) {
+      uint8_t diff = modifiers ^ keyboard_.leds;
+      if (diff & 1) {
+        PushKeyboard(0x46);
+        PushKeyboard(0x46 | 0x80);
+      } else if (diff & 2) {
+        PushKeyboard(0x45);
+        PushKeyboard(0x45 | 0x80);
+      } else if (diff & 4) {
+        PushKeyboard(0x3A);
+        PushKeyboard(0x3A | 0x80);
+      }
+    }
+
+    /* skip modifiers input */
+    uint8_t code = (scancode[0] == 0xE0 ? scancode[1] : scancode[0]) & 0x7F;
+    if (code == 0x45 || code == 0x46 || code == 0x3A) {
+      return true;
+    }
   
-    std::lock_guard<std::mutex> lock(mutex_);
     for (int i = 0; i < 10 && scancode[i]; i++) {
       PushKeyboard(scancode[i]);
     }
@@ -511,11 +534,11 @@ class Ps2 : public Device, public KeyboardInputInterface {
   }
 
   bool QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (mouse_.disable_streaming) {
       return false;
     }
   
-    std::lock_guard<std::mutex> lock(mutex_);
     uint8_t state = mouse_.buttons = (uint8_t)button_state;
     rel_y = -rel_y;
     state |= 8; // Always 1

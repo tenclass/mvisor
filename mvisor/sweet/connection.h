@@ -58,6 +58,9 @@ class SweetConnection {
   bool Send(uint32_t type, void* data, size_t length);
   void ParsePacket(SweetPacketHeader* header);
   void OnQueryStatus(); 
+  void OnKeyboardInput();
+  void OnSendPointerInput();
+  void OnConfigMonitors();
   void OnStartDisplayStream();
 
   Machine*      machine_;

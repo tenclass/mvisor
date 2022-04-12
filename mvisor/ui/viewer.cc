@@ -389,7 +389,9 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     }
   case SDL_KEYUP:
     if (keyboard_ && TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
-      keyboard_->QueueKeyboardEvent(transcoded);
+      auto mod = SDL_GetModState();
+      uint8_t modifiers = ((mod & KMOD_NUM) ? 2: 0) | ((mod & KMOD_CAPS) ? 4 : 0);
+      keyboard_->QueueKeyboardEvent(transcoded, modifiers);
     }
     break;
   case SDL_MOUSEWHEEL:

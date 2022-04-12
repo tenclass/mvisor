@@ -295,11 +295,18 @@ class Ps2State_Keyboard : public ::google::protobuf::Message /* @@protoc_inserti
   ::google::protobuf::uint32 scancode_set() const;
   void set_scancode_set(::google::protobuf::uint32 value);
 
+  // uint32 leds = 2;
+  void clear_leds();
+  static const int kLedsFieldNumber = 2;
+  ::google::protobuf::uint32 leds() const;
+  void set_leds(::google::protobuf::uint32 value);
+
   // @@protoc_insertion_point(class_scope:Ps2State.Keyboard)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 scancode_set_;
+  ::google::protobuf::uint32 leds_;
   mutable int _cached_size_;
   friend struct ::protobuf_ps2_2eproto::TableStruct;
   friend void ::protobuf_ps2_2eproto::InitDefaultsPs2State_KeyboardImpl();
@@ -558,6 +565,20 @@ inline void Ps2State_Keyboard::set_scancode_set(::google::protobuf::uint32 value
   
   scancode_set_ = value;
   // @@protoc_insertion_point(field_set:Ps2State.Keyboard.scancode_set)
+}
+
+// uint32 leds = 2;
+inline void Ps2State_Keyboard::clear_leds() {
+  leds_ = 0u;
+}
+inline ::google::protobuf::uint32 Ps2State_Keyboard::leds() const {
+  // @@protoc_insertion_point(field_get:Ps2State.Keyboard.leds)
+  return leds_;
+}
+inline void Ps2State_Keyboard::set_leds(::google::protobuf::uint32 value) {
+  
+  leds_ = value;
+  // @@protoc_insertion_point(field_set:Ps2State.Keyboard.leds)
 }
 
 // -------------------------------------------------------------------

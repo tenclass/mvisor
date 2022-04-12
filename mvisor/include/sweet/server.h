@@ -44,6 +44,12 @@ class SweetServer {
   void StopDisplayStream();
 
   inline Machine* machine() { return machine_; }
+  inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
+  inline std::vector<DisplayResizeInterface*>& resizers() { return resizers_; }
+  inline KeyboardInputInterface* keyboard() { return keyboard_; }
+  inline PlaybackInterface* playback() { return playback_; }
+  inline DisplayInterface* display() { return display_; }
+
  private:
   SweetConnection* GetConnectionByFd(int fd);
   void LookupDevices();

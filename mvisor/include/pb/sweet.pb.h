@@ -647,32 +647,32 @@ class SendPointerInput : public ::google::protobuf::Message /* @@protoc_insertio
   ::google::protobuf::uint32 buttons() const;
   void set_buttons(::google::protobuf::uint32 value);
 
-  // uint32 x = 2;
+  // int32 x = 2;
   void clear_x();
   static const int kXFieldNumber = 2;
-  ::google::protobuf::uint32 x() const;
-  void set_x(::google::protobuf::uint32 value);
+  ::google::protobuf::int32 x() const;
+  void set_x(::google::protobuf::int32 value);
 
-  // uint32 y = 3;
+  // int32 y = 3;
   void clear_y();
   static const int kYFieldNumber = 3;
-  ::google::protobuf::uint32 y() const;
-  void set_y(::google::protobuf::uint32 value);
+  ::google::protobuf::int32 y() const;
+  void set_y(::google::protobuf::int32 value);
 
-  // uint32 z = 4;
+  // int32 z = 4;
   void clear_z();
   static const int kZFieldNumber = 4;
-  ::google::protobuf::uint32 z() const;
-  void set_z(::google::protobuf::uint32 value);
+  ::google::protobuf::int32 z() const;
+  void set_z(::google::protobuf::int32 value);
 
   // @@protoc_insertion_point(class_scope:SweetProtocol.SendPointerInput)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 buttons_;
-  ::google::protobuf::uint32 x_;
-  ::google::protobuf::uint32 y_;
-  ::google::protobuf::uint32 z_;
+  ::google::protobuf::int32 x_;
+  ::google::protobuf::int32 y_;
+  ::google::protobuf::int32 z_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
   friend void ::protobuf_sweet_2eproto::InitDefaultsSendPointerInputImpl();
@@ -2308,43 +2308,43 @@ inline void SendPointerInput::set_buttons(::google::protobuf::uint32 value) {
   // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.buttons)
 }
 
-// uint32 x = 2;
+// int32 x = 2;
 inline void SendPointerInput::clear_x() {
-  x_ = 0u;
+  x_ = 0;
 }
-inline ::google::protobuf::uint32 SendPointerInput::x() const {
+inline ::google::protobuf::int32 SendPointerInput::x() const {
   // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.x)
   return x_;
 }
-inline void SendPointerInput::set_x(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_x(::google::protobuf::int32 value) {
   
   x_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.x)
 }
 
-// uint32 y = 3;
+// int32 y = 3;
 inline void SendPointerInput::clear_y() {
-  y_ = 0u;
+  y_ = 0;
 }
-inline ::google::protobuf::uint32 SendPointerInput::y() const {
+inline ::google::protobuf::int32 SendPointerInput::y() const {
   // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.y)
   return y_;
 }
-inline void SendPointerInput::set_y(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_y(::google::protobuf::int32 value) {
   
   y_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.y)
 }
 
-// uint32 z = 4;
+// int32 z = 4;
 inline void SendPointerInput::clear_z() {
-  z_ = 0u;
+  z_ = 0;
 }
-inline ::google::protobuf::uint32 SendPointerInput::z() const {
+inline ::google::protobuf::int32 SendPointerInput::z() const {
   // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.z)
   return z_;
 }
-inline void SendPointerInput::set_z(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_z(::google::protobuf::int32 value) {
   
   z_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.z)

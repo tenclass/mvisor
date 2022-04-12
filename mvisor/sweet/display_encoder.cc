@@ -241,7 +241,7 @@ void SweetDisplayEncoder::EncodeProcess() {
 }
 
 void SweetDisplayEncoder::ConvertSlices() {
-  auto start_time = std::chrono::steady_clock::now();
+  // auto start_time = std::chrono::steady_clock::now();
 
   for (auto slice: encode_slices_) {
     uint8_t* src = screen_bitmap_ + screen_stride_ * slice->y + slice->x * (screen_bpp_ >> 3);
@@ -262,9 +262,9 @@ void SweetDisplayEncoder::ConvertSlices() {
     }
   }
 
-  auto delta = std::chrono::steady_clock::now() - start_time;
-  auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(delta).count();
-  MV_LOG("converted cost %ld ms", delta_ms);
+  // auto delta = std::chrono::steady_clock::now() - start_time;
+  // auto delta_us = std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
+  // MV_LOG("converted cost %ld us", delta_us);
 }
 
 void SweetDisplayEncoder::DrawSlices(std::vector<EncodeSlice*>& slices) {
