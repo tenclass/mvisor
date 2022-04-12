@@ -69,7 +69,9 @@ class SweetServer {
   KeyboardInputInterface*               keyboard_;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
+
   PlaybackFormat                        playback_format_;
+
   bool                        display_mode_changed_ = false;
   bool                        display_updated_ = false;
   SweetDisplayEncoder*        display_encoder_ = nullptr;

@@ -226,3 +226,37 @@ void SweetConnection::SendDisplayStreamDataEvent(void* data, size_t length) {
   Send(kDisplayStreamDataEvent, data, length);
 }
 
+void SweetConnection::UpdateCursor(const DisplayMouseCursor* cursor_update) {
+  if (cursor_update->visible) {
+    if (cursor_update->shape.id == cursor_shape_id_) {
+      return;
+    }
+    auto& shape = cursor_update->shape;
+
+    cursor_shape_id_ = shape.id;
+    cursor_visible_ = true;
+
+    SetCursorEvent event;
+    event.set_visible(true);
+    event.set_x(cursor_update->x);
+    event.set_y(cursor_update->y);
+    auto cursor = event.mutable_shape();
+    cursor->set_type(shape.type);
+    cursor->set_width(shape.width);
+    cursor->set_height(shape.height);
+    cursor->set_hotspot_x(shape.hotspot_x);
+    cursor->set_hotspot_y(shape.hotspot_y);
+
+    auto& iov = shape.vector.front();
+    cursor->set_data(iov.iov_base, iov.iov_len);
+    Send(kSetCursorEvent, event);
+  } else {
+    if (cursor_visible_) {
+      cursor_visible_ = false;
+  
+      SetCursorEvent event;
+      event.set_visible(false);
+      Send(kSetCursorEvent, event);
+    }
+  }
+}

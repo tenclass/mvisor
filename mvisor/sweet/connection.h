@@ -51,6 +51,7 @@ class SweetConnection {
   void SendDisplayStreamStartEvent(uint w, uint h);
   void SendDisplayStreamStopEvent();
   void SendDisplayStreamDataEvent(void* data, size_t length);
+  void UpdateCursor(const DisplayMouseCursor* cursor_update);
 
  private:
   bool Send(uint32_t type);
@@ -68,6 +69,9 @@ class SweetConnection {
   int           fd_ = -1;
   std::string   buffer_;
   std::mutex    mutex_;
+
+  bool          cursor_visible_ = false;
+  uint64_t      cursor_shape_id_ = 0;
 };
 
 #endif // _MVISOR_SWEET_CONNECTION_H

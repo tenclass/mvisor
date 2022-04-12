@@ -170,6 +170,9 @@ void SweetServer::OnEvent() {
 
     DisplayUpdate update;
     display_->AcquireUpdate(update);
+    if (display_connection_) {
+      display_connection_->UpdateCursor(&update.cursor);
+    }
     display_encoder_->Render(update.partials);
     display_->ReleaseUpdate();
   }
