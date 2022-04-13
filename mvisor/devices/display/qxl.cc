@@ -875,9 +875,21 @@ class Qxl : public Vga, public DisplayResizeInterface {
       shape.height = cursor->header.height;
       shape.hotspot_x = cursor->header.hot_spot_x;
       shape.hotspot_y = cursor->header.hot_spot_y;
-      shape.vector.clear();
-      GetMemSlotChunkedData(&cursor->chunk, shape.vector);
-      MV_ASSERT(shape.vector.size() > 0);
+    
+      /* Linearize chunked data */
+      std::vector<iovec> v;
+      GetMemSlotChunkedData(&cursor->chunk, v);
+      size_t size = 0;
+      for (auto& iov : v) {
+        size += iov.iov_len;
+      }
+      shape.data.resize(size);
+      size_t offset = 0;
+      for (auto& iov : v) {
+        memcpy(shape.data.data() + offset, iov.iov_base, iov.iov_len);
+        offset += iov.iov_len;
+      }
+
       ++shape.id;
       ++current_cursor_.update_timestamp;
       break;

@@ -52,6 +52,8 @@ class SweetDisplayEncoder {
   void Start(OutputCallback output_cb);
   void Stop();
   void ForceKeyframe();
+  void Screendump(std::string format, uint w, uint h, uint quality, std::string& output);
+
  private:
   void SetDefaultConfig();
   void EncodeProcess();

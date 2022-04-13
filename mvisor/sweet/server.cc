@@ -277,6 +277,10 @@ void SweetServer::StopDisplayStream() {
   }
 }
 
+void SweetServer::RefreshDisplayStream() {
+  display_encoder_->ForceKeyframe();
+}
+
 void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {
   switch (state)
   {

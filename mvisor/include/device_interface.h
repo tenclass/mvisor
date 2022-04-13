@@ -22,6 +22,7 @@
 #include <functional>
 #include <vector>
 #include <cstring>
+#include <string>
 #include <deque>
 #include <sys/uio.h>
 
@@ -62,18 +63,18 @@ struct DisplayPartialBitmap {
   bool                flip;
 };
 struct DisplayMouseCursor {
-  uint8_t     visible;
-  uint        x;
-  uint        y;
-  uint64_t    update_timestamp;
+  uint8_t       visible;
+  uint          x;
+  uint          y;
+  uint64_t      update_timestamp;
   struct {
-    uint64_t  id;
-    uint16_t  type;
-    uint16_t  width;
-    uint16_t  height;
-    uint16_t  hotspot_x;
-    uint16_t  hotspot_y;
-    std::vector<iovec> vector;
+    uint64_t    id;
+    uint16_t    type;
+    uint16_t    width;
+    uint16_t    height;
+    uint16_t    hotspot_x;
+    uint16_t    hotspot_y;
+    std::string data;
   } shape;
 };
 struct DisplayUpdate {

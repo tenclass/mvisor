@@ -19,6 +19,7 @@
 #include "display_encoder.h"
 
 #include <libyuv.h>
+#include <jpeglib.h>
 
 #include "logger.h"
 
@@ -324,4 +325,71 @@ void SweetDisplayEncoder::Encode() {
 void SweetDisplayEncoder::ForceKeyframe() {
   force_keyframe_ = true;
   encode_cv_.notify_all();
+}
+
+void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint quality, std::string& output) {
+  if (format != "jpeg") {
+    MV_LOG("not supported screendump format %s", format.c_str());
+    return;
+  }
+
+  if (screen_bpp_ != 24 && screen_bpp_ != 32) {
+    MV_PANIC("unsupported bpp=%d", screen_bpp_);
+  }
+
+  if (w < 10 || w > screen_width_)
+    w = screen_width_;
+  if (h < 10 || h > screen_height_)
+    h = screen_height_;
+
+  /* Scale screen bitmap to w x h */
+  size_t bitmap_stride = w * 4;
+  uint8_t bitmap[bitmap_stride * h];
+  uint8_t* dst = bitmap;
+  for (uint y = 0; y < h; y++) {
+    auto line_src = screen_bitmap_ + (y * screen_height_ / h) * screen_stride_;
+    for (uint x = 0; x < w; x++) {
+      if (screen_bpp_ == 24) {
+        auto src = line_src + (x * screen_width_ / w) * 3;
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
+        dst[3] = 0;
+      } else {
+        auto src = line_src + (x * screen_width_ / w) * 4;
+        *(uint32_t*)dst = *(uint32_t*)src;
+      }
+      dst += 4;
+    }
+  }
+
+  /* bitmap to jpeg */
+  jpeg_compress_struct cinfo;
+  jpeg_error_mgr jerr;
+  cinfo.err = jpeg_std_error(&jerr);
+  jpeg_create_compress(&cinfo);
+
+  uint8_t* out_buffer = nullptr;
+  size_t out_size = 0;
+  jpeg_mem_dest(&cinfo, &out_buffer, &out_size);
+
+  cinfo.image_width = w;
+  cinfo.image_height = h;
+  cinfo.input_components = 4;
+  cinfo.in_color_space = JCS_EXT_BGRA;
+
+  jpeg_set_defaults(&cinfo);
+  jpeg_set_quality(&cinfo, quality, true);
+  jpeg_start_compress(&cinfo, true);
+  while (cinfo.next_scanline < cinfo.image_height) {
+    JSAMPROW row_pointer = bitmap + cinfo.next_scanline * bitmap_stride;
+    jpeg_write_scanlines(&cinfo, &row_pointer, 1);
+  }
+  jpeg_finish_compress(&cinfo);
+  jpeg_destroy_compress(&cinfo);
+  if (out_buffer) {
+    output.resize(out_size);
+    memcpy(output.data(), out_buffer, out_size);
+    free(out_buffer);
+  }
 }

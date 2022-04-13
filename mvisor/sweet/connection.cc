@@ -20,6 +20,7 @@
 
 
 #include "connection.h"
+#include "display_encoder.h"
 #include "utilities.h"
 #include "logger.h"
 #include "pb/sweet.pb.h"
@@ -31,7 +32,6 @@ SweetConnection::SweetConnection(SweetServer* server, int fd) {
   server_ = server;
   machine_ = server->machine();
   fd_ = fd;
-  MV_LOG("sweet connection created fd=%d", fd);
 }
 
 SweetConnection::~SweetConnection() {
@@ -42,7 +42,6 @@ bool SweetConnection::OnReceive() {
   SweetPacketHeader header;
   int nbytes = recv(fd_, &header, sizeof(header), MSG_WAITALL);
   if (nbytes <= 0) {
-    MV_LOG("recv nbytes=%ld", nbytes);
     return false;
   }
   
@@ -71,6 +70,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kStopDisplayStream:
     server_->StopDisplayStream();
     break;
+  case kRefreshDisplayStream:
+    server_->RefreshDisplayStream();
+    break;
   case kSendKeyboardInput:
     OnKeyboardInput();
     break;
@@ -85,6 +87,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
     break;
   case kStopPlaybackStream:
     server_->StopPlaybackStream();
+    break;
+  case kQueryScreenshot:
+    OnQueryScreenshot();
     break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
@@ -261,9 +266,7 @@ void SweetConnection::UpdateCursor(const DisplayMouseCursor* cursor_update) {
     cursor->set_hotspot_x(shape.hotspot_x);
     cursor->set_hotspot_y(shape.hotspot_y);
 
-    MV_ASSERT(!shape.vector.empty());
-    auto& iov = shape.vector.front();
-    cursor->set_data(iov.iov_base, iov.iov_len);
+    cursor->set_data(shape.data.data(), shape.data.size());
     Send(kSetCursorEvent, event);
   } else {
     if (cursor_visible_) {
@@ -291,4 +294,23 @@ void SweetConnection::SendPlaybackStreamStopEvent() {
 
 void SweetConnection::SendPlaybackStreamDataEvent(void* data, size_t length) {
   Send(kPlaybackStreamDataEvent, data, length);
+}
+
+void SweetConnection::OnQueryScreenshot() {
+  QueryScreeenshot query;
+  if (!query.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  auto encoder = server_->display_encoder();
+  MV_ASSERT(encoder);
+
+  std::string image_data;
+  encoder->Screendump(query.format(), query.width(), query.height(), 50, image_data);
+
+  QueryScreenshotResponse response;
+  response.set_format(query.format());
+  response.set_width(query.width());
+  response.set_height(query.height());
+  response.set_data(image_data);
+  Send(kQueryScreenshotResponse, response);
 }

@@ -156,28 +156,18 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
     auto& shape = cursor_update->shape;
     uint32_t stride = SPICE_ALIGN(shape.width, 8) >> 3;
 
-    size_t size = 0;
-    for (auto& iov : shape.vector)
-      size += iov.iov_len;
-    auto shape_data = new uint8_t[size];
-    auto ptr = shape_data;
-    for (auto& iov : shape.vector) {
-      memcpy(ptr, iov.iov_base, iov.iov_len);
-      ptr += iov.iov_len;
-    }
     if (shape.type == SPICE_CURSOR_TYPE_MONO) {
       uint8_t mask[4 * 100] = { 0 };
-      cursor_ = SDL_CreateCursor(shape_data + stride * shape.height, mask,
-        shape.width, shape.height, shape.hotspot_x, shape.hotspot_y);
+      cursor_ = SDL_CreateCursor((const uint8_t*)shape.data.data() + stride * shape.height,
+        mask, shape.width, shape.height, shape.hotspot_x, shape.hotspot_y);
       SDL_SetCursor(cursor_);
     } else {
-      auto surface = SDL_CreateRGBSurfaceWithFormatFrom(shape_data, shape.width, shape.height,
-        32, shape.width * 4, SDL_PIXELFORMAT_BGRA32);
+      auto surface = SDL_CreateRGBSurfaceWithFormatFrom((void*)shape.data.data(),
+        shape.width, shape.height, 32, shape.width * 4, SDL_PIXELFORMAT_BGRA32);
       cursor_ = SDL_CreateColorCursor(surface, shape.hotspot_x, shape.hotspot_y);
       SDL_SetCursor(cursor_);
       SDL_FreeSurface(surface);
     }
-    delete shape_data;
     cursor_shape_id_ = shape.id;
     cursor_visible_ = true;
   } else {

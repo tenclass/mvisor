@@ -45,6 +45,7 @@ class SweetServer {
   void StopDisplayStream();
   void StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config);
   void StopPlaybackStream();
+  void RefreshDisplayStream();
 
   inline Machine* machine() { return machine_; }
   inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
@@ -52,6 +53,7 @@ class SweetServer {
   inline KeyboardInputInterface* keyboard() { return keyboard_; }
   inline PlaybackInterface* playback() { return playback_; }
   inline DisplayInterface* display() { return display_; }
+  inline SweetDisplayEncoder* display_encoder() { return display_encoder_; }
 
  private:
   SweetConnection* GetConnectionByFd(int fd);
