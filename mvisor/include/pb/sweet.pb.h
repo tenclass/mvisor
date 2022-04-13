@@ -67,8 +67,8 @@ void InitDefaultsPlaybackStreamConfigImpl();
 void InitDefaultsPlaybackStreamConfig();
 void InitDefaultsDisplayStreamStartEventImpl();
 void InitDefaultsDisplayStreamStartEvent();
-void InitDefaultsPlaybackStartEventImpl();
-void InitDefaultsPlaybackStartEvent();
+void InitDefaultsPlaybackStreamStartEventImpl();
+void InitDefaultsPlaybackStreamStartEvent();
 inline void InitDefaults() {
   InitDefaultsQueryStatusResponse();
   InitDefaultsSendKeyboardInput();
@@ -82,7 +82,7 @@ inline void InitDefaults() {
   InitDefaultsDisplayStreamConfig();
   InitDefaultsPlaybackStreamConfig();
   InitDefaultsDisplayStreamStartEvent();
-  InitDefaultsPlaybackStartEvent();
+  InitDefaultsPlaybackStreamStartEvent();
 }
 }  // namespace protobuf_sweet_2eproto
 namespace SweetProtocol {
@@ -98,12 +98,12 @@ extern MonitorsConfigDefaultTypeInternal _MonitorsConfig_default_instance_;
 class MonitorsConfig_Monitor;
 class MonitorsConfig_MonitorDefaultTypeInternal;
 extern MonitorsConfig_MonitorDefaultTypeInternal _MonitorsConfig_Monitor_default_instance_;
-class PlaybackStartEvent;
-class PlaybackStartEventDefaultTypeInternal;
-extern PlaybackStartEventDefaultTypeInternal _PlaybackStartEvent_default_instance_;
 class PlaybackStreamConfig;
 class PlaybackStreamConfigDefaultTypeInternal;
 extern PlaybackStreamConfigDefaultTypeInternal _PlaybackStreamConfig_default_instance_;
+class PlaybackStreamStartEvent;
+class PlaybackStreamStartEventDefaultTypeInternal;
+extern PlaybackStreamStartEventDefaultTypeInternal _PlaybackStreamStartEvent_default_instance_;
 class QueryScreeenshot;
 class QueryScreeenshotDefaultTypeInternal;
 extern QueryScreeenshotDefaultTypeInternal _QueryScreeenshot_default_instance_;
@@ -209,15 +209,15 @@ enum SweetResponseAndEvent {
   kDisplayStreamStartEvent = 4178,
   kDisplayStreamStopEvent = 4179,
   kDisplayStreamDataEvent = 4180,
-  kPlaybackStartEvent = 4192,
-  kPlaybackStopEvent = 4193,
-  kPlaybackDataEvent = 4194,
+  kPlaybackStreamStartEvent = 4192,
+  kPlaybackStreamStopEvent = 4193,
+  kPlaybackStreamDataEvent = 4194,
   SweetResponseAndEvent_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetResponseAndEvent_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetResponseAndEvent_IsValid(int value);
 const SweetResponseAndEvent SweetResponseAndEvent_MIN = kInvalidResponse;
-const SweetResponseAndEvent SweetResponseAndEvent_MAX = kPlaybackDataEvent;
+const SweetResponseAndEvent SweetResponseAndEvent_MAX = kPlaybackStreamDataEvent;
 const int SweetResponseAndEvent_ARRAYSIZE = SweetResponseAndEvent_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetResponseAndEvent_descriptor();
@@ -1851,24 +1851,24 @@ class DisplayStreamStartEvent : public ::google::protobuf::Message /* @@protoc_i
 };
 // -------------------------------------------------------------------
 
-class PlaybackStartEvent : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.PlaybackStartEvent) */ {
+class PlaybackStreamStartEvent : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.PlaybackStreamStartEvent) */ {
  public:
-  PlaybackStartEvent();
-  virtual ~PlaybackStartEvent();
+  PlaybackStreamStartEvent();
+  virtual ~PlaybackStreamStartEvent();
 
-  PlaybackStartEvent(const PlaybackStartEvent& from);
+  PlaybackStreamStartEvent(const PlaybackStreamStartEvent& from);
 
-  inline PlaybackStartEvent& operator=(const PlaybackStartEvent& from) {
+  inline PlaybackStreamStartEvent& operator=(const PlaybackStreamStartEvent& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  PlaybackStartEvent(PlaybackStartEvent&& from) noexcept
-    : PlaybackStartEvent() {
+  PlaybackStreamStartEvent(PlaybackStreamStartEvent&& from) noexcept
+    : PlaybackStreamStartEvent() {
     *this = ::std::move(from);
   }
 
-  inline PlaybackStartEvent& operator=(PlaybackStartEvent&& from) noexcept {
+  inline PlaybackStreamStartEvent& operator=(PlaybackStreamStartEvent&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -1878,30 +1878,30 @@ class PlaybackStartEvent : public ::google::protobuf::Message /* @@protoc_insert
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const PlaybackStartEvent& default_instance();
+  static const PlaybackStreamStartEvent& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const PlaybackStartEvent* internal_default_instance() {
-    return reinterpret_cast<const PlaybackStartEvent*>(
-               &_PlaybackStartEvent_default_instance_);
+  static inline const PlaybackStreamStartEvent* internal_default_instance() {
+    return reinterpret_cast<const PlaybackStreamStartEvent*>(
+               &_PlaybackStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     12;
 
-  void Swap(PlaybackStartEvent* other);
-  friend void swap(PlaybackStartEvent& a, PlaybackStartEvent& b) {
+  void Swap(PlaybackStreamStartEvent* other);
+  friend void swap(PlaybackStreamStartEvent& a, PlaybackStreamStartEvent& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline PlaybackStartEvent* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline PlaybackStreamStartEvent* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  PlaybackStartEvent* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  PlaybackStreamStartEvent* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const PlaybackStartEvent& from);
-  void MergeFrom(const PlaybackStartEvent& from);
+  void CopyFrom(const PlaybackStreamStartEvent& from);
+  void MergeFrom(const PlaybackStreamStartEvent& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -1917,7 +1917,7 @@ class PlaybackStartEvent : public ::google::protobuf::Message /* @@protoc_insert
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(PlaybackStartEvent* other);
+  void InternalSwap(PlaybackStreamStartEvent* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -1933,17 +1933,25 @@ class PlaybackStartEvent : public ::google::protobuf::Message /* @@protoc_insert
 
   // accessors -------------------------------------------------------
 
+  // string codec = 2;
+  void clear_codec();
+  static const int kCodecFieldNumber = 2;
+  const ::std::string& codec() const;
+  void set_codec(const ::std::string& value);
+  #if LANG_CXX11
+  void set_codec(::std::string&& value);
+  #endif
+  void set_codec(const char* value);
+  void set_codec(const char* value, size_t size);
+  ::std::string* mutable_codec();
+  ::std::string* release_codec();
+  void set_allocated_codec(::std::string* codec);
+
   // uint32 playback_id = 1;
   void clear_playback_id();
   static const int kPlaybackIdFieldNumber = 1;
   ::google::protobuf::uint32 playback_id() const;
   void set_playback_id(::google::protobuf::uint32 value);
-
-  // uint32 codec = 2;
-  void clear_codec();
-  static const int kCodecFieldNumber = 2;
-  ::google::protobuf::uint32 codec() const;
-  void set_codec(::google::protobuf::uint32 value);
 
   // uint32 format = 3;
   void clear_format();
@@ -1963,18 +1971,18 @@ class PlaybackStartEvent : public ::google::protobuf::Message /* @@protoc_insert
   ::google::protobuf::uint32 frequency() const;
   void set_frequency(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.PlaybackStartEvent)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.PlaybackStreamStartEvent)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr codec_;
   ::google::protobuf::uint32 playback_id_;
-  ::google::protobuf::uint32 codec_;
   ::google::protobuf::uint32 format_;
   ::google::protobuf::uint32 channels_;
   ::google::protobuf::uint32 frequency_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsPlaybackStartEventImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsPlaybackStreamStartEventImpl();
 };
 // ===================================================================
 
@@ -3309,76 +3317,115 @@ inline void DisplayStreamStartEvent::set_height(::google::protobuf::uint32 value
 
 // -------------------------------------------------------------------
 
-// PlaybackStartEvent
+// PlaybackStreamStartEvent
 
 // uint32 playback_id = 1;
-inline void PlaybackStartEvent::clear_playback_id() {
+inline void PlaybackStreamStartEvent::clear_playback_id() {
   playback_id_ = 0u;
 }
-inline ::google::protobuf::uint32 PlaybackStartEvent::playback_id() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStartEvent.playback_id)
+inline ::google::protobuf::uint32 PlaybackStreamStartEvent::playback_id() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStreamStartEvent.playback_id)
   return playback_id_;
 }
-inline void PlaybackStartEvent::set_playback_id(::google::protobuf::uint32 value) {
+inline void PlaybackStreamStartEvent::set_playback_id(::google::protobuf::uint32 value) {
   
   playback_id_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStartEvent.playback_id)
+  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamStartEvent.playback_id)
 }
 
-// uint32 codec = 2;
-inline void PlaybackStartEvent::clear_codec() {
-  codec_ = 0u;
+// string codec = 2;
+inline void PlaybackStreamStartEvent::clear_codec() {
+  codec_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::google::protobuf::uint32 PlaybackStartEvent::codec() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStartEvent.codec)
-  return codec_;
+inline const ::std::string& PlaybackStreamStartEvent::codec() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStreamStartEvent.codec)
+  return codec_.GetNoArena();
 }
-inline void PlaybackStartEvent::set_codec(::google::protobuf::uint32 value) {
+inline void PlaybackStreamStartEvent::set_codec(const ::std::string& value) {
   
-  codec_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStartEvent.codec)
+  codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamStartEvent.codec)
+}
+#if LANG_CXX11
+inline void PlaybackStreamStartEvent::set_codec(::std::string&& value) {
+  
+  codec_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.PlaybackStreamStartEvent.codec)
+}
+#endif
+inline void PlaybackStreamStartEvent::set_codec(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.PlaybackStreamStartEvent.codec)
+}
+inline void PlaybackStreamStartEvent::set_codec(const char* value, size_t size) {
+  
+  codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.PlaybackStreamStartEvent.codec)
+}
+inline ::std::string* PlaybackStreamStartEvent::mutable_codec() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.PlaybackStreamStartEvent.codec)
+  return codec_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* PlaybackStreamStartEvent::release_codec() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.PlaybackStreamStartEvent.codec)
+  
+  return codec_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void PlaybackStreamStartEvent::set_allocated_codec(::std::string* codec) {
+  if (codec != NULL) {
+    
+  } else {
+    
+  }
+  codec_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), codec);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.PlaybackStreamStartEvent.codec)
 }
 
 // uint32 format = 3;
-inline void PlaybackStartEvent::clear_format() {
+inline void PlaybackStreamStartEvent::clear_format() {
   format_ = 0u;
 }
-inline ::google::protobuf::uint32 PlaybackStartEvent::format() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStartEvent.format)
+inline ::google::protobuf::uint32 PlaybackStreamStartEvent::format() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStreamStartEvent.format)
   return format_;
 }
-inline void PlaybackStartEvent::set_format(::google::protobuf::uint32 value) {
+inline void PlaybackStreamStartEvent::set_format(::google::protobuf::uint32 value) {
   
   format_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStartEvent.format)
+  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamStartEvent.format)
 }
 
 // uint32 channels = 4;
-inline void PlaybackStartEvent::clear_channels() {
+inline void PlaybackStreamStartEvent::clear_channels() {
   channels_ = 0u;
 }
-inline ::google::protobuf::uint32 PlaybackStartEvent::channels() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStartEvent.channels)
+inline ::google::protobuf::uint32 PlaybackStreamStartEvent::channels() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStreamStartEvent.channels)
   return channels_;
 }
-inline void PlaybackStartEvent::set_channels(::google::protobuf::uint32 value) {
+inline void PlaybackStreamStartEvent::set_channels(::google::protobuf::uint32 value) {
   
   channels_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStartEvent.channels)
+  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamStartEvent.channels)
 }
 
 // uint32 frequency = 5;
-inline void PlaybackStartEvent::clear_frequency() {
+inline void PlaybackStreamStartEvent::clear_frequency() {
   frequency_ = 0u;
 }
-inline ::google::protobuf::uint32 PlaybackStartEvent::frequency() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStartEvent.frequency)
+inline ::google::protobuf::uint32 PlaybackStreamStartEvent::frequency() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStreamStartEvent.frequency)
   return frequency_;
 }
-inline void PlaybackStartEvent::set_frequency(::google::protobuf::uint32 value) {
+inline void PlaybackStreamStartEvent::set_frequency(::google::protobuf::uint32 value) {
   
   frequency_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStartEvent.frequency)
+  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamStartEvent.frequency)
 }
 
 #ifdef __GNUC__

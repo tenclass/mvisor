@@ -22,6 +22,7 @@
 
 #include <list>
 #include <string>
+#include <opus/opus.h>
 
 #include "machine.h"
 #include "device_interface.h"
@@ -42,6 +43,8 @@ class SweetServer {
 
   void StartDisplayStreamOnConnection(SweetConnection* conn, DisplayStreamConfig* config);
   void StopDisplayStream();
+  void StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config);
+  void StopPlaybackStream();
 
   inline Machine* machine() { return machine_; }
   inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
@@ -77,6 +80,8 @@ class SweetServer {
   SweetDisplayEncoder*        display_encoder_ = nullptr;
   SweetConnection*            display_connection_ = nullptr;
   DisplayStreamConfig         display_config_;
+  OpusEncoder*                playback_encoder_ = nullptr;
+  SweetConnection*            playback_connection_ = nullptr;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

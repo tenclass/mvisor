@@ -80,6 +80,12 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kConfigMonitors:
     OnConfigMonitors();
     break;
+  case kStartPlaybackStream:
+    OnStartPlaybackStream();
+    break;
+  case kStopPlaybackStream:
+    server_->StopPlaybackStream();
+    break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
   }
@@ -211,6 +217,14 @@ void SweetConnection::OnStartDisplayStream() {
   server_->StartDisplayStreamOnConnection(this, &config);
 }
 
+void SweetConnection::OnStartPlaybackStream() {
+  PlaybackStreamConfig config;
+  if (!config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  server_->StartPlaybackStreamOnConnection(this, &config);
+}
+
 void SweetConnection::SendDisplayStreamStartEvent(uint w, uint h) {
   DisplayStreamStartEvent event;
   event.set_width(w);
@@ -247,6 +261,7 @@ void SweetConnection::UpdateCursor(const DisplayMouseCursor* cursor_update) {
     cursor->set_hotspot_x(shape.hotspot_x);
     cursor->set_hotspot_y(shape.hotspot_y);
 
+    MV_ASSERT(!shape.vector.empty());
     auto& iov = shape.vector.front();
     cursor->set_data(iov.iov_base, iov.iov_len);
     Send(kSetCursorEvent, event);
@@ -259,4 +274,21 @@ void SweetConnection::UpdateCursor(const DisplayMouseCursor* cursor_update) {
       Send(kSetCursorEvent, event);
     }
   }
+}
+
+void SweetConnection::SendPlaybackStreamStartEvent(std::string codec, uint format, uint channels, uint frequency) {
+  PlaybackStreamStartEvent event;
+  event.set_codec(codec);
+  event.set_format(format);
+  event.set_channels(channels);
+  event.set_frequency(frequency);
+  Send(kPlaybackStreamStartEvent, event);
+}
+
+void SweetConnection::SendPlaybackStreamStopEvent() {
+  Send(kPlaybackStreamStopEvent);
+}
+
+void SweetConnection::SendPlaybackStreamDataEvent(void* data, size_t length) {
+  Send(kPlaybackStreamDataEvent, data, length);
 }

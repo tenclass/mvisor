@@ -1,7 +1,7 @@
 PROTOC = protoc
 INCLUDE_DIRS := ./include /usr/include
 LIBS := stdc++ stdc++fs
-LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound x264 yuv
+LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound x264 yuv opus
 MKDIR_P = mkdir -p
 
 # FIXME: Add -g only if debug mode is on
@@ -34,10 +34,10 @@ load: all
 	$(EXECUTABLE) -config /tmp/save/configuration.yaml
 
 sweet: all
-	$(EXECUTABLE) -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_624d1b5e534883324a9b4f7c/sweet.sock
+	$(EXECUTABLE) -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock
 
 debug_sweet: all
-	gdb -ex "handle SIG34 nostop pass" -ex "run -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_624d1b5e534883324a9b4f7c/sweet.sock" $(EXECUTABLE)
+	gdb -ex "handle SIG34 nostop pass" -ex "run -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock" $(EXECUTABLE)
 
 debug_load: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run -config /tmp/save/configuration.yaml" $(EXECUTABLE)

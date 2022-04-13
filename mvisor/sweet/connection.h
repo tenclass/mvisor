@@ -52,6 +52,9 @@ class SweetConnection {
   void SendDisplayStreamStopEvent();
   void SendDisplayStreamDataEvent(void* data, size_t length);
   void UpdateCursor(const DisplayMouseCursor* cursor_update);
+  void SendPlaybackStreamStartEvent(std::string codec, uint format, uint channels, uint frequency);
+  void SendPlaybackStreamStopEvent();
+  void SendPlaybackStreamDataEvent(void* data, size_t length);
 
  private:
   bool Send(uint32_t type);
@@ -63,6 +66,7 @@ class SweetConnection {
   void OnSendPointerInput();
   void OnConfigMonitors();
   void OnStartDisplayStream();
+  void OnStartPlaybackStream();
 
   Machine*      machine_;
   SweetServer*  server_;

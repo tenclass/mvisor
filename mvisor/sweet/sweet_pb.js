@@ -15,8 +15,8 @@ goog.exportSymbol('proto.SweetProtocol.DisplayStreamConfig', null, global);
 goog.exportSymbol('proto.SweetProtocol.DisplayStreamStartEvent', null, global);
 goog.exportSymbol('proto.SweetProtocol.MonitorsConfig', null, global);
 goog.exportSymbol('proto.SweetProtocol.MonitorsConfig.Monitor', null, global);
-goog.exportSymbol('proto.SweetProtocol.PlaybackStartEvent', null, global);
 goog.exportSymbol('proto.SweetProtocol.PlaybackStreamConfig', null, global);
+goog.exportSymbol('proto.SweetProtocol.PlaybackStreamStartEvent', null, global);
 goog.exportSymbol('proto.SweetProtocol.QueryScreeenshot', null, global);
 goog.exportSymbol('proto.SweetProtocol.QueryScreenshotResponse', null, global);
 goog.exportSymbol('proto.SweetProtocol.QueryStatusResponse', null, global);
@@ -2990,12 +2990,12 @@ proto.SweetProtocol.DisplayStreamStartEvent.prototype.setHeight = function(value
  * @extends {jspb.Message}
  * @constructor
  */
-proto.SweetProtocol.PlaybackStartEvent = function(opt_data) {
+proto.SweetProtocol.PlaybackStreamStartEvent = function(opt_data) {
   jspb.Message.initialize(this, opt_data, 0, -1, null, null);
 };
-goog.inherits(proto.SweetProtocol.PlaybackStartEvent, jspb.Message);
+goog.inherits(proto.SweetProtocol.PlaybackStreamStartEvent, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
-  proto.SweetProtocol.PlaybackStartEvent.displayName = 'proto.SweetProtocol.PlaybackStartEvent';
+  proto.SweetProtocol.PlaybackStreamStartEvent.displayName = 'proto.SweetProtocol.PlaybackStreamStartEvent';
 }
 
 
@@ -3010,8 +3010,8 @@ if (jspb.Message.GENERATE_TO_OBJECT) {
  *     for transitional soy proto support: http://goto/soy-param-migration
  * @return {!Object}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.toObject = function(opt_includeInstance) {
-  return proto.SweetProtocol.PlaybackStartEvent.toObject(opt_includeInstance, this);
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.toObject = function(opt_includeInstance) {
+  return proto.SweetProtocol.PlaybackStreamStartEvent.toObject(opt_includeInstance, this);
 };
 
 
@@ -3020,14 +3020,14 @@ proto.SweetProtocol.PlaybackStartEvent.prototype.toObject = function(opt_include
  * @param {boolean|undefined} includeInstance Whether to include the JSPB
  *     instance for transitional soy proto support:
  *     http://goto/soy-param-migration
- * @param {!proto.SweetProtocol.PlaybackStartEvent} msg The msg instance to transform.
+ * @param {!proto.SweetProtocol.PlaybackStreamStartEvent} msg The msg instance to transform.
  * @return {!Object}
  * @suppress {unusedLocalVariables} f is only used for nested messages
  */
-proto.SweetProtocol.PlaybackStartEvent.toObject = function(includeInstance, msg) {
+proto.SweetProtocol.PlaybackStreamStartEvent.toObject = function(includeInstance, msg) {
   var f, obj = {
     playbackId: jspb.Message.getFieldWithDefault(msg, 1, 0),
-    codec: jspb.Message.getFieldWithDefault(msg, 2, 0),
+    codec: jspb.Message.getFieldWithDefault(msg, 2, ""),
     format: jspb.Message.getFieldWithDefault(msg, 3, 0),
     channels: jspb.Message.getFieldWithDefault(msg, 4, 0),
     frequency: jspb.Message.getFieldWithDefault(msg, 5, 0)
@@ -3044,23 +3044,23 @@ proto.SweetProtocol.PlaybackStartEvent.toObject = function(includeInstance, msg)
 /**
  * Deserializes binary data (in protobuf wire format).
  * @param {jspb.ByteSource} bytes The bytes to deserialize.
- * @return {!proto.SweetProtocol.PlaybackStartEvent}
+ * @return {!proto.SweetProtocol.PlaybackStreamStartEvent}
  */
-proto.SweetProtocol.PlaybackStartEvent.deserializeBinary = function(bytes) {
+proto.SweetProtocol.PlaybackStreamStartEvent.deserializeBinary = function(bytes) {
   var reader = new jspb.BinaryReader(bytes);
-  var msg = new proto.SweetProtocol.PlaybackStartEvent;
-  return proto.SweetProtocol.PlaybackStartEvent.deserializeBinaryFromReader(msg, reader);
+  var msg = new proto.SweetProtocol.PlaybackStreamStartEvent;
+  return proto.SweetProtocol.PlaybackStreamStartEvent.deserializeBinaryFromReader(msg, reader);
 };
 
 
 /**
  * Deserializes binary data (in protobuf wire format) from the
  * given reader into the given message object.
- * @param {!proto.SweetProtocol.PlaybackStartEvent} msg The message object to deserialize into.
+ * @param {!proto.SweetProtocol.PlaybackStreamStartEvent} msg The message object to deserialize into.
  * @param {!jspb.BinaryReader} reader The BinaryReader to use.
- * @return {!proto.SweetProtocol.PlaybackStartEvent}
+ * @return {!proto.SweetProtocol.PlaybackStreamStartEvent}
  */
-proto.SweetProtocol.PlaybackStartEvent.deserializeBinaryFromReader = function(msg, reader) {
+proto.SweetProtocol.PlaybackStreamStartEvent.deserializeBinaryFromReader = function(msg, reader) {
   while (reader.nextField()) {
     if (reader.isEndGroup()) {
       break;
@@ -3072,7 +3072,7 @@ proto.SweetProtocol.PlaybackStartEvent.deserializeBinaryFromReader = function(ms
       msg.setPlaybackId(value);
       break;
     case 2:
-      var value = /** @type {number} */ (reader.readUint32());
+      var value = /** @type {string} */ (reader.readString());
       msg.setCodec(value);
       break;
     case 3:
@@ -3100,9 +3100,9 @@ proto.SweetProtocol.PlaybackStartEvent.deserializeBinaryFromReader = function(ms
  * Serializes the message to binary data (in protobuf wire format).
  * @return {!Uint8Array}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.serializeBinary = function() {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.serializeBinary = function() {
   var writer = new jspb.BinaryWriter();
-  proto.SweetProtocol.PlaybackStartEvent.serializeBinaryToWriter(this, writer);
+  proto.SweetProtocol.PlaybackStreamStartEvent.serializeBinaryToWriter(this, writer);
   return writer.getResultBuffer();
 };
 
@@ -3110,11 +3110,11 @@ proto.SweetProtocol.PlaybackStartEvent.prototype.serializeBinary = function() {
 /**
  * Serializes the given message to binary data (in protobuf wire
  * format), writing to the given BinaryWriter.
- * @param {!proto.SweetProtocol.PlaybackStartEvent} message
+ * @param {!proto.SweetProtocol.PlaybackStreamStartEvent} message
  * @param {!jspb.BinaryWriter} writer
  * @suppress {unusedLocalVariables} f is only used for nested messages
  */
-proto.SweetProtocol.PlaybackStartEvent.serializeBinaryToWriter = function(message, writer) {
+proto.SweetProtocol.PlaybackStreamStartEvent.serializeBinaryToWriter = function(message, writer) {
   var f = undefined;
   f = message.getPlaybackId();
   if (f !== 0) {
@@ -3124,8 +3124,8 @@ proto.SweetProtocol.PlaybackStartEvent.serializeBinaryToWriter = function(messag
     );
   }
   f = message.getCodec();
-  if (f !== 0) {
-    writer.writeUint32(
+  if (f.length > 0) {
+    writer.writeString(
       2,
       f
     );
@@ -3158,29 +3158,29 @@ proto.SweetProtocol.PlaybackStartEvent.serializeBinaryToWriter = function(messag
  * optional uint32 playback_id = 1;
  * @return {number}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.getPlaybackId = function() {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.getPlaybackId = function() {
   return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 1, 0));
 };
 
 
 /** @param {number} value */
-proto.SweetProtocol.PlaybackStartEvent.prototype.setPlaybackId = function(value) {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.setPlaybackId = function(value) {
   jspb.Message.setProto3IntField(this, 1, value);
 };
 
 
 /**
- * optional uint32 codec = 2;
- * @return {number}
+ * optional string codec = 2;
+ * @return {string}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.getCodec = function() {
-  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 2, 0));
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.getCodec = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
 };
 
 
-/** @param {number} value */
-proto.SweetProtocol.PlaybackStartEvent.prototype.setCodec = function(value) {
-  jspb.Message.setProto3IntField(this, 2, value);
+/** @param {string} value */
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.setCodec = function(value) {
+  jspb.Message.setProto3StringField(this, 2, value);
 };
 
 
@@ -3188,13 +3188,13 @@ proto.SweetProtocol.PlaybackStartEvent.prototype.setCodec = function(value) {
  * optional uint32 format = 3;
  * @return {number}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.getFormat = function() {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.getFormat = function() {
   return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 3, 0));
 };
 
 
 /** @param {number} value */
-proto.SweetProtocol.PlaybackStartEvent.prototype.setFormat = function(value) {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.setFormat = function(value) {
   jspb.Message.setProto3IntField(this, 3, value);
 };
 
@@ -3203,13 +3203,13 @@ proto.SweetProtocol.PlaybackStartEvent.prototype.setFormat = function(value) {
  * optional uint32 channels = 4;
  * @return {number}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.getChannels = function() {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.getChannels = function() {
   return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 4, 0));
 };
 
 
 /** @param {number} value */
-proto.SweetProtocol.PlaybackStartEvent.prototype.setChannels = function(value) {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.setChannels = function(value) {
   jspb.Message.setProto3IntField(this, 4, value);
 };
 
@@ -3218,13 +3218,13 @@ proto.SweetProtocol.PlaybackStartEvent.prototype.setChannels = function(value) {
  * optional uint32 frequency = 5;
  * @return {number}
  */
-proto.SweetProtocol.PlaybackStartEvent.prototype.getFrequency = function() {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.getFrequency = function() {
   return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 5, 0));
 };
 
 
 /** @param {number} value */
-proto.SweetProtocol.PlaybackStartEvent.prototype.setFrequency = function(value) {
+proto.SweetProtocol.PlaybackStreamStartEvent.prototype.setFrequency = function(value) {
   jspb.Message.setProto3IntField(this, 5, value);
 };
 
@@ -3278,9 +3278,9 @@ proto.SweetProtocol.SweetResponseAndEvent = {
   KDISPLAYSTREAMSTARTEVENT: 4178,
   KDISPLAYSTREAMSTOPEVENT: 4179,
   KDISPLAYSTREAMDATAEVENT: 4180,
-  KPLAYBACKSTARTEVENT: 4192,
-  KPLAYBACKSTOPEVENT: 4193,
-  KPLAYBACKDATAEVENT: 4194
+  KPLAYBACKSTREAMSTARTEVENT: 4192,
+  KPLAYBACKSTREAMSTOPEVENT: 4193,
+  KPLAYBACKSTREAMDATAEVENT: 4194
 };
 
 goog.object.extend(exports, proto.SweetProtocol);
