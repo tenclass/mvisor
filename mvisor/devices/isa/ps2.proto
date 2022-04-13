@@ -16,6 +16,7 @@ message Ps2State {
 
   message Keyboard {
     uint32  scancode_set    = 1;
+    uint32  leds            = 2;
   }
   
   Keyboard  keyboard        = 3;

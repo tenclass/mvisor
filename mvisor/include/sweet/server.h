@@ -22,6 +22,7 @@
 
 #include <list>
 #include <string>
+#include <opus/opus.h>
 
 #include "machine.h"
 #include "device_interface.h"
@@ -42,8 +43,16 @@ class SweetServer {
 
   void StartDisplayStreamOnConnection(SweetConnection* conn, DisplayStreamConfig* config);
   void StopDisplayStream();
+  void StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config);
+  void StopPlaybackStream();
 
   inline Machine* machine() { return machine_; }
+  inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
+  inline std::vector<DisplayResizeInterface*>& resizers() { return resizers_; }
+  inline KeyboardInputInterface* keyboard() { return keyboard_; }
+  inline PlaybackInterface* playback() { return playback_; }
+  inline DisplayInterface* display() { return display_; }
+
  private:
   SweetConnection* GetConnectionByFd(int fd);
   void LookupDevices();
@@ -63,12 +72,16 @@ class SweetServer {
   KeyboardInputInterface*               keyboard_;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
+
   PlaybackFormat                        playback_format_;
+
   bool                        display_mode_changed_ = false;
   bool                        display_updated_ = false;
   SweetDisplayEncoder*        display_encoder_ = nullptr;
   SweetConnection*            display_connection_ = nullptr;
   DisplayStreamConfig         display_config_;
+  OpusEncoder*                playback_encoder_ = nullptr;
+  SweetConnection*            playback_connection_ = nullptr;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

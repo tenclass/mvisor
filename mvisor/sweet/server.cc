@@ -67,6 +67,10 @@ SweetServer::~SweetServer() {
   if (display_encoder_) {
     delete display_encoder_;
   }
+  if (playback_encoder_) {
+    opus_encoder_destroy(playback_encoder_);
+    playback_encoder_ = nullptr;
+  }
 
   safe_close(&event_fd_);
   safe_close(&server_fd_);
@@ -128,6 +132,9 @@ int SweetServer::MainLoop() {
               display_encoder_->Stop();
               display_connection_ = nullptr;
             }
+            if (playback_connection_ == conn) {
+              playback_connection_ = nullptr;
+            }
             connections_.remove(conn);
             delete conn;
           }
@@ -170,6 +177,9 @@ void SweetServer::OnEvent() {
 
     DisplayUpdate update;
     display_->AcquireUpdate(update);
+    if (display_connection_) {
+      display_connection_->UpdateCursor(&update.cursor);
+    }
     display_encoder_->Render(update.partials);
     display_->ReleaseUpdate();
   }
@@ -268,5 +278,70 @@ void SweetServer::StopDisplayStream() {
 }
 
 void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {
+  switch (state)
+  {
+  case kPlaybackStart:
+    playback_->GetPlaybackFormat(&playback_format_.format, &playback_format_.channels,
+      &playback_format_.frequency, &playback_format_.interval_ms);
+    break;
+  case kPlaybackStop:
+    if (playback_encoder_) {
+      opus_encoder_destroy(playback_encoder_);
+      playback_encoder_ = nullptr;
+      if (playback_connection_) {
+        playback_connection_->SendPlaybackStreamStopEvent();
+      }
+    }
+    break;
+  case kPlaybackData:
+    if (!playback_encoder_) {
+      int error;
+      playback_encoder_ = opus_encoder_create(playback_format_.frequency, playback_format_.channels, OPUS_APPLICATION_AUDIO, &error);
+      if (!playback_encoder_) {
+        MV_PANIC("failed to create opus encoder, error=%d", error);
+      }
+      if (playback_connection_) {
+        playback_connection_->SendPlaybackStreamStartEvent("opus", 0, playback_format_.channels, playback_format_.frequency);
+      }
+    }
+    if (playback_encoder_ && playback_connection_) {
+      uint8_t buffer[1000];
+      int frame_size = 480;
+      size_t frame_bytes = frame_size * playback_format_.channels * sizeof(opus_int16);
+      auto remain = iov.iov_len;
+      auto ptr = (uint8_t*)iov.iov_base;
+      while (remain >= frame_bytes) {
+        auto ret = opus_encode(playback_encoder_, (const opus_int16*)ptr, frame_size, buffer, sizeof(buffer));
+        if (ret > 0) {
+          playback_connection_->SendPlaybackStreamDataEvent(buffer, ret);
+        }
+        ptr += frame_bytes;
+        remain -= frame_bytes;
+      }
+    }
+    break;
+  }
+}
+
+
+void SweetServer::StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config) {
+  bool is_playing = playback_encoder_ != nullptr;
+  /* Send stop to previous connection */
+  if (playback_connection_ && is_playing) {
+    playback_connection_->SendPlaybackStreamStopEvent();
+  }
+
+  playback_connection_ = conn;
+  if (playback_connection_ && is_playing) {
+    playback_connection_->SendPlaybackStreamStartEvent("opus", 0, playback_format_.channels, playback_format_.frequency);
+  }
+}
+
+void SweetServer::StopPlaybackStream() {
+  bool is_playing = playback_encoder_ != nullptr;
+  if (playback_connection_ && is_playing) {
+    playback_connection_->SendPlaybackStreamStopEvent();
+  }
+  playback_connection_ = nullptr;
 }
 

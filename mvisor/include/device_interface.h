@@ -27,18 +27,18 @@
 
 class KeyboardInputInterface {
  public:
-  virtual bool QueueKeyboardEvent(uint8_t scancode[10]) = 0;
+  virtual bool QueueKeyboardEvent(uint8_t scancode[10], uint8_t modifiers) = 0;
   virtual bool QueueMouseEvent(uint buttons, int rel_x, int rel_y, int rel_z) = 0;
   virtual bool InputAcceptable() = 0;
 };
 
 struct PointerEvent {
-  uint buttons; 
-  int x;
-  int y;
-  int z;
-  uint screen_width;
-  uint screen_height;
+  uint  buttons; 
+  int   x;
+  int   y;
+  int   z;
+  uint  screen_width;
+  uint  screen_height;
 };
 class PointerInputInterface {
  public:

@@ -51,6 +51,10 @@ class SweetConnection {
   void SendDisplayStreamStartEvent(uint w, uint h);
   void SendDisplayStreamStopEvent();
   void SendDisplayStreamDataEvent(void* data, size_t length);
+  void UpdateCursor(const DisplayMouseCursor* cursor_update);
+  void SendPlaybackStreamStartEvent(std::string codec, uint format, uint channels, uint frequency);
+  void SendPlaybackStreamStopEvent();
+  void SendPlaybackStreamDataEvent(void* data, size_t length);
 
  private:
   bool Send(uint32_t type);
@@ -58,13 +62,20 @@ class SweetConnection {
   bool Send(uint32_t type, void* data, size_t length);
   void ParsePacket(SweetPacketHeader* header);
   void OnQueryStatus(); 
+  void OnKeyboardInput();
+  void OnSendPointerInput();
+  void OnConfigMonitors();
   void OnStartDisplayStream();
+  void OnStartPlaybackStream();
 
   Machine*      machine_;
   SweetServer*  server_;
   int           fd_ = -1;
   std::string   buffer_;
   std::mutex    mutex_;
+
+  bool          cursor_visible_ = false;
+  uint64_t      cursor_shape_id_ = 0;
 };
 
 #endif // _MVISOR_SWEET_CONNECTION_H

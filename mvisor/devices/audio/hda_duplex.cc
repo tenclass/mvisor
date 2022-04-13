@@ -35,8 +35,8 @@
 #include "pb/hda_duplex.pb.h"
 #include "logger.h"
 
-#define HDA_TIMER_INTERVAL_MS (10) // 10ms
-#define HDA_STREAM_BUFFER_SIZE 8192
+#define HDA_TIMER_INTERVAL_MS   (10)
+#define HDA_STREAM_BUFFER_SIZE  (480 * 20)
 
 struct HdaStream {
   uint32_t  id;

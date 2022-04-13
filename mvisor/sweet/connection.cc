@@ -71,6 +71,21 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kStopDisplayStream:
     server_->StopDisplayStream();
     break;
+  case kSendKeyboardInput:
+    OnKeyboardInput();
+    break;
+  case kSendPointerInput:
+    OnSendPointerInput();
+    break;
+  case kConfigMonitors:
+    OnConfigMonitors();
+    break;
+  case kStartPlaybackStream:
+    OnStartPlaybackStream();
+    break;
+  case kStopPlaybackStream:
+    server_->StopPlaybackStream();
+    break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
   }
@@ -132,11 +147,82 @@ void SweetConnection::OnQueryStatus() {
   Send(kQueryStatusResponse, response);
 }
 
+void SweetConnection::OnKeyboardInput() {
+  SendKeyboardInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  if (machine_->IsPaused()) {
+    return;
+  }
+
+  uint code = input.scancode();
+  uint8_t scancode[10] = { 0 };
+  for (int i = 0; i < 10 && code; i++) {
+    scancode[i] = (uint8_t)code;
+    code >>= 8;
+  }
+  server_->keyboard()->QueueKeyboardEvent(scancode, input.modifiers());
+}
+
+void SweetConnection::OnSendPointerInput() {
+  SendPointerInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  if (machine_->IsPaused()) {
+    return;
+  }
+
+  PointerEvent event;
+  event.buttons = input.buttons();
+  event.x = input.x();
+  event.y = input.y();
+  event.z = input.z();
+
+  uint w, h;
+  server_->display()->GetDisplayMode(&w, &h, nullptr, nullptr);
+  event.screen_width = w;
+  event.screen_width = h;
+  
+  for (auto pointer : server_->pointers()) {
+    if (pointer->InputAcceptable()) {
+      pointer->QueuePointerEvent(event);
+      break;
+    }
+  }
+}
+
+void SweetConnection::OnConfigMonitors() {
+  MonitorsConfig config;
+  if (!config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  
+  MV_ASSERT(config.count() > 0);
+  auto& monitor = config.monitors(0);
+
+  for (auto resizer : server_->resizers()) {
+    if (resizer->Resize(monitor.width(), monitor.height())) {
+      break;
+    }
+  }
+}
+
 void SweetConnection::OnStartDisplayStream() {
   DisplayStreamConfig config;
-  if (config.ParseFromString(buffer_)) {
-    server_->StartDisplayStreamOnConnection(this, &config);
+  if (!config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
   }
+  server_->StartDisplayStreamOnConnection(this, &config);
+}
+
+void SweetConnection::OnStartPlaybackStream() {
+  PlaybackStreamConfig config;
+  if (!config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  server_->StartPlaybackStreamOnConnection(this, &config);
 }
 
 void SweetConnection::SendDisplayStreamStartEvent(uint w, uint h) {
@@ -154,3 +240,55 @@ void SweetConnection::SendDisplayStreamDataEvent(void* data, size_t length) {
   Send(kDisplayStreamDataEvent, data, length);
 }
 
+void SweetConnection::UpdateCursor(const DisplayMouseCursor* cursor_update) {
+  if (cursor_update->visible) {
+    if (cursor_update->shape.id == cursor_shape_id_) {
+      return;
+    }
+    auto& shape = cursor_update->shape;
+
+    cursor_shape_id_ = shape.id;
+    cursor_visible_ = true;
+
+    SetCursorEvent event;
+    event.set_visible(true);
+    event.set_x(cursor_update->x);
+    event.set_y(cursor_update->y);
+    auto cursor = event.mutable_shape();
+    cursor->set_type(shape.type);
+    cursor->set_width(shape.width);
+    cursor->set_height(shape.height);
+    cursor->set_hotspot_x(shape.hotspot_x);
+    cursor->set_hotspot_y(shape.hotspot_y);
+
+    MV_ASSERT(!shape.vector.empty());
+    auto& iov = shape.vector.front();
+    cursor->set_data(iov.iov_base, iov.iov_len);
+    Send(kSetCursorEvent, event);
+  } else {
+    if (cursor_visible_) {
+      cursor_visible_ = false;
+  
+      SetCursorEvent event;
+      event.set_visible(false);
+      Send(kSetCursorEvent, event);
+    }
+  }
+}
+
+void SweetConnection::SendPlaybackStreamStartEvent(std::string codec, uint format, uint channels, uint frequency) {
+  PlaybackStreamStartEvent event;
+  event.set_codec(codec);
+  event.set_format(format);
+  event.set_channels(channels);
+  event.set_frequency(frequency);
+  Send(kPlaybackStreamStartEvent, event);
+}
+
+void SweetConnection::SendPlaybackStreamStopEvent() {
+  Send(kPlaybackStreamStopEvent);
+}
+
+void SweetConnection::SendPlaybackStreamDataEvent(void* data, size_t length) {
+  Send(kPlaybackStreamDataEvent, data, length);
+}
