@@ -87,10 +87,19 @@ class DisplayInterface {
  public:
   virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) = 0;
   virtual const uint8_t* GetPallete() const = 0;
+  virtual void Redraw() = 0;
   virtual bool AcquireUpdate(DisplayUpdate& update) = 0;
   virtual void ReleaseUpdate() = 0;
   virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
   virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback) = 0;
+};
+
+
+struct PlaybackFormat {
+  uint format;
+  uint channels;
+  uint frequency;
+  uint interval_ms;
 };
 
 enum PlaybackState {
@@ -98,12 +107,14 @@ enum PlaybackState {
   kPlaybackStop,
   kPlaybackData
 };
+
 typedef std::function <void(PlaybackState state, struct iovec iov)> PlaybackListener;
 class PlaybackInterface {
  public:
   virtual void GetPlaybackFormat(uint* format, uint* channels, uint* frequency, uint* interval_ms) = 0;
   virtual void RegisterPlaybackListener(PlaybackListener callback) = 0;
 };
+
 
 class SerialPortInterface;
 class SerialDeviceInterface {

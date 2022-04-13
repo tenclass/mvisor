@@ -199,6 +199,10 @@ void Vga::OnRefreshTimer() {
   }
 }
 
+void Vga::Redraw() {
+  /* Do nothing, refresh timer updates display */
+}
+
 void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end) {
   uint16_t location = (vga_.crtc[0xE] << 8) | (vga_.crtc[0xF]);
   *sel_start = vga_.crtc[0xA] & 0x1F;
@@ -208,10 +212,14 @@ void Vga::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t*
 }
 
 void Vga::GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) {
-  *w = width_;
-  *h = height_;
-  *bpp = bpp_;
-  *stride = stride_;
+  if (w)
+    *w = width_;
+  if (h)
+    *h = height_;
+  if (bpp)
+    *bpp = bpp_;
+  if (stride)
+    *stride = stride_;
 }
 
 const uint8_t* Vga::GetPallete() const {

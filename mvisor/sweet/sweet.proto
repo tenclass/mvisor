@@ -1,6 +1,66 @@
 syntax = "proto3";
 package SweetProtocol;
 
+enum SweetCommand {
+  kInvalid                = 0x00;
+  kQueryStatus            = 0x10;
+  /* Machine operations */
+  kResetMachine           = 0x20;
+  kStartupMachine         = 0x21;
+  kShutdownMachine        = 0x22;
+  kPauseMachine           = 0x23;
+  kResumeMachine          = 0x24;
+  kSaveMachine            = 0x25;
+  /* Disk operations */
+  kFreezeDisk             = 0x30;
+  kThawDisk               = 0x31;
+  kSaveDisk               = 0x32;
+  /* Input */
+  kSendKeyboardInput      = 0x40;
+  kSendPointerInput       = 0x41;
+  /* Display */
+  kConfigMonitors         = 0x50;
+  kQueryScreenshot        = 0x51;
+  kStartDisplayStream     = 0x52;
+  kStopDisplayStream      = 0x53;
+  kRefreshDisplayStream   = 0x54;
+  /* Playback */
+  kStartPlaybackStream    = 0x60;
+  kStopPlaybackStream     = 0x61;
+  /* Record */
+  kStartRecordStream      = 0x70;
+  kStopRecordStream       = 0x71;
+  kSendRecordStreamData   = 0x72;
+  /* Clipboard */
+  kCopyToGuest            = 0x80;
+  kPasteFromGuest         = 0x81;
+  /* USB */
+  kConnectUsb             = 0x90;
+  kDisconnectUsb          = 0x91;
+  kSendUsbData            = 0x92;
+  /* Network */
+  kStartTcpService        = 0xA0;
+  kConnectTcp             = 0xA1;
+  kCloseTcp               = 0xA2;
+  kSendTcpData            = 0xA3;
+}
+
+enum SweetResponseAndEvent {
+  kInvalidResponse           = 0x0000;
+  kQueryStatusResponse       = 0x1010;
+
+  kQueryScreenshotResponse   = 0x1050;
+  kSetCursorEvent            = 0x1051;
+  kDisplayStreamStartEvent   = 0x1052;
+  kDisplayStreamStopEvent    = 0x1053;
+  kDisplayStreamDataEvent    = 0x1054;
+
+  kPlaybackStartEvent        = 0x1060;
+  kPlaybackStopEvent         = 0x1061;
+  kPlaybackDataEvent         = 0x1062;
+}
+
+
 message QueryStatusResponse {
   bool      debug       = 1;
   bool      paused      = 2;
@@ -16,12 +76,13 @@ message QueryStatusResponse {
   bool      tenclass_agent  = 1002;
 }
 
-message SendKeyboardInputCommand {
+message SendKeyboardInput {
   uint32    scancode    = 1;
   bool      pressed     = 2;
+  uint32    modifiers   = 3;
 }
 
-message SendPointerInputCommand {
+message SendPointerInput {
   enum PointerButtonBit {
     LEFT    = 0;
     MIDDLE  = 1;
@@ -34,7 +95,7 @@ message SendPointerInputCommand {
   uint32    z           = 4;
 }
 
-message QueryScreeenshotCommand {
+message QueryScreeenshot {
   string    format      = 1;
   uint32    width       = 2;
   uint32    height      = 3;
@@ -47,7 +108,7 @@ message QueryScreenshotResponse {
   bytes     data        = 4;
 }
 
-message ConfigMonitorsCommand {
+message MonitorsConfig {
   message Monitor {
     uint32  index   = 1;
     uint32  left    = 2;
@@ -76,37 +137,35 @@ message SetCursorEvent {
   CursorShape shape     = 4;
 }
 
-message StartDisplayStreamCommand {
-  /* x264 / x265 / av1 */
+message DisplayStreamConfig {
+  /* codec: x264 / x265 / av1 */
   string    codec       = 1;
-  /* baseline / main / high */
+  /* profile: baseline / main / high */
   string    profile     = 2;
-  /* ultrafast / superfast / veryfast / faster / fast */
-  string    speed       = 3;
-  /* vbr / cbr */
+  /* preset: ultrafast / superfast / veryfast / faster / fast */
+  string    preset      = 3;
+  /* rc: vbr / cbr */
   string    rate_control= 4;
-  /* for QXL, 16 / 32 / 64 */
+  /* fps: for QXL, 16 / 32 / 64 */
   uint32    fps         = 5;
-  /* for vbr, it's max bitrate */
+  /* bitrate: for vbr, it's max bitrate */
   uint32    bitrate     = 6;
-  /* for vbr, minimal quality */
+  /* qmin: for vbr, minimal quality */
   uint32    qmin        = 7;
-  /* number of sliced-threads */
+  /* threads: number of sliced-threads */
   uint32    threads     = 8;
-  /* codec specific flags, for x264, 1: fast decode, 2: cabac, 4: num_ref_frames=3 */
+  /* codec specific flags: for x264, 1: fast decode, 2: cabac, 4: num_ref_frames=3 */
   uint32    flags       = 9;
 }
 
-message StartPlaybackStreamCommand {
+message PlaybackStreamConfig {
   /* pcm / opus */
   string    codec       = 1;
 }
 
 message DisplayStreamStartEvent {
-  uint32    display_id  = 1;
-  uint32    width       = 2;
-  uint32    height      = 3;
-  uint32    codec       = 5;
+  uint32    width       = 1;
+  uint32    height      = 2;
 }
 
 message PlaybackStartEvent {

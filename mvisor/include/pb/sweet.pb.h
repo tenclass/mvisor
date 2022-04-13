@@ -45,110 +45,190 @@ struct TableStruct {
 void AddDescriptors();
 void InitDefaultsQueryStatusResponseImpl();
 void InitDefaultsQueryStatusResponse();
-void InitDefaultsSendKeyboardInputCommandImpl();
-void InitDefaultsSendKeyboardInputCommand();
-void InitDefaultsSendPointerInputCommandImpl();
-void InitDefaultsSendPointerInputCommand();
-void InitDefaultsQueryScreeenshotCommandImpl();
-void InitDefaultsQueryScreeenshotCommand();
+void InitDefaultsSendKeyboardInputImpl();
+void InitDefaultsSendKeyboardInput();
+void InitDefaultsSendPointerInputImpl();
+void InitDefaultsSendPointerInput();
+void InitDefaultsQueryScreeenshotImpl();
+void InitDefaultsQueryScreeenshot();
 void InitDefaultsQueryScreenshotResponseImpl();
 void InitDefaultsQueryScreenshotResponse();
-void InitDefaultsConfigMonitorsCommand_MonitorImpl();
-void InitDefaultsConfigMonitorsCommand_Monitor();
-void InitDefaultsConfigMonitorsCommandImpl();
-void InitDefaultsConfigMonitorsCommand();
+void InitDefaultsMonitorsConfig_MonitorImpl();
+void InitDefaultsMonitorsConfig_Monitor();
+void InitDefaultsMonitorsConfigImpl();
+void InitDefaultsMonitorsConfig();
 void InitDefaultsSetCursorEvent_CursorShapeImpl();
 void InitDefaultsSetCursorEvent_CursorShape();
 void InitDefaultsSetCursorEventImpl();
 void InitDefaultsSetCursorEvent();
-void InitDefaultsStartDisplayStreamCommandImpl();
-void InitDefaultsStartDisplayStreamCommand();
-void InitDefaultsStartPlaybackStreamCommandImpl();
-void InitDefaultsStartPlaybackStreamCommand();
+void InitDefaultsDisplayStreamConfigImpl();
+void InitDefaultsDisplayStreamConfig();
+void InitDefaultsPlaybackStreamConfigImpl();
+void InitDefaultsPlaybackStreamConfig();
 void InitDefaultsDisplayStreamStartEventImpl();
 void InitDefaultsDisplayStreamStartEvent();
 void InitDefaultsPlaybackStartEventImpl();
 void InitDefaultsPlaybackStartEvent();
 inline void InitDefaults() {
   InitDefaultsQueryStatusResponse();
-  InitDefaultsSendKeyboardInputCommand();
-  InitDefaultsSendPointerInputCommand();
-  InitDefaultsQueryScreeenshotCommand();
+  InitDefaultsSendKeyboardInput();
+  InitDefaultsSendPointerInput();
+  InitDefaultsQueryScreeenshot();
   InitDefaultsQueryScreenshotResponse();
-  InitDefaultsConfigMonitorsCommand_Monitor();
-  InitDefaultsConfigMonitorsCommand();
+  InitDefaultsMonitorsConfig_Monitor();
+  InitDefaultsMonitorsConfig();
   InitDefaultsSetCursorEvent_CursorShape();
   InitDefaultsSetCursorEvent();
-  InitDefaultsStartDisplayStreamCommand();
-  InitDefaultsStartPlaybackStreamCommand();
+  InitDefaultsDisplayStreamConfig();
+  InitDefaultsPlaybackStreamConfig();
   InitDefaultsDisplayStreamStartEvent();
   InitDefaultsPlaybackStartEvent();
 }
 }  // namespace protobuf_sweet_2eproto
 namespace SweetProtocol {
-class ConfigMonitorsCommand;
-class ConfigMonitorsCommandDefaultTypeInternal;
-extern ConfigMonitorsCommandDefaultTypeInternal _ConfigMonitorsCommand_default_instance_;
-class ConfigMonitorsCommand_Monitor;
-class ConfigMonitorsCommand_MonitorDefaultTypeInternal;
-extern ConfigMonitorsCommand_MonitorDefaultTypeInternal _ConfigMonitorsCommand_Monitor_default_instance_;
+class DisplayStreamConfig;
+class DisplayStreamConfigDefaultTypeInternal;
+extern DisplayStreamConfigDefaultTypeInternal _DisplayStreamConfig_default_instance_;
 class DisplayStreamStartEvent;
 class DisplayStreamStartEventDefaultTypeInternal;
 extern DisplayStreamStartEventDefaultTypeInternal _DisplayStreamStartEvent_default_instance_;
+class MonitorsConfig;
+class MonitorsConfigDefaultTypeInternal;
+extern MonitorsConfigDefaultTypeInternal _MonitorsConfig_default_instance_;
+class MonitorsConfig_Monitor;
+class MonitorsConfig_MonitorDefaultTypeInternal;
+extern MonitorsConfig_MonitorDefaultTypeInternal _MonitorsConfig_Monitor_default_instance_;
 class PlaybackStartEvent;
 class PlaybackStartEventDefaultTypeInternal;
 extern PlaybackStartEventDefaultTypeInternal _PlaybackStartEvent_default_instance_;
-class QueryScreeenshotCommand;
-class QueryScreeenshotCommandDefaultTypeInternal;
-extern QueryScreeenshotCommandDefaultTypeInternal _QueryScreeenshotCommand_default_instance_;
+class PlaybackStreamConfig;
+class PlaybackStreamConfigDefaultTypeInternal;
+extern PlaybackStreamConfigDefaultTypeInternal _PlaybackStreamConfig_default_instance_;
+class QueryScreeenshot;
+class QueryScreeenshotDefaultTypeInternal;
+extern QueryScreeenshotDefaultTypeInternal _QueryScreeenshot_default_instance_;
 class QueryScreenshotResponse;
 class QueryScreenshotResponseDefaultTypeInternal;
 extern QueryScreenshotResponseDefaultTypeInternal _QueryScreenshotResponse_default_instance_;
 class QueryStatusResponse;
 class QueryStatusResponseDefaultTypeInternal;
 extern QueryStatusResponseDefaultTypeInternal _QueryStatusResponse_default_instance_;
-class SendKeyboardInputCommand;
-class SendKeyboardInputCommandDefaultTypeInternal;
-extern SendKeyboardInputCommandDefaultTypeInternal _SendKeyboardInputCommand_default_instance_;
-class SendPointerInputCommand;
-class SendPointerInputCommandDefaultTypeInternal;
-extern SendPointerInputCommandDefaultTypeInternal _SendPointerInputCommand_default_instance_;
+class SendKeyboardInput;
+class SendKeyboardInputDefaultTypeInternal;
+extern SendKeyboardInputDefaultTypeInternal _SendKeyboardInput_default_instance_;
+class SendPointerInput;
+class SendPointerInputDefaultTypeInternal;
+extern SendPointerInputDefaultTypeInternal _SendPointerInput_default_instance_;
 class SetCursorEvent;
 class SetCursorEventDefaultTypeInternal;
 extern SetCursorEventDefaultTypeInternal _SetCursorEvent_default_instance_;
 class SetCursorEvent_CursorShape;
 class SetCursorEvent_CursorShapeDefaultTypeInternal;
 extern SetCursorEvent_CursorShapeDefaultTypeInternal _SetCursorEvent_CursorShape_default_instance_;
-class StartDisplayStreamCommand;
-class StartDisplayStreamCommandDefaultTypeInternal;
-extern StartDisplayStreamCommandDefaultTypeInternal _StartDisplayStreamCommand_default_instance_;
-class StartPlaybackStreamCommand;
-class StartPlaybackStreamCommandDefaultTypeInternal;
-extern StartPlaybackStreamCommandDefaultTypeInternal _StartPlaybackStreamCommand_default_instance_;
 }  // namespace SweetProtocol
 namespace SweetProtocol {
 
-enum SendPointerInputCommand_PointerButtonBit {
-  SendPointerInputCommand_PointerButtonBit_LEFT = 0,
-  SendPointerInputCommand_PointerButtonBit_MIDDLE = 1,
-  SendPointerInputCommand_PointerButtonBit_RIGHT = 2,
-  SendPointerInputCommand_PointerButtonBit_SendPointerInputCommand_PointerButtonBit_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
-  SendPointerInputCommand_PointerButtonBit_SendPointerInputCommand_PointerButtonBit_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+enum SendPointerInput_PointerButtonBit {
+  SendPointerInput_PointerButtonBit_LEFT = 0,
+  SendPointerInput_PointerButtonBit_MIDDLE = 1,
+  SendPointerInput_PointerButtonBit_RIGHT = 2,
+  SendPointerInput_PointerButtonBit_SendPointerInput_PointerButtonBit_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  SendPointerInput_PointerButtonBit_SendPointerInput_PointerButtonBit_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
-bool SendPointerInputCommand_PointerButtonBit_IsValid(int value);
-const SendPointerInputCommand_PointerButtonBit SendPointerInputCommand_PointerButtonBit_PointerButtonBit_MIN = SendPointerInputCommand_PointerButtonBit_LEFT;
-const SendPointerInputCommand_PointerButtonBit SendPointerInputCommand_PointerButtonBit_PointerButtonBit_MAX = SendPointerInputCommand_PointerButtonBit_RIGHT;
-const int SendPointerInputCommand_PointerButtonBit_PointerButtonBit_ARRAYSIZE = SendPointerInputCommand_PointerButtonBit_PointerButtonBit_MAX + 1;
+bool SendPointerInput_PointerButtonBit_IsValid(int value);
+const SendPointerInput_PointerButtonBit SendPointerInput_PointerButtonBit_PointerButtonBit_MIN = SendPointerInput_PointerButtonBit_LEFT;
+const SendPointerInput_PointerButtonBit SendPointerInput_PointerButtonBit_PointerButtonBit_MAX = SendPointerInput_PointerButtonBit_RIGHT;
+const int SendPointerInput_PointerButtonBit_PointerButtonBit_ARRAYSIZE = SendPointerInput_PointerButtonBit_PointerButtonBit_MAX + 1;
 
-const ::google::protobuf::EnumDescriptor* SendPointerInputCommand_PointerButtonBit_descriptor();
-inline const ::std::string& SendPointerInputCommand_PointerButtonBit_Name(SendPointerInputCommand_PointerButtonBit value) {
+const ::google::protobuf::EnumDescriptor* SendPointerInput_PointerButtonBit_descriptor();
+inline const ::std::string& SendPointerInput_PointerButtonBit_Name(SendPointerInput_PointerButtonBit value) {
   return ::google::protobuf::internal::NameOfEnum(
-    SendPointerInputCommand_PointerButtonBit_descriptor(), value);
+    SendPointerInput_PointerButtonBit_descriptor(), value);
 }
-inline bool SendPointerInputCommand_PointerButtonBit_Parse(
-    const ::std::string& name, SendPointerInputCommand_PointerButtonBit* value) {
-  return ::google::protobuf::internal::ParseNamedEnum<SendPointerInputCommand_PointerButtonBit>(
-    SendPointerInputCommand_PointerButtonBit_descriptor(), name, value);
+inline bool SendPointerInput_PointerButtonBit_Parse(
+    const ::std::string& name, SendPointerInput_PointerButtonBit* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<SendPointerInput_PointerButtonBit>(
+    SendPointerInput_PointerButtonBit_descriptor(), name, value);
+}
+enum SweetCommand {
+  kInvalid = 0,
+  kQueryStatus = 16,
+  kResetMachine = 32,
+  kStartupMachine = 33,
+  kShutdownMachine = 34,
+  kPauseMachine = 35,
+  kResumeMachine = 36,
+  kSaveMachine = 37,
+  kFreezeDisk = 48,
+  kThawDisk = 49,
+  kSaveDisk = 50,
+  kSendKeyboardInput = 64,
+  kSendPointerInput = 65,
+  kConfigMonitors = 80,
+  kQueryScreenshot = 81,
+  kStartDisplayStream = 82,
+  kStopDisplayStream = 83,
+  kRefreshDisplayStream = 84,
+  kStartPlaybackStream = 96,
+  kStopPlaybackStream = 97,
+  kStartRecordStream = 112,
+  kStopRecordStream = 113,
+  kSendRecordStreamData = 114,
+  kCopyToGuest = 128,
+  kPasteFromGuest = 129,
+  kConnectUsb = 144,
+  kDisconnectUsb = 145,
+  kSendUsbData = 146,
+  kStartTcpService = 160,
+  kConnectTcp = 161,
+  kCloseTcp = 162,
+  kSendTcpData = 163,
+  SweetCommand_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  SweetCommand_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool SweetCommand_IsValid(int value);
+const SweetCommand SweetCommand_MIN = kInvalid;
+const SweetCommand SweetCommand_MAX = kSendTcpData;
+const int SweetCommand_ARRAYSIZE = SweetCommand_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* SweetCommand_descriptor();
+inline const ::std::string& SweetCommand_Name(SweetCommand value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    SweetCommand_descriptor(), value);
+}
+inline bool SweetCommand_Parse(
+    const ::std::string& name, SweetCommand* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<SweetCommand>(
+    SweetCommand_descriptor(), name, value);
+}
+enum SweetResponseAndEvent {
+  kInvalidResponse = 0,
+  kQueryStatusResponse = 4112,
+  kQueryScreenshotResponse = 4176,
+  kSetCursorEvent = 4177,
+  kDisplayStreamStartEvent = 4178,
+  kDisplayStreamStopEvent = 4179,
+  kDisplayStreamDataEvent = 4180,
+  kPlaybackStartEvent = 4192,
+  kPlaybackStopEvent = 4193,
+  kPlaybackDataEvent = 4194,
+  SweetResponseAndEvent_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  SweetResponseAndEvent_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool SweetResponseAndEvent_IsValid(int value);
+const SweetResponseAndEvent SweetResponseAndEvent_MIN = kInvalidResponse;
+const SweetResponseAndEvent SweetResponseAndEvent_MAX = kPlaybackDataEvent;
+const int SweetResponseAndEvent_ARRAYSIZE = SweetResponseAndEvent_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* SweetResponseAndEvent_descriptor();
+inline const ::std::string& SweetResponseAndEvent_Name(SweetResponseAndEvent value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    SweetResponseAndEvent_descriptor(), value);
+}
+inline bool SweetResponseAndEvent_Parse(
+    const ::std::string& name, SweetResponseAndEvent* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<SweetResponseAndEvent>(
+    SweetResponseAndEvent_descriptor(), name, value);
 }
 // ===================================================================
 
@@ -338,24 +418,24 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
 };
 // -------------------------------------------------------------------
 
-class SendKeyboardInputCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendKeyboardInputCommand) */ {
+class SendKeyboardInput : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendKeyboardInput) */ {
  public:
-  SendKeyboardInputCommand();
-  virtual ~SendKeyboardInputCommand();
+  SendKeyboardInput();
+  virtual ~SendKeyboardInput();
 
-  SendKeyboardInputCommand(const SendKeyboardInputCommand& from);
+  SendKeyboardInput(const SendKeyboardInput& from);
 
-  inline SendKeyboardInputCommand& operator=(const SendKeyboardInputCommand& from) {
+  inline SendKeyboardInput& operator=(const SendKeyboardInput& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  SendKeyboardInputCommand(SendKeyboardInputCommand&& from) noexcept
-    : SendKeyboardInputCommand() {
+  SendKeyboardInput(SendKeyboardInput&& from) noexcept
+    : SendKeyboardInput() {
     *this = ::std::move(from);
   }
 
-  inline SendKeyboardInputCommand& operator=(SendKeyboardInputCommand&& from) noexcept {
+  inline SendKeyboardInput& operator=(SendKeyboardInput&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -365,30 +445,30 @@ class SendKeyboardInputCommand : public ::google::protobuf::Message /* @@protoc_
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const SendKeyboardInputCommand& default_instance();
+  static const SendKeyboardInput& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const SendKeyboardInputCommand* internal_default_instance() {
-    return reinterpret_cast<const SendKeyboardInputCommand*>(
-               &_SendKeyboardInputCommand_default_instance_);
+  static inline const SendKeyboardInput* internal_default_instance() {
+    return reinterpret_cast<const SendKeyboardInput*>(
+               &_SendKeyboardInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     1;
 
-  void Swap(SendKeyboardInputCommand* other);
-  friend void swap(SendKeyboardInputCommand& a, SendKeyboardInputCommand& b) {
+  void Swap(SendKeyboardInput* other);
+  friend void swap(SendKeyboardInput& a, SendKeyboardInput& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline SendKeyboardInputCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline SendKeyboardInput* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  SendKeyboardInputCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  SendKeyboardInput* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const SendKeyboardInputCommand& from);
-  void MergeFrom(const SendKeyboardInputCommand& from);
+  void CopyFrom(const SendKeyboardInput& from);
+  void MergeFrom(const SendKeyboardInput& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -404,7 +484,7 @@ class SendKeyboardInputCommand : public ::google::protobuf::Message /* @@protoc_
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(SendKeyboardInputCommand* other);
+  void InternalSwap(SendKeyboardInput* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -432,36 +512,43 @@ class SendKeyboardInputCommand : public ::google::protobuf::Message /* @@protoc_
   bool pressed() const;
   void set_pressed(bool value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.SendKeyboardInputCommand)
+  // uint32 modifiers = 3;
+  void clear_modifiers();
+  static const int kModifiersFieldNumber = 3;
+  ::google::protobuf::uint32 modifiers() const;
+  void set_modifiers(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SendKeyboardInput)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::uint32 scancode_;
   bool pressed_;
+  ::google::protobuf::uint32 modifiers_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsSendKeyboardInputCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSendKeyboardInputImpl();
 };
 // -------------------------------------------------------------------
 
-class SendPointerInputCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendPointerInputCommand) */ {
+class SendPointerInput : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendPointerInput) */ {
  public:
-  SendPointerInputCommand();
-  virtual ~SendPointerInputCommand();
+  SendPointerInput();
+  virtual ~SendPointerInput();
 
-  SendPointerInputCommand(const SendPointerInputCommand& from);
+  SendPointerInput(const SendPointerInput& from);
 
-  inline SendPointerInputCommand& operator=(const SendPointerInputCommand& from) {
+  inline SendPointerInput& operator=(const SendPointerInput& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  SendPointerInputCommand(SendPointerInputCommand&& from) noexcept
-    : SendPointerInputCommand() {
+  SendPointerInput(SendPointerInput&& from) noexcept
+    : SendPointerInput() {
     *this = ::std::move(from);
   }
 
-  inline SendPointerInputCommand& operator=(SendPointerInputCommand&& from) noexcept {
+  inline SendPointerInput& operator=(SendPointerInput&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -471,30 +558,30 @@ class SendPointerInputCommand : public ::google::protobuf::Message /* @@protoc_i
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const SendPointerInputCommand& default_instance();
+  static const SendPointerInput& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const SendPointerInputCommand* internal_default_instance() {
-    return reinterpret_cast<const SendPointerInputCommand*>(
-               &_SendPointerInputCommand_default_instance_);
+  static inline const SendPointerInput* internal_default_instance() {
+    return reinterpret_cast<const SendPointerInput*>(
+               &_SendPointerInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     2;
 
-  void Swap(SendPointerInputCommand* other);
-  friend void swap(SendPointerInputCommand& a, SendPointerInputCommand& b) {
+  void Swap(SendPointerInput* other);
+  friend void swap(SendPointerInput& a, SendPointerInput& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline SendPointerInputCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline SendPointerInput* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  SendPointerInputCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  SendPointerInput* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const SendPointerInputCommand& from);
-  void MergeFrom(const SendPointerInputCommand& from);
+  void CopyFrom(const SendPointerInput& from);
+  void MergeFrom(const SendPointerInput& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -510,7 +597,7 @@ class SendPointerInputCommand : public ::google::protobuf::Message /* @@protoc_i
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(SendPointerInputCommand* other);
+  void InternalSwap(SendPointerInput* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -524,32 +611,32 @@ class SendPointerInputCommand : public ::google::protobuf::Message /* @@protoc_i
 
   // nested types ----------------------------------------------------
 
-  typedef SendPointerInputCommand_PointerButtonBit PointerButtonBit;
+  typedef SendPointerInput_PointerButtonBit PointerButtonBit;
   static const PointerButtonBit LEFT =
-    SendPointerInputCommand_PointerButtonBit_LEFT;
+    SendPointerInput_PointerButtonBit_LEFT;
   static const PointerButtonBit MIDDLE =
-    SendPointerInputCommand_PointerButtonBit_MIDDLE;
+    SendPointerInput_PointerButtonBit_MIDDLE;
   static const PointerButtonBit RIGHT =
-    SendPointerInputCommand_PointerButtonBit_RIGHT;
+    SendPointerInput_PointerButtonBit_RIGHT;
   static inline bool PointerButtonBit_IsValid(int value) {
-    return SendPointerInputCommand_PointerButtonBit_IsValid(value);
+    return SendPointerInput_PointerButtonBit_IsValid(value);
   }
   static const PointerButtonBit PointerButtonBit_MIN =
-    SendPointerInputCommand_PointerButtonBit_PointerButtonBit_MIN;
+    SendPointerInput_PointerButtonBit_PointerButtonBit_MIN;
   static const PointerButtonBit PointerButtonBit_MAX =
-    SendPointerInputCommand_PointerButtonBit_PointerButtonBit_MAX;
+    SendPointerInput_PointerButtonBit_PointerButtonBit_MAX;
   static const int PointerButtonBit_ARRAYSIZE =
-    SendPointerInputCommand_PointerButtonBit_PointerButtonBit_ARRAYSIZE;
+    SendPointerInput_PointerButtonBit_PointerButtonBit_ARRAYSIZE;
   static inline const ::google::protobuf::EnumDescriptor*
   PointerButtonBit_descriptor() {
-    return SendPointerInputCommand_PointerButtonBit_descriptor();
+    return SendPointerInput_PointerButtonBit_descriptor();
   }
   static inline const ::std::string& PointerButtonBit_Name(PointerButtonBit value) {
-    return SendPointerInputCommand_PointerButtonBit_Name(value);
+    return SendPointerInput_PointerButtonBit_Name(value);
   }
   static inline bool PointerButtonBit_Parse(const ::std::string& name,
       PointerButtonBit* value) {
-    return SendPointerInputCommand_PointerButtonBit_Parse(name, value);
+    return SendPointerInput_PointerButtonBit_Parse(name, value);
   }
 
   // accessors -------------------------------------------------------
@@ -578,7 +665,7 @@ class SendPointerInputCommand : public ::google::protobuf::Message /* @@protoc_i
   ::google::protobuf::uint32 z() const;
   void set_z(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.SendPointerInputCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SendPointerInput)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
@@ -588,28 +675,28 @@ class SendPointerInputCommand : public ::google::protobuf::Message /* @@protoc_i
   ::google::protobuf::uint32 z_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsSendPointerInputCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSendPointerInputImpl();
 };
 // -------------------------------------------------------------------
 
-class QueryScreeenshotCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.QueryScreeenshotCommand) */ {
+class QueryScreeenshot : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.QueryScreeenshot) */ {
  public:
-  QueryScreeenshotCommand();
-  virtual ~QueryScreeenshotCommand();
+  QueryScreeenshot();
+  virtual ~QueryScreeenshot();
 
-  QueryScreeenshotCommand(const QueryScreeenshotCommand& from);
+  QueryScreeenshot(const QueryScreeenshot& from);
 
-  inline QueryScreeenshotCommand& operator=(const QueryScreeenshotCommand& from) {
+  inline QueryScreeenshot& operator=(const QueryScreeenshot& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  QueryScreeenshotCommand(QueryScreeenshotCommand&& from) noexcept
-    : QueryScreeenshotCommand() {
+  QueryScreeenshot(QueryScreeenshot&& from) noexcept
+    : QueryScreeenshot() {
     *this = ::std::move(from);
   }
 
-  inline QueryScreeenshotCommand& operator=(QueryScreeenshotCommand&& from) noexcept {
+  inline QueryScreeenshot& operator=(QueryScreeenshot&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -619,30 +706,30 @@ class QueryScreeenshotCommand : public ::google::protobuf::Message /* @@protoc_i
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const QueryScreeenshotCommand& default_instance();
+  static const QueryScreeenshot& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const QueryScreeenshotCommand* internal_default_instance() {
-    return reinterpret_cast<const QueryScreeenshotCommand*>(
-               &_QueryScreeenshotCommand_default_instance_);
+  static inline const QueryScreeenshot* internal_default_instance() {
+    return reinterpret_cast<const QueryScreeenshot*>(
+               &_QueryScreeenshot_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     3;
 
-  void Swap(QueryScreeenshotCommand* other);
-  friend void swap(QueryScreeenshotCommand& a, QueryScreeenshotCommand& b) {
+  void Swap(QueryScreeenshot* other);
+  friend void swap(QueryScreeenshot& a, QueryScreeenshot& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline QueryScreeenshotCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline QueryScreeenshot* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  QueryScreeenshotCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  QueryScreeenshot* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const QueryScreeenshotCommand& from);
-  void MergeFrom(const QueryScreeenshotCommand& from);
+  void CopyFrom(const QueryScreeenshot& from);
+  void MergeFrom(const QueryScreeenshot& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -658,7 +745,7 @@ class QueryScreeenshotCommand : public ::google::protobuf::Message /* @@protoc_i
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(QueryScreeenshotCommand* other);
+  void InternalSwap(QueryScreeenshot* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -700,7 +787,7 @@ class QueryScreeenshotCommand : public ::google::protobuf::Message /* @@protoc_i
   ::google::protobuf::uint32 height() const;
   void set_height(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.QueryScreeenshotCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.QueryScreeenshot)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
@@ -709,7 +796,7 @@ class QueryScreeenshotCommand : public ::google::protobuf::Message /* @@protoc_i
   ::google::protobuf::uint32 height_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsQueryScreeenshotCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsQueryScreeenshotImpl();
 };
 // -------------------------------------------------------------------
 
@@ -849,24 +936,24 @@ class QueryScreenshotResponse : public ::google::protobuf::Message /* @@protoc_i
 };
 // -------------------------------------------------------------------
 
-class ConfigMonitorsCommand_Monitor : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ConfigMonitorsCommand.Monitor) */ {
+class MonitorsConfig_Monitor : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.MonitorsConfig.Monitor) */ {
  public:
-  ConfigMonitorsCommand_Monitor();
-  virtual ~ConfigMonitorsCommand_Monitor();
+  MonitorsConfig_Monitor();
+  virtual ~MonitorsConfig_Monitor();
 
-  ConfigMonitorsCommand_Monitor(const ConfigMonitorsCommand_Monitor& from);
+  MonitorsConfig_Monitor(const MonitorsConfig_Monitor& from);
 
-  inline ConfigMonitorsCommand_Monitor& operator=(const ConfigMonitorsCommand_Monitor& from) {
+  inline MonitorsConfig_Monitor& operator=(const MonitorsConfig_Monitor& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ConfigMonitorsCommand_Monitor(ConfigMonitorsCommand_Monitor&& from) noexcept
-    : ConfigMonitorsCommand_Monitor() {
+  MonitorsConfig_Monitor(MonitorsConfig_Monitor&& from) noexcept
+    : MonitorsConfig_Monitor() {
     *this = ::std::move(from);
   }
 
-  inline ConfigMonitorsCommand_Monitor& operator=(ConfigMonitorsCommand_Monitor&& from) noexcept {
+  inline MonitorsConfig_Monitor& operator=(MonitorsConfig_Monitor&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -876,30 +963,30 @@ class ConfigMonitorsCommand_Monitor : public ::google::protobuf::Message /* @@pr
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const ConfigMonitorsCommand_Monitor& default_instance();
+  static const MonitorsConfig_Monitor& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ConfigMonitorsCommand_Monitor* internal_default_instance() {
-    return reinterpret_cast<const ConfigMonitorsCommand_Monitor*>(
-               &_ConfigMonitorsCommand_Monitor_default_instance_);
+  static inline const MonitorsConfig_Monitor* internal_default_instance() {
+    return reinterpret_cast<const MonitorsConfig_Monitor*>(
+               &_MonitorsConfig_Monitor_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     5;
 
-  void Swap(ConfigMonitorsCommand_Monitor* other);
-  friend void swap(ConfigMonitorsCommand_Monitor& a, ConfigMonitorsCommand_Monitor& b) {
+  void Swap(MonitorsConfig_Monitor* other);
+  friend void swap(MonitorsConfig_Monitor& a, MonitorsConfig_Monitor& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ConfigMonitorsCommand_Monitor* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline MonitorsConfig_Monitor* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  ConfigMonitorsCommand_Monitor* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  MonitorsConfig_Monitor* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const ConfigMonitorsCommand_Monitor& from);
-  void MergeFrom(const ConfigMonitorsCommand_Monitor& from);
+  void CopyFrom(const MonitorsConfig_Monitor& from);
+  void MergeFrom(const MonitorsConfig_Monitor& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -915,7 +1002,7 @@ class ConfigMonitorsCommand_Monitor : public ::google::protobuf::Message /* @@pr
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(ConfigMonitorsCommand_Monitor* other);
+  void InternalSwap(MonitorsConfig_Monitor* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -967,7 +1054,7 @@ class ConfigMonitorsCommand_Monitor : public ::google::protobuf::Message /* @@pr
   ::google::protobuf::uint32 depth() const;
   void set_depth(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.ConfigMonitorsCommand.Monitor)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.MonitorsConfig.Monitor)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
@@ -979,28 +1066,28 @@ class ConfigMonitorsCommand_Monitor : public ::google::protobuf::Message /* @@pr
   ::google::protobuf::uint32 depth_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsConfigMonitorsCommand_MonitorImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsMonitorsConfig_MonitorImpl();
 };
 // -------------------------------------------------------------------
 
-class ConfigMonitorsCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ConfigMonitorsCommand) */ {
+class MonitorsConfig : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.MonitorsConfig) */ {
  public:
-  ConfigMonitorsCommand();
-  virtual ~ConfigMonitorsCommand();
+  MonitorsConfig();
+  virtual ~MonitorsConfig();
 
-  ConfigMonitorsCommand(const ConfigMonitorsCommand& from);
+  MonitorsConfig(const MonitorsConfig& from);
 
-  inline ConfigMonitorsCommand& operator=(const ConfigMonitorsCommand& from) {
+  inline MonitorsConfig& operator=(const MonitorsConfig& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  ConfigMonitorsCommand(ConfigMonitorsCommand&& from) noexcept
-    : ConfigMonitorsCommand() {
+  MonitorsConfig(MonitorsConfig&& from) noexcept
+    : MonitorsConfig() {
     *this = ::std::move(from);
   }
 
-  inline ConfigMonitorsCommand& operator=(ConfigMonitorsCommand&& from) noexcept {
+  inline MonitorsConfig& operator=(MonitorsConfig&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -1010,30 +1097,30 @@ class ConfigMonitorsCommand : public ::google::protobuf::Message /* @@protoc_ins
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const ConfigMonitorsCommand& default_instance();
+  static const MonitorsConfig& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const ConfigMonitorsCommand* internal_default_instance() {
-    return reinterpret_cast<const ConfigMonitorsCommand*>(
-               &_ConfigMonitorsCommand_default_instance_);
+  static inline const MonitorsConfig* internal_default_instance() {
+    return reinterpret_cast<const MonitorsConfig*>(
+               &_MonitorsConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     6;
 
-  void Swap(ConfigMonitorsCommand* other);
-  friend void swap(ConfigMonitorsCommand& a, ConfigMonitorsCommand& b) {
+  void Swap(MonitorsConfig* other);
+  friend void swap(MonitorsConfig& a, MonitorsConfig& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline ConfigMonitorsCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline MonitorsConfig* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  ConfigMonitorsCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  MonitorsConfig* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const ConfigMonitorsCommand& from);
-  void MergeFrom(const ConfigMonitorsCommand& from);
+  void CopyFrom(const MonitorsConfig& from);
+  void MergeFrom(const MonitorsConfig& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -1049,7 +1136,7 @@ class ConfigMonitorsCommand : public ::google::protobuf::Message /* @@protoc_ins
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(ConfigMonitorsCommand* other);
+  void InternalSwap(MonitorsConfig* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -1063,20 +1150,20 @@ class ConfigMonitorsCommand : public ::google::protobuf::Message /* @@protoc_ins
 
   // nested types ----------------------------------------------------
 
-  typedef ConfigMonitorsCommand_Monitor Monitor;
+  typedef MonitorsConfig_Monitor Monitor;
 
   // accessors -------------------------------------------------------
 
-  // repeated .SweetProtocol.ConfigMonitorsCommand.Monitor monitors = 2;
+  // repeated .SweetProtocol.MonitorsConfig.Monitor monitors = 2;
   int monitors_size() const;
   void clear_monitors();
   static const int kMonitorsFieldNumber = 2;
-  const ::SweetProtocol::ConfigMonitorsCommand_Monitor& monitors(int index) const;
-  ::SweetProtocol::ConfigMonitorsCommand_Monitor* mutable_monitors(int index);
-  ::SweetProtocol::ConfigMonitorsCommand_Monitor* add_monitors();
-  ::google::protobuf::RepeatedPtrField< ::SweetProtocol::ConfigMonitorsCommand_Monitor >*
+  const ::SweetProtocol::MonitorsConfig_Monitor& monitors(int index) const;
+  ::SweetProtocol::MonitorsConfig_Monitor* mutable_monitors(int index);
+  ::SweetProtocol::MonitorsConfig_Monitor* add_monitors();
+  ::google::protobuf::RepeatedPtrField< ::SweetProtocol::MonitorsConfig_Monitor >*
       mutable_monitors();
-  const ::google::protobuf::RepeatedPtrField< ::SweetProtocol::ConfigMonitorsCommand_Monitor >&
+  const ::google::protobuf::RepeatedPtrField< ::SweetProtocol::MonitorsConfig_Monitor >&
       monitors() const;
 
   // uint32 count = 1;
@@ -1085,15 +1172,15 @@ class ConfigMonitorsCommand : public ::google::protobuf::Message /* @@protoc_ins
   ::google::protobuf::uint32 count() const;
   void set_count(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.ConfigMonitorsCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.MonitorsConfig)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::SweetProtocol::ConfigMonitorsCommand_Monitor > monitors_;
+  ::google::protobuf::RepeatedPtrField< ::SweetProtocol::MonitorsConfig_Monitor > monitors_;
   ::google::protobuf::uint32 count_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsConfigMonitorsCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsMonitorsConfigImpl();
 };
 // -------------------------------------------------------------------
 
@@ -1364,24 +1451,24 @@ class SetCursorEvent : public ::google::protobuf::Message /* @@protoc_insertion_
 };
 // -------------------------------------------------------------------
 
-class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.StartDisplayStreamCommand) */ {
+class DisplayStreamConfig : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.DisplayStreamConfig) */ {
  public:
-  StartDisplayStreamCommand();
-  virtual ~StartDisplayStreamCommand();
+  DisplayStreamConfig();
+  virtual ~DisplayStreamConfig();
 
-  StartDisplayStreamCommand(const StartDisplayStreamCommand& from);
+  DisplayStreamConfig(const DisplayStreamConfig& from);
 
-  inline StartDisplayStreamCommand& operator=(const StartDisplayStreamCommand& from) {
+  inline DisplayStreamConfig& operator=(const DisplayStreamConfig& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  StartDisplayStreamCommand(StartDisplayStreamCommand&& from) noexcept
-    : StartDisplayStreamCommand() {
+  DisplayStreamConfig(DisplayStreamConfig&& from) noexcept
+    : DisplayStreamConfig() {
     *this = ::std::move(from);
   }
 
-  inline StartDisplayStreamCommand& operator=(StartDisplayStreamCommand&& from) noexcept {
+  inline DisplayStreamConfig& operator=(DisplayStreamConfig&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -1391,30 +1478,30 @@ class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const StartDisplayStreamCommand& default_instance();
+  static const DisplayStreamConfig& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const StartDisplayStreamCommand* internal_default_instance() {
-    return reinterpret_cast<const StartDisplayStreamCommand*>(
-               &_StartDisplayStreamCommand_default_instance_);
+  static inline const DisplayStreamConfig* internal_default_instance() {
+    return reinterpret_cast<const DisplayStreamConfig*>(
+               &_DisplayStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     9;
 
-  void Swap(StartDisplayStreamCommand* other);
-  friend void swap(StartDisplayStreamCommand& a, StartDisplayStreamCommand& b) {
+  void Swap(DisplayStreamConfig* other);
+  friend void swap(DisplayStreamConfig& a, DisplayStreamConfig& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline StartDisplayStreamCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline DisplayStreamConfig* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  StartDisplayStreamCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  DisplayStreamConfig* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const StartDisplayStreamCommand& from);
-  void MergeFrom(const StartDisplayStreamCommand& from);
+  void CopyFrom(const DisplayStreamConfig& from);
+  void MergeFrom(const DisplayStreamConfig& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -1430,7 +1517,7 @@ class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(StartDisplayStreamCommand* other);
+  void InternalSwap(DisplayStreamConfig* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -1474,19 +1561,19 @@ class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc
   ::std::string* release_profile();
   void set_allocated_profile(::std::string* profile);
 
-  // string speed = 3;
-  void clear_speed();
-  static const int kSpeedFieldNumber = 3;
-  const ::std::string& speed() const;
-  void set_speed(const ::std::string& value);
+  // string preset = 3;
+  void clear_preset();
+  static const int kPresetFieldNumber = 3;
+  const ::std::string& preset() const;
+  void set_preset(const ::std::string& value);
   #if LANG_CXX11
-  void set_speed(::std::string&& value);
+  void set_preset(::std::string&& value);
   #endif
-  void set_speed(const char* value);
-  void set_speed(const char* value, size_t size);
-  ::std::string* mutable_speed();
-  ::std::string* release_speed();
-  void set_allocated_speed(::std::string* speed);
+  void set_preset(const char* value);
+  void set_preset(const char* value, size_t size);
+  ::std::string* mutable_preset();
+  ::std::string* release_preset();
+  void set_allocated_preset(::std::string* preset);
 
   // string rate_control = 4;
   void clear_rate_control();
@@ -1532,13 +1619,13 @@ class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc
   ::google::protobuf::uint32 flags() const;
   void set_flags(::google::protobuf::uint32 value);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.StartDisplayStreamCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.DisplayStreamConfig)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr codec_;
   ::google::protobuf::internal::ArenaStringPtr profile_;
-  ::google::protobuf::internal::ArenaStringPtr speed_;
+  ::google::protobuf::internal::ArenaStringPtr preset_;
   ::google::protobuf::internal::ArenaStringPtr rate_control_;
   ::google::protobuf::uint32 fps_;
   ::google::protobuf::uint32 bitrate_;
@@ -1547,28 +1634,28 @@ class StartDisplayStreamCommand : public ::google::protobuf::Message /* @@protoc
   ::google::protobuf::uint32 flags_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsStartDisplayStreamCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsDisplayStreamConfigImpl();
 };
 // -------------------------------------------------------------------
 
-class StartPlaybackStreamCommand : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.StartPlaybackStreamCommand) */ {
+class PlaybackStreamConfig : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.PlaybackStreamConfig) */ {
  public:
-  StartPlaybackStreamCommand();
-  virtual ~StartPlaybackStreamCommand();
+  PlaybackStreamConfig();
+  virtual ~PlaybackStreamConfig();
 
-  StartPlaybackStreamCommand(const StartPlaybackStreamCommand& from);
+  PlaybackStreamConfig(const PlaybackStreamConfig& from);
 
-  inline StartPlaybackStreamCommand& operator=(const StartPlaybackStreamCommand& from) {
+  inline PlaybackStreamConfig& operator=(const PlaybackStreamConfig& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  StartPlaybackStreamCommand(StartPlaybackStreamCommand&& from) noexcept
-    : StartPlaybackStreamCommand() {
+  PlaybackStreamConfig(PlaybackStreamConfig&& from) noexcept
+    : PlaybackStreamConfig() {
     *this = ::std::move(from);
   }
 
-  inline StartPlaybackStreamCommand& operator=(StartPlaybackStreamCommand&& from) noexcept {
+  inline PlaybackStreamConfig& operator=(PlaybackStreamConfig&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -1578,30 +1665,30 @@ class StartPlaybackStreamCommand : public ::google::protobuf::Message /* @@proto
   }
   #endif
   static const ::google::protobuf::Descriptor* descriptor();
-  static const StartPlaybackStreamCommand& default_instance();
+  static const PlaybackStreamConfig& default_instance();
 
   static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
-  static inline const StartPlaybackStreamCommand* internal_default_instance() {
-    return reinterpret_cast<const StartPlaybackStreamCommand*>(
-               &_StartPlaybackStreamCommand_default_instance_);
+  static inline const PlaybackStreamConfig* internal_default_instance() {
+    return reinterpret_cast<const PlaybackStreamConfig*>(
+               &_PlaybackStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     10;
 
-  void Swap(StartPlaybackStreamCommand* other);
-  friend void swap(StartPlaybackStreamCommand& a, StartPlaybackStreamCommand& b) {
+  void Swap(PlaybackStreamConfig* other);
+  friend void swap(PlaybackStreamConfig& a, PlaybackStreamConfig& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline StartPlaybackStreamCommand* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline PlaybackStreamConfig* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  StartPlaybackStreamCommand* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  PlaybackStreamConfig* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
   void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
-  void CopyFrom(const StartPlaybackStreamCommand& from);
-  void MergeFrom(const StartPlaybackStreamCommand& from);
+  void CopyFrom(const PlaybackStreamConfig& from);
+  void MergeFrom(const PlaybackStreamConfig& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -1617,7 +1704,7 @@ class StartPlaybackStreamCommand : public ::google::protobuf::Message /* @@proto
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const PROTOBUF_FINAL;
-  void InternalSwap(StartPlaybackStreamCommand* other);
+  void InternalSwap(PlaybackStreamConfig* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -1647,14 +1734,14 @@ class StartPlaybackStreamCommand : public ::google::protobuf::Message /* @@proto
   ::std::string* release_codec();
   void set_allocated_codec(::std::string* codec);
 
-  // @@protoc_insertion_point(class_scope:SweetProtocol.StartPlaybackStreamCommand)
+  // @@protoc_insertion_point(class_scope:SweetProtocol.PlaybackStreamConfig)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
   ::google::protobuf::internal::ArenaStringPtr codec_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
-  friend void ::protobuf_sweet_2eproto::InitDefaultsStartPlaybackStreamCommandImpl();
+  friend void ::protobuf_sweet_2eproto::InitDefaultsPlaybackStreamConfigImpl();
 };
 // -------------------------------------------------------------------
 
@@ -1740,38 +1827,24 @@ class DisplayStreamStartEvent : public ::google::protobuf::Message /* @@protoc_i
 
   // accessors -------------------------------------------------------
 
-  // uint32 display_id = 1;
-  void clear_display_id();
-  static const int kDisplayIdFieldNumber = 1;
-  ::google::protobuf::uint32 display_id() const;
-  void set_display_id(::google::protobuf::uint32 value);
-
-  // uint32 width = 2;
+  // uint32 width = 1;
   void clear_width();
-  static const int kWidthFieldNumber = 2;
+  static const int kWidthFieldNumber = 1;
   ::google::protobuf::uint32 width() const;
   void set_width(::google::protobuf::uint32 value);
 
-  // uint32 height = 3;
+  // uint32 height = 2;
   void clear_height();
-  static const int kHeightFieldNumber = 3;
+  static const int kHeightFieldNumber = 2;
   ::google::protobuf::uint32 height() const;
   void set_height(::google::protobuf::uint32 value);
-
-  // uint32 codec = 5;
-  void clear_codec();
-  static const int kCodecFieldNumber = 5;
-  ::google::protobuf::uint32 codec() const;
-  void set_codec(::google::protobuf::uint32 value);
 
   // @@protoc_insertion_point(class_scope:SweetProtocol.DisplayStreamStartEvent)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
-  ::google::protobuf::uint32 display_id_;
   ::google::protobuf::uint32 width_;
   ::google::protobuf::uint32 height_;
-  ::google::protobuf::uint32 codec_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
   friend void ::protobuf_sweet_2eproto::InitDefaultsDisplayStreamStartEventImpl();
@@ -2173,179 +2246,193 @@ inline void QueryStatusResponse::set_tenclass_agent(bool value) {
 
 // -------------------------------------------------------------------
 
-// SendKeyboardInputCommand
+// SendKeyboardInput
 
 // uint32 scancode = 1;
-inline void SendKeyboardInputCommand::clear_scancode() {
+inline void SendKeyboardInput::clear_scancode() {
   scancode_ = 0u;
 }
-inline ::google::protobuf::uint32 SendKeyboardInputCommand::scancode() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.SendKeyboardInputCommand.scancode)
+inline ::google::protobuf::uint32 SendKeyboardInput::scancode() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendKeyboardInput.scancode)
   return scancode_;
 }
-inline void SendKeyboardInputCommand::set_scancode(::google::protobuf::uint32 value) {
+inline void SendKeyboardInput::set_scancode(::google::protobuf::uint32 value) {
   
   scancode_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.SendKeyboardInputCommand.scancode)
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendKeyboardInput.scancode)
 }
 
 // bool pressed = 2;
-inline void SendKeyboardInputCommand::clear_pressed() {
+inline void SendKeyboardInput::clear_pressed() {
   pressed_ = false;
 }
-inline bool SendKeyboardInputCommand::pressed() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.SendKeyboardInputCommand.pressed)
+inline bool SendKeyboardInput::pressed() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendKeyboardInput.pressed)
   return pressed_;
 }
-inline void SendKeyboardInputCommand::set_pressed(bool value) {
+inline void SendKeyboardInput::set_pressed(bool value) {
   
   pressed_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.SendKeyboardInputCommand.pressed)
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendKeyboardInput.pressed)
+}
+
+// uint32 modifiers = 3;
+inline void SendKeyboardInput::clear_modifiers() {
+  modifiers_ = 0u;
+}
+inline ::google::protobuf::uint32 SendKeyboardInput::modifiers() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendKeyboardInput.modifiers)
+  return modifiers_;
+}
+inline void SendKeyboardInput::set_modifiers(::google::protobuf::uint32 value) {
+  
+  modifiers_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendKeyboardInput.modifiers)
 }
 
 // -------------------------------------------------------------------
 
-// SendPointerInputCommand
+// SendPointerInput
 
 // uint32 buttons = 1;
-inline void SendPointerInputCommand::clear_buttons() {
+inline void SendPointerInput::clear_buttons() {
   buttons_ = 0u;
 }
-inline ::google::protobuf::uint32 SendPointerInputCommand::buttons() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInputCommand.buttons)
+inline ::google::protobuf::uint32 SendPointerInput::buttons() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.buttons)
   return buttons_;
 }
-inline void SendPointerInputCommand::set_buttons(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_buttons(::google::protobuf::uint32 value) {
   
   buttons_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInputCommand.buttons)
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.buttons)
 }
 
 // uint32 x = 2;
-inline void SendPointerInputCommand::clear_x() {
+inline void SendPointerInput::clear_x() {
   x_ = 0u;
 }
-inline ::google::protobuf::uint32 SendPointerInputCommand::x() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInputCommand.x)
+inline ::google::protobuf::uint32 SendPointerInput::x() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.x)
   return x_;
 }
-inline void SendPointerInputCommand::set_x(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_x(::google::protobuf::uint32 value) {
   
   x_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInputCommand.x)
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.x)
 }
 
 // uint32 y = 3;
-inline void SendPointerInputCommand::clear_y() {
+inline void SendPointerInput::clear_y() {
   y_ = 0u;
 }
-inline ::google::protobuf::uint32 SendPointerInputCommand::y() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInputCommand.y)
+inline ::google::protobuf::uint32 SendPointerInput::y() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.y)
   return y_;
 }
-inline void SendPointerInputCommand::set_y(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_y(::google::protobuf::uint32 value) {
   
   y_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInputCommand.y)
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.y)
 }
 
 // uint32 z = 4;
-inline void SendPointerInputCommand::clear_z() {
+inline void SendPointerInput::clear_z() {
   z_ = 0u;
 }
-inline ::google::protobuf::uint32 SendPointerInputCommand::z() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInputCommand.z)
+inline ::google::protobuf::uint32 SendPointerInput::z() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendPointerInput.z)
   return z_;
 }
-inline void SendPointerInputCommand::set_z(::google::protobuf::uint32 value) {
+inline void SendPointerInput::set_z(::google::protobuf::uint32 value) {
   
   z_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInputCommand.z)
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendPointerInput.z)
 }
 
 // -------------------------------------------------------------------
 
-// QueryScreeenshotCommand
+// QueryScreeenshot
 
 // string format = 1;
-inline void QueryScreeenshotCommand::clear_format() {
+inline void QueryScreeenshot::clear_format() {
   format_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& QueryScreeenshotCommand::format() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.QueryScreeenshotCommand.format)
+inline const ::std::string& QueryScreeenshot::format() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryScreeenshot.format)
   return format_.GetNoArena();
 }
-inline void QueryScreeenshotCommand::set_format(const ::std::string& value) {
+inline void QueryScreeenshot::set_format(const ::std::string& value) {
   
   format_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.QueryScreeenshotCommand.format)
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryScreeenshot.format)
 }
 #if LANG_CXX11
-inline void QueryScreeenshotCommand::set_format(::std::string&& value) {
+inline void QueryScreeenshot::set_format(::std::string&& value) {
   
   format_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryScreeenshotCommand.format)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryScreeenshot.format)
 }
 #endif
-inline void QueryScreeenshotCommand::set_format(const char* value) {
+inline void QueryScreeenshot::set_format(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   format_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryScreeenshotCommand.format)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryScreeenshot.format)
 }
-inline void QueryScreeenshotCommand::set_format(const char* value, size_t size) {
+inline void QueryScreeenshot::set_format(const char* value, size_t size) {
   
   format_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryScreeenshotCommand.format)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryScreeenshot.format)
 }
-inline ::std::string* QueryScreeenshotCommand::mutable_format() {
+inline ::std::string* QueryScreeenshot::mutable_format() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryScreeenshotCommand.format)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryScreeenshot.format)
   return format_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* QueryScreeenshotCommand::release_format() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.QueryScreeenshotCommand.format)
+inline ::std::string* QueryScreeenshot::release_format() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.QueryScreeenshot.format)
   
   return format_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void QueryScreeenshotCommand::set_allocated_format(::std::string* format) {
+inline void QueryScreeenshot::set_allocated_format(::std::string* format) {
   if (format != NULL) {
     
   } else {
     
   }
   format_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), format);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryScreeenshotCommand.format)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryScreeenshot.format)
 }
 
 // uint32 width = 2;
-inline void QueryScreeenshotCommand::clear_width() {
+inline void QueryScreeenshot::clear_width() {
   width_ = 0u;
 }
-inline ::google::protobuf::uint32 QueryScreeenshotCommand::width() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.QueryScreeenshotCommand.width)
+inline ::google::protobuf::uint32 QueryScreeenshot::width() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryScreeenshot.width)
   return width_;
 }
-inline void QueryScreeenshotCommand::set_width(::google::protobuf::uint32 value) {
+inline void QueryScreeenshot::set_width(::google::protobuf::uint32 value) {
   
   width_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.QueryScreeenshotCommand.width)
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryScreeenshot.width)
 }
 
 // uint32 height = 3;
-inline void QueryScreeenshotCommand::clear_height() {
+inline void QueryScreeenshot::clear_height() {
   height_ = 0u;
 }
-inline ::google::protobuf::uint32 QueryScreeenshotCommand::height() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.QueryScreeenshotCommand.height)
+inline ::google::protobuf::uint32 QueryScreeenshot::height() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryScreeenshot.height)
   return height_;
 }
-inline void QueryScreeenshotCommand::set_height(::google::protobuf::uint32 value) {
+inline void QueryScreeenshot::set_height(::google::protobuf::uint32 value) {
   
   height_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.QueryScreeenshotCommand.height)
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryScreeenshot.height)
 }
 
 // -------------------------------------------------------------------
@@ -2488,137 +2575,137 @@ inline void QueryScreenshotResponse::set_allocated_data(::std::string* data) {
 
 // -------------------------------------------------------------------
 
-// ConfigMonitorsCommand_Monitor
+// MonitorsConfig_Monitor
 
 // uint32 index = 1;
-inline void ConfigMonitorsCommand_Monitor::clear_index() {
+inline void MonitorsConfig_Monitor::clear_index() {
   index_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand_Monitor::index() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.Monitor.index)
+inline ::google::protobuf::uint32 MonitorsConfig_Monitor::index() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.Monitor.index)
   return index_;
 }
-inline void ConfigMonitorsCommand_Monitor::set_index(::google::protobuf::uint32 value) {
+inline void MonitorsConfig_Monitor::set_index(::google::protobuf::uint32 value) {
   
   index_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.Monitor.index)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.Monitor.index)
 }
 
 // uint32 left = 2;
-inline void ConfigMonitorsCommand_Monitor::clear_left() {
+inline void MonitorsConfig_Monitor::clear_left() {
   left_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand_Monitor::left() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.Monitor.left)
+inline ::google::protobuf::uint32 MonitorsConfig_Monitor::left() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.Monitor.left)
   return left_;
 }
-inline void ConfigMonitorsCommand_Monitor::set_left(::google::protobuf::uint32 value) {
+inline void MonitorsConfig_Monitor::set_left(::google::protobuf::uint32 value) {
   
   left_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.Monitor.left)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.Monitor.left)
 }
 
 // uint32 top = 3;
-inline void ConfigMonitorsCommand_Monitor::clear_top() {
+inline void MonitorsConfig_Monitor::clear_top() {
   top_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand_Monitor::top() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.Monitor.top)
+inline ::google::protobuf::uint32 MonitorsConfig_Monitor::top() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.Monitor.top)
   return top_;
 }
-inline void ConfigMonitorsCommand_Monitor::set_top(::google::protobuf::uint32 value) {
+inline void MonitorsConfig_Monitor::set_top(::google::protobuf::uint32 value) {
   
   top_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.Monitor.top)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.Monitor.top)
 }
 
 // uint32 width = 4;
-inline void ConfigMonitorsCommand_Monitor::clear_width() {
+inline void MonitorsConfig_Monitor::clear_width() {
   width_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand_Monitor::width() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.Monitor.width)
+inline ::google::protobuf::uint32 MonitorsConfig_Monitor::width() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.Monitor.width)
   return width_;
 }
-inline void ConfigMonitorsCommand_Monitor::set_width(::google::protobuf::uint32 value) {
+inline void MonitorsConfig_Monitor::set_width(::google::protobuf::uint32 value) {
   
   width_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.Monitor.width)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.Monitor.width)
 }
 
 // uint32 height = 5;
-inline void ConfigMonitorsCommand_Monitor::clear_height() {
+inline void MonitorsConfig_Monitor::clear_height() {
   height_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand_Monitor::height() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.Monitor.height)
+inline ::google::protobuf::uint32 MonitorsConfig_Monitor::height() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.Monitor.height)
   return height_;
 }
-inline void ConfigMonitorsCommand_Monitor::set_height(::google::protobuf::uint32 value) {
+inline void MonitorsConfig_Monitor::set_height(::google::protobuf::uint32 value) {
   
   height_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.Monitor.height)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.Monitor.height)
 }
 
 // uint32 depth = 6;
-inline void ConfigMonitorsCommand_Monitor::clear_depth() {
+inline void MonitorsConfig_Monitor::clear_depth() {
   depth_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand_Monitor::depth() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.Monitor.depth)
+inline ::google::protobuf::uint32 MonitorsConfig_Monitor::depth() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.Monitor.depth)
   return depth_;
 }
-inline void ConfigMonitorsCommand_Monitor::set_depth(::google::protobuf::uint32 value) {
+inline void MonitorsConfig_Monitor::set_depth(::google::protobuf::uint32 value) {
   
   depth_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.Monitor.depth)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.Monitor.depth)
 }
 
 // -------------------------------------------------------------------
 
-// ConfigMonitorsCommand
+// MonitorsConfig
 
 // uint32 count = 1;
-inline void ConfigMonitorsCommand::clear_count() {
+inline void MonitorsConfig::clear_count() {
   count_ = 0u;
 }
-inline ::google::protobuf::uint32 ConfigMonitorsCommand::count() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.count)
+inline ::google::protobuf::uint32 MonitorsConfig::count() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.count)
   return count_;
 }
-inline void ConfigMonitorsCommand::set_count(::google::protobuf::uint32 value) {
+inline void MonitorsConfig::set_count(::google::protobuf::uint32 value) {
   
   count_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.ConfigMonitorsCommand.count)
+  // @@protoc_insertion_point(field_set:SweetProtocol.MonitorsConfig.count)
 }
 
-// repeated .SweetProtocol.ConfigMonitorsCommand.Monitor monitors = 2;
-inline int ConfigMonitorsCommand::monitors_size() const {
+// repeated .SweetProtocol.MonitorsConfig.Monitor monitors = 2;
+inline int MonitorsConfig::monitors_size() const {
   return monitors_.size();
 }
-inline void ConfigMonitorsCommand::clear_monitors() {
+inline void MonitorsConfig::clear_monitors() {
   monitors_.Clear();
 }
-inline const ::SweetProtocol::ConfigMonitorsCommand_Monitor& ConfigMonitorsCommand::monitors(int index) const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.ConfigMonitorsCommand.monitors)
+inline const ::SweetProtocol::MonitorsConfig_Monitor& MonitorsConfig::monitors(int index) const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.MonitorsConfig.monitors)
   return monitors_.Get(index);
 }
-inline ::SweetProtocol::ConfigMonitorsCommand_Monitor* ConfigMonitorsCommand::mutable_monitors(int index) {
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.ConfigMonitorsCommand.monitors)
+inline ::SweetProtocol::MonitorsConfig_Monitor* MonitorsConfig::mutable_monitors(int index) {
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.MonitorsConfig.monitors)
   return monitors_.Mutable(index);
 }
-inline ::SweetProtocol::ConfigMonitorsCommand_Monitor* ConfigMonitorsCommand::add_monitors() {
-  // @@protoc_insertion_point(field_add:SweetProtocol.ConfigMonitorsCommand.monitors)
+inline ::SweetProtocol::MonitorsConfig_Monitor* MonitorsConfig::add_monitors() {
+  // @@protoc_insertion_point(field_add:SweetProtocol.MonitorsConfig.monitors)
   return monitors_.Add();
 }
-inline ::google::protobuf::RepeatedPtrField< ::SweetProtocol::ConfigMonitorsCommand_Monitor >*
-ConfigMonitorsCommand::mutable_monitors() {
-  // @@protoc_insertion_point(field_mutable_list:SweetProtocol.ConfigMonitorsCommand.monitors)
+inline ::google::protobuf::RepeatedPtrField< ::SweetProtocol::MonitorsConfig_Monitor >*
+MonitorsConfig::mutable_monitors() {
+  // @@protoc_insertion_point(field_mutable_list:SweetProtocol.MonitorsConfig.monitors)
   return &monitors_;
 }
-inline const ::google::protobuf::RepeatedPtrField< ::SweetProtocol::ConfigMonitorsCommand_Monitor >&
-ConfigMonitorsCommand::monitors() const {
-  // @@protoc_insertion_point(field_list:SweetProtocol.ConfigMonitorsCommand.monitors)
+inline const ::google::protobuf::RepeatedPtrField< ::SweetProtocol::MonitorsConfig_Monitor >&
+MonitorsConfig::monitors() const {
+  // @@protoc_insertion_point(field_list:SweetProtocol.MonitorsConfig.monitors)
   return monitors_;
 }
 
@@ -2847,366 +2934,352 @@ inline void SetCursorEvent::set_allocated_shape(::SweetProtocol::SetCursorEvent_
 
 // -------------------------------------------------------------------
 
-// StartDisplayStreamCommand
+// DisplayStreamConfig
 
 // string codec = 1;
-inline void StartDisplayStreamCommand::clear_codec() {
+inline void DisplayStreamConfig::clear_codec() {
   codec_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& StartDisplayStreamCommand::codec() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.codec)
+inline const ::std::string& DisplayStreamConfig::codec() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.codec)
   return codec_.GetNoArena();
 }
-inline void StartDisplayStreamCommand::set_codec(const ::std::string& value) {
+inline void DisplayStreamConfig::set_codec(const ::std::string& value) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.codec)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.codec)
 }
 #if LANG_CXX11
-inline void StartDisplayStreamCommand::set_codec(::std::string&& value) {
+inline void DisplayStreamConfig::set_codec(::std::string&& value) {
   
   codec_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.DisplayStreamConfig.codec)
 }
 #endif
-inline void StartDisplayStreamCommand::set_codec(const char* value) {
+inline void DisplayStreamConfig::set_codec(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.DisplayStreamConfig.codec)
 }
-inline void StartDisplayStreamCommand::set_codec(const char* value, size_t size) {
+inline void DisplayStreamConfig::set_codec(const char* value, size_t size) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.DisplayStreamConfig.codec)
 }
-inline ::std::string* StartDisplayStreamCommand::mutable_codec() {
+inline ::std::string* DisplayStreamConfig::mutable_codec() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.codec)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.DisplayStreamConfig.codec)
   return codec_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* StartDisplayStreamCommand::release_codec() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.codec)
+inline ::std::string* DisplayStreamConfig::release_codec() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.DisplayStreamConfig.codec)
   
   return codec_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void StartDisplayStreamCommand::set_allocated_codec(::std::string* codec) {
+inline void DisplayStreamConfig::set_allocated_codec(::std::string* codec) {
   if (codec != NULL) {
     
   } else {
     
   }
   codec_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), codec);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.DisplayStreamConfig.codec)
 }
 
 // string profile = 2;
-inline void StartDisplayStreamCommand::clear_profile() {
+inline void DisplayStreamConfig::clear_profile() {
   profile_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& StartDisplayStreamCommand::profile() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.profile)
+inline const ::std::string& DisplayStreamConfig::profile() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.profile)
   return profile_.GetNoArena();
 }
-inline void StartDisplayStreamCommand::set_profile(const ::std::string& value) {
+inline void DisplayStreamConfig::set_profile(const ::std::string& value) {
   
   profile_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.profile)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.profile)
 }
 #if LANG_CXX11
-inline void StartDisplayStreamCommand::set_profile(::std::string&& value) {
+inline void DisplayStreamConfig::set_profile(::std::string&& value) {
   
   profile_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.profile)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.DisplayStreamConfig.profile)
 }
 #endif
-inline void StartDisplayStreamCommand::set_profile(const char* value) {
+inline void DisplayStreamConfig::set_profile(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   profile_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.profile)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.DisplayStreamConfig.profile)
 }
-inline void StartDisplayStreamCommand::set_profile(const char* value, size_t size) {
+inline void DisplayStreamConfig::set_profile(const char* value, size_t size) {
   
   profile_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.profile)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.DisplayStreamConfig.profile)
 }
-inline ::std::string* StartDisplayStreamCommand::mutable_profile() {
+inline ::std::string* DisplayStreamConfig::mutable_profile() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.profile)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.DisplayStreamConfig.profile)
   return profile_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* StartDisplayStreamCommand::release_profile() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.profile)
+inline ::std::string* DisplayStreamConfig::release_profile() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.DisplayStreamConfig.profile)
   
   return profile_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void StartDisplayStreamCommand::set_allocated_profile(::std::string* profile) {
+inline void DisplayStreamConfig::set_allocated_profile(::std::string* profile) {
   if (profile != NULL) {
     
   } else {
     
   }
   profile_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), profile);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.profile)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.DisplayStreamConfig.profile)
 }
 
-// string speed = 3;
-inline void StartDisplayStreamCommand::clear_speed() {
-  speed_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+// string preset = 3;
+inline void DisplayStreamConfig::clear_preset() {
+  preset_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& StartDisplayStreamCommand::speed() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.speed)
-  return speed_.GetNoArena();
+inline const ::std::string& DisplayStreamConfig::preset() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.preset)
+  return preset_.GetNoArena();
 }
-inline void StartDisplayStreamCommand::set_speed(const ::std::string& value) {
+inline void DisplayStreamConfig::set_preset(const ::std::string& value) {
   
-  speed_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.speed)
+  preset_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.preset)
 }
 #if LANG_CXX11
-inline void StartDisplayStreamCommand::set_speed(::std::string&& value) {
+inline void DisplayStreamConfig::set_preset(::std::string&& value) {
   
-  speed_.SetNoArena(
+  preset_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.speed)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.DisplayStreamConfig.preset)
 }
 #endif
-inline void StartDisplayStreamCommand::set_speed(const char* value) {
+inline void DisplayStreamConfig::set_preset(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
-  speed_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.speed)
+  preset_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.DisplayStreamConfig.preset)
 }
-inline void StartDisplayStreamCommand::set_speed(const char* value, size_t size) {
+inline void DisplayStreamConfig::set_preset(const char* value, size_t size) {
   
-  speed_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+  preset_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.speed)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.DisplayStreamConfig.preset)
 }
-inline ::std::string* StartDisplayStreamCommand::mutable_speed() {
+inline ::std::string* DisplayStreamConfig::mutable_preset() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.speed)
-  return speed_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.DisplayStreamConfig.preset)
+  return preset_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* StartDisplayStreamCommand::release_speed() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.speed)
+inline ::std::string* DisplayStreamConfig::release_preset() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.DisplayStreamConfig.preset)
   
-  return speed_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  return preset_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void StartDisplayStreamCommand::set_allocated_speed(::std::string* speed) {
-  if (speed != NULL) {
+inline void DisplayStreamConfig::set_allocated_preset(::std::string* preset) {
+  if (preset != NULL) {
     
   } else {
     
   }
-  speed_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), speed);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.speed)
+  preset_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), preset);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.DisplayStreamConfig.preset)
 }
 
 // string rate_control = 4;
-inline void StartDisplayStreamCommand::clear_rate_control() {
+inline void DisplayStreamConfig::clear_rate_control() {
   rate_control_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& StartDisplayStreamCommand::rate_control() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.rate_control)
+inline const ::std::string& DisplayStreamConfig::rate_control() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.rate_control)
   return rate_control_.GetNoArena();
 }
-inline void StartDisplayStreamCommand::set_rate_control(const ::std::string& value) {
+inline void DisplayStreamConfig::set_rate_control(const ::std::string& value) {
   
   rate_control_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.rate_control)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.rate_control)
 }
 #if LANG_CXX11
-inline void StartDisplayStreamCommand::set_rate_control(::std::string&& value) {
+inline void DisplayStreamConfig::set_rate_control(::std::string&& value) {
   
   rate_control_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartDisplayStreamCommand.rate_control)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.DisplayStreamConfig.rate_control)
 }
 #endif
-inline void StartDisplayStreamCommand::set_rate_control(const char* value) {
+inline void DisplayStreamConfig::set_rate_control(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   rate_control_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartDisplayStreamCommand.rate_control)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.DisplayStreamConfig.rate_control)
 }
-inline void StartDisplayStreamCommand::set_rate_control(const char* value, size_t size) {
+inline void DisplayStreamConfig::set_rate_control(const char* value, size_t size) {
   
   rate_control_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartDisplayStreamCommand.rate_control)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.DisplayStreamConfig.rate_control)
 }
-inline ::std::string* StartDisplayStreamCommand::mutable_rate_control() {
+inline ::std::string* DisplayStreamConfig::mutable_rate_control() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartDisplayStreamCommand.rate_control)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.DisplayStreamConfig.rate_control)
   return rate_control_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* StartDisplayStreamCommand::release_rate_control() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.StartDisplayStreamCommand.rate_control)
+inline ::std::string* DisplayStreamConfig::release_rate_control() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.DisplayStreamConfig.rate_control)
   
   return rate_control_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void StartDisplayStreamCommand::set_allocated_rate_control(::std::string* rate_control) {
+inline void DisplayStreamConfig::set_allocated_rate_control(::std::string* rate_control) {
   if (rate_control != NULL) {
     
   } else {
     
   }
   rate_control_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), rate_control);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartDisplayStreamCommand.rate_control)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.DisplayStreamConfig.rate_control)
 }
 
 // uint32 fps = 5;
-inline void StartDisplayStreamCommand::clear_fps() {
+inline void DisplayStreamConfig::clear_fps() {
   fps_ = 0u;
 }
-inline ::google::protobuf::uint32 StartDisplayStreamCommand::fps() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.fps)
+inline ::google::protobuf::uint32 DisplayStreamConfig::fps() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.fps)
   return fps_;
 }
-inline void StartDisplayStreamCommand::set_fps(::google::protobuf::uint32 value) {
+inline void DisplayStreamConfig::set_fps(::google::protobuf::uint32 value) {
   
   fps_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.fps)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.fps)
 }
 
 // uint32 bitrate = 6;
-inline void StartDisplayStreamCommand::clear_bitrate() {
+inline void DisplayStreamConfig::clear_bitrate() {
   bitrate_ = 0u;
 }
-inline ::google::protobuf::uint32 StartDisplayStreamCommand::bitrate() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.bitrate)
+inline ::google::protobuf::uint32 DisplayStreamConfig::bitrate() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.bitrate)
   return bitrate_;
 }
-inline void StartDisplayStreamCommand::set_bitrate(::google::protobuf::uint32 value) {
+inline void DisplayStreamConfig::set_bitrate(::google::protobuf::uint32 value) {
   
   bitrate_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.bitrate)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.bitrate)
 }
 
 // uint32 qmin = 7;
-inline void StartDisplayStreamCommand::clear_qmin() {
+inline void DisplayStreamConfig::clear_qmin() {
   qmin_ = 0u;
 }
-inline ::google::protobuf::uint32 StartDisplayStreamCommand::qmin() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.qmin)
+inline ::google::protobuf::uint32 DisplayStreamConfig::qmin() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.qmin)
   return qmin_;
 }
-inline void StartDisplayStreamCommand::set_qmin(::google::protobuf::uint32 value) {
+inline void DisplayStreamConfig::set_qmin(::google::protobuf::uint32 value) {
   
   qmin_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.qmin)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.qmin)
 }
 
 // uint32 threads = 8;
-inline void StartDisplayStreamCommand::clear_threads() {
+inline void DisplayStreamConfig::clear_threads() {
   threads_ = 0u;
 }
-inline ::google::protobuf::uint32 StartDisplayStreamCommand::threads() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.threads)
+inline ::google::protobuf::uint32 DisplayStreamConfig::threads() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.threads)
   return threads_;
 }
-inline void StartDisplayStreamCommand::set_threads(::google::protobuf::uint32 value) {
+inline void DisplayStreamConfig::set_threads(::google::protobuf::uint32 value) {
   
   threads_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.threads)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.threads)
 }
 
 // uint32 flags = 9;
-inline void StartDisplayStreamCommand::clear_flags() {
+inline void DisplayStreamConfig::clear_flags() {
   flags_ = 0u;
 }
-inline ::google::protobuf::uint32 StartDisplayStreamCommand::flags() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartDisplayStreamCommand.flags)
+inline ::google::protobuf::uint32 DisplayStreamConfig::flags() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamConfig.flags)
   return flags_;
 }
-inline void StartDisplayStreamCommand::set_flags(::google::protobuf::uint32 value) {
+inline void DisplayStreamConfig::set_flags(::google::protobuf::uint32 value) {
   
   flags_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartDisplayStreamCommand.flags)
+  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamConfig.flags)
 }
 
 // -------------------------------------------------------------------
 
-// StartPlaybackStreamCommand
+// PlaybackStreamConfig
 
 // string codec = 1;
-inline void StartPlaybackStreamCommand::clear_codec() {
+inline void PlaybackStreamConfig::clear_codec() {
   codec_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline const ::std::string& StartPlaybackStreamCommand::codec() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.StartPlaybackStreamCommand.codec)
+inline const ::std::string& PlaybackStreamConfig::codec() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.PlaybackStreamConfig.codec)
   return codec_.GetNoArena();
 }
-inline void StartPlaybackStreamCommand::set_codec(const ::std::string& value) {
+inline void PlaybackStreamConfig::set_codec(const ::std::string& value) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
-  // @@protoc_insertion_point(field_set:SweetProtocol.StartPlaybackStreamCommand.codec)
+  // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamConfig.codec)
 }
 #if LANG_CXX11
-inline void StartPlaybackStreamCommand::set_codec(::std::string&& value) {
+inline void PlaybackStreamConfig::set_codec(::std::string&& value) {
   
   codec_.SetNoArena(
     &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
-  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.StartPlaybackStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.PlaybackStreamConfig.codec)
 }
 #endif
-inline void StartPlaybackStreamCommand::set_codec(const char* value) {
+inline void PlaybackStreamConfig::set_codec(const char* value) {
   GOOGLE_DCHECK(value != NULL);
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
-  // @@protoc_insertion_point(field_set_char:SweetProtocol.StartPlaybackStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.PlaybackStreamConfig.codec)
 }
-inline void StartPlaybackStreamCommand::set_codec(const char* value, size_t size) {
+inline void PlaybackStreamConfig::set_codec(const char* value, size_t size) {
   
   codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
       ::std::string(reinterpret_cast<const char*>(value), size));
-  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.StartPlaybackStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.PlaybackStreamConfig.codec)
 }
-inline ::std::string* StartPlaybackStreamCommand::mutable_codec() {
+inline ::std::string* PlaybackStreamConfig::mutable_codec() {
   
-  // @@protoc_insertion_point(field_mutable:SweetProtocol.StartPlaybackStreamCommand.codec)
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.PlaybackStreamConfig.codec)
   return codec_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::std::string* StartPlaybackStreamCommand::release_codec() {
-  // @@protoc_insertion_point(field_release:SweetProtocol.StartPlaybackStreamCommand.codec)
+inline ::std::string* PlaybackStreamConfig::release_codec() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.PlaybackStreamConfig.codec)
   
   return codec_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void StartPlaybackStreamCommand::set_allocated_codec(::std::string* codec) {
+inline void PlaybackStreamConfig::set_allocated_codec(::std::string* codec) {
   if (codec != NULL) {
     
   } else {
     
   }
   codec_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), codec);
-  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.StartPlaybackStreamCommand.codec)
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.PlaybackStreamConfig.codec)
 }
 
 // -------------------------------------------------------------------
 
 // DisplayStreamStartEvent
 
-// uint32 display_id = 1;
-inline void DisplayStreamStartEvent::clear_display_id() {
-  display_id_ = 0u;
-}
-inline ::google::protobuf::uint32 DisplayStreamStartEvent::display_id() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamStartEvent.display_id)
-  return display_id_;
-}
-inline void DisplayStreamStartEvent::set_display_id(::google::protobuf::uint32 value) {
-  
-  display_id_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamStartEvent.display_id)
-}
-
-// uint32 width = 2;
+// uint32 width = 1;
 inline void DisplayStreamStartEvent::clear_width() {
   width_ = 0u;
 }
@@ -3220,7 +3293,7 @@ inline void DisplayStreamStartEvent::set_width(::google::protobuf::uint32 value)
   // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamStartEvent.width)
 }
 
-// uint32 height = 3;
+// uint32 height = 2;
 inline void DisplayStreamStartEvent::clear_height() {
   height_ = 0u;
 }
@@ -3232,20 +3305,6 @@ inline void DisplayStreamStartEvent::set_height(::google::protobuf::uint32 value
   
   height_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamStartEvent.height)
-}
-
-// uint32 codec = 5;
-inline void DisplayStreamStartEvent::clear_codec() {
-  codec_ = 0u;
-}
-inline ::google::protobuf::uint32 DisplayStreamStartEvent::codec() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.DisplayStreamStartEvent.codec)
-  return codec_;
-}
-inline void DisplayStreamStartEvent::set_codec(::google::protobuf::uint32 value) {
-  
-  codec_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.DisplayStreamStartEvent.codec)
 }
 
 // -------------------------------------------------------------------
@@ -3357,10 +3416,20 @@ inline void PlaybackStartEvent::set_frequency(::google::protobuf::uint32 value) 
 namespace google {
 namespace protobuf {
 
-template <> struct is_proto_enum< ::SweetProtocol::SendPointerInputCommand_PointerButtonBit> : ::google::protobuf::internal::true_type {};
+template <> struct is_proto_enum< ::SweetProtocol::SendPointerInput_PointerButtonBit> : ::google::protobuf::internal::true_type {};
 template <>
-inline const EnumDescriptor* GetEnumDescriptor< ::SweetProtocol::SendPointerInputCommand_PointerButtonBit>() {
-  return ::SweetProtocol::SendPointerInputCommand_PointerButtonBit_descriptor();
+inline const EnumDescriptor* GetEnumDescriptor< ::SweetProtocol::SendPointerInput_PointerButtonBit>() {
+  return ::SweetProtocol::SendPointerInput_PointerButtonBit_descriptor();
+}
+template <> struct is_proto_enum< ::SweetProtocol::SweetCommand> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::SweetProtocol::SweetCommand>() {
+  return ::SweetProtocol::SweetCommand_descriptor();
+}
+template <> struct is_proto_enum< ::SweetProtocol::SweetResponseAndEvent> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::SweetProtocol::SweetResponseAndEvent>() {
+  return ::SweetProtocol::SweetResponseAndEvent_descriptor();
 }
 
 }  // namespace protobuf

@@ -37,13 +37,6 @@ struct PendingResize {
   std::chrono::steady_clock::time_point time;
 };
 
-struct PlaybackFormat {
-  uint format;
-  uint channels;
-  uint frequency;
-  uint interval_ms;
-};
-
 class Viewer {
  public:
   Viewer(Machine* machine);

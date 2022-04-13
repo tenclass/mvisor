@@ -27,12 +27,12 @@
 
 UsbDevice::UsbDevice() {
   set_parent_name("xhci-host");
+  speed_ = kUsbSpeedHigh;
 }
 
 void UsbDevice::Reset() {
   configuration_value_ = 0;
   config_ = nullptr;
-  speed_ = kUsbSpeedHigh;
 
   /* remove all endpoints */
   for (auto endpoint : endpoints_) {
