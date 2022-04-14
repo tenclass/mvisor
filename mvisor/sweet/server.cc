@@ -253,7 +253,8 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
   if (display_encoder_) {
     delete display_encoder_;
   }
-  display_encoder_ = new SweetDisplayEncoder(w, h, bpp, stride, &display_config_);
+  display_encoder_ = new SweetDisplayEncoder(w, h, &display_config_);
+  display_->Redraw();
 
   /* Send stop to previous connection */
   if (display_connection_) {

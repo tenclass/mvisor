@@ -603,10 +603,12 @@ bool Vga::AcquireUpdate(DisplayUpdate& update) {
 
   auto partial = DisplayPartialBitmap {
     .stride = stride_,
+    .bpp = bpp_,
     .width = width_,
     .height = height_,
     .x = 0,
-    .y = 0
+    .y = 0,
+    .pallete = vga_.pallete
   };
 
   size_t data_size = stride_ * height_;

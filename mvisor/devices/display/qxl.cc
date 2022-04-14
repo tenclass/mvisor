@@ -943,6 +943,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       MV_ASSERT(bitmap->format == SPICE_BITMAP_FMT_RGBA || bitmap->format == SPICE_BITMAP_FMT_32BIT);
       MV_ASSERT(bitmap->palette == 0);
       MV_ASSERT(partial.width == bitmap->x && partial.height == bitmap->y);
+      partial.bpp = primary_surface_.bits_pp;
       partial.stride = bitmap->stride;
       partial.flip = !(bitmap->flags & QXL_BITMAP_TOP_DOWN);
 
@@ -958,6 +959,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       MV_ASSERT(fill->rop_descriptor == SPICE_ROPD_OP_PUT);
       QXLBrush* brush = &fill->brush;
       MV_ASSERT(brush->type == SPICE_BRUSH_TYPE_SOLID);
+      partial.bpp = primary_surface_.bits_pp;
       partial.stride = partial.width * primary_surface_.bytes_pp;
       uint32_t color = brush->u.color;
       size_t size = partial.stride * partial.height;

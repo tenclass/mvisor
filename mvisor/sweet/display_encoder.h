@@ -45,7 +45,7 @@ struct EncodeSlice {
 
 class SweetDisplayEncoder {
  public:
-  SweetDisplayEncoder(uint width, uint height, uint bpp, uint stride, DisplayStreamConfig* config);
+  SweetDisplayEncoder(uint width, uint height, DisplayStreamConfig* config);
   ~SweetDisplayEncoder();
 
   void Render(std::vector<DisplayPartialBitmap>& partials);
@@ -59,6 +59,7 @@ class SweetDisplayEncoder {
   void EncodeProcess();
   void InitializeX264();
   void RenderPartial(DisplayPartialBitmap* partial);
+  void ConvertPartial(DisplayPartialBitmap* partial);
   void CreateEncodeSlice(uint top, uint left, uint bottom, uint right);
   void ConvertSlices();
   void DrawSlices(std::vector<EncodeSlice*>& slices);

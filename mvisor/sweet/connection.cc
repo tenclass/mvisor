@@ -145,7 +145,7 @@ void SweetConnection::OnQueryStatus() {
   response.set_config_path(machine_->configuration()->path());
 
   auto spice_agent = dynamic_cast<SerialPortInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
-  if (spice_agent && spice_agent->ready()) {
+  if (spice_agent) {
     response.set_spice_agent(true);
   }
 
@@ -188,7 +188,7 @@ void SweetConnection::OnSendPointerInput() {
   uint w, h;
   server_->display()->GetDisplayMode(&w, &h, nullptr, nullptr);
   event.screen_width = w;
-  event.screen_width = h;
+  event.screen_height = h;
   
   for (auto pointer : server_->pointers()) {
     if (pointer->InputAcceptable()) {

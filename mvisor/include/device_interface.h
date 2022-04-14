@@ -56,11 +56,13 @@ class DisplayResizeInterface {
 struct DisplayPartialBitmap {
   std::vector<iovec>  vector;
   uint                stride;
+  uint                bpp;
   uint                width;
   uint                height;
   uint                x;
   uint                y;
   bool                flip;
+  const uint8_t*      pallete;
 };
 struct DisplayMouseCursor {
   uint8_t       visible;
