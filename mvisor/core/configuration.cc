@@ -42,7 +42,7 @@ void Configuration::InitializePaths() {
 
   bzero(temp, sizeof(temp));
   if (readlink("/proc/self/exe", temp, sizeof(temp) - 1) > 0) {
-    directories_.insert(temp);
+    directories_.insert(dirname(temp));
   }
 }
 
@@ -188,14 +188,22 @@ void Configuration::SetObjectKeyValue(Object* object, std::string key, const YAM
 void Configuration::LoadMachine(const YAML::Node& node) {
   if (node["memory"]) {
     string memory = node["memory"].as<string>();
-    MV_ASSERT(memory.back() == 'G');
-    machine_->ram_size_ = (1UL << 30) * atol(memory.substr(0, memory.length() - 1).c_str());
+    long value = atol(memory.substr(0, memory.length() - 1).c_str());
+    if (memory.back() == 'G') {
+      machine_->ram_size_ = (1UL << 30) * value;
+    } else if (memory.back() == 'M') {
+      machine_->ram_size_ = (1UL << 20) * value;
+    } else {
+      MV_PANIC("invalid memory size %s", memory.c_str());
+    }
   }
   if (node["vcpu"]) {
     machine_->num_vcpus_ = node["vcpu"].as<uint64_t>();
   }
   if (node["bios"]) {
     bios_path_ = FindPath(node["bios"].as<string>());
+  } else {
+    bios_path_ = FindPath("../share/bios-256k.bin");
   }
   if (node["debug"]) {
     machine_->debug_ = node["debug"].as<bool>();

@@ -59,11 +59,12 @@ void PrintHelp() {
 }
 
 static struct option long_options[] = {
-  { "help", no_argument, 0, 'h'},
-  { "uuid", required_argument, 0, 0 },
-  { "name", required_argument, 0, 0 },
-  { "config", required_argument, 0, 'c'},
-  { "sweet", required_argument, 0, 0}
+  {"help", no_argument, 0, 'h'},
+  {"uuid", required_argument, 0, 0},
+  {"name", required_argument, 0, 0},
+  {"config", required_argument, 0, 'c'},
+  {"sweet", required_argument, 0, 0},
+  {"pidfile", required_argument, 0, 0}
 };
 
 static Machine*     machine = nullptr;
@@ -77,6 +78,7 @@ int main(int argc, char* argv[])
   std::string config_path = "../config/default.yaml";
   std::string vm_uuid, vm_name;
   std::string sweet_path;
+  std::string pid_path;
 
   int option_index = 0;
   while (getopt_long_only(argc, argv, "hc:", long_options, &option_index) != -1) {
@@ -97,7 +99,17 @@ int main(int argc, char* argv[])
     case 4:
       sweet_path = optarg;
       break;
+    case 5:
+      pid_path = optarg;
+      break;
     }
+  }
+
+  /* write pid to file if path specified */
+  if (!pid_path.empty()) {
+    FILE* fp = fopen(pid_path.c_str(), "wb");
+    fprintf(fp, "%d\n", getpid());
+    fclose(fp);
   }
 
   int ret;
@@ -127,5 +139,9 @@ int main(int argc, char* argv[])
   }
 
   delete machine;
+
+  if (!pid_path.empty()) {
+    unlink(pid_path.c_str());
+  }
   return ret;
 }

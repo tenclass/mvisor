@@ -34,7 +34,7 @@ load: all
 	$(EXECUTABLE) -config /tmp/save/configuration.yaml
 
 sweet: all
-	$(EXECUTABLE) -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock
+	$(EXECUTABLE) -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock -pidfile /tmp/pid
 
 debug_sweet: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock" $(EXECUTABLE)
@@ -44,6 +44,9 @@ debug_load: all
 
 debug: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run" $(EXECUTABLE)
+
+install: all
+	cp -f $(EXECUTABLE) /mnt/server/opt/mvisor/build/bin/
 
 image:
 	qemu-img create -f qcow2 -F qcow2 -b /data/win10.qcow2 /data/hd.qcow2

@@ -114,8 +114,9 @@ void MemoryManager::InitializeReservedMemory() {
 
 /* SeaBIOS is loaded into the end of 1MB and the end of 4GB */
 void MemoryManager::LoadBiosFile() {
+  auto& bios_path = machine_->config_->bios_path();
   // Read BIOS data from path to bios_data
-  int fd = open(machine_->config_->bios_path().c_str(), O_RDONLY);
+  int fd = open(bios_path.c_str(), O_RDONLY);
   MV_ASSERT(fd > 0);  
   struct stat st;
   fstat(fd, &st);

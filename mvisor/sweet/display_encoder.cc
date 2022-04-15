@@ -39,6 +39,7 @@ SweetDisplayEncoder::SweetDisplayEncoder(uint width, uint height, DisplayStreamC
     screen_stride_ += 64 - (screen_stride_ % 64);
 
   screen_bitmap_ = new uint8_t[screen_stride_ * screen_height_];
+  bzero(screen_bitmap_, screen_stride_ * screen_height_);
   InitializeX264();
 
   /* start encode thread */
