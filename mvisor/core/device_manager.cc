@@ -726,11 +726,6 @@ bool DeviceManager::LoadState(MigrationReader* reader) {
   bzero(clock.pad, sizeof(clock.pad));
   MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_CLOCK, &clock) == 0);
 
-  /* Reset device states */
-  for (auto device : registered_devices_) {
-    device->Reset();
-  }
-
   /* Load device states */
   for (auto device : registered_devices_) {
     reader->SetPrefix(device->name());

@@ -61,6 +61,7 @@ class Uip : public Object, public NetworkBackendInterface {
   Device*               real_device_ = nullptr;
   std::vector<Ipv4Packet*> queued_packets_;
   uint                  mtu_;
+  bool                  restrict_ = false;
 
  public:
   Uip() {
@@ -95,6 +96,10 @@ class Uip : public Object, public NetworkBackendInterface {
     timer_ = real_device_->manager()->io()->AddTimer(10 * 1000, true, [this](){
       OnTimer();
     });
+
+    if (real_device_->has_key("restrict")) {
+      restrict_ = std::get<bool>((*real_device_)["restrict"]);
+    }
   }
 
   virtual void Reset() {
@@ -297,6 +302,10 @@ class Uip : public Object, public NetworkBackendInterface {
     
     auto socket = dynamic_cast<RedirectTcpSocket*>(LookupTcpSocket(sip, dip, sport, dport));
     if (socket == nullptr) {
+      /* If restricted, don't redirect UDP packets */
+      if (restrict_) {
+        return;
+      }
       socket = new RedirectTcpSocket(this, packet);
       tcp_sockets_.push_back(socket);
     }
@@ -375,6 +384,10 @@ class Uip : public Object, public NetworkBackendInterface {
           return;
         }
       } else {
+        if (restrict_) {
+          /* If restricted, don't redirect UDP packets */
+          return;
+        }
         auto redirect_udp = new RedirectUdpSocket(this, packet);
         redirect_udp->InitializeRedirect();
         socket = redirect_udp;

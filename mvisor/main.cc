@@ -64,7 +64,8 @@ static struct option long_options[] = {
   {"name", required_argument, 0, 0},
   {"config", required_argument, 0, 'c'},
   {"sweet", required_argument, 0, 0},
-  {"pidfile", required_argument, 0, 0}
+  {"pidfile", required_argument, 0, 0},
+  {"load", required_argument, 0, 0}
 };
 
 static Machine*     machine = nullptr;
@@ -79,6 +80,7 @@ int main(int argc, char* argv[])
   std::string vm_uuid, vm_name;
   std::string sweet_path;
   std::string pid_path;
+  std::string load_path;
 
   int option_index = 0;
   while (getopt_long_only(argc, argv, "hc:", long_options, &option_index) != -1) {
@@ -101,6 +103,9 @@ int main(int argc, char* argv[])
       break;
     case 5:
       pid_path = optarg;
+      break;
+    case 6:
+      load_path = optarg;
       break;
     }
   }
@@ -127,13 +132,21 @@ int main(int argc, char* argv[])
       machine->Quit();
       sweet_server->Close();
     });
-    machine->Run();
+
+    if (!load_path.empty())
+      machine->Load(load_path);
+    machine->Resume();
+
     ret = sweet_server->MainLoop();
     delete sweet_server;
   } else {
     /* SDL handles default signals */
     viewer = new Viewer(machine);
-    machine->Run();
+
+    if (!load_path.empty())
+      machine->Load(load_path);
+    machine->Resume();
+
     ret = viewer->MainLoop();
     delete viewer;
   }

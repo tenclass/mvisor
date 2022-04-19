@@ -57,11 +57,24 @@ Machine::Machine(std::string config_path) {
   io_thread_ = new IoThread(this);
   /* Initialize device manager, connect and reset all devices */
   device_manager_ = new DeviceManager(this, root);
+
   /* Create vcpu objects */
   for (int i = 0; i < num_vcpus_; ++i) {
     Vcpu* vcpu = new Vcpu(this, i);
     vcpus_.push_back(vcpu);
   }
+
+  /* Start threads and wait to resume */
+  wait_count_ = num_vcpus_ + 1;
+  paused_ = true;
+
+  for (auto vcpu: vcpus_) {
+    vcpu->Start();
+  }
+  io_thread_->Start();
+
+  /* Reset devices after vCPU created and paused */
+  device_manager_->ResetDevices();
 }
 
 /* Free VM resources */
@@ -106,24 +119,6 @@ void Machine::InitializeKvm() {
   // Create vm so that we can map userspace memory
   vm_fd_ = ioctl(kvm_fd_, KVM_CREATE_VM, 0);
   MV_ASSERT(vm_fd_ > 0);
-}
-
-/* Start vCPU threads and IO thread */
-void Machine::Run() {
-  if (config_->snapshot()) {
-    auto path = std::filesystem::path(config_->path());
-    Load(path.parent_path());
-  } else {
-    device_manager_->ResetDevices();
-  }
-  
-  /* Set paused = false */
-  Resume();
-
-  for (auto vcpu: vcpus_) {
-    vcpu->Start();
-  }
-  io_thread_->Start();
 }
 
 /* Maybe there are lots of things to do before quiting a VM */

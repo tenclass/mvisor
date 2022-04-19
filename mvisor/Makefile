@@ -31,7 +31,7 @@ run: all
 # Press F2 to save VM to /tmp/save and make load to restore the VM
 # Remember to use snapshot=Yes in disk configuration
 load: all
-	$(EXECUTABLE) -config /tmp/save/configuration.yaml
+	$(EXECUTABLE) -config /tmp/save/configuration.yaml -load /tmp/save
 
 sweet: all
 	$(EXECUTABLE) -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock -pidfile /tmp/pid
@@ -40,7 +40,7 @@ debug_sweet: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run -sweet /var/run/sfcloud/5ffdf526b0321206714888c7_6254e6303d4cd2dd150d7a80/sweet.sock" $(EXECUTABLE)
 
 debug_load: all
-	gdb -ex "handle SIG34 nostop pass" -ex "run -config /tmp/save/configuration.yaml" $(EXECUTABLE)
+	gdb -ex "handle SIG34 nostop pass" -ex "run -config /tmp/save/configuration.yaml -load /tmp/save" $(EXECUTABLE)
 
 debug: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run" $(EXECUTABLE)

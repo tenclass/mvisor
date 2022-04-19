@@ -41,7 +41,6 @@ class Machine {
   Machine(std::string config_path);
   ~Machine();
 
-  void Run();
   void Quit();
   void Reset();
   void Pause();

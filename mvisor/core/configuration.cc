@@ -92,12 +92,6 @@ bool Configuration::LoadFile(std::string path) {
   if (config["objects"]) {
     LoadObjects(config["objects"]);
   }
-
-  if (config["snapshot"]) {
-    snapshot_ = config["snapshot"].as<bool>();
-  } else {
-    snapshot_ = false;
-  }
   return true;
 }
 
@@ -260,7 +254,6 @@ bool Configuration::Save(std::string path) {
     return false;
 
   auto root = YAML::Node();
-  root["snapshot"] = true;
   root["version"] = 1;
 
   /* Build time */

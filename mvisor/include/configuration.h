@@ -35,7 +35,6 @@ class Configuration {
   bool Save(std::string path);
   std::string FindPath(std::string path) const;
 
-  inline bool snapshot() const { return snapshot_; }
   inline const std::string& path() const { return path_; }
   inline const std::string& bios_path() const { return bios_path_; }
 
@@ -53,7 +52,6 @@ class Configuration {
 
   Machine*    machine_;
   std::set<std::string> directories_;
-  bool        snapshot_;
   std::string path_;
   std::string bios_path_;
 };
