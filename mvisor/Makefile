@@ -61,7 +61,7 @@ gvt:
 
 sweet_js:
 	$(PROTOC) --js_out=import_style=commonjs,binary:. sweet/sweet.proto
-	cp sweet/sweet_pb.js /mnt/server/sfcloud/sfspice/
+	mv sweet/sweet_pb.js /mnt/server/sfcloud/sfspice/
 
 all: $(EXECUTABLE)
 

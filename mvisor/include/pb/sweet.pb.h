@@ -314,6 +314,20 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
 
   // accessors -------------------------------------------------------
 
+  // string status = 3;
+  void clear_status();
+  static const int kStatusFieldNumber = 3;
+  const ::std::string& status() const;
+  void set_status(const ::std::string& value);
+  #if LANG_CXX11
+  void set_status(::std::string&& value);
+  #endif
+  void set_status(const char* value);
+  void set_status(const char* value, size_t size);
+  ::std::string* mutable_status();
+  ::std::string* release_status();
+  void set_allocated_status(::std::string* status);
+
   // string vm_uuid = 6;
   void clear_vm_uuid();
   static const int kVmUuidFieldNumber = 6;
@@ -362,12 +376,6 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
   ::google::protobuf::uint64 memory_size() const;
   void set_memory_size(::google::protobuf::uint64 value);
 
-  // bool tenclass_agent = 1002;
-  void clear_tenclass_agent();
-  static const int kTenclassAgentFieldNumber = 1002;
-  bool tenclass_agent() const;
-  void set_tenclass_agent(bool value);
-
   // uint32 vcpu_count = 4;
   void clear_vcpu_count();
   static const int kVcpuCountFieldNumber = 4;
@@ -380,15 +388,9 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
   bool debug() const;
   void set_debug(bool value);
 
-  // bool paused = 2;
-  void clear_paused();
-  static const int kPausedFieldNumber = 2;
-  bool paused() const;
-  void set_paused(bool value);
-
-  // bool hypervisor = 3;
+  // bool hypervisor = 2;
   void clear_hypervisor();
-  static const int kHypervisorFieldNumber = 3;
+  static const int kHypervisorFieldNumber = 2;
   bool hypervisor() const;
   void set_hypervisor(bool value);
 
@@ -398,20 +400,26 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
   bool spice_agent() const;
   void set_spice_agent(bool value);
 
+  // bool tenclass_agent = 1002;
+  void clear_tenclass_agent();
+  static const int kTenclassAgentFieldNumber = 1002;
+  bool tenclass_agent() const;
+  void set_tenclass_agent(bool value);
+
   // @@protoc_insertion_point(class_scope:SweetProtocol.QueryStatusResponse)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr status_;
   ::google::protobuf::internal::ArenaStringPtr vm_uuid_;
   ::google::protobuf::internal::ArenaStringPtr vm_name_;
   ::google::protobuf::internal::ArenaStringPtr config_path_;
   ::google::protobuf::uint64 memory_size_;
-  bool tenclass_agent_;
   ::google::protobuf::uint32 vcpu_count_;
   bool debug_;
-  bool paused_;
   bool hypervisor_;
   bool spice_agent_;
+  bool tenclass_agent_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
   friend void ::protobuf_sweet_2eproto::InitDefaultsQueryStatusResponseImpl();
@@ -2009,21 +2017,7 @@ inline void QueryStatusResponse::set_debug(bool value) {
   // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.debug)
 }
 
-// bool paused = 2;
-inline void QueryStatusResponse::clear_paused() {
-  paused_ = false;
-}
-inline bool QueryStatusResponse::paused() const {
-  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.paused)
-  return paused_;
-}
-inline void QueryStatusResponse::set_paused(bool value) {
-  
-  paused_ = value;
-  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.paused)
-}
-
-// bool hypervisor = 3;
+// bool hypervisor = 2;
 inline void QueryStatusResponse::clear_hypervisor() {
   hypervisor_ = false;
 }
@@ -2035,6 +2029,59 @@ inline void QueryStatusResponse::set_hypervisor(bool value) {
   
   hypervisor_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.hypervisor)
+}
+
+// string status = 3;
+inline void QueryStatusResponse::clear_status() {
+  status_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& QueryStatusResponse::status() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.status)
+  return status_.GetNoArena();
+}
+inline void QueryStatusResponse::set_status(const ::std::string& value) {
+  
+  status_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.status)
+}
+#if LANG_CXX11
+inline void QueryStatusResponse::set_status(::std::string&& value) {
+  
+  status_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.QueryStatusResponse.status)
+}
+#endif
+inline void QueryStatusResponse::set_status(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  status_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.QueryStatusResponse.status)
+}
+inline void QueryStatusResponse::set_status(const char* value, size_t size) {
+  
+  status_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.QueryStatusResponse.status)
+}
+inline ::std::string* QueryStatusResponse::mutable_status() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.QueryStatusResponse.status)
+  return status_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* QueryStatusResponse::release_status() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.QueryStatusResponse.status)
+  
+  return status_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void QueryStatusResponse::set_allocated_status(::std::string* status) {
+  if (status != NULL) {
+    
+  } else {
+    
+  }
+  status_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), status);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.QueryStatusResponse.status)
 }
 
 // uint32 vcpu_count = 4;

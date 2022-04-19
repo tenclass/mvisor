@@ -50,6 +50,7 @@ class Machine {
   void WaitToResume();
   void Save(std::string path);
   void Load(std::string path);
+  const char* GetStatus();
 
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
@@ -82,6 +83,8 @@ class Machine {
 
   bool valid_ = true;
   bool paused_ = true;
+  bool loading_ = false;
+  bool saving_ = false;
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;

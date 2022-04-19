@@ -63,8 +63,8 @@ enum SweetResponseAndEvent {
 
 message QueryStatusResponse {
   bool      debug       = 1;
-  bool      paused      = 2;
-  bool      hypervisor  = 3;
+  bool      hypervisor  = 2;
+  string    status      = 3;
   uint32    vcpu_count  = 4;
   uint64    memory_size = 5;
   string    vm_uuid     = 6;

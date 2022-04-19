@@ -136,7 +136,7 @@ bool SweetConnection::Send(uint32_t type) {
 void SweetConnection::OnQueryStatus() {
   QueryStatusResponse response;  
   response.set_debug(machine_->debug());
-  response.set_paused(machine_->IsPaused());
+  response.set_status(machine_->GetStatus());
   response.set_hypervisor(machine_->hypervisor());
   response.set_vcpu_count(machine_->num_vcpus());
   response.set_memory_size(machine_->ram_size());

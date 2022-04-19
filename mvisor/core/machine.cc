@@ -241,10 +241,12 @@ void Machine::RegisterStateChangeListener(VoidCallback callback) {
 
 /* Should call by UI thread */
 void Machine::Save(std::string path) {
+  MV_ASSERT(!saving_);
   /* Make sure the machine is paused */
   if (!IsPaused()) {
     Pause();
   }
+  saving_ = true;
   MV_LOG("start saving");
 
   MigrationWriter writer(path);
@@ -272,15 +274,19 @@ void Machine::Save(std::string path) {
     MV_PANIC("failed to save configuration yaml");
     return;
   }
+
+  saving_ = false;
   MV_LOG("done saving");
 }
 
 /* Should call by UI thread */
 void Machine::Load(std::string path) {
+  MV_ASSERT(!loading_);
   /* Make sure the machine is paused */
   if (!IsPaused()) {
     Pause();
   }
+  loading_ = true;
   MV_LOG("start loading");
 
   MigrationReader reader(path);
@@ -298,5 +304,26 @@ void Machine::Load(std::string path) {
       MV_PANIC("failed to load %s", vcpu->name());
     }
   }
+
+  loading_ = false;
   MV_LOG("done loading");
 }
+
+const char* Machine::GetStatus() {
+  if (!valid_) {
+    return "invalid";
+  }
+  if (!paused_) {
+    return "running";
+  }
+  if (saving_) {
+    return "saving";
+  }
+  if (loading_) {
+    return "loading";
+  }
+
+  /* otherwise return paused */
+  return "paused";
+}
+
