@@ -64,6 +64,18 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kQueryStatus:
     OnQueryStatus();
     break;
+  case kPauseMachine:
+    machine_->Pause();
+    break;
+  case kResumeMachine:
+    machine_->Resume();
+    break;
+  case kResetMachine:
+    machine_->Reset();
+    break;
+  case kQuitMachine:
+    machine_->Quit();
+    break;
   case kStartDisplayStream:
     OnStartDisplayStream();
     break;
@@ -93,7 +105,11 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
     break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
+    return;
   }
+
+  /* command acknowledge */
+  Send(kCommandAcknowledge);
 }
 
 bool SweetConnection::Send(uint32_t type, void* data, size_t length) {

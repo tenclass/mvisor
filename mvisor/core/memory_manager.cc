@@ -390,6 +390,9 @@ bool MemoryManager::SaveState(MigrationWriter* writer) {
 
   auto ptr = (uint8_t*)ram_host_;
   for (size_t pos = 0; pos < machine_->ram_size_; pos += PAGE_SIZE) {
+    if (!machine_->saving_) {
+      return false;
+    }
     if (!test_zero(ptr, PAGE_SIZE)) {
       pwrite(fd, ptr, PAGE_SIZE, pos);
     }

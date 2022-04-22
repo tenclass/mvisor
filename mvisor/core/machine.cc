@@ -252,7 +252,7 @@ void Machine::Save(std::string path) {
   MigrationWriter writer(path);
   /* Save device states */
   if (!device_manager_->SaveState(&writer)) {
-    MV_PANIC("failed to save device states");
+    MV_LOG("failed to save device states");
     return;
   }
   /* Save vcpu states */
@@ -261,17 +261,17 @@ void Machine::Save(std::string path) {
   }
   /* Save system RAM */
   if (!memory_manager_->SaveState(&writer)) {
-    MV_PANIC("failed to save RAM");
+    MV_LOG("failed to save RAM");
     return;
   }
   /* Save disk images */
   if (!io_thread_->SaveDiskImage(&writer)) {
-    MV_PANIC("failed to sync disk images");
+    MV_LOG("failed to sync disk images");
     return;
   }
   /* Save configuration after saving disk images (paths might changed) */
   if (!config_->Save(path + "/configuration.yaml")) {
-    MV_PANIC("failed to save configuration yaml");
+    MV_LOG("failed to save configuration yaml");
     return;
   }
 

@@ -159,6 +159,7 @@ enum SweetCommand {
   kPauseMachine = 35,
   kResumeMachine = 36,
   kSaveMachine = 37,
+  kQuitMachine = 38,
   kFreezeDisk = 48,
   kThawDisk = 49,
   kSaveDisk = 50,
@@ -203,6 +204,7 @@ inline bool SweetCommand_Parse(
 }
 enum SweetResponseAndEvent {
   kInvalidResponse = 0,
+  kCommandAcknowledge = 4096,
   kQueryStatusResponse = 4112,
   kQueryScreenshotResponse = 4176,
   kSetCursorEvent = 4177,

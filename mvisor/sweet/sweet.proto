@@ -11,6 +11,7 @@ enum SweetCommand {
   kPauseMachine           = 0x23;
   kResumeMachine          = 0x24;
   kSaveMachine            = 0x25;
+  kQuitMachine            = 0x26;
   /* Disk operations */
   kFreezeDisk             = 0x30;
   kThawDisk               = 0x31;
@@ -46,18 +47,19 @@ enum SweetCommand {
 }
 
 enum SweetResponseAndEvent {
-  kInvalidResponse           = 0x0000;
-  kQueryStatusResponse       = 0x1010;
+  kInvalidResponse            = 0x0000;
+  kCommandAcknowledge         = 0x1000;
+  kQueryStatusResponse        = 0x1010;
 
-  kQueryScreenshotResponse   = 0x1050;
-  kSetCursorEvent            = 0x1051;
-  kDisplayStreamStartEvent   = 0x1052;
-  kDisplayStreamStopEvent    = 0x1053;
-  kDisplayStreamDataEvent    = 0x1054;
+  kQueryScreenshotResponse    = 0x1050;
+  kSetCursorEvent             = 0x1051;
+  kDisplayStreamStartEvent    = 0x1052;
+  kDisplayStreamStopEvent     = 0x1053;
+  kDisplayStreamDataEvent     = 0x1054;
 
-  kPlaybackStreamStartEvent        = 0x1060;
-  kPlaybackStreamStopEvent         = 0x1061;
-  kPlaybackStreamDataEvent         = 0x1062;
+  kPlaybackStreamStartEvent   = 0x1060;
+  kPlaybackStreamStopEvent    = 0x1061;
+  kPlaybackStreamDataEvent    = 0x1062;
 }
 
 
