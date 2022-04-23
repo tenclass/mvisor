@@ -71,9 +71,6 @@ class DummyDevice : public Device {
     
     /* PORT A20-A24 IBM Token Ring */
     AddIoResource(kIoResourceTypePio, 0x0A20, 5, "IBM Token Ring");
-    
-    /* PORT AE0C-AE20 */
-    AddIoResource(kIoResourceTypePio, 0xAE0C, 20, "Pci Hotplug");
 
     /* HPET MMIO */
     AddIoResource(kIoResourceTypeMmio, 0xFED00000, 0x400, "HPET");

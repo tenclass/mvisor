@@ -44,7 +44,8 @@ void Log(LogType type, const char* file, int line, const char* function, const c
   sprintf(timestr, "%.3lf", double(delta_us) / 1000);
 
   if (type == kLogTypeDebug) {
-    printf("[%s] %s:%d %s() %s\n", timestr, file, line, function, message);
+    fprintf(stdout, "[%s] %s:%d %s() %s\n", timestr, file, line, function, message);
+    fflush(stdout);
   } else if (type == kLogTypeError) {
     fprintf(stderr,"[%s] %s:%d %s() %s\n", timestr, file, line, function, message);
   } else if (type == kLogTypePanic) {

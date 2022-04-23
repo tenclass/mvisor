@@ -63,10 +63,10 @@ void SweetDisplayEncoder::InitializeX264() {
   x264_param_t param;
   char tune[30];
 
-  // MV_LOG("%ux%ux%u codec=%s profile=%s speed=%s bitrate=%u qmin=%u fps=%u threads=%u flags=0x%x",
-  //   screen_width_, screen_height_, screen_bpp_,
-  //   config_->codec().c_str(), config_->profile().c_str(), config_->preset().c_str(), config_->bitrate(),
-  //   config_->qmin(), config_->fps(), config_->threads(), config_->flags());
+  MV_LOG("%ux%ux%u codec=%s profile=%s speed=%s bitrate=%u qmin=%u fps=%u threads=%u flags=0x%x",
+    screen_width_, screen_height_, screen_bpp_,
+    config_->codec().c_str(), config_->profile().c_str(), config_->preset().c_str(), config_->bitrate(),
+    config_->qmin(), config_->fps(), config_->threads(), config_->flags());
 
   /* check fast decode flag, zerolatency is required */
   if (config_->flags() & 1) {
