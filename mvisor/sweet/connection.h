@@ -47,6 +47,9 @@ class SweetConnection {
 
   int fd() { return fd_; }
   bool OnReceive();
+  bool Send(uint32_t type);
+  bool Send(uint32_t type, Message& message);
+  bool Send(uint32_t type, void* data, size_t length);
 
   void SendDisplayStreamStartEvent(uint w, uint h);
   void SendDisplayStreamStopEvent();
@@ -57,11 +60,8 @@ class SweetConnection {
   void SendPlaybackStreamDataEvent(void* data, size_t length);
 
  private:
-  bool Send(uint32_t type);
-  bool Send(uint32_t type, Message& message);
-  bool Send(uint32_t type, void* data, size_t length);
   void ParsePacket(SweetPacketHeader* header);
-  void OnQueryStatus(); 
+  void OnQueryStatus();
   void OnKeyboardInput();
   void OnSendPointerInput();
   void OnConfigMonitors();

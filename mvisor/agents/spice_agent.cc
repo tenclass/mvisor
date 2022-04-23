@@ -55,7 +55,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
     num_monitors_ = 1;
   }
 
-  void OnMessage(uint8_t* data, size_t size) {
+  virtual void OnMessage(uint8_t* data, size_t size) {
     if (size < sizeof(VDIChunkHeader) + sizeof(VDAgentMessage)) {
       MV_PANIC("Chunk too small, size=0x%lx", size);
       return;
@@ -67,10 +67,6 @@ class SpiceAgent : public Object, public SerialPortInterface,
     }
     VDAgentMessage* message = (VDAgentMessage*)(data + sizeof(VDIChunkHeader));
     HandleAgentMessage(message);
-  }
-
-  void OnWritable() {
-    writable_ = true;
   }
 
   void SendMonitorConfig() {

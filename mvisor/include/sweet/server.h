@@ -22,6 +22,7 @@
 
 #include <list>
 #include <string>
+#include <mutex>
 #include <opus/opus.h>
 
 #include "machine.h"
@@ -46,6 +47,7 @@ class SweetServer {
   void StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config);
   void StopPlaybackStream();
   void RefreshDisplayStream();
+  void QemuGuestCommand(SweetConnection* conn, std::string& command);
 
   inline Machine* machine() { return machine_; }
   inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
@@ -65,13 +67,15 @@ class SweetServer {
 
   Machine*                    machine_;
   std::list<SweetConnection*> connections_;
+  std::mutex                  mutex_;
   std::string                 unix_path_;
   int                         server_fd_ = -1;
   int                         event_fd_ = -1;
   
-  DisplayInterface*                     display_;
-  PlaybackInterface*                    playback_;
-  KeyboardInputInterface*               keyboard_;
+  DisplayInterface*                     display_ = nullptr;
+  PlaybackInterface*                    playback_ = nullptr;
+  KeyboardInputInterface*               keyboard_ = nullptr;
+  SerialPortInterface*                  qemu_guest_agent_ = nullptr;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
 
@@ -84,6 +88,7 @@ class SweetServer {
   DisplayStreamConfig         display_config_;
   OpusEncoder*                playback_encoder_ = nullptr;
   SweetConnection*            playback_connection_ = nullptr;
+  SweetConnection*            guest_command_connection_ = nullptr;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

@@ -127,6 +127,8 @@ int SweetServer::MainLoop() {
         } else if (i >= 2) {
           auto conn = GetConnectionByFd(fds[i].fd);
           if (!conn->OnReceive()) {
+            /* lock here to prevent io threads from using connection object */
+            std::lock_guard<std::mutex> lock(mutex_);
             /* connection is closed or error */
             if (display_connection_ == conn) {
               display_encoder_->Stop();
@@ -134,6 +136,9 @@ int SweetServer::MainLoop() {
             }
             if (playback_connection_ == conn) {
               playback_connection_ = nullptr;
+            }
+            if (guest_command_connection_ == conn) {
+              guest_command_connection_ = nullptr;
             }
             connections_.remove(conn);
             delete conn;
@@ -223,6 +228,13 @@ void SweetServer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayResizeInterface*>(o); })) {
     resizers_.push_back(dynamic_cast<DisplayResizeInterface*>(o));
   }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<SerialPortInterface*>(o); })) {
+    auto port = dynamic_cast<SerialPortInterface*>(o);
+    if (strcmp(port->port_name(), "org.qemu.guest_agent.0") == 0) {
+      qemu_guest_agent_ = port;
+      break;
+    }
+  }
   MV_ASSERT(display_);
 
   display_->RegisterDisplayModeChangeListener([this]() {
@@ -235,7 +247,16 @@ void SweetServer::LookupDevices() {
   });
   if (playback_) {
     playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
+      std::lock_guard<std::mutex> lock(mutex_);
       OnPlayback(state, iov);
+    });
+  }
+  if (qemu_guest_agent_) {
+    qemu_guest_agent_->set_callback([this](uint8_t* data, size_t size) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (guest_command_connection_) {
+        guest_command_connection_->Send(kQemuGuestCommandResponse, data, size);
+      }
     });
   }
 }
@@ -280,6 +301,13 @@ void SweetServer::StopDisplayStream() {
 
 void SweetServer::RefreshDisplayStream() {
   display_encoder_->ForceKeyframe();
+}
+
+void SweetServer::QemuGuestCommand(SweetConnection* conn, std::string& command) {
+  if (qemu_guest_agent_) {
+    guest_command_connection_ = conn;
+    qemu_guest_agent_->SendMessage((uint8_t*)command.data(), command.size());
+  }
 }
 
 void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {

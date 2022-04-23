@@ -76,6 +76,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kQuitMachine:
     machine_->Quit();
     break;
+  case kQemuGuestCommand:
+    server_->QemuGuestCommand(this, buffer_);
+    break;
   case kStartDisplayStream:
     OnStartDisplayStream();
     break;

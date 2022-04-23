@@ -12,10 +12,8 @@ enum SweetCommand {
   kResumeMachine          = 0x24;
   kSaveMachine            = 0x25;
   kQuitMachine            = 0x26;
-  /* Disk operations */
-  kFreezeDisk             = 0x30;
-  kThawDisk               = 0x31;
-  kSaveDisk               = 0x32;
+  /* Guest operations */
+  kQemuGuestCommand       = 0x30;
   /* Input */
   kSendKeyboardInput      = 0x40;
   kSendPointerInput       = 0x41;
@@ -50,6 +48,7 @@ enum SweetResponseAndEvent {
   kInvalidResponse            = 0x0000;
   kCommandAcknowledge         = 0x1000;
   kQueryStatusResponse        = 0x1010;
+  kQemuGuestCommandResponse   = 0x1030;
 
   kQueryScreenshotResponse    = 0x1050;
   kSetCursorEvent             = 0x1051;

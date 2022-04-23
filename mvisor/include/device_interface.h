@@ -127,8 +127,16 @@ class SerialDeviceInterface {
 
 class SerialPortInterface {
  public:
-  virtual void OnMessage(uint8_t* data, size_t size) = 0;
-  virtual void OnWritable() = 0;
+  virtual void OnMessage(uint8_t* data, size_t size) {
+    if (callback_)
+      callback_(data, size);
+  }
+  virtual void OnWritable() {
+    writable_ = true;
+  }
+  virtual void SendMessage(uint8_t* data, size_t size) {
+    device_->SendMessage(this, data, size);
+  }
 
   void Initialize(SerialDeviceInterface* device, uint32_t id) {
     device_ = device;
@@ -139,16 +147,22 @@ class SerialPortInterface {
     ready_ = ready;
   }
 
+  virtual void set_callback(std::function<void(uint8_t*, size_t)> callback) {
+    callback_ = callback;
+  }
+
   inline uint32_t     port_id() const { return port_id_; }
   inline const char*  port_name() const { return port_name_; }
   inline bool         ready() const { return ready_; }
 
  protected:
   SerialDeviceInterface* device_;
+  std::function<void(uint8_t*, size_t)> callback_;
   uint32_t  port_id_;
   char      port_name_[100];
   bool      ready_ = false;
   bool      writable_ = false;
+
 };
 
 
