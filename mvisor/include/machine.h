@@ -45,6 +45,7 @@ class Machine {
   void Reset();
   void Pause();
   void Resume();
+  void Shutdown();
   bool IsValid() { return valid_; }
   bool IsPaused() { return valid_ && paused_; }
   void WaitToResume();
@@ -64,12 +65,14 @@ class Machine {
   inline uint64_t ram_size() { return ram_size_; }
   inline bool debug() { return debug_; }
   inline bool hypervisor() { return hypervisor_; }
+  inline bool power_on() { return power_on_; }
   inline const std::string& guest_os() const { return guest_os_; }
   inline const std::string& vm_name() const { return vm_name_; }
   inline const std::string& vm_uuid() const { return vm_uuid_; }
   inline void set_guest_os(std::string os) { guest_os_ = os; }
   inline void set_vm_name(std::string name) { vm_name_ = name; }
   inline void set_vm_uuid(std::string uuid) { vm_uuid_ = uuid; }
+  inline void set_power_on(bool on) { power_on_ = on; }
   inline Vcpu* first_vcpu() { return vcpus_.size() ? vcpus_[0] : nullptr; }
 
  private:
@@ -85,6 +88,7 @@ class Machine {
   bool paused_ = true;
   bool loading_ = false;
   bool saving_ = false;
+  bool power_on_ = false;
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;

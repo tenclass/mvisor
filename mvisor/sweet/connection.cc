@@ -73,6 +73,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kResetMachine:
     machine_->Reset();
     break;
+  case kShutdownMachine:
+    machine_->Shutdown();
+    break;
   case kQuitMachine:
     machine_->Quit();
     break;

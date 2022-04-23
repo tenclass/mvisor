@@ -138,6 +138,9 @@ void Machine::Quit() {
 
 /* Recover BIOS data and reset all vCPU */
 void Machine::Reset() {
+  if (!valid_)
+    return;
+  power_on_ = true;
   memory_manager_->Reset();
   device_manager_->ResetDevices();
 
@@ -181,12 +184,21 @@ std::vector<Object*> Machine::LookupObjects(std::function<bool (Object*)> compar
   return result;
 }
 
+/* Power button is pressed */
+void Machine::Shutdown() {
+  for (auto o : LookupObjects([](auto o) { return dynamic_cast<PowerDownInterface*>(o); })) {
+    auto interface = dynamic_cast<PowerDownInterface*>(o);
+    interface->PowerDown();
+  }
+}
+
 /* Resume from paused state */
 void Machine::Resume() {
   std::unique_lock<std::mutex> lock(mutex_);
   MV_ASSERT(paused_);
   MV_ASSERT(wait_count_ == 0);
   paused_ = false;
+  power_on_ = true;
 
   /* Resume threads */
   wait_to_resume_.notify_all();

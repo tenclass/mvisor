@@ -23,6 +23,7 @@
 #include "logger.h"
 #include "pci_device.h"
 #include "device_manager.h"
+#include "device_interface.h"
 #include "machine.h"
 #include "pb/ich9_lpc.pb.h"
 
@@ -86,13 +87,22 @@ static uint64_t acpi_get_clock(uint64_t now)
   return (__int128_t)now * PM_TIMER_FREQUENCY / 1000000000;
 }
 
-class Ich9Lpc : public PciDevice {
+class Ich9Lpc : public PciDevice, public PowerDownInterface {
  private:
   Ich9LpcState  state_;
   bool          initialized_pmio_ = false;
   bool          initialized_rcrb_ = false;
+  int           system_control_irq_ = -1;
 
-  void UpdatePmBaseSci() {
+  void UpdateSystemControlIrq() {
+    if (system_control_irq_ == -1)
+      return;
+    auto acpi = state_.mutable_acpi();
+    int level = (acpi->pm1_enable() & acpi->pm1_status() & 0x521) || (acpi->gpe0_enable() & acpi->gpe0_status());
+    manager_->SetGsiLevel(system_control_irq_, level);
+  }
+
+  void UpdatePmBase() {
     /* PM IO base should be 0xB000 */
     uint32_t pm_io_base = *(uint32_t*)(pci_header_.data + ICH9_LPC_PMBASE);
     uint8_t acpi_control = *(uint8_t*)(pci_header_.data + ICH9_LPC_ACPI_CTRL);
@@ -101,11 +111,16 @@ class Ich9Lpc : public PciDevice {
         pm_io_base &= ICH9_LPC_PMBASE_BASE_ADDRESS_MASK;
         AddIoResource(kIoResourceTypePio, pm_io_base, ICH9_PMIO_SIZE, "LPC PM");
         initialized_pmio_ = true;
+        /* update system control irq */
+        auto irq_select = acpi_control & ICH9_LPC_ACPI_CTRL_SCI_IRQ_SEL_MASK;
+        MV_ASSERT(irq_select == ICH9_LPC_ACPI_CTRL_9);
+        system_control_irq_ = 9;
       }
     } else {
       if (initialized_pmio_) {
         RemoveIoResource(kIoResourceTypePio, "LPC PM");
         initialized_pmio_ = false;
+        system_control_irq_ = -1;
       }
     }
   }
@@ -157,7 +172,7 @@ class Ich9Lpc : public PciDevice {
     if (!reader->ReadProtobuf("LPC", state_)) {
       return false;
     }
-    UpdatePmBaseSci();
+    UpdatePmBase();
     UpdateRootComplexRegisterBLock();
     return true;
   }
@@ -166,6 +181,7 @@ class Ich9Lpc : public PciDevice {
     PciDevice::Reset();
     state_.Clear();
     state_.mutable_acpi()->set_smi_enable(ICH9_LPC_PMIO_ACPI_SMI_EN_APMC_EN);
+    UpdatePmBase();
   }
 
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
@@ -174,7 +190,7 @@ class Ich9Lpc : public PciDevice {
     if (ranges_overlap(offset, length, ICH9_LPC_PMBASE, 4) ||
       ranges_overlap(offset, length, ICH9_LPC_ACPI_CTRL, 1)) {
         /* pm io base || lsacpi enable, SCI: IRQ9 000b = irq9*/
-      UpdatePmBaseSci();
+      UpdatePmBase();
     }
     if (ranges_overlap(offset, length, ICH9_LPC_RCBA, 4)) {
       /* set root complex register block BAR */
@@ -277,9 +293,11 @@ class Ich9Lpc : public PciDevice {
     {
     case 0x00:
       acpi->set_pm1_status(acpi->pm1_status() & ~value);
+      UpdateSystemControlIrq();
       break;
     case 0x02:
       acpi->set_pm1_enable(value);
+      UpdateSystemControlIrq();
       break;
     case 0x04:
       acpi->set_pm1_control(value & ~ACPI_BITMASK_SLEEP_ENABLE);
@@ -307,15 +325,27 @@ class Ich9Lpc : public PciDevice {
     switch (type)
     {
     case 0: // soft power off
-      manager_->machine()->Quit();
+      manager_->machine()->set_power_on(false);
+      MV_LOG("machine is power off");
       break;
     case 1: // suspend request
-      manager_->machine()->Quit();
+      MV_PANIC("suspend is not supported");
       break;
     default:
       MV_LOG("unknown acpi suspend type=%d", type);
       break;
     }
+  }
+
+  /* Power down interface */
+  virtual void PowerDown() {
+    manager_->io()->Schedule([this]() {
+      auto acpi = state_.mutable_acpi();
+      if (acpi->pm1_enable() & 0x100) {
+        acpi->set_pm1_status(acpi->pm1_status() | 0x100);
+        UpdateSystemControlIrq();
+      }
+    });
   }
 };
 

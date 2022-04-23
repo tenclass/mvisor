@@ -376,6 +376,12 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       machine_->Pause();
       machine_->Save("/tmp/save");
       return;
+    } else if (event.key.keysym.sym == SDLK_F12) {
+      if (machine_->power_on()) {
+        machine_->Shutdown();
+      } else {
+        machine_->Reset();
+      }
     }
   case SDL_KEYUP:
     if (keyboard_ && TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {

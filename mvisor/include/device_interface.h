@@ -195,4 +195,10 @@ class NetworkBackendInterface {
   MacAddress guest_mac_;
 };
 
+
+class PowerDownInterface {
+ public:
+  virtual void PowerDown() = 0;
+};
+
 #endif // _MVISOR_DEVICE_INTERFACES_H
