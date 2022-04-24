@@ -205,7 +205,6 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
     }
     if (ranges_overlap(offset, length, ICH9_LPC_GEN_PMCON_1, 8)) {
       MV_PANIC("ich9_lpc_pmcon_update(lpc);");
-      // MV_PANIC("activate irq remapping in LPC E-H");
     }
   }
 
@@ -325,8 +324,10 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
     switch (type)
     {
     case 0: // soft power off
-      manager_->machine()->set_power_on(false);
-      MV_LOG("machine is power off");
+      std::thread([this]() {
+        manager_->machine()->Pause();
+        MV_LOG("machine is power off");
+      }).detach();
       break;
     case 1: // suspend request
       MV_PANIC("suspend is not supported");

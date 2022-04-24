@@ -140,7 +140,6 @@ void Machine::Quit() {
 void Machine::Reset() {
   if (!valid_)
     return;
-  power_on_ = true;
   memory_manager_->Reset();
   device_manager_->ResetDevices();
 
@@ -198,7 +197,6 @@ void Machine::Resume() {
   MV_ASSERT(paused_);
   MV_ASSERT(wait_count_ == 0);
   paused_ = false;
-  power_on_ = true;
 
   /* Resume threads */
   wait_to_resume_.notify_all();

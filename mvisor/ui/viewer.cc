@@ -368,19 +368,25 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   case SDL_KEYDOWN:
     if (event.key.keysym.sym == SDLK_PAUSE) {
       if (machine_->IsPaused()) {
+        MV_LOG("Resume");
         machine_->Resume();
       } else {
+        MV_LOG("Pause");
         machine_->Pause();
       }
     } else if (event.key.keysym.sym == SDLK_F2) {
+      MV_LOG("Save");
       machine_->Pause();
       machine_->Save("/tmp/save");
       return;
     } else if (event.key.keysym.sym == SDLK_F12) {
-      if (machine_->power_on()) {
-        machine_->Shutdown();
-      } else {
+      if (machine_->IsPaused()) {
+        MV_LOG("Reset");
+        machine_->Resume();
         machine_->Reset();
+      } else {
+        MV_LOG("Shutdown");
+        machine_->Shutdown();
       }
     }
   case SDL_KEYUP:
