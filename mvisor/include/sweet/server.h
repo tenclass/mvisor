@@ -59,6 +59,7 @@ class SweetServer {
 
  private:
   SweetConnection* GetConnectionByFd(int fd);
+  void RemoveConnection(SweetConnection* conn);
   void LookupDevices();
   void OnEvent();
   void OnAccept();

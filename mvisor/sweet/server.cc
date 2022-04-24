@@ -127,21 +127,7 @@ int SweetServer::MainLoop() {
         } else if (i >= 2) {
           auto conn = GetConnectionByFd(fds[i].fd);
           if (!conn->OnReceive()) {
-            /* lock here to prevent io threads from using connection object */
-            std::lock_guard<std::mutex> lock(mutex_);
-            /* connection is closed or error */
-            if (display_connection_ == conn) {
-              display_encoder_->Stop();
-              display_connection_ = nullptr;
-            }
-            if (playback_connection_ == conn) {
-              playback_connection_ = nullptr;
-            }
-            if (guest_command_connection_ == conn) {
-              guest_command_connection_ = nullptr;
-            }
-            connections_.remove(conn);
-            delete conn;
+            RemoveConnection(conn);
           }
         }
       }
@@ -210,6 +196,24 @@ SweetConnection* SweetServer::GetConnectionByFd(int fd) {
     }
   }
   return nullptr;
+}
+
+void SweetServer::RemoveConnection(SweetConnection* conn) {
+  /* lock here to prevent io threads from using connection object */
+  std::lock_guard<std::mutex> lock(mutex_);
+  /* connection is closed or error */
+  if (display_connection_ == conn) {
+    display_encoder_->Stop();
+    display_connection_ = nullptr;
+  }
+  if (playback_connection_ == conn) {
+    playback_connection_ = nullptr;
+  }
+  if (guest_command_connection_ == conn) {
+    guest_command_connection_ = nullptr;
+  }
+  connections_.remove(conn);
+  delete conn;
 }
 
 void SweetServer::LookupDevices() {
