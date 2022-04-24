@@ -42,7 +42,7 @@ Nov 2021
 10. Legacy DMA ❌
 11. IDE ❌ / AHCI ✅
 12. Parallel Port ❌
-13. Serial Port ❌
+13. Serial Port ✅
 14. VGA / VBE ✅
 15. Option Roms ✅ / SMBIOS ✅ / ACPI Table ✅
 16. Boot DOS ✅
@@ -54,7 +54,7 @@ Feb 2022
 
 1. Virtio (Console ✅ / Block ✅ / Net ✅ / Balloon)
 2. SpiceAgent ✅
-3. QemuGuestAgent
+3. QemuGuestAgent ✅
 4. Qxl ✅
 5. Audio (ICH9-HDA) ✅
 6. Tap network
@@ -73,7 +73,12 @@ Mar 2022
 
 Milestone 4: Virtualization Management
 Apr 2022
-1. Monitor unix socket
+1. Sweet server ✅
+2. Audio playback ✅
+3. Opus audio streaming ✅
+4. H264 display streaming ✅
+5. JPEG screendump ✅
+
 
 ## Install
 

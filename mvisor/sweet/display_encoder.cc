@@ -379,6 +379,15 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
     return;
   }
 
+  if (!w && !h) {
+    w = screen_width_;
+    h = screen_height_;
+  } else if (!w) {
+    w = h * screen_width_ / screen_height_;
+  } else if (!h) {
+    h = w * screen_height_ / screen_width_;
+  }
+
   if (w < 10 || w > screen_width_)
     w = screen_width_;
   if (h < 10 || h > screen_height_)
@@ -389,26 +398,6 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
   uint8_t bitmap[bitmap_stride * h];
   libyuv::ARGBScale(screen_bitmap_, screen_stride_, screen_width_, screen_height_,
     bitmap, bitmap_stride, w, h, libyuv::kFilterNone);
-  
-  // size_t bitmap_stride = w * 4;
-  // uint8_t bitmap[bitmap_stride * h];
-  // uint8_t* dst = bitmap;
-  // for (uint y = 0; y < h; y++) {
-  //   auto line_src = screen_bitmap_ + (y * screen_height_ / h) * screen_stride_;
-  //   for (uint x = 0; x < w; x++) {
-  //     if (screen_bpp_ == 24) {
-  //       auto src = line_src + (x * screen_width_ / w) * 3;
-  //       dst[0] = src[0];
-  //       dst[1] = src[1];
-  //       dst[2] = src[2];
-  //       dst[3] = 0;
-  //     } else {
-  //       auto src = line_src + (x * screen_width_ / w) * 4;
-  //       *(uint32_t*)dst = *(uint32_t*)src;
-  //     }
-  //     dst += 4;
-  //   }
-  // }
 
   /* bitmap to jpeg */
   jpeg_compress_struct cinfo;

@@ -352,13 +352,13 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
   virtual void Redraw() {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
-    if (mode_ != kDisplayQxlMode) {
-      return Vga::Redraw();
-    }
-  
-    /* Reset the draw state of all drawbles */
-    for (auto drawable : drawables_) {
-      drawable->drawed = false;
+    if (mode_ == kDisplayQxlMode) {
+      /* Reset the draw state of all drawbles */
+      for (auto drawable : drawables_) {
+        drawable->drawed = false;
+      }
+    } else {
+      Vga::Redraw();
     }
   }
 
