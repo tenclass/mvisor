@@ -49,8 +49,8 @@ class Machine {
   bool IsValid() { return valid_; }
   bool IsPaused() { return valid_ && paused_; }
   void WaitToResume();
-  void Save(std::string path);
-  void Load(std::string path);
+  void Save(const std::string path);
+  void Load(const std::string path);
   const char* GetStatus();
 
   Object* LookupObjectByName(std::string name);

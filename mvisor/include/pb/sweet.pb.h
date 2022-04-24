@@ -37,7 +37,7 @@ namespace protobuf_sweet_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[13];
+  static const ::google::protobuf::internal::ParseTable schema[14];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -45,6 +45,8 @@ struct TableStruct {
 void AddDescriptors();
 void InitDefaultsQueryStatusResponseImpl();
 void InitDefaultsQueryStatusResponse();
+void InitDefaultsSaveMachineOptionsImpl();
+void InitDefaultsSaveMachineOptions();
 void InitDefaultsSendKeyboardInputImpl();
 void InitDefaultsSendKeyboardInput();
 void InitDefaultsSendPointerInputImpl();
@@ -71,6 +73,7 @@ void InitDefaultsPlaybackStreamStartEventImpl();
 void InitDefaultsPlaybackStreamStartEvent();
 inline void InitDefaults() {
   InitDefaultsQueryStatusResponse();
+  InitDefaultsSaveMachineOptions();
   InitDefaultsSendKeyboardInput();
   InitDefaultsSendPointerInput();
   InitDefaultsQueryScreeenshot();
@@ -113,6 +116,9 @@ extern QueryScreenshotResponseDefaultTypeInternal _QueryScreenshotResponse_defau
 class QueryStatusResponse;
 class QueryStatusResponseDefaultTypeInternal;
 extern QueryStatusResponseDefaultTypeInternal _QueryStatusResponse_default_instance_;
+class SaveMachineOptions;
+class SaveMachineOptionsDefaultTypeInternal;
+extern SaveMachineOptionsDefaultTypeInternal _SaveMachineOptions_default_instance_;
 class SendKeyboardInput;
 class SendKeyboardInputDefaultTypeInternal;
 extern SendKeyboardInputDefaultTypeInternal _SendKeyboardInput_default_instance_;
@@ -377,6 +383,12 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
   ::google::protobuf::uint64 memory_size() const;
   void set_memory_size(::google::protobuf::uint64 value);
 
+  // bool tenclass_agent = 1005;
+  void clear_tenclass_agent();
+  static const int kTenclassAgentFieldNumber = 1005;
+  bool tenclass_agent() const;
+  void set_tenclass_agent(bool value);
+
   // uint32 vcpu_count = 4;
   void clear_vcpu_count();
   static const int kVcpuCountFieldNumber = 4;
@@ -401,11 +413,11 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
   bool spice_agent() const;
   void set_spice_agent(bool value);
 
-  // bool tenclass_agent = 1002;
-  void clear_tenclass_agent();
-  static const int kTenclassAgentFieldNumber = 1002;
-  bool tenclass_agent() const;
-  void set_tenclass_agent(bool value);
+  // bool qemu_agent = 1002;
+  void clear_qemu_agent();
+  static const int kQemuAgentFieldNumber = 1002;
+  bool qemu_agent() const;
+  void set_qemu_agent(bool value);
 
   // @@protoc_insertion_point(class_scope:SweetProtocol.QueryStatusResponse)
  private:
@@ -416,14 +428,122 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
   ::google::protobuf::internal::ArenaStringPtr vm_name_;
   ::google::protobuf::internal::ArenaStringPtr config_path_;
   ::google::protobuf::uint64 memory_size_;
+  bool tenclass_agent_;
   ::google::protobuf::uint32 vcpu_count_;
   bool debug_;
   bool hypervisor_;
   bool spice_agent_;
-  bool tenclass_agent_;
+  bool qemu_agent_;
   mutable int _cached_size_;
   friend struct ::protobuf_sweet_2eproto::TableStruct;
   friend void ::protobuf_sweet_2eproto::InitDefaultsQueryStatusResponseImpl();
+};
+// -------------------------------------------------------------------
+
+class SaveMachineOptions : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SaveMachineOptions) */ {
+ public:
+  SaveMachineOptions();
+  virtual ~SaveMachineOptions();
+
+  SaveMachineOptions(const SaveMachineOptions& from);
+
+  inline SaveMachineOptions& operator=(const SaveMachineOptions& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  SaveMachineOptions(SaveMachineOptions&& from) noexcept
+    : SaveMachineOptions() {
+    *this = ::std::move(from);
+  }
+
+  inline SaveMachineOptions& operator=(SaveMachineOptions&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SaveMachineOptions& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SaveMachineOptions* internal_default_instance() {
+    return reinterpret_cast<const SaveMachineOptions*>(
+               &_SaveMachineOptions_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    1;
+
+  void Swap(SaveMachineOptions* other);
+  friend void swap(SaveMachineOptions& a, SaveMachineOptions& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SaveMachineOptions* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  SaveMachineOptions* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const SaveMachineOptions& from);
+  void MergeFrom(const SaveMachineOptions& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(SaveMachineOptions* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string path = 1;
+  void clear_path();
+  static const int kPathFieldNumber = 1;
+  const ::std::string& path() const;
+  void set_path(const ::std::string& value);
+  #if LANG_CXX11
+  void set_path(::std::string&& value);
+  #endif
+  void set_path(const char* value);
+  void set_path(const char* value, size_t size);
+  ::std::string* mutable_path();
+  ::std::string* release_path();
+  void set_allocated_path(::std::string* path);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SaveMachineOptions)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr path_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSaveMachineOptionsImpl();
 };
 // -------------------------------------------------------------------
 
@@ -462,7 +582,7 @@ class SendKeyboardInput : public ::google::protobuf::Message /* @@protoc_inserti
                &_SendKeyboardInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
+    2;
 
   void Swap(SendKeyboardInput* other);
   friend void swap(SendKeyboardInput& a, SendKeyboardInput& b) {
@@ -575,7 +695,7 @@ class SendPointerInput : public ::google::protobuf::Message /* @@protoc_insertio
                &_SendPointerInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    2;
+    3;
 
   void Swap(SendPointerInput* other);
   friend void swap(SendPointerInput& a, SendPointerInput& b) {
@@ -723,7 +843,7 @@ class QueryScreeenshot : public ::google::protobuf::Message /* @@protoc_insertio
                &_QueryScreeenshot_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    3;
+    4;
 
   void Swap(QueryScreeenshot* other);
   friend void swap(QueryScreeenshot& a, QueryScreeenshot& b) {
@@ -844,7 +964,7 @@ class QueryScreenshotResponse : public ::google::protobuf::Message /* @@protoc_i
                &_QueryScreenshotResponse_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    4;
+    5;
 
   void Swap(QueryScreenshotResponse* other);
   friend void swap(QueryScreenshotResponse& a, QueryScreenshotResponse& b) {
@@ -980,7 +1100,7 @@ class MonitorsConfig_Monitor : public ::google::protobuf::Message /* @@protoc_in
                &_MonitorsConfig_Monitor_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(MonitorsConfig_Monitor* other);
   friend void swap(MonitorsConfig_Monitor& a, MonitorsConfig_Monitor& b) {
@@ -1114,7 +1234,7 @@ class MonitorsConfig : public ::google::protobuf::Message /* @@protoc_insertion_
                &_MonitorsConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(MonitorsConfig* other);
   friend void swap(MonitorsConfig& a, MonitorsConfig& b) {
@@ -1228,7 +1348,7 @@ class SetCursorEvent_CursorShape : public ::google::protobuf::Message /* @@proto
                &_SetCursorEvent_CursorShape_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(SetCursorEvent_CursorShape* other);
   friend void swap(SetCursorEvent_CursorShape& a, SetCursorEvent_CursorShape& b) {
@@ -1370,7 +1490,7 @@ class SetCursorEvent : public ::google::protobuf::Message /* @@protoc_insertion_
                &_SetCursorEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(SetCursorEvent* other);
   friend void swap(SetCursorEvent& a, SetCursorEvent& b) {
@@ -1495,7 +1615,7 @@ class DisplayStreamConfig : public ::google::protobuf::Message /* @@protoc_inser
                &_DisplayStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(DisplayStreamConfig* other);
   friend void swap(DisplayStreamConfig& a, DisplayStreamConfig& b) {
@@ -1682,7 +1802,7 @@ class PlaybackStreamConfig : public ::google::protobuf::Message /* @@protoc_inse
                &_PlaybackStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(PlaybackStreamConfig* other);
   friend void swap(PlaybackStreamConfig& a, PlaybackStreamConfig& b) {
@@ -1789,7 +1909,7 @@ class DisplayStreamStartEvent : public ::google::protobuf::Message /* @@protoc_i
                &_DisplayStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(DisplayStreamStartEvent* other);
   friend void swap(DisplayStreamStartEvent& a, DisplayStreamStartEvent& b) {
@@ -1895,7 +2015,7 @@ class PlaybackStreamStartEvent : public ::google::protobuf::Message /* @@protoc_
                &_PlaybackStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(PlaybackStreamStartEvent* other);
   friend void swap(PlaybackStreamStartEvent& a, PlaybackStreamStartEvent& b) {
@@ -2286,7 +2406,21 @@ inline void QueryStatusResponse::set_spice_agent(bool value) {
   // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.spice_agent)
 }
 
-// bool tenclass_agent = 1002;
+// bool qemu_agent = 1002;
+inline void QueryStatusResponse::clear_qemu_agent() {
+  qemu_agent_ = false;
+}
+inline bool QueryStatusResponse::qemu_agent() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.QueryStatusResponse.qemu_agent)
+  return qemu_agent_;
+}
+inline void QueryStatusResponse::set_qemu_agent(bool value) {
+  
+  qemu_agent_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.qemu_agent)
+}
+
+// bool tenclass_agent = 1005;
 inline void QueryStatusResponse::clear_tenclass_agent() {
   tenclass_agent_ = false;
 }
@@ -2298,6 +2432,63 @@ inline void QueryStatusResponse::set_tenclass_agent(bool value) {
   
   tenclass_agent_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.tenclass_agent)
+}
+
+// -------------------------------------------------------------------
+
+// SaveMachineOptions
+
+// string path = 1;
+inline void SaveMachineOptions::clear_path() {
+  path_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& SaveMachineOptions::path() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SaveMachineOptions.path)
+  return path_.GetNoArena();
+}
+inline void SaveMachineOptions::set_path(const ::std::string& value) {
+  
+  path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.SaveMachineOptions.path)
+}
+#if LANG_CXX11
+inline void SaveMachineOptions::set_path(::std::string&& value) {
+  
+  path_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.SaveMachineOptions.path)
+}
+#endif
+inline void SaveMachineOptions::set_path(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.SaveMachineOptions.path)
+}
+inline void SaveMachineOptions::set_path(const char* value, size_t size) {
+  
+  path_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.SaveMachineOptions.path)
+}
+inline ::std::string* SaveMachineOptions::mutable_path() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.SaveMachineOptions.path)
+  return path_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* SaveMachineOptions::release_path() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.SaveMachineOptions.path)
+  
+  return path_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SaveMachineOptions::set_allocated_path(::std::string* path) {
+  if (path != NULL) {
+    
+  } else {
+    
+  }
+  path_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), path);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.SaveMachineOptions.path)
 }
 
 // -------------------------------------------------------------------
@@ -3479,6 +3670,8 @@ inline void PlaybackStreamStartEvent::set_frequency(::google::protobuf::uint32 v
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

@@ -68,6 +68,7 @@ class SweetConnection {
   void OnStartDisplayStream();
   void OnStartPlaybackStream();
   void OnQueryScreenshot();
+  void OnSaveMachine();
 
   Machine*      machine_;
   SweetServer*  server_;

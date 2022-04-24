@@ -250,7 +250,7 @@ void Machine::RegisterStateChangeListener(VoidCallback callback) {
 }
 
 /* Should call by UI thread */
-void Machine::Save(std::string path) {
+void Machine::Save(const std::string path) {
   MV_ASSERT(!saving_);
   /* Make sure the machine is paused */
   if (!IsPaused()) {
@@ -290,7 +290,7 @@ void Machine::Save(std::string path) {
 }
 
 /* Should call by UI thread */
-void Machine::Load(std::string path) {
+void Machine::Load(const std::string path) {
   MV_ASSERT(!loading_);
   /* Make sure the machine is paused */
   if (!IsPaused()) {

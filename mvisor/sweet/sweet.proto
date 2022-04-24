@@ -74,7 +74,12 @@ message QueryStatusResponse {
 
   /* capabilities */
   bool      spice_agent     = 1001;
-  bool      tenclass_agent  = 1002;
+  bool      qemu_agent      = 1002;
+  bool      tenclass_agent  = 1005;
+}
+
+message SaveMachineOptions {
+  string    path        = 1;
 }
 
 message SendKeyboardInput {

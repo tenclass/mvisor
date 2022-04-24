@@ -79,6 +79,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kQuitMachine:
     machine_->Quit();
     break;
+  case kSaveMachine:
+    OnSaveMachine();
+    break;
   case kQemuGuestCommand:
     server_->QemuGuestCommand(this, buffer_);
     break;
@@ -170,8 +173,20 @@ void SweetConnection::OnQueryStatus() {
   if (spice_agent) {
     response.set_spice_agent(true);
   }
+  auto qemu_agent = dynamic_cast<SerialPortInterface*>(machine_->LookupObjectByClass("QemuGuestAgent"));
+  if (qemu_agent) {
+    response.set_qemu_agent(true);
+  }
 
   Send(kQueryStatusResponse, response);
+}
+
+void SweetConnection::OnSaveMachine() {
+  SaveMachineOptions options;
+  if (!options.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  machine_->Save(options.path());
 }
 
 void SweetConnection::OnKeyboardInput() {
