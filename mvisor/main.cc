@@ -128,10 +128,12 @@ int main(int argc, char* argv[])
    */
   if (!sweet_path.empty()) {
     sweet_server = new SweetServer(machine, sweet_path);
-    signal(SIGINT, [](int signo) {
+    auto quit_callback = [](int signo) {
       machine->Quit();
       sweet_server->Close();
-    });
+    };
+    signal(SIGINT, quit_callback);
+    signal(SIGTERM, quit_callback);
 
     if (!load_path.empty())
       machine->Load(load_path);
