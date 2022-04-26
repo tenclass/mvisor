@@ -94,4 +94,4 @@ An ISO image file is needed to install OS. Modify config/default.yaml to configu
 
 Virtio is recommended:
 
-<a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Downlaod Virtio Guest Tools</a>
+<a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Download Virtio Guest Tools</a>

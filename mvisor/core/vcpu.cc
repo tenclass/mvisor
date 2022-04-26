@@ -132,13 +132,27 @@ void Vcpu::SetupCpuid() {
   }
 
   /* Add Hyper-V functions to cpuid */
+  if (machine_->hypervisor_) {
+    SetupHyperV(&cpuid.cpuid2);
+  }
+
+  if (ioctl(fd_, KVM_SET_CPUID2, &cpuid) < 0)
+    MV_PANIC("KVM_SET_CPUID2 failed");
+}
+
+void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
   struct {
     struct kvm_cpuid2 cpuid2;
     struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
   } hyperv_cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
 
   if (ioctl(fd_, KVM_GET_SUPPORTED_HV_CPUID, &hyperv_cpuid) < 0) {
-    MV_PANIC("failed to get supported Hyper-V CPUID");
+    MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV));
+    MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV_TIME));
+    MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV_SYNIC));
+    MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV_TLBFLUSH));
+    MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV_SEND_IPI));
+    MV_PANIC("failed to get supported Hyper-V CPUID. Please upgrade your kernel.");
   }
 
   for (uint i = 0; i < hyperv_cpuid.cpuid2.nent; i++) {
@@ -179,12 +193,9 @@ void Vcpu::SetupCpuid() {
     }
     
     if (entry->function) {
-      cpuid.entries[cpuid.cpuid2.nent++] = *entry;
+      cpuid->entries[cpuid->nent++] = *entry;
     }
   }
-
-  if (ioctl(fd_, KVM_SET_CPUID2, &cpuid) < 0)
-    MV_PANIC("KVM_SET_CPUID2 failed");
 }
 
 void Vcpu::SetupMachineCheckException() {

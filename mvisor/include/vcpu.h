@@ -79,6 +79,7 @@ class Vcpu {
   void PrepareX86Vcpu();
   void SetupSingalHandler();
   void SetupCpuid();
+  void SetupHyperV(kvm_cpuid2* cpuid);
   void SetupMachineCheckException();
   void SetupModelSpecificRegisters();
   uint64_t GetSupportedMsrFeature(uint index);
