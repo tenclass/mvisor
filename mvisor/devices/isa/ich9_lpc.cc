@@ -305,8 +305,9 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
       }
       break;
     case 0x20 ... 0x27:
+      MV_ASSERT(size == 1);
       value = acpi->gpe0_status();
-      memcpy((uint8_t*)&value + offset - 0x20, data, size);
+      ((uint8_t*)&value)[offset - 0x20] &= ~data[0];
       acpi->set_gpe0_status(value);
       break;
     case 0x28 ... 0x2F:

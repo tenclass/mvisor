@@ -315,5 +315,6 @@ void Configuration::SaveMachine(YAML::Node& node) {
   node["memory"] = ss.str();
   node["vcpu"] = machine_->num_vcpus_;
   node["debug"] = machine_->debug_;
+  node["hypervisor"] = machine_->hypervisor_;
   node["bios"] = bios_path_;
 }
