@@ -586,7 +586,19 @@ void Vcpu::LoadStateFrom(VcpuState& state) {
     kvm_msr_entry entries[MAX_KVM_MSR_ENTRIES];
   } msrs;
   memcpy(&msrs, state.msrs().data(), sizeof(msrs));
-  MV_ASSERT(ioctl(fd_, KVM_SET_MSRS, &msrs) == (int)msrs.msrs.nmsrs);
+  int nmsrs = msrs.msrs.nmsrs;
+  while (nmsrs > 0) {
+    auto ret = ioctl(fd_, KVM_SET_MSRS, &msrs);
+    MV_ASSERT(ret >= 0);
+    if (ret < nmsrs) {
+      MV_LOG("Failed to set MSR 0x%x=0x%x. Maybe kernel version is too old?", msrs.entries[ret].index, msrs.entries[ret].data);
+      // Skip the failed one
+      nmsrs -= ret + 1;
+      memmove(msrs.entries, &msrs.entries[ret + 1], nmsrs * sizeof(kvm_msr_entry));
+    } else {
+      nmsrs -= ret;
+    }
+  }
 
   /* KVM vcpu events */
   kvm_vcpu_events events;
