@@ -71,6 +71,7 @@ DeviceManager::~DeviceManager() {
   }
   
   safe_close(&vfio_kvm_device_fd_);
+  MV_ASSERT(ioevents_.empty());
 }
 
 /* Called when system start or reset */

@@ -54,6 +54,10 @@ SweetDisplayEncoder::~SweetDisplayEncoder() {
     encode_thread_.join();
   }
 
+  for (auto slice : encode_slices_) {
+    delete slice;
+  }
+
   x264_encoder_close(x264_);
   x264_picture_clean(&input_yuv_);
   delete screen_bitmap_;

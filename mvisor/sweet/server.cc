@@ -315,8 +315,13 @@ void SweetServer::RefreshDisplayStream() {
 
 void SweetServer::QemuGuestCommand(SweetConnection* conn, std::string& command) {
   if (qemu_guest_agent_) {
-    guest_command_connection_ = conn;
-    qemu_guest_agent_->SendMessage((uint8_t*)command.data(), command.size());
+    if (qemu_guest_agent_->ready()) {
+      guest_command_connection_ = conn;
+      qemu_guest_agent_->SendMessage((uint8_t*)command.data(), command.size());
+    } else {
+      /* FIXME: how to send error response??? */
+      conn->Send(kQemuGuestCommandResponse, nullptr, 0);
+    }
   }
 }
 

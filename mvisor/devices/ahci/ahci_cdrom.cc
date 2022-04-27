@@ -213,7 +213,6 @@ void AhciCdrom::ParseCommandPacket() {
 }
 
 void AhciCdrom::Atapi_ReadSectorsAsync() {
-  io_async_ = true;
   size_t vec_index = 0;
   size_t position = io_.lba_block * track_size_;
   size_t total_bytes = io_.lba_count * track_size_;
@@ -223,6 +222,7 @@ void AhciCdrom::Atapi_ReadSectorsAsync() {
   
     auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
     
+    io_async_ = true;
     image_->ReadAsync(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
       io_.nbytes += length;
       if (io_.nbytes == (ssize_t)total_bytes) {

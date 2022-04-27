@@ -71,6 +71,7 @@ struct UsbPacket {
 class UsbDevice : public Device {
  public:
   UsbDevice();
+  virtual void Disconnect();
   virtual void Reset();
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);

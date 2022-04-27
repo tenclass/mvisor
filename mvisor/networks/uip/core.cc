@@ -71,6 +71,8 @@ class Uip : public Object, public NetworkBackendInterface {
     if (timer_) {
       real_device_->manager()->io()->RemoveTimer(timer_);
     }
+    /* Release all resources */
+    Reset();
   }
 
   /* UIP Router Configuration

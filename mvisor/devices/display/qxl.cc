@@ -122,6 +122,14 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
   }
 
+  virtual void Disconnect() {
+    for (auto drawable: drawables_) {
+      delete drawable;
+    }
+    drawables_.clear();
+    Vga::Disconnect();
+  }
+
   virtual void Reset() {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     /* Vga Reset() resets mode */

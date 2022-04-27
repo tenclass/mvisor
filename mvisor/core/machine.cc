@@ -99,6 +99,7 @@ Machine::~Machine() {
     safe_close(&vm_fd_);
   if (kvm_fd_ > 0)
     safe_close(&kvm_fd_);
+  delete config_;
 }
 
 /* Create KVM instance */
@@ -125,6 +126,11 @@ void Machine::InitializeKvm() {
 void Machine::Quit() {
   if (!valid_)
     return;
+  
+  /* Pause all threads and flush disk cache as well */
+  if (!paused_) {
+    Pause();
+  }
   valid_ = false;
 
   /* If paused, threads are waiting to resume */

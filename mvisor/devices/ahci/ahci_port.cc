@@ -167,6 +167,9 @@ bool AhciPort::HandleCommand(int slot) {
 
   /* We have only one DMA engine each drive.
    * when async IO is running by IO thread, we should wait for the slot */
+  MV_ASSERT(busy_slot_ == -1);
+  MV_ASSERT(drive_->io_async() == false);
+
   bool should_wait = drive_->StartCommand([this, io, command_, slot, regs]() {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
     if (io->nbytes <= 0 || io->dma_status) {
@@ -179,7 +182,6 @@ bool AhciPort::HandleCommand(int slot) {
     if (busy_slot_ != -1) {
       port_control_.command_issue &= ~(1U << busy_slot_);
       busy_slot_ = -1;
-      lock.unlock();
       /* Check next command */
       CheckCommand();
     }

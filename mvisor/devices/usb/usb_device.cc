@@ -30,6 +30,13 @@ UsbDevice::UsbDevice() {
   speed_ = kUsbSpeedHigh;
 }
 
+void UsbDevice::Disconnect() {
+  /* Free resources */
+  Reset();
+
+  Device::Disconnect();
+}
+
 void UsbDevice::Reset() {
   configuration_value_ = 0;
   config_ = nullptr;
@@ -39,6 +46,7 @@ void UsbDevice::Reset() {
     if (endpoint->timer) {
       manager_->io()->RemoveTimer(endpoint->timer);
     }
+    delete endpoint;
   }
   endpoints_.clear();
 }

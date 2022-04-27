@@ -106,6 +106,7 @@ class IdeStorageDevice : public Device {
   IdeStorageType  type() { return type_; }
   IdeIo*          io() { return &io_; }
   IdeRegisters*   regs() { return &regs_; }
+  bool            io_async() { return io_async_; }
 
  protected:
   virtual void Ata_ResetSignature();
@@ -122,7 +123,7 @@ class IdeStorageDevice : public Device {
   VoidCallback    ata_handlers_[256];
   bool            write_cache_ = true;
   VoidCallback    io_complete_;
-  bool            io_async_;
+  bool            io_async_ = false;
 };
 
 

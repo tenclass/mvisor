@@ -130,8 +130,9 @@ class Qcow2Image : public DiskImage {
   size_t rfb_entries_;
   size_t refcount_bits_;
 
-  uint64_t free_cluster_index_ = 0;
-  uint8_t* copied_cluster_ = nullptr;
+  uint64_t    free_cluster_index_ = 0;
+  uint8_t*    copied_cluster_ = nullptr;
+  std::string compressed_;
 
   std::vector<uint64_t> l1_table_;
   std::vector<uint64_t> refcount_table_;

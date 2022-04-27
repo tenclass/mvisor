@@ -157,6 +157,14 @@ class XhciHost : public PciDevice {
     }
   }
 
+  virtual void Disconnect() {
+    /* disable slots and endpoints */
+    for (uint i = 1; i <= max_slots_; i++) {
+      DisableSlot(i);
+    }
+    PciDevice::Disconnect();
+  }
+
   bool AttachUsbDevice(UsbDevice* device) {
     for (auto &port_state : port_states_) {
       if (port_state.device)

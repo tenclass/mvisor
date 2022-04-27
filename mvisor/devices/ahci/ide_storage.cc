@@ -93,6 +93,7 @@ bool IdeStorageDevice::IsAvailable() {
 
 void IdeStorageDevice::CompleteCommand() {
   regs_.status &= ~ATA_SR_BSY;
+  io_async_ = false;
   io_complete_();
 }
 
@@ -105,7 +106,7 @@ bool IdeStorageDevice::StartCommand(VoidCallback iocp) {
   
   if (regs_.status & (ATA_SR_BSY)) {
     if (regs_.command != ATA_CMD_DEVICE_RESET || type_ != kIdeStorageTypeCdrom) {
-      MV_PANIC("invalid command 0x%x while busy", regs_.command);
+      MV_PANIC("%s invalid command 0x%x while busy, async=%d", name_, regs_.command, io_async_);
       return false;
     }
   }

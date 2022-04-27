@@ -187,8 +187,10 @@ void Vga::Disconnect() {
     vram_base_ = nullptr;
   }
 
-  manager_->io()->RemoveTimer(refresh_timer_);
-  refresh_timer_ = nullptr;
+  if (refresh_timer_) {
+    manager_->io()->RemoveTimer(refresh_timer_);
+    refresh_timer_ = nullptr;
+  }
   mode_ = kDisplayUnknownMode;
   PciDevice::Disconnect();
 }

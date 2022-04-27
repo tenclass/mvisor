@@ -50,6 +50,15 @@ IoThread::~IoThread() {
   if (epoll_fd_ > 0) {
     safe_close(&epoll_fd_);
   }
+  for (auto it = epoll_events_.begin(); it != epoll_events_.end(); it++) {
+    delete it->second;
+  }
+  for (auto timer : timers_) {
+    if (!timer->removed) {
+      MV_LOG("warning: timer %s is not removed when disconnected", timer->callback.target_type().name());
+    }
+    delete timer;
+  }
 }
 
 

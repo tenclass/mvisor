@@ -52,6 +52,15 @@ MemoryManager::MemoryManager(const Machine* machine)
 }
 
 MemoryManager::~MemoryManager() {
+  for (auto listener: listeners_) {
+    delete listener;
+  }
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
+    delete it->second;
+  }
+  for (auto region : regions_) {
+    delete region;
+  }
   munmap(ram_host_, machine_->ram_size_);
   if (bios_data_)
     free(bios_data_);

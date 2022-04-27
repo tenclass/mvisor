@@ -31,6 +31,10 @@ Device::Device() {
 }
 
 Device::~Device() {
+  /* Free resources */
+  for (auto resource : io_resources_) {
+    delete resource;
+  }
 }
 
 void Device::Reset() {
@@ -109,6 +113,7 @@ void Device::RemoveIoResource(IoResourceType type, const char* name) {
         SetIoResourceEnabled(resource, false);
       }
       io_resources_.erase(it);
+      delete resource;
       return;
     }
   }
@@ -123,6 +128,7 @@ void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
       }
       MV_ASSERT(!resource->enabled);
       io_resources_.erase(it);
+      delete resource;
       return;
     }
   }

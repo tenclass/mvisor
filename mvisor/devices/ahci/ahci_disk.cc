@@ -204,7 +204,6 @@ void AhciDisk::WriteLba() {
 }
 
 void AhciDisk::Ata_ReadWriteSectorsAsync(bool is_write) {
-  io_async_ = true;
   size_t vec_index = 0;
   size_t position = io_.lba_block * geometry_.sector_size;
   size_t total_bytes = io_.lba_count * geometry_.sector_size;
@@ -213,6 +212,7 @@ void AhciDisk::Ata_ReadWriteSectorsAsync(bool is_write) {
     auto &iov = io_.vector[vec_index];
     auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
 
+    io_async_ = true;
     auto complete_block = [this, total_bytes, length](ssize_t ret) {
       io_.nbytes += length;
       if (io_.nbytes == (ssize_t)total_bytes) {
@@ -232,7 +232,6 @@ void AhciDisk::Ata_ReadWriteSectorsAsync(bool is_write) {
 }
 
 void AhciDisk::Ata_TrimAsync() {
-  io_async_ = true;
   size_t total_bytes = 0;
   struct Chunk {
     size_t position;
@@ -261,6 +260,7 @@ void AhciDisk::Ata_TrimAsync() {
   }
   io_.nbytes = 0;
   for (auto chunk : chunks) {
+    io_async_ = true;
     image_->DiscardAsync(chunk.position, chunk.length, false, [this, total_bytes, chunk](ssize_t ret) {
       io_.nbytes += chunk.length;
       if (io_.nbytes == (ssize_t)total_bytes) {

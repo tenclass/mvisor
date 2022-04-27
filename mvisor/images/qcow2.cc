@@ -376,12 +376,13 @@ ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_
       (cluster_start & ~QCOW2_COMPRESSED_SECTOR_MASK);
     cluster_start &= (1ULL << x) - 1;
 
-    void* compressed = new uint8_t[compressed_length];
-    ssize_t bytes_read = ReadFile(compressed, compressed_length, cluster_start);
+    if (compressed_.size() < compressed_length)
+      compressed_.resize(compressed_length);
+    ssize_t bytes_read = ReadFile(compressed_.data(), compressed_length, cluster_start);
     if (bytes_read < 0) {
       return bytes_read;
     }
-    auto ret = zstd_decompress(compressed, compressed_length, copied_cluster_, cluster_size_);
+    auto ret = zstd_decompress(compressed_.data(), compressed_length, copied_cluster_, cluster_size_);
     if (ret < 0) {
       MV_PANIC("failed to decompressed length=0x%x ret=%d", compressed_length, ret);
       return ret;
