@@ -78,7 +78,6 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   uint32_t                  pcm_formats_;
   std::vector<HdaNode>      nodes_;
   std::array<HdaStream, 2>  streams_ = { 0 };
-  FILE*                     fp_output_ = nullptr;
   std::vector<PlaybackListener> playback_listerns_;
 
  public:
@@ -88,15 +87,13 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
 
   void Connect() {
     Device::Connect();
-    if (debug_) {
-      fp_output_ = fopen("/tmp/sound.dat", "wb");
-      MV_ASSERT(fp_output_);
-    }
   }
 
   virtual void Disconnect() {
-    if (fp_output_) {
-      fclose(fp_output_);
+    for (auto& stream : streams_) {
+      if (stream.running) {
+        SetStreamRunning(&stream, false);
+      }
     }
     Device::Disconnect();
   }
