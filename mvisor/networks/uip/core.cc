@@ -40,9 +40,9 @@ struct ArpMessage {
   uint8_t     ar_pln;    /* length of protocol address  */
   uint16_t    ar_op;     /* ARP opcode (command)    */
 
-   /*
-    * Ethernet looks like this : This bit is variable sized however...
-    */
+  /*
+  * Ethernet looks like this : This bit is variable sized however...
+  */
   uint8_t     ar_sha[ETH_ALEN];  /* sender hardware address  */
   uint32_t    ar_sip;            /* sender IP address    */
   uint8_t     ar_tha[ETH_ALEN];  /* target hardware address  */
@@ -312,8 +312,8 @@ class Uip : public Object, public NetworkBackendInterface {
     
     auto socket = dynamic_cast<RedirectTcpSocket*>(LookupTcpSocket(sip, dip, sport, dport));
     if (socket == nullptr) {
-      /* If restricted, don't redirect UDP packets */
-      if (restrict_) {
+      /* If restricted and not local network, don't redirect packets */
+      if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
         return;
       }
       socket = new RedirectTcpSocket(this, packet);
@@ -387,8 +387,8 @@ class Uip : public Object, public NetworkBackendInterface {
         dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_);
         socket = dhcp;
       } else {
-        if (restrict_) {
-          /* If restricted, don't redirect UDP packets */
+        if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
+          /* If restricted and not local network, don't redirect UDP packets */
           return;
         }
         auto redirect_udp = new RedirectUdpSocket(this, packet);
