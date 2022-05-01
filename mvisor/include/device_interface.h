@@ -189,10 +189,14 @@ class NetworkBackendInterface {
   virtual Ipv4Packet* AllocatePacket(bool urgent) = 0;
   virtual void OnReceiveAvailable() = 0;
 
-  NetworkDeviceInterface* device() { return device_; }
+  inline NetworkDeviceInterface* device() { return device_; }
+  inline uint32_t router_ip() { return router_ip_; }
  protected:
   NetworkDeviceInterface* device_;
-  MacAddress guest_mac_;
+  MacAddress              guest_mac_;
+  MacAddress              router_mac_;
+  uint32_t                router_ip_;
+  uint32_t                router_subnet_mask_;
 };
 
 

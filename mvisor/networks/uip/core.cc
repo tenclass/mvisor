@@ -51,10 +51,6 @@ struct ArpMessage {
 
 class Uip : public Object, public NetworkBackendInterface {
  private:
-  MacAddress            router_mac_;
-  uint32_t              router_ip_;
-  uint32_t              router_subnet_mask_;
-  uint32_t              guest_ip_;
   std::list<TcpSocket*> tcp_sockets_;
   std::list<UdpSocket*> udp_sockets_;
   IoTimer*              timer_ = nullptr;
@@ -86,11 +82,9 @@ class Uip : public Object, public NetworkBackendInterface {
     mtu_ = mtu;
     MV_ASSERT(mtu_ + 16 <= 4096);
 
-    // Assign IP 192.168.128.100 to machine
-    // FIXME: should be configurable
+    // Default configuration 192.168.128.1/24
     router_subnet_mask_ = 0xFFFFFF00;
     router_ip_ = 0xC0A88001;
-    guest_ip_ = 0xC0A88064;
 
     // This function could only be called once
     MV_ASSERT(real_device_ == nullptr);
@@ -101,6 +95,20 @@ class Uip : public Object, public NetworkBackendInterface {
 
     if (real_device_->has_key("restrict")) {
       restrict_ = std::get<bool>((*real_device_)["restrict"]);
+    }
+
+    if (real_device_->has_key("router")) {
+      auto router = std::get<std::string>((*real_device_)["router"]);
+      // Parse 192.168.2.2/24
+      auto slash_pos = router.find('/');
+      if (slash_pos != std::string::npos) {
+        in_addr ip;
+        if (inet_aton(router.substr(0, slash_pos).c_str(), &ip)) {
+          router_ip_ = ntohl(ip.s_addr);
+          auto mask_bits = atoi(router.substr(slash_pos + 1).c_str());
+          router_subnet_mask_ = 0xFFFFFFFF << (32 - mask_bits);
+        }
+      }
     }
   }
 
@@ -374,17 +382,10 @@ class Uip : public Object, public NetworkBackendInterface {
     auto socket = LookupUdpSocket(sip, dip, sport, dport);
     if (socket == nullptr) {
       // Check if it's UDP broadcast
-      if (dip == 0xFFFFFFFF || (dip & router_subnet_mask_) == (router_ip_ & router_subnet_mask_)) {
-        if (dport == 67) {
-          auto dhcp = new DhcpServiceUdpSocket(this, packet);
-          dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_, guest_ip_);
-          socket = dhcp;
-        } else {
-          if (real_device_->debug()) {
-            MV_LOG("unhandled UDP to %x:%d", dip, dport);
-          }
-          return;
-        }
+      if (dport == 67) {
+        auto dhcp = new DhcpServiceUdpSocket(this, packet);
+        dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_);
+        socket = dhcp;
       } else {
         if (restrict_) {
           /* If restricted, don't redirect UDP packets */

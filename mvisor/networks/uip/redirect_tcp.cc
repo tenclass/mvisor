@@ -117,6 +117,12 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
       .s_addr = htonl(dip_)
     }
   };
+
+  // Accessing router is the same as accessing the host
+  // FIXME: This might be dangerous to allow all ports
+  if (dip_ == backend_->router_ip()) {
+    daddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  }
   
   auto ret = connect(fd_, (sockaddr*)&daddr, sizeof(daddr));
   MV_ASSERT(ret < 0 && errno == EINPROGRESS);

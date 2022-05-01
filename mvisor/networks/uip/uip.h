@@ -182,7 +182,7 @@ class DhcpServiceUdpSocket : public UdpSocket {
   DhcpServiceUdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
     UdpSocket(backend, packet) {
   }
-  void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask, uint32_t guest_ip);
+  void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask);
   void OnPacketFromGuest(Ipv4Packet* packet);
   bool active();
 

@@ -45,11 +45,16 @@ struct DhcpMessage {
 } __attribute__((packed));
 
 
-void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask, uint32_t guest_ip) {
+void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask) {
   router_mac_ = router_mac;
   router_ip_ = router_ip;
   subnet_mask_ = subnet_mask;
-  guest_ip_ = guest_ip;
+
+  for (uint x = 0x64; x <= 0xF0; x++) {
+    guest_ip_ = (router_ip_ & subnet_mask_) | x;
+    if (guest_ip_ != router_ip_)
+      break;
+  }
 
   // Load DNS nameservers
   FILE* fp = fopen("/etc/resolv.conf", "r");
