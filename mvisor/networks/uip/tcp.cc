@@ -17,7 +17,9 @@
  */
 
 #include "uip.h"
+
 #include <arpa/inet.h>
+
 #include "logger.h"
 
 

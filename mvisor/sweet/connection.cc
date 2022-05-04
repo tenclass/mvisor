@@ -18,7 +18,6 @@
 
 #include "sweet/server.h"
 
-
 #include "connection.h"
 #include "display_encoder.h"
 #include "utilities.h"

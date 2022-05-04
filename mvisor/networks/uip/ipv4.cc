@@ -17,9 +17,11 @@
  */
 
 #include "uip.h"
+
 #include <arpa/inet.h>
-#include "logger.h"
+
 #include "device_manager.h"
+#include "logger.h"
 
 
 Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, Ipv4Packet* packet) :

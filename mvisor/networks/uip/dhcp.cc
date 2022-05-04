@@ -19,9 +19,9 @@
 #include "uip.h"
 
 #include <cstring>
+#include <arpa/inet.h>
 
 #include "logger.h"
-#include <arpa/inet.h>
 
 
 struct DhcpMessage {

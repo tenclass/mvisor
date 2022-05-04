@@ -17,9 +17,10 @@
  */
 
 #include "uip.h"
-#include <unistd.h>
+
 #include <fcntl.h>
 #include <arpa/inet.h>
+
 #include "logger.h"
 #include "utilities.h"
 

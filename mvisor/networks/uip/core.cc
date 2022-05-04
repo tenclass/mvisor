@@ -17,19 +17,15 @@
  */
 
 #include "uip.h"
-#include <mutex>
+
 #include <list>
-#include <thread>
+
 #include <arpa/inet.h>
 #include <linux/if_arp.h>
-#include <sys/epoll.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
-#include "utilities.h"
+
 #include "object.h"
-#include "device_interface.h"
 #include "device.h"
-#include "pci_device.h"
+#include "device_interface.h"
 #include "device_manager.h"
 #include "logger.h"
 

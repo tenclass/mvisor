@@ -19,14 +19,17 @@
 #ifndef _MVISOR_NETWORKS_USER_H
 #define _MVISOR_NETWORKS_USER_H
 
-#include "device_interface.h"
+
 #include <string>
 #include <vector>
+
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <ctime>
+
+#include "device_interface.h"
 #include "io_thread.h"
 
 #define UIP_MAX_BUFFER_SIZE         (4096 - 16)
