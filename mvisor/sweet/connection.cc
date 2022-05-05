@@ -337,11 +337,11 @@ void SweetConnection::OnQueryScreenshot() {
   if (!query.ParseFromString(buffer_)) {
     MV_PANIC("failed to parse buffer");
   }
-  auto encoder = server_->display_encoder();
-  MV_ASSERT(encoder);
-
   std::string image_data;
-  encoder->Screendump(query.format(), query.width(), query.height(), 50, image_data);
+
+  auto encoder = server_->display_encoder();
+  if (encoder)
+    encoder->Screendump(query.format(), query.width(), query.height(), 50, image_data);
 
   QueryScreenshotResponse response;
   response.set_format(query.format());

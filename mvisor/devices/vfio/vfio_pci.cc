@@ -594,7 +594,10 @@ void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t lengt
 
   /* write the VFIO device, check if msi */
   auto ret = pwrite(device_fd_, data, length, config_region.offset + offset);
-  MV_ASSERT(ret == (ssize_t)length);
+  if (ret != (ssize_t)length) {
+    MV_PANIC("failed to write VFIO device, offset=0x%x length=0x%x data=0x%x ret=%d",
+      offset, length, *(uint32_t*)data, ret);
+  }
 
   /* the default bahavior detects BAR activate/deactivate */
   PciDevice::WritePciConfigSpace(offset, data, length);

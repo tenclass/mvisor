@@ -135,9 +135,11 @@ int main(int argc, char* argv[])
     signal(SIGINT, quit_callback);
     signal(SIGTERM, quit_callback);
 
-    if (!load_path.empty())
-      machine->Load(load_path);
-    machine->Resume();
+    if (!load_path.empty()) {
+      std::thread([&load_path]() {
+        machine->Load(load_path);
+      }).detach();
+    }
 
     ret = sweet_server->MainLoop();
     delete sweet_server;
