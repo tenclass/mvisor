@@ -165,7 +165,13 @@ class SerialPortInterface {
 
 };
 
-
+struct RedirectRule {
+  uint        protocol;
+  uint32_t    match_ip;
+  uint16_t    match_port;
+  uint32_t    target_ip;
+  uint16_t    target_port;
+};
 struct MacAddress {
   union {
     uint8_t   data[6];
@@ -191,12 +197,14 @@ class NetworkBackendInterface {
 
   inline NetworkDeviceInterface* device() { return device_; }
   inline uint32_t router_ip() { return router_ip_; }
+  inline const std::vector<RedirectRule>& redirect_rules() const { return redirect_rules_; }
  protected:
-  NetworkDeviceInterface* device_;
-  MacAddress              guest_mac_;
-  MacAddress              router_mac_;
-  uint32_t                router_ip_;
-  uint32_t                router_subnet_mask_;
+  NetworkDeviceInterface*   device_;
+  MacAddress                guest_mac_;
+  MacAddress                router_mac_;
+  uint32_t                  router_ip_;
+  uint32_t                  router_subnet_mask_;
+  std::vector<RedirectRule> redirect_rules_;
 };
 
 

@@ -35,14 +35,21 @@ RedirectUdpSocket::~RedirectUdpSocket() {
 }
 
 bool RedirectUdpSocket::active() {
-  // Kill timedout
+  // Kill timed out
   if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
+    return false;
+  }
+  if (fd_ == -1) {
     return false;
   }
   return true;
 }
 
 void RedirectUdpSocket::InitializeRedirect() {
+  if (debug_) {
+    MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
+  }
+
   fd_ = socket(AF_INET, SOCK_DGRAM, 0);
   MV_ASSERT(fd_ >= 0);
 
@@ -56,18 +63,30 @@ void RedirectUdpSocket::InitializeRedirect() {
       .s_addr = htonl(dip_)
     }
   };
+
+  for (auto& rule : backend_->redirect_rules()) {
+    if (rule.protocol == 0 || rule.protocol == 0x11) {
+      if (rule.match_ip == dip_ && rule.match_port == dport_) {
+        daddr.sin_addr.s_addr = htonl(rule.target_ip);
+        daddr.sin_port = htons(rule.target_port);
+        break;
+      }
+    }
+  }
+
   auto ret = connect(fd_, (struct sockaddr*)&daddr, sizeof(daddr));
-  MV_ASSERT(ret == 0);
+  if (ret < 0) {
+    if (debug_)
+      perror("failed to initialize UDP socket");
+    safe_close(&fd_);
+    return;
+  }
 
   io_->StartPolling(fd_, EPOLLIN | EPOLLET, [this](auto events) {
     if (events & EPOLLIN) {
       StartReading();
     }
   });
-
-  if (debug_) {
-    MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
-  }
 }
 
 void RedirectUdpSocket::StartReading() {

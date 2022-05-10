@@ -45,6 +45,9 @@ bool RedirectTcpSocket::active() {
   if ((read_done_ || write_done_) && time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
     return false;
   }
+  if (fd_ == -1) {
+    return false;
+  }
   return true;
 }
 
@@ -97,6 +100,10 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
     return;
   }
 
+  if (debug_) {
+    MV_LOG("TCP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
+  }
+
   SynchronizeTcp(packet->tcp);
 
   // Initialize redirect states
@@ -119,14 +126,24 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
     }
   };
 
-  // Accessing router is the same as accessing the host
-  // FIXME: This might be dangerous to allow all ports
-  if (dip_ == backend_->router_ip()) {
-    daddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  for (auto& rule : backend_->redirect_rules()) {
+    if (rule.protocol == 0 || rule.protocol == 0x06) {
+      if (rule.match_ip == dip_ && rule.match_port == dport_) {
+        daddr.sin_addr.s_addr = htonl(rule.target_ip);
+        daddr.sin_port = htons(rule.target_port);
+        break;
+      }
+    }
   }
   
   auto ret = connect(fd_, (sockaddr*)&daddr, sizeof(daddr));
-  MV_ASSERT(ret < 0 && errno == EINPROGRESS);
+  if (ret < 0 && errno != EINPROGRESS) {
+    if (debug_)
+      perror("failed to initialize TCP socket");
+    safe_close(&fd_);
+    return;
+  }
+
   io_->StartPolling(fd_, EPOLLOUT | EPOLLIN | EPOLLET, [this](auto events) {
     can_read_ = events & EPOLLIN;
     can_write_ = events & EPOLLOUT;
@@ -141,10 +158,6 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
       StartReading();
     }
   });
-
-  if (debug_) {
-    MV_LOG("TCP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
-  }
 }
 
 void RedirectTcpSocket::OnRemoteConnected() {

@@ -20,6 +20,7 @@
 
 #include <list>
 
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <linux/if_arp.h>
 
@@ -106,6 +107,11 @@ class Uip : public Object, public NetworkBackendInterface {
         }
       }
     }
+
+    if (real_device_->has_key("redirect")) {
+      auto redirect = std::get<std::string>((*real_device_)["redirect"]);
+      ParseRedirectRules(redirect);
+    }
   }
 
   virtual void Reset() {
@@ -122,6 +128,81 @@ class Uip : public Object, public NetworkBackendInterface {
       delete *it;
     }
     tcp_sockets_.clear();
+  }
+
+  // Parse tcp:192.168.2.2:7070
+  bool ParseEndpoint(std::string endpoint, uint8_t* protocol, std::string* address, uint16_t* port) {
+    auto first_pos = endpoint.find_first_of(':');
+    auto last_pos = endpoint.find_last_of(':');
+    if (first_pos == std::string::npos || last_pos == std::string::npos) {
+      return false;
+    }
+
+    *protocol = 0;
+    if (first_pos != last_pos) {
+      auto protocol_string = endpoint.substr(0, first_pos);
+      if (protocol_string == "tcp") {
+        *protocol = 0x06;
+      } else if (protocol_string == "udp") {
+        *protocol = 0x11;
+      } else {
+        MV_LOG("unknown protocol %s", protocol_string.c_str());
+      }
+      first_pos += 1;
+    } else {
+      first_pos = 0;
+    }
+
+    *address = endpoint.substr(first_pos, last_pos - first_pos);
+    std::string port_string = endpoint.substr(last_pos + 1);
+    *port = atoi(port_string.c_str());
+    return true;
+  }
+
+  // Parse tcp:192.168.2.2:7070-127.0.0.1:7070
+  void ParseRedirectRule(std::string input) {
+    auto slash_pos = input.find('-');
+    if (slash_pos == std::string::npos)
+      return;
+    
+    RedirectRule rule;
+    std::string address;
+    uint8_t protocol;
+    uint16_t port;
+    if (!ParseEndpoint(input.substr(0, slash_pos), &protocol, &address, &port)) {
+      return;
+    }
+
+    rule.protocol = protocol;
+    rule.match_ip = ntohl(inet_addr(address.c_str()));
+    rule.match_port = port;
+    if (!ParseEndpoint(input.substr(slash_pos + 1), &protocol, &address, &port)) {
+      return;
+    }
+    auto entry = gethostbyname2(address.c_str(), AF_INET);
+    if (!entry) {
+      MV_LOG("failed to resolve name %s", address.c_str());
+      return;
+    }
+    rule.target_ip = ntohl(*(in_addr_t*)entry->h_addr_list[0]);
+    rule.target_port = port;
+    redirect_rules_.push_back(rule);
+  }
+
+  // Parse tcp:192.168.2.2:7070-127.0.0.1:7070;udp:192.168.2.2:8000-www.test.com:8000
+  void ParseRedirectRules(std::string rules) {
+    size_t start = 0;
+    while (true) {
+      auto colon_pos = rules.find_first_of(';', start);
+      if (colon_pos > start) {
+        ParseRedirectRule(rules.substr(start, colon_pos));
+      }
+      if (colon_pos == std::string::npos) {
+        break;
+      } else {
+        start = colon_pos + 1;
+      }
+    }
   }
 
   void OnTimer() {
