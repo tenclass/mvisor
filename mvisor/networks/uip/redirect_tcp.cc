@@ -84,6 +84,14 @@ void RedirectTcpSocket::Shutdown(int how) {
     MV_LOG("TCP fd=%d shutdown %s %x:%u -> %x:%u", fd_, how == SHUT_WR ? "WRITE" : "READ",
       sip_, sport_, dip_, dport_);
   }
+
+  if (read_done_ && write_done_) {
+    if (debug_) {
+      MV_LOG("TCP fd=%d closed", fd_);
+    }
+    io_->StopPolling(fd_);
+    safe_close(&fd_);
+  }
 }
 
 void RedirectTcpSocket::ReplyReset(Ipv4Packet* packet) {
