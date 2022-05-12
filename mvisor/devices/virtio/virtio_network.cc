@@ -124,9 +124,6 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
   }
 
   void OnReceive(int queue_index) {
-    if (debug_) {
-      MV_LOG("OnReceive %d", queue_index);
-    }
     if (backend_) {
       backend_->OnReceiveAvailable();
     }
@@ -155,7 +152,11 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
   virtual bool WriteBuffer(void* buffer, size_t size) {
     VirtQueue& vq = queues_[0];
-    MV_ASSERT(vq.enabled);
+    if (!vq.enabled) {
+      /* Drop all packets if device is not ready */
+      return true;
+    }
+
     std::vector<VirtElement*> elements;
 
     virtio_net_hdr_v1* net_header = nullptr;

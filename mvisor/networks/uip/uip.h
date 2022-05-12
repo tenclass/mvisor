@@ -27,6 +27,7 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
+#include <arpa/inet.h>
 #include <ctime>
 
 #include "device_interface.h"
@@ -64,7 +65,7 @@ struct Ipv4Packet {
 
 class Ipv4Socket {
  public:
-  Ipv4Socket(NetworkBackendInterface* backend, Ipv4Packet* packet);
+  Ipv4Socket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip);
   virtual ~Ipv4Socket() {}
   virtual void OnPacketFromGuest(Ipv4Packet* packet) = 0;
   
@@ -87,7 +88,7 @@ class Ipv4Socket {
 
 class TcpSocket : public Ipv4Socket {
  public:
-  TcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
+  TcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
    
   inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
@@ -104,18 +105,18 @@ class TcpSocket : public Ipv4Socket {
 
   uint16_t sport_;
   uint16_t dport_;
-  uint32_t window_size_;
-  uint32_t guest_acked_;
-  uint32_t ack_host_;
-  uint32_t seq_host_;
-  uint16_t mss_;
-  uint8_t  window_scale_;
-  bool     sack_permitted_;
+  uint32_t window_size_ = 0;
+  uint32_t guest_acked_ = 0;
+  uint32_t ack_host_ = 0;
+  uint32_t seq_host_ = 0;
+  uint16_t mss_ = 0;
+  uint8_t  window_scale_ = 0;
+  bool     sack_permitted_ = false;
 };
 
 class UdpSocket : public Ipv4Socket {
  public:
-  UdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
+  UdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
 
   inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
@@ -132,13 +133,14 @@ class UdpSocket : public Ipv4Socket {
 
 class RedirectTcpSocket : public TcpSocket {
  public:
-  RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet);
+  RedirectTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
   virtual ~RedirectTcpSocket();
+  virtual void InitializeRedirect(Ipv4Packet* packet);
   void Shutdown(int how);
-  void InitializeRedirect(Ipv4Packet* packet);
   void OnPacketFromGuest(Ipv4Packet* packet);
   bool UpdateGuestAck(tcphdr* tcp);
-  void Reset(Ipv4Packet* packet);
+  void ReplyReset(Ipv4Packet* packet);
+  void Reset();
 
   bool active();
   bool connected() { return connected_; }
@@ -160,12 +162,18 @@ class RedirectTcpSocket : public TcpSocket {
   bool connected_ = false;
 };
 
+class MapTcpSocket : public RedirectTcpSocket {
+ public:
+  MapTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport, int fd);
+  virtual void InitializeRedirect(Ipv4Packet* packet);
+};
+
 class Device;
 class DeviceManager;
 class RedirectUdpSocket : public UdpSocket {
  public:
-  RedirectUdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
-    UdpSocket(backend, packet) {
+  RedirectUdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
+    UdpSocket(backend, sip, dip, sport, dport) {
   }
   virtual ~RedirectUdpSocket();
   void InitializeRedirect();
@@ -182,10 +190,7 @@ class RedirectUdpSocket : public UdpSocket {
 struct DhcpMessage;
 class DhcpServiceUdpSocket : public UdpSocket {
  public:
-  DhcpServiceUdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
-    UdpSocket(backend, packet) {
-  }
-  void InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask);
+  DhcpServiceUdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
   void OnPacketFromGuest(Ipv4Packet* packet);
   bool active();
 
@@ -194,10 +199,6 @@ class DhcpServiceUdpSocket : public UdpSocket {
   size_t FillDhcpOptions(uint8_t* option, int dhcp_type);
 
   std::vector<uint32_t> nameservers_;
-  MacAddress router_mac_;
-  uint32_t subnet_mask_;
-  uint32_t router_ip_;
-  uint32_t guest_ip_;
 };
 
 #endif // _MVISOR_NETWORKS_USER_H

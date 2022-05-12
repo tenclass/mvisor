@@ -24,11 +24,8 @@
 #include "logger.h"
 
 
-Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
-  backend_(backend) {
-  auto ip = packet->ip;
-  sip_ = ntohl(ip->saddr);
-  dip_ = ntohl(ip->daddr);
+Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip) :
+  backend_(backend), sip_(sip), dip_(dip) {
   debug_ = false;
   active_time_ = time(nullptr);
 

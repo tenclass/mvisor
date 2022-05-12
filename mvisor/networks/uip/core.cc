@@ -19,9 +19,9 @@
 #include "uip.h"
 
 #include <list>
+#include <deque>
 
 #include <netdb.h>
-#include <arpa/inet.h>
 #include <linux/if_arp.h>
 
 #include "object.h"
@@ -29,6 +29,7 @@
 #include "device_interface.h"
 #include "device_manager.h"
 #include "logger.h"
+
 
 struct ArpMessage {
   uint16_t    ar_hrd;    /* format of hardware address  */
@@ -46,6 +47,23 @@ struct ArpMessage {
   uint32_t    ar_tip;            /* target IP address    */
 } __attribute__((packed));
 
+
+static std::deque<std::string> Split(std::string input, std::string token) {
+  std::deque<std::string> result;
+  size_t start = 0;
+  while (true) {
+    auto token_pos = input.find_first_of(token, start);
+    result.emplace_back(input.substr(start, token_pos - start));
+    if (token_pos == std::string::npos) {
+      break;
+    } else {
+      start = token_pos + token.length();
+    }
+  }
+  return result;
+}
+
+
 class Uip : public Object, public NetworkBackendInterface {
  private:
   std::list<TcpSocket*> tcp_sockets_;
@@ -55,6 +73,7 @@ class Uip : public Object, public NetworkBackendInterface {
   std::vector<Ipv4Packet*> queued_packets_;
   uint                  mtu_;
   bool                  restrict_ = false;
+  std::vector<int>      map_fds_;
 
  public:
   Uip() {
@@ -64,14 +83,15 @@ class Uip : public Object, public NetworkBackendInterface {
     if (timer_) {
       real_device_->manager()->io()->RemoveTimer(timer_);
     }
+    for (auto fd : map_fds_) {
+      real_device_->manager()->io()->StopPolling(fd);
+      safe_close(&fd);
+    }
     /* Release all resources */
     Reset();
   }
 
-  /* UIP Router Configuration
-   * Router MAC: 5255C0A80001
-   * Router IP: 192.168.128.1
-   */
+  /* UIP Router Configuration / Router MAC: 5255C0A80001 */
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac, int mtu) {
     device_ = device;
     guest_mac_ = mac;
@@ -108,9 +128,27 @@ class Uip : public Object, public NetworkBackendInterface {
       }
     }
 
+    // Generate guest ip after router ip is determined
+    for (uint x = 0x64; x <= 0xF0; x++) {
+      guest_ip_ = (router_ip_ & router_subnet_mask_) | x;
+      if (guest_ip_ != router_ip_)
+        break;
+    }
+
     if (real_device_->has_key("redirect")) {
       auto redirect = std::get<std::string>((*real_device_)["redirect"]);
-      ParseRedirectRules(redirect);
+      // Parse tcp:192.168.2.2:7070-127.0.0.1:7070;udp:192.168.2.2:8000-www.test.com:8000
+      for (auto rule : Split(redirect, ";")) {
+        ParseRedirectRule(rule);
+      }
+    }
+
+    if (real_device_->has_key("map")) {
+      auto map = std::get<std::string>((*real_device_)["map"]);
+      for (auto rule : Split(map, ";")) {
+        ParseMapRule(rule);
+      }
+      StartMapServices();
     }
   }
 
@@ -132,51 +170,46 @@ class Uip : public Object, public NetworkBackendInterface {
 
   // Parse tcp:192.168.2.2:7070
   bool ParseEndpoint(std::string endpoint, uint8_t* protocol, std::string* address, uint16_t* port) {
-    auto first_pos = endpoint.find_first_of(':');
-    auto last_pos = endpoint.find_last_of(':');
-    if (first_pos == std::string::npos || last_pos == std::string::npos) {
+    auto parts = Split(endpoint, ":");
+    if (parts.size() < 2 || parts.size() > 3) {
+      MV_PANIC("Invalid endpoint %s", endpoint.c_str());
       return false;
     }
 
     *protocol = 0;
-    if (first_pos != last_pos) {
-      auto protocol_string = endpoint.substr(0, first_pos);
-      if (protocol_string == "tcp") {
+    if (parts.size() == 3) {
+      if (parts[0] == "tcp") {
         *protocol = 0x06;
-      } else if (protocol_string == "udp") {
+      } else if (parts[0] == "udp") {
         *protocol = 0x11;
       } else {
-        MV_LOG("unknown protocol %s", protocol_string.c_str());
+        MV_LOG("unknown protocol %s", parts[0].c_str());
       }
-      first_pos += 1;
-    } else {
-      first_pos = 0;
+      parts.pop_front();
     }
 
-    *address = endpoint.substr(first_pos, last_pos - first_pos);
-    std::string port_string = endpoint.substr(last_pos + 1);
-    *port = atoi(port_string.c_str());
+    *address = parts[0];
+    *port = atoi(parts[1].c_str());
     return true;
   }
 
   // Parse tcp:192.168.2.2:7070-127.0.0.1:7070
   void ParseRedirectRule(std::string input) {
-    auto slash_pos = input.find('-');
-    if (slash_pos == std::string::npos)
-      return;
+    auto endpoints = Split(input, "-");
+    MV_ASSERT(endpoints.size() == 2);
     
     RedirectRule rule;
     std::string address;
     uint8_t protocol;
     uint16_t port;
-    if (!ParseEndpoint(input.substr(0, slash_pos), &protocol, &address, &port)) {
+    if (!ParseEndpoint(endpoints[0], &protocol, &address, &port)) {
       return;
     }
 
     rule.protocol = protocol;
     rule.match_ip = ntohl(inet_addr(address.c_str()));
     rule.match_port = port;
-    if (!ParseEndpoint(input.substr(slash_pos + 1), &protocol, &address, &port)) {
+    if (!ParseEndpoint(endpoints[1], &protocol, &address, &port)) {
       return;
     }
     auto entry = gethostbyname2(address.c_str(), AF_INET);
@@ -189,19 +222,81 @@ class Uip : public Object, public NetworkBackendInterface {
     redirect_rules_.push_back(rule);
   }
 
-  // Parse tcp:192.168.2.2:7070-127.0.0.1:7070;udp:192.168.2.2:8000-www.test.com:8000
-  void ParseRedirectRules(std::string rules) {
-    size_t start = 0;
-    while (true) {
-      auto colon_pos = rules.find_first_of(';', start);
-      if (colon_pos > start) {
-        ParseRedirectRule(rules.substr(start, colon_pos));
+  // Parse tcp:0.0.0.0:8080-:7070
+  void ParseMapRule(std::string input) {
+    auto endpoints = Split(input, "-");
+    MV_ASSERT(endpoints.size() == 2);
+
+    MapRule rule;
+    std::string address;
+    uint8_t protocol;
+    uint16_t port;
+    if (!ParseEndpoint(endpoints[0], &protocol, &address, &port)) {
+      return;
+    }
+
+    /* Currently only TCP service is allowed */
+    MV_ASSERT(protocol == 0x06);
+    rule.protocol = protocol;
+    if (!address.empty()) {
+      rule.listen_ip = ntohl(inet_addr(address.c_str()));
+    } else {
+      rule.listen_ip = INADDR_ANY;
+    }
+    rule.listen_port = port;
+    if (!ParseEndpoint(endpoints[1], &protocol, &address, &port)) {
+      return;
+    }
+    if (!address.empty()) {
+      rule.target_ip = ntohl(inet_addr(address.c_str()));
+    } else {
+      rule.target_ip = guest_ip_;
+    }
+    rule.target_port = port;
+    map_rules_.push_back(rule);
+  }
+
+  void StartMapServices() {
+    for (auto& rule : map_rules_) {
+      sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(rule.listen_port),
+        .sin_addr = {
+          .s_addr = htonl(rule.listen_ip)
+        }
+      };
+
+      int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+      MV_ASSERT(fd >= 0);
+
+      // Set socket reuse flag
+      int flag = 1;
+      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+  
+      MV_ASSERT(bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+      MV_ASSERT(listen(fd, 128) == 0);
+      map_fds_.push_back(fd);
+      if (real_device_->debug()) {
+        MV_LOG("listen ip=0x%x port=%d fd=%d", rule.listen_ip, rule.listen_port, fd);
       }
-      if (colon_pos == std::string::npos) {
-        break;
-      } else {
-        start = colon_pos + 1;
-      }
+
+      real_device_->manager()->io()->StartPolling(fd, EPOLLIN, [this, fd, rule](auto events) {
+        if (events & EPOLLIN) {
+          sockaddr_in addr;
+          socklen_t addr_len = sizeof(addr);
+          int conn_fd = accept4(fd, (sockaddr*)&addr, &addr_len, SOCK_NONBLOCK);
+          if (conn_fd != -1) {
+            if (addr.sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+              addr.sin_addr.s_addr = htonl(router_ip_);
+            }
+            auto sock = new MapTcpSocket(this, rule.target_ip, ntohl(addr.sin_addr.s_addr),
+              rule.target_port, ntohs(addr.sin_port), conn_fd);
+            tcp_sockets_.push_back(sock);
+          }
+        } else {
+          MV_LOG("invalid events=0x%x", events);
+        }
+      });
     }
   }
 
@@ -308,17 +403,21 @@ class Uip : public Object, public NetworkBackendInterface {
       break;
     case ETH_P_ARP:
       ParseArpPacket(eth, (ArpMessage*)&eth[1]);
+      packet->Release();
       break;
     case ETH_P_IPV6:
       // ignore IPv6
       MV_LOG("ignore IPv6");
+      packet->Release();
       break;
     case ETH_P_LLDP:
       // ignore LLDP
       MV_LOG("ignore LLDP");
+      packet->Release();
       break;
     default:
       MV_PANIC("Unknown ethernet packet protocol=%x", protocol);
+      packet->Release();
       break;
     }
   }
@@ -352,12 +451,14 @@ class Uip : public Object, public NetworkBackendInterface {
     {
     case 0x06: { // TCP
       packet->tcp = (struct tcphdr*)((uint8_t*)ip + ip->ihl * 4);
-      ParseTcpPacket(packet);
+      if (ParseTcpPacket(packet))
+        packet->Release();
       break;
     }
     case 0x11: { // UDP
       packet->udp = (struct udphdr*)((uint8_t*)ip + ip->ihl * 4);
-      ParseUdpPacket(packet);
+      if (ParseUdpPacket(packet))
+        packet->Release();
       break;
     }
     default:
@@ -366,6 +467,7 @@ class Uip : public Object, public NetworkBackendInterface {
         MV_LOG("ip packet protocol=%d", ip->protocol);
         DumpHex(ip, ntohs(ip->tot_len));
       }
+      packet->Release();
       break;
     }
   }
@@ -379,7 +481,7 @@ class Uip : public Object, public NetworkBackendInterface {
     return nullptr;
   }
 
-  void ParseTcpPacket(Ipv4Packet* packet) {
+  bool ParseTcpPacket(Ipv4Packet* packet) {
     auto ip = packet->ip;
     auto tcp = packet->tcp;
     uint32_t sip = ntohl(ip->saddr);
@@ -391,16 +493,16 @@ class Uip : public Object, public NetworkBackendInterface {
     if (socket == nullptr) {
       /* If restricted and not local network, don't redirect packets */
       if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
-        return;
+        return true;
       }
-      socket = new RedirectTcpSocket(this, packet);
+      socket = new RedirectTcpSocket(this, ntohl(ip->saddr), ntohl(ip->daddr), ntohs(tcp->source), ntohs(tcp->dest));
       tcp_sockets_.push_back(socket);
     }
 
     // Guest is trying to start a TCP session
     if (tcp->syn) {
       socket->InitializeRedirect(packet);
-      return;
+      return true;
     }
 
     // If not connected, other packets will reset the connection
@@ -409,24 +511,29 @@ class Uip : public Object, public NetworkBackendInterface {
         MV_LOG("Reset TCP %x:%u -> %x:%u syn:%d ack:%d rst:%d fin:%d", sip, sport, dip, dport,
           tcp->syn, tcp->ack, tcp->rst, tcp->fin);
       }
-      socket->Reset(packet);
-      return;
+      socket->ReplyReset(packet);
+      return true;
     }
   
     // Guest is closing the TCP
     if (tcp->fin) {
       socket->Shutdown(SHUT_WR);
-      return;
+      return true;
+    }
+
+    if (tcp->rst) {
+      socket->Reset();
+      return true;
     }
 
     // ACK is always set if not SYN or FIN or RST
     if (!tcp->ack) {
-      return;
+      return true;
     }
 
     // If send window buffer is full, try again when new guest ack comes
     if (!socket->UpdateGuestAck(tcp)) {
-      return;
+      return true;
     }
 
     // Send out TCP data to remote host
@@ -434,9 +541,10 @@ class Uip : public Object, public NetworkBackendInterface {
     packet->data_offset = 0;
     packet->data_length = ntohs(ip->tot_len) - ip->ihl * 4 - tcp->doff * 4;
     if (packet->data_length == 0) {
-      return;
+      return true;
     }
     socket->OnPacketFromGuest(packet);
+    return false;
   }
 
   UdpSocket* LookupUdpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
@@ -448,7 +556,7 @@ class Uip : public Object, public NetworkBackendInterface {
     return nullptr;
   }
 
-  void ParseUdpPacket(Ipv4Packet* packet) {
+  bool ParseUdpPacket(Ipv4Packet* packet) {
     auto ip = packet->ip;
     auto udp = packet->udp;
     uint32_t sip = ntohl(ip->saddr);
@@ -460,15 +568,13 @@ class Uip : public Object, public NetworkBackendInterface {
     if (socket == nullptr) {
       // Check if it's UDP broadcast
       if (dport == 67) {
-        auto dhcp = new DhcpServiceUdpSocket(this, packet);
-        dhcp->InitializeService(router_mac_, router_ip_, router_subnet_mask_);
-        socket = dhcp;
+        socket = new DhcpServiceUdpSocket(this, sip, dip, sport, dport);
       } else {
         if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
           /* If restricted and not local network, don't redirect UDP packets */
-          return;
+          return true;
         }
-        auto redirect_udp = new RedirectUdpSocket(this, packet);
+        auto redirect_udp = new RedirectUdpSocket(this, sip, dip, sport, dport);
         redirect_udp->InitializeRedirect();
         socket = redirect_udp;
       }
@@ -480,6 +586,7 @@ class Uip : public Object, public NetworkBackendInterface {
     packet->data_offset = 0;
     packet->data_length = ntohs(udp->len) - sizeof(*udp);
     socket->OnPacketFromGuest(packet);
+    return false;
   }
 
 };

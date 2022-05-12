@@ -172,6 +172,13 @@ struct RedirectRule {
   uint32_t    target_ip;
   uint16_t    target_port;
 };
+struct MapRule {
+  uint        protocol;
+  uint32_t    listen_ip;
+  uint16_t    listen_port;
+  uint32_t    target_ip;
+  uint16_t    target_port;
+};
 struct MacAddress {
   union {
     uint8_t   data[6];
@@ -196,15 +203,22 @@ class NetworkBackendInterface {
   virtual void OnReceiveAvailable() = 0;
 
   inline NetworkDeviceInterface* device() { return device_; }
+  inline MacAddress& router_mac() { return router_mac_; }
   inline uint32_t router_ip() { return router_ip_; }
+  inline uint32_t router_subnet_mask() { return router_subnet_mask_; }
+  inline uint32_t guest_ip() { return guest_ip_; }
   inline const std::vector<RedirectRule>& redirect_rules() const { return redirect_rules_; }
+  inline const std::vector<MapRule>& map_rules() const { return map_rules_; }
+
  protected:
   NetworkDeviceInterface*   device_;
   MacAddress                guest_mac_;
   MacAddress                router_mac_;
   uint32_t                  router_ip_;
   uint32_t                  router_subnet_mask_;
+  uint32_t                  guest_ip_;
   std::vector<RedirectRule> redirect_rules_;
+  std::vector<MapRule>      map_rules_;
 };
 
 

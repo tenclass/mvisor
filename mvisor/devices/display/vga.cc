@@ -173,6 +173,7 @@ void Vga::Connect() {
     }
     vram_base_ = (uint8_t*)mmap(nullptr, vram_size_, PROT_READ | PROT_WRITE,
       MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    pci_bars_[0].size = vram_size_;
     pci_bars_[0].host_memory = vram_base_;
   }
 

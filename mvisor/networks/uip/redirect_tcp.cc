@@ -24,9 +24,9 @@
 #include "logger.h"
 #include "utilities.h"
 
-RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
-  TcpSocket(backend, packet) {
-  fd_ = -1;
+RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
+  : TcpSocket(backend, sip, dip, sport, dport)
+{
 }
 
 RedirectTcpSocket::~RedirectTcpSocket() {
@@ -42,8 +42,10 @@ RedirectTcpSocket::~RedirectTcpSocket() {
 
 bool RedirectTcpSocket::active() {
   // Kill half closed
-  if ((read_done_ || write_done_) && time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
-    return false;
+  if (read_done_ || write_done_ || !connected_) {
+    if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
+      return false;
+    }
   }
   if (fd_ == -1) {
     return false;
@@ -84,7 +86,7 @@ void RedirectTcpSocket::Shutdown(int how) {
   }
 }
 
-void RedirectTcpSocket::Reset(Ipv4Packet* packet) {
+void RedirectTcpSocket::ReplyReset(Ipv4Packet* packet) {
   SynchronizeTcp(packet->tcp);
   seq_host_ = ntohl(packet->tcp->ack_seq);
 
@@ -95,25 +97,29 @@ void RedirectTcpSocket::Reset(Ipv4Packet* packet) {
   }
 }
 
+void RedirectTcpSocket::Reset() {
+  if (fd_ > 0) {
+    io_->StopPolling(fd_);
+    shutdown(fd_, SHUT_RDWR);
+    safe_close(&fd_);
+  }
+}
+
 void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
   if (fd_ > 0) {
     return;
   }
 
-  if (debug_) {
-    MV_LOG("TCP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
-  }
-
   SynchronizeTcp(packet->tcp);
 
   // Initialize redirect states
-  write_done_ = false;
-  read_done_ = false;
-  can_read_ = false;
-  can_write_ = false;
   connected_ = false;
   fd_ = socket(AF_INET, SOCK_STREAM, 0);
   MV_ASSERT(fd_ >= 0);
+
+  if (debug_) {
+    MV_LOG("TCP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
+  }
 
   // Set non-blocking
   MV_ASSERT(fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK) != -1);

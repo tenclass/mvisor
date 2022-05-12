@@ -46,12 +46,12 @@ bool RedirectUdpSocket::active() {
 }
 
 void RedirectUdpSocket::InitializeRedirect() {
+  fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+  MV_ASSERT(fd_ >= 0);
+
   if (debug_) {
     MV_LOG("UDP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
   }
-
-  fd_ = socket(AF_INET, SOCK_DGRAM, 0);
-  MV_ASSERT(fd_ >= 0);
 
   // Set non-blocking
   fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK);

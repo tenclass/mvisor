@@ -45,17 +45,9 @@ struct DhcpMessage {
 } __attribute__((packed));
 
 
-void DhcpServiceUdpSocket::InitializeService(MacAddress router_mac, uint32_t router_ip, uint32_t subnet_mask) {
-  router_mac_ = router_mac;
-  router_ip_ = router_ip;
-  subnet_mask_ = subnet_mask;
-
-  for (uint x = 0x64; x <= 0xF0; x++) {
-    guest_ip_ = (router_ip_ & subnet_mask_) | x;
-    if (guest_ip_ != router_ip_)
-      break;
-  }
-
+DhcpServiceUdpSocket::DhcpServiceUdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
+  : UdpSocket(backend, sip, dip, sport, dport)
+{
   // Load DNS nameservers
   FILE* fp = fopen("/etc/resolv.conf", "r");
   if (fp) {
@@ -132,7 +124,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   if (option_type == 0x01) { // Discover
     reply = CreateDhcpResponse(dhcp, 2);
   } else if (option_type == 0x03) { // Request
-    if (requested_ip == 0 || requested_ip == guest_ip_) {
+    if (requested_ip == 0 || requested_ip == backend_->guest_ip()) {
       reply = CreateDhcpResponse(dhcp, 5);  // ACK
     } else {
       reply = CreateDhcpResponse(dhcp, 6);  // NAK
@@ -140,8 +132,12 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   } else {
     DumpHex(dhcp, packet->data_length);
     MV_LOG("unknown dhcp packet option_type=0x%x", option_type);
+    packet->Release();
     return;
   }
+
+  // No more use
+  packet->Release();
 
   // Build UDP reply message
   auto reply_packet = AllocatePacket(false);
@@ -155,7 +151,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   // DHCP message uses special IPs
   uint32_t sip = sip_, dip = dip_;
   sip_ = 0xFFFFFFFF;
-  dip_ = router_ip_;
+  dip_ = backend_->router_ip();
   OnDataFromHost(reply_packet);
   sip_ = sip;
   dip_ = dip;
@@ -173,19 +169,19 @@ size_t DhcpServiceUdpSocket::FillDhcpOptions(uint8_t* option, int dhcp_type) {
   // dhcp server id
   *p++ = 54;
   *p++ = 4;
-  *(uint32_t*)p = htonl(router_ip_);
+  *(uint32_t*)p = htonl(backend_->router_ip());
   p += 4;
 
   // subnet mask
   *p++ = 1;
   *p++ = 4;
-  *(uint32_t*)p = htonl(subnet_mask_);
+  *(uint32_t*)p = htonl(backend_->router_subnet_mask());
   p += 4;
 
   // router
   *p++ = 3;
   *p++ = 4;
-  *(uint32_t*)p = htonl(router_ip_);
+  *(uint32_t*)p = htonl(backend_->router_ip());
   p += 4;
 
   // nameserver
@@ -211,7 +207,7 @@ std::string DhcpServiceUdpSocket::CreateDhcpResponse(DhcpMessage* request, int d
   response->message_type = 2;
   response->client_ip = 0;
 
-  response->your_ip = htonl(guest_ip_);
+  response->your_ip = htonl(backend_->guest_ip());
   response->next_server_ip = 0;
   response->relay_agent_ip = 0;
 

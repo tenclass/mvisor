@@ -23,23 +23,20 @@
 #include "logger.h"
 
 
-TcpSocket::TcpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
-  Ipv4Socket(backend, packet) {
-  auto tcp = packet->tcp;
-  sport_ = ntohs(tcp->source);
-  dport_ = ntohs(tcp->dest);
+TcpSocket::TcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
+  Ipv4Socket(backend, sip, dip), sport_(sport), dport_(dport) {
+  mss_ = 1460;
+  // setup initial sequence and acknowledge
+  seq_host_ = 0x66666666;
 }
 
 void TcpSocket::SynchronizeTcp(tcphdr* tcp) {
-  mss_ = 1460;
-  sack_permitted_ = false;
-  window_scale_ = 0;
-  window_size_ = ntohs(tcp->window);
-  guest_acked_ = 0;
-
-  // setup initial sequence and acknowledge
-  seq_host_ = 0x66666666;
+  window_size_ = ntohs(tcp->window) << window_scale_;
   ack_host_ = ntohl(tcp->seq) + 1;
+
+  if (tcp->ack) {
+    guest_acked_ = ntohl(tcp->ack_seq);
+  }
 
   ParseTcpOptions(tcp);
 }

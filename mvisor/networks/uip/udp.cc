@@ -21,11 +21,9 @@
 #include <arpa/inet.h>
 
 
-UdpSocket::UdpSocket(NetworkBackendInterface* backend, Ipv4Packet* packet) :
-  Ipv4Socket(backend, packet) {
-  auto udp = packet->udp;
-  sport_ = ntohs(udp->source);
-  dport_ = ntohs(udp->dest);
+UdpSocket::UdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
+  Ipv4Socket(backend, sip, dip), sport_(sport), dport_(dport)
+{
 }
 
 Ipv4Packet* UdpSocket::AllocatePacket(bool urgent) {
