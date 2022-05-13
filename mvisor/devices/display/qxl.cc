@@ -120,6 +120,9 @@ class Qxl : public Vga, public DisplayResizeInterface {
     if (qxl_vram32_base_) {
       free(qxl_vram32_base_);
     }
+    if (qxl_rom_base_) {
+      free(qxl_rom_base_);
+    }
   }
 
   virtual void Disconnect() {
