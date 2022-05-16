@@ -288,7 +288,8 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       callback(node.pin_control);
       break;
     case AC_VERB_SET_PIN_WIDGET_CONTROL:
-      MV_ASSERT(node.pin_control == payload);
+      /* If OS volume is muted, pin_control is set zero. */
+      node.pin_control = payload;
       callback(0);
       break;
     case AC_VERB_GET_CONFIG_DEFAULT:
