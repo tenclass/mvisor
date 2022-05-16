@@ -280,8 +280,8 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
   display_encoder_ = new SweetDisplayEncoder(w, h, &display_config_);
 
   /* Regenerate all partials after encoder recreated */
+  display_->Redraw();
   if (!display_updated_) {
-    display_->Redraw();
     display_updated_ = true;
     WakeUp();
   }
