@@ -200,7 +200,10 @@ void Machine::Shutdown() {
 /* Resume from paused state */
 void Machine::Resume() {
   std::unique_lock<std::mutex> lock(mutex_);
-  MV_ASSERT(paused_);
+  if (!paused_) {
+    MV_LOG("unable to resume a running machine");
+    return;
+  }
   MV_ASSERT(wait_count_ == 0);
   paused_ = false;
 
