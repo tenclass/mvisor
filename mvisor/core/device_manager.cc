@@ -354,15 +354,24 @@ void DeviceManager::SetupCoalescingMmioRing(kvm_coalesced_mmio_ring* ring) {
   }
 }
 
-/* FIXME: Is mutex necessary? */
 void DeviceManager::FlushCoalescingMmioBuffer() {
   if (!coalesced_mmio_ring_) {
     return;
   }
+  if (coalesced_mmio_ring_->first == coalesced_mmio_ring_->last) {
+    return;
+  }
+
+  /* Is mutex necessary? */
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+
   uint max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
     sizeof(struct kvm_coalesced_mmio));
   while (coalesced_mmio_ring_->first != coalesced_mmio_ring_->last) {
     struct kvm_coalesced_mmio *m = &coalesced_mmio_ring_->coalesced_mmio[coalesced_mmio_ring_->first];
+    coalesced_mmio_ring_->first = (coalesced_mmio_ring_->first + 1) % max_entries;
+
+    lock.unlock();
     for (size_t i = m->len; i < sizeof(m->data); i++)
       m->data[i] = 0;
     if (m->pio == 1) {
@@ -370,7 +379,7 @@ void DeviceManager::FlushCoalescingMmioBuffer() {
     } else {
       machine_->device_manager()->HandleMmio(m->phys_addr, m->data, m->len, 1);
     }
-    coalesced_mmio_ring_->first = (coalesced_mmio_ring_->first + 1) % max_entries;
+    lock.lock();
   }
 }
 
