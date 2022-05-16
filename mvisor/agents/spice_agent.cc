@@ -70,32 +70,13 @@ class SpiceAgent : public Object, public SerialPortInterface,
     HandleAgentMessage(message);
   }
 
-  void SendMonitorConfig() {
-    size_t buffer_size = sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig) * num_monitors_;
-    uint8_t buffer[buffer_size] = { 0 };
-    auto config = (VDAgentMonitorsConfig*)buffer;
-    config->num_of_monitors = num_monitors_;
-    config->flags = VD_AGENT_CONFIG_MONITORS_FLAG_PHYSICAL_SIZE;
-  
-    for (int i = 0; i < num_monitors_; i++) {
-      auto &mon = config->monitors[i];
-      mon.depth = 32;
-      mon.width = 1024;
-      mon.height = 768;
-    }
-    SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, buffer, buffer_size);
-  }
-
   void HandleAgentMessage(VDAgentMessage* message) {
     switch (message->type)
     {
     case VD_AGENT_ANNOUNCE_CAPABILITIES: {
-      /* control the initial resolution when OS started */
-      // SendMonitorConfig();
-
       /* ui effects & color depth */
       VDAgentDisplayConfig display_config = {
-        .flags = VD_AGENT_DISPLAY_CONFIG_FLAG_DISABLE_ANIMATION
+        .flags = 0
       };
       SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, &display_config, sizeof(display_config));
 
@@ -172,6 +153,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
   }
 
   virtual bool Resize(uint32_t width, uint32_t height) {
+    /* For H264, resolution must be multiple of 2 */
     if (width & 1)
       width++;
     if (height & 1)
