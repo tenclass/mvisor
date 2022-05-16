@@ -20,6 +20,7 @@
 #define _MVISOR_UTILITY_H
 
 #include <unistd.h>
+#include <stdio.h>
 
 class Object;
 typedef Object* (*ClassCreator) (void);
@@ -54,7 +55,10 @@ static void __attribute__ ((constructor)) __init__##cb(void) \
 
 /* Close fd and set to -1 */
 static inline void safe_close(int *fd) {
-  if (*fd > 0) {
+  if (*fd == 0) {
+    fprintf(stderr, "unable to close stdout\n");
+    return;
+  } else if (*fd > 0) {
     close(*fd);
     *fd = -1;
   }

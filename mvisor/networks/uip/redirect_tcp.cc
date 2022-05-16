@@ -34,7 +34,7 @@ RedirectTcpSocket::~RedirectTcpSocket() {
     packet->Release();
   }
 
-  if (fd_ > 0) {
+  if (fd_ != -1) {
     io_->StopPolling(fd_);
     safe_close(&fd_);
   }
