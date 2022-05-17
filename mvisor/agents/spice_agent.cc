@@ -104,7 +104,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
         MV_LOG("agent reply type=%u error=%u", reply->type, reply->error);
       }
       break;
-    } 
+    }
     case VD_AGENT_CLIPBOARD_GRAB: {
       auto grab = (VDAgentClipboardGrab*)message->data; 
       VDAgentClipboardRequest request = {
@@ -112,7 +112,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
       };
       SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_CLIPBOARD_REQUEST, &request, sizeof(request));
       break;
-    } 
+    }
     case VD_AGENT_CLIPBOARD: {
       auto clipboard = (VDAgentClipboard*) message->data;
       uint32_t msg_size = message->size - sizeof(message->type);

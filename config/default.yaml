@@ -2,7 +2,7 @@ name: Default configuration
 base: q35.yaml
 
 machine:
-  memory: 8G
+  memory: 4G
   vcpu: 8
   # Turn on BIOS output and performance measurement
   debug: No
@@ -12,6 +12,7 @@ machine:
 objects:
   - class: qxl
   - class: spice-agent
+  - class: qemu-guest-agent
   - class: usb-tablet
 
   - class: virtio-network

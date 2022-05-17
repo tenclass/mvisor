@@ -51,7 +51,7 @@ SweetServer::SweetServer(Machine* machine, std::string unix_path) :
     MV_PANIC("failed to bind unix socket %s", unix_path_.c_str());
   }
 
-  MV_ASSERT(listen(server_fd_, 1) == 0);
+  MV_ASSERT(listen(server_fd_, 10) == 0);
 
   /* Find all devices and register listeners */
   LookupDevices();
@@ -426,4 +426,3 @@ void SweetServer::OnClipboardEvent(ClipboardData clipboard_data) {
     clipboard_connection_->SendClipboardStreamDataEvent(clipboard_data);
   }
 }
-

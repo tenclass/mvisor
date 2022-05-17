@@ -89,6 +89,7 @@ void SweetDisplayEncoder::InitializeX264() {
   /* rate control method is not configurable now */
   param.rc.i_rc_method = X264_RC_CRF;
   param.rc.f_rf_constant = config_->qmin();
+  param.rc.i_qp_max = config_->qmin() + 6;
   param.rc.i_vbv_max_bitrate = config_->bitrate() / 1000;
   param.rc.i_vbv_buffer_size = config_->bitrate() * 2 / 1000;
 
@@ -262,7 +263,10 @@ void SweetDisplayEncoder::CreateEncodeSlice(uint top, uint left, uint bottom, ui
 void SweetDisplayEncoder::EncodeProcess() {
   SetThreadName("sweet-encoder");
 
+  uint average_packet_size = config_->bitrate() / config_->fps() / 8;
   auto idle_interval = std::chrono::milliseconds(1000);
+  auto frame_interval = std::chrono::microseconds(1000000 / config_->fps());
+  auto next_encode_time = std::chrono::steady_clock::now() + frame_interval * 0.0;
 
   while (!destroyed_) {
     std::unique_lock<std::mutex> lock(encode_mutex_);
@@ -285,12 +289,23 @@ void SweetDisplayEncoder::EncodeProcess() {
 
       DrawSlices(copied);
     }
+
+    auto start_time = std::chrono::steady_clock::now();
+    if (start_time < next_encode_time) {
+      continue;
+    }
   
     Encode();
 
     lock.lock();
     if (output_callback_) {
       output_callback_(output_nal_->p_payload, output_nal_size_);
+    }
+
+    /* Calculate next frame time point. Control bitrate by limiting fps */
+    double overhead = double(output_nal_size_) / average_packet_size;
+    if (overhead > 1.0 && overhead < config_->fps()) {
+      next_encode_time = start_time + frame_interval * (overhead - 1.0);
     }
   }
 }
