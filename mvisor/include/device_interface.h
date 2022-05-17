@@ -53,6 +53,21 @@ class DisplayResizeInterface {
 };
 
 
+struct ClipboardData {
+  uint32_t        type;
+  uint32_t        msg_size;
+  void*           msg_data;
+  std::string     file_name;
+};
+
+typedef std::function <void(ClipboardData clipboard_data)> ClipboardListener;
+class ClipboardInterface {
+  public:
+    virtual void RegisterClipboardListener(ClipboardListener callback) = 0;
+    virtual bool ClipboardDataToGuest(uint type, uint32_t msg_size, void* msg_data) = 0;
+};
+
+
 struct DisplayPartialBitmap {
   std::vector<iovec>  vector;
   uint                stride;

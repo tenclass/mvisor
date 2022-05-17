@@ -46,6 +46,8 @@ class SweetServer {
   void StopDisplayStream();
   void StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config);
   void StopPlaybackStream();
+  void StartClipboardStreamOnConnection(SweetConnection* conn);
+  void StopClipboardStream();
   void RefreshDisplayStream();
   void QemuGuestCommand(SweetConnection* conn, std::string& command);
 
@@ -56,6 +58,7 @@ class SweetServer {
   inline PlaybackInterface* playback() { return playback_; }
   inline DisplayInterface* display() { return display_; }
   inline SweetDisplayEncoder* display_encoder() { return display_encoder_; }
+  inline ClipboardInterface* clipboard() { return clipboard_; }
 
  private:
   SweetConnection* GetConnectionByFd(int fd);
@@ -65,6 +68,7 @@ class SweetServer {
   void OnAccept();
   void OnPlayback(PlaybackState state, struct iovec& iov);
   void SetDefaultConfig();
+  void OnClipboardEvent(ClipboardData clipboard_data);
 
   Machine*                    machine_;
   std::list<SweetConnection*> connections_;
@@ -77,6 +81,7 @@ class SweetServer {
   PlaybackInterface*                    playback_ = nullptr;
   KeyboardInputInterface*               keyboard_ = nullptr;
   SerialPortInterface*                  qemu_guest_agent_ = nullptr;
+  ClipboardInterface*                   clipboard_ = nullptr;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
 
@@ -89,6 +94,7 @@ class SweetServer {
   DisplayStreamConfig         display_config_;
   OpusEncoder*                playback_encoder_ = nullptr;
   SweetConnection*            playback_connection_ = nullptr;
+  SweetConnection*            clipboard_connection_ = nullptr;
   SweetConnection*            guest_command_connection_ = nullptr;
 };
 

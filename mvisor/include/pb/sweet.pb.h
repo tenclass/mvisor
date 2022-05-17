@@ -37,7 +37,7 @@ namespace protobuf_sweet_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[14];
+  static const ::google::protobuf::internal::ParseTable schema[16];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -71,6 +71,10 @@ void InitDefaultsDisplayStreamStartEventImpl();
 void InitDefaultsDisplayStreamStartEvent();
 void InitDefaultsPlaybackStreamStartEventImpl();
 void InitDefaultsPlaybackStreamStartEvent();
+void InitDefaultsClipboardDataToGuestImpl();
+void InitDefaultsClipboardDataToGuest();
+void InitDefaultsClipboardStreamDataEventImpl();
+void InitDefaultsClipboardStreamDataEvent();
 inline void InitDefaults() {
   InitDefaultsQueryStatusResponse();
   InitDefaultsSaveMachineOptions();
@@ -86,9 +90,17 @@ inline void InitDefaults() {
   InitDefaultsPlaybackStreamConfig();
   InitDefaultsDisplayStreamStartEvent();
   InitDefaultsPlaybackStreamStartEvent();
+  InitDefaultsClipboardDataToGuest();
+  InitDefaultsClipboardStreamDataEvent();
 }
 }  // namespace protobuf_sweet_2eproto
 namespace SweetProtocol {
+class ClipboardDataToGuest;
+class ClipboardDataToGuestDefaultTypeInternal;
+extern ClipboardDataToGuestDefaultTypeInternal _ClipboardDataToGuest_default_instance_;
+class ClipboardStreamDataEvent;
+class ClipboardStreamDataEventDefaultTypeInternal;
+extern ClipboardStreamDataEventDefaultTypeInternal _ClipboardStreamDataEvent_default_instance_;
 class DisplayStreamConfig;
 class DisplayStreamConfigDefaultTypeInternal;
 extern DisplayStreamConfigDefaultTypeInternal _DisplayStreamConfig_default_instance_;
@@ -179,8 +191,9 @@ enum SweetCommand {
   kStartRecordStream = 112,
   kStopRecordStream = 113,
   kSendRecordStreamData = 114,
-  kCopyToGuest = 128,
-  kPasteFromGuest = 129,
+  kClipboardDataToGuest = 128,
+  kStartClipboardStream = 129,
+  kStopClipboardStream = 130,
   kConnectUsb = 144,
   kDisconnectUsb = 145,
   kSendUsbData = 146,
@@ -188,12 +201,14 @@ enum SweetCommand {
   kConnectTcp = 161,
   kCloseTcp = 162,
   kSendTcpData = 163,
+  kStartVirtioFs = 176,
+  kStopVirtioFs = 177,
   SweetCommand_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetCommand_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetCommand_IsValid(int value);
 const SweetCommand SweetCommand_MIN = kInvalid;
-const SweetCommand SweetCommand_MAX = kSendTcpData;
+const SweetCommand SweetCommand_MAX = kStopVirtioFs;
 const int SweetCommand_ARRAYSIZE = SweetCommand_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetCommand_descriptor();
@@ -219,12 +234,18 @@ enum SweetResponseAndEvent {
   kPlaybackStreamStartEvent = 4192,
   kPlaybackStreamStopEvent = 4193,
   kPlaybackStreamDataEvent = 4194,
+  kVirtioFsStartEvent = 4208,
+  kVirtioFsStopEvent = 4209,
+  kVirtioFsNotifyEvent = 4210,
+  kClipboardStreamStartEvent = 4224,
+  kClipboardStreamStopEvent = 4225,
+  kClipboardStreamDataEvent = 4226,
   SweetResponseAndEvent_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetResponseAndEvent_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetResponseAndEvent_IsValid(int value);
 const SweetResponseAndEvent SweetResponseAndEvent_MIN = kInvalidResponse;
-const SweetResponseAndEvent SweetResponseAndEvent_MAX = kPlaybackStreamDataEvent;
+const SweetResponseAndEvent SweetResponseAndEvent_MAX = kClipboardStreamDataEvent;
 const int SweetResponseAndEvent_ARRAYSIZE = SweetResponseAndEvent_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetResponseAndEvent_descriptor();
@@ -236,6 +257,32 @@ inline bool SweetResponseAndEvent_Parse(
     const ::std::string& name, SweetResponseAndEvent* value) {
   return ::google::protobuf::internal::ParseNamedEnum<SweetResponseAndEvent>(
     SweetResponseAndEvent_descriptor(), name, value);
+}
+enum ClipboardDataType {
+  kSweetClipboard_NONE = 0,
+  kSweetClipboard_UTF8_TEXT = 1,
+  kSweetClipboard_IMAGE_PNG = 2,
+  kSweetClipboard_IMAGE_BMP = 3,
+  kSweetClipboard_IMAGE_TIFF = 4,
+  kSweetClipboard_IMAGE_JPG = 5,
+  kSweetClipboard_FILE_LIST = 6,
+  ClipboardDataType_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
+  ClipboardDataType_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
+};
+bool ClipboardDataType_IsValid(int value);
+const ClipboardDataType ClipboardDataType_MIN = kSweetClipboard_NONE;
+const ClipboardDataType ClipboardDataType_MAX = kSweetClipboard_FILE_LIST;
+const int ClipboardDataType_ARRAYSIZE = ClipboardDataType_MAX + 1;
+
+const ::google::protobuf::EnumDescriptor* ClipboardDataType_descriptor();
+inline const ::std::string& ClipboardDataType_Name(ClipboardDataType value) {
+  return ::google::protobuf::internal::NameOfEnum(
+    ClipboardDataType_descriptor(), value);
+}
+inline bool ClipboardDataType_Parse(
+    const ::std::string& name, ClipboardDataType* value) {
+  return ::google::protobuf::internal::ParseNamedEnum<ClipboardDataType>(
+    ClipboardDataType_descriptor(), name, value);
 }
 // ===================================================================
 
@@ -2113,6 +2160,264 @@ class PlaybackStreamStartEvent : public ::google::protobuf::Message /* @@protoc_
   friend struct ::protobuf_sweet_2eproto::TableStruct;
   friend void ::protobuf_sweet_2eproto::InitDefaultsPlaybackStreamStartEventImpl();
 };
+// -------------------------------------------------------------------
+
+class ClipboardDataToGuest : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ClipboardDataToGuest) */ {
+ public:
+  ClipboardDataToGuest();
+  virtual ~ClipboardDataToGuest();
+
+  ClipboardDataToGuest(const ClipboardDataToGuest& from);
+
+  inline ClipboardDataToGuest& operator=(const ClipboardDataToGuest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ClipboardDataToGuest(ClipboardDataToGuest&& from) noexcept
+    : ClipboardDataToGuest() {
+    *this = ::std::move(from);
+  }
+
+  inline ClipboardDataToGuest& operator=(ClipboardDataToGuest&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ClipboardDataToGuest& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ClipboardDataToGuest* internal_default_instance() {
+    return reinterpret_cast<const ClipboardDataToGuest*>(
+               &_ClipboardDataToGuest_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    14;
+
+  void Swap(ClipboardDataToGuest* other);
+  friend void swap(ClipboardDataToGuest& a, ClipboardDataToGuest& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ClipboardDataToGuest* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  ClipboardDataToGuest* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const ClipboardDataToGuest& from);
+  void MergeFrom(const ClipboardDataToGuest& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(ClipboardDataToGuest* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // bytes data = 2;
+  void clear_data();
+  static const int kDataFieldNumber = 2;
+  const ::std::string& data() const;
+  void set_data(const ::std::string& value);
+  #if LANG_CXX11
+  void set_data(::std::string&& value);
+  #endif
+  void set_data(const char* value);
+  void set_data(const void* value, size_t size);
+  ::std::string* mutable_data();
+  ::std::string* release_data();
+  void set_allocated_data(::std::string* data);
+
+  // string file_name = 3;
+  void clear_file_name();
+  static const int kFileNameFieldNumber = 3;
+  const ::std::string& file_name() const;
+  void set_file_name(const ::std::string& value);
+  #if LANG_CXX11
+  void set_file_name(::std::string&& value);
+  #endif
+  void set_file_name(const char* value);
+  void set_file_name(const char* value, size_t size);
+  ::std::string* mutable_file_name();
+  ::std::string* release_file_name();
+  void set_allocated_file_name(::std::string* file_name);
+
+  // .SweetProtocol.ClipboardDataType type = 1;
+  void clear_type();
+  static const int kTypeFieldNumber = 1;
+  ::SweetProtocol::ClipboardDataType type() const;
+  void set_type(::SweetProtocol::ClipboardDataType value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.ClipboardDataToGuest)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr data_;
+  ::google::protobuf::internal::ArenaStringPtr file_name_;
+  int type_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsClipboardDataToGuestImpl();
+};
+// -------------------------------------------------------------------
+
+class ClipboardStreamDataEvent : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ClipboardStreamDataEvent) */ {
+ public:
+  ClipboardStreamDataEvent();
+  virtual ~ClipboardStreamDataEvent();
+
+  ClipboardStreamDataEvent(const ClipboardStreamDataEvent& from);
+
+  inline ClipboardStreamDataEvent& operator=(const ClipboardStreamDataEvent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  ClipboardStreamDataEvent(ClipboardStreamDataEvent&& from) noexcept
+    : ClipboardStreamDataEvent() {
+    *this = ::std::move(from);
+  }
+
+  inline ClipboardStreamDataEvent& operator=(ClipboardStreamDataEvent&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ClipboardStreamDataEvent& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const ClipboardStreamDataEvent* internal_default_instance() {
+    return reinterpret_cast<const ClipboardStreamDataEvent*>(
+               &_ClipboardStreamDataEvent_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    15;
+
+  void Swap(ClipboardStreamDataEvent* other);
+  friend void swap(ClipboardStreamDataEvent& a, ClipboardStreamDataEvent& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline ClipboardStreamDataEvent* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  ClipboardStreamDataEvent* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const ClipboardStreamDataEvent& from);
+  void MergeFrom(const ClipboardStreamDataEvent& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(ClipboardStreamDataEvent* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // bytes data = 2;
+  void clear_data();
+  static const int kDataFieldNumber = 2;
+  const ::std::string& data() const;
+  void set_data(const ::std::string& value);
+  #if LANG_CXX11
+  void set_data(::std::string&& value);
+  #endif
+  void set_data(const char* value);
+  void set_data(const void* value, size_t size);
+  ::std::string* mutable_data();
+  ::std::string* release_data();
+  void set_allocated_data(::std::string* data);
+
+  // string file_name = 3;
+  void clear_file_name();
+  static const int kFileNameFieldNumber = 3;
+  const ::std::string& file_name() const;
+  void set_file_name(const ::std::string& value);
+  #if LANG_CXX11
+  void set_file_name(::std::string&& value);
+  #endif
+  void set_file_name(const char* value);
+  void set_file_name(const char* value, size_t size);
+  ::std::string* mutable_file_name();
+  ::std::string* release_file_name();
+  void set_allocated_file_name(::std::string* file_name);
+
+  // .SweetProtocol.ClipboardDataType type = 1;
+  void clear_type();
+  static const int kTypeFieldNumber = 1;
+  ::SweetProtocol::ClipboardDataType type() const;
+  void set_type(::SweetProtocol::ClipboardDataType value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.ClipboardStreamDataEvent)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr data_;
+  ::google::protobuf::internal::ArenaStringPtr file_name_;
+  int type_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsClipboardStreamDataEventImpl();
+};
 // ===================================================================
 
 
@@ -3667,9 +3972,261 @@ inline void PlaybackStreamStartEvent::set_frequency(::google::protobuf::uint32 v
   // @@protoc_insertion_point(field_set:SweetProtocol.PlaybackStreamStartEvent.frequency)
 }
 
+// -------------------------------------------------------------------
+
+// ClipboardDataToGuest
+
+// .SweetProtocol.ClipboardDataType type = 1;
+inline void ClipboardDataToGuest::clear_type() {
+  type_ = 0;
+}
+inline ::SweetProtocol::ClipboardDataType ClipboardDataToGuest::type() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.ClipboardDataToGuest.type)
+  return static_cast< ::SweetProtocol::ClipboardDataType >(type_);
+}
+inline void ClipboardDataToGuest::set_type(::SweetProtocol::ClipboardDataType value) {
+  
+  type_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.ClipboardDataToGuest.type)
+}
+
+// bytes data = 2;
+inline void ClipboardDataToGuest::clear_data() {
+  data_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ClipboardDataToGuest::data() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.ClipboardDataToGuest.data)
+  return data_.GetNoArena();
+}
+inline void ClipboardDataToGuest::set_data(const ::std::string& value) {
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.ClipboardDataToGuest.data)
+}
+#if LANG_CXX11
+inline void ClipboardDataToGuest::set_data(::std::string&& value) {
+  
+  data_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ClipboardDataToGuest.data)
+}
+#endif
+inline void ClipboardDataToGuest::set_data(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.ClipboardDataToGuest.data)
+}
+inline void ClipboardDataToGuest::set_data(const void* value, size_t size) {
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ClipboardDataToGuest.data)
+}
+inline ::std::string* ClipboardDataToGuest::mutable_data() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.ClipboardDataToGuest.data)
+  return data_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ClipboardDataToGuest::release_data() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.ClipboardDataToGuest.data)
+  
+  return data_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ClipboardDataToGuest::set_allocated_data(::std::string* data) {
+  if (data != NULL) {
+    
+  } else {
+    
+  }
+  data_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), data);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ClipboardDataToGuest.data)
+}
+
+// string file_name = 3;
+inline void ClipboardDataToGuest::clear_file_name() {
+  file_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ClipboardDataToGuest::file_name() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.ClipboardDataToGuest.file_name)
+  return file_name_.GetNoArena();
+}
+inline void ClipboardDataToGuest::set_file_name(const ::std::string& value) {
+  
+  file_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.ClipboardDataToGuest.file_name)
+}
+#if LANG_CXX11
+inline void ClipboardDataToGuest::set_file_name(::std::string&& value) {
+  
+  file_name_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ClipboardDataToGuest.file_name)
+}
+#endif
+inline void ClipboardDataToGuest::set_file_name(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  file_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.ClipboardDataToGuest.file_name)
+}
+inline void ClipboardDataToGuest::set_file_name(const char* value, size_t size) {
+  
+  file_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ClipboardDataToGuest.file_name)
+}
+inline ::std::string* ClipboardDataToGuest::mutable_file_name() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.ClipboardDataToGuest.file_name)
+  return file_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ClipboardDataToGuest::release_file_name() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.ClipboardDataToGuest.file_name)
+  
+  return file_name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ClipboardDataToGuest::set_allocated_file_name(::std::string* file_name) {
+  if (file_name != NULL) {
+    
+  } else {
+    
+  }
+  file_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), file_name);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ClipboardDataToGuest.file_name)
+}
+
+// -------------------------------------------------------------------
+
+// ClipboardStreamDataEvent
+
+// .SweetProtocol.ClipboardDataType type = 1;
+inline void ClipboardStreamDataEvent::clear_type() {
+  type_ = 0;
+}
+inline ::SweetProtocol::ClipboardDataType ClipboardStreamDataEvent::type() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.ClipboardStreamDataEvent.type)
+  return static_cast< ::SweetProtocol::ClipboardDataType >(type_);
+}
+inline void ClipboardStreamDataEvent::set_type(::SweetProtocol::ClipboardDataType value) {
+  
+  type_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.ClipboardStreamDataEvent.type)
+}
+
+// bytes data = 2;
+inline void ClipboardStreamDataEvent::clear_data() {
+  data_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ClipboardStreamDataEvent::data() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.ClipboardStreamDataEvent.data)
+  return data_.GetNoArena();
+}
+inline void ClipboardStreamDataEvent::set_data(const ::std::string& value) {
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.ClipboardStreamDataEvent.data)
+}
+#if LANG_CXX11
+inline void ClipboardStreamDataEvent::set_data(::std::string&& value) {
+  
+  data_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ClipboardStreamDataEvent.data)
+}
+#endif
+inline void ClipboardStreamDataEvent::set_data(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.ClipboardStreamDataEvent.data)
+}
+inline void ClipboardStreamDataEvent::set_data(const void* value, size_t size) {
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ClipboardStreamDataEvent.data)
+}
+inline ::std::string* ClipboardStreamDataEvent::mutable_data() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.ClipboardStreamDataEvent.data)
+  return data_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ClipboardStreamDataEvent::release_data() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.ClipboardStreamDataEvent.data)
+  
+  return data_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ClipboardStreamDataEvent::set_allocated_data(::std::string* data) {
+  if (data != NULL) {
+    
+  } else {
+    
+  }
+  data_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), data);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ClipboardStreamDataEvent.data)
+}
+
+// string file_name = 3;
+inline void ClipboardStreamDataEvent::clear_file_name() {
+  file_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& ClipboardStreamDataEvent::file_name() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.ClipboardStreamDataEvent.file_name)
+  return file_name_.GetNoArena();
+}
+inline void ClipboardStreamDataEvent::set_file_name(const ::std::string& value) {
+  
+  file_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.ClipboardStreamDataEvent.file_name)
+}
+#if LANG_CXX11
+inline void ClipboardStreamDataEvent::set_file_name(::std::string&& value) {
+  
+  file_name_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.ClipboardStreamDataEvent.file_name)
+}
+#endif
+inline void ClipboardStreamDataEvent::set_file_name(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  file_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.ClipboardStreamDataEvent.file_name)
+}
+inline void ClipboardStreamDataEvent::set_file_name(const char* value, size_t size) {
+  
+  file_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.ClipboardStreamDataEvent.file_name)
+}
+inline ::std::string* ClipboardStreamDataEvent::mutable_file_name() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.ClipboardStreamDataEvent.file_name)
+  return file_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* ClipboardStreamDataEvent::release_file_name() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.ClipboardStreamDataEvent.file_name)
+  
+  return file_name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void ClipboardStreamDataEvent::set_allocated_file_name(::std::string* file_name) {
+  if (file_name != NULL) {
+    
+  } else {
+    
+  }
+  file_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), file_name);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ClipboardStreamDataEvent.file_name)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
@@ -3718,6 +4275,11 @@ template <> struct is_proto_enum< ::SweetProtocol::SweetResponseAndEvent> : ::go
 template <>
 inline const EnumDescriptor* GetEnumDescriptor< ::SweetProtocol::SweetResponseAndEvent>() {
   return ::SweetProtocol::SweetResponseAndEvent_descriptor();
+}
+template <> struct is_proto_enum< ::SweetProtocol::ClipboardDataType> : ::google::protobuf::internal::true_type {};
+template <>
+inline const EnumDescriptor* GetEnumDescriptor< ::SweetProtocol::ClipboardDataType>() {
+  return ::SweetProtocol::ClipboardDataType_descriptor();
 }
 
 }  // namespace protobuf

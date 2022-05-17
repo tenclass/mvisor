@@ -208,6 +208,9 @@ void SweetServer::RemoveConnection(SweetConnection* conn) {
   if (playback_connection_ == conn) {
     playback_connection_ = nullptr;
   }
+  if (clipboard_connection_ == conn) {
+    clipboard_connection_ = nullptr;
+  }
   if (guest_command_connection_ == conn) {
     guest_command_connection_ = nullptr;
   }
@@ -235,7 +238,8 @@ void SweetServer::LookupDevices() {
     auto port = dynamic_cast<SerialPortInterface*>(o);
     if (strcmp(port->port_name(), "org.qemu.guest_agent.0") == 0) {
       qemu_guest_agent_ = port;
-      break;
+    } else if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
+      clipboard_ = dynamic_cast<ClipboardInterface*>(o);
     }
   }
   MV_ASSERT(display_);
@@ -252,6 +256,12 @@ void SweetServer::LookupDevices() {
     playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
       std::lock_guard<std::mutex> lock(mutex_);
       OnPlayback(state, iov);
+    });
+  }
+  if(clipboard_) {
+    clipboard_->RegisterClipboardListener([this](ClipboardData clipboard_data) {
+      std::lock_guard<std::mutex> lock(mutex_);
+      OnClipboardEvent(clipboard_data);
     });
   }
   if (qemu_guest_agent_) {
@@ -370,7 +380,6 @@ void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {
   }
 }
 
-
 void SweetServer::StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config) {
   bool is_playing = playback_encoder_ != nullptr;
   /* Send stop to previous connection */
@@ -390,5 +399,31 @@ void SweetServer::StopPlaybackStream() {
     playback_connection_->SendPlaybackStreamStopEvent();
   }
   playback_connection_ = nullptr;
+}
+
+void SweetServer::StartClipboardStreamOnConnection(SweetConnection* conn) {
+  /* Send stop to previous connection */
+  if (clipboard_connection_ ) {
+    clipboard_connection_->SendClipboardStreamStopEvent();
+  }
+
+  clipboard_connection_ = conn;
+
+  if (clipboard_connection_) {
+    clipboard_connection_->SendClipboardStreamStartEvent();
+  }
+}
+
+void SweetServer::StopClipboardStream() {
+  if (clipboard_connection_) {
+    clipboard_connection_->SendClipboardStreamStopEvent();
+  }
+  clipboard_connection_ = nullptr;
+}
+
+void SweetServer::OnClipboardEvent(ClipboardData clipboard_data) {
+  if(clipboard_connection_) {
+    clipboard_connection_->SendClipboardStreamDataEvent(clipboard_data);
+  }
 }
 

@@ -58,6 +58,9 @@ class SweetConnection {
   void SendPlaybackStreamStartEvent(std::string codec, uint format, uint channels, uint frequency);
   void SendPlaybackStreamStopEvent();
   void SendPlaybackStreamDataEvent(void* data, size_t length);
+  void SendClipboardStreamStartEvent();
+  void SendClipboardStreamStopEvent();
+  void SendClipboardStreamDataEvent(ClipboardData& clipboard_data);
 
  private:
   void ParsePacket(SweetPacketHeader* header);
@@ -69,6 +72,10 @@ class SweetConnection {
   void OnStartPlaybackStream();
   void OnQueryScreenshot();
   void OnSaveMachine();
+  void OnClipboardDataToGuest();
+  void OnStartClipboardStream();
+  void OnStopClipboardStream();
+
 
   Machine*      machine_;
   SweetServer*  server_;

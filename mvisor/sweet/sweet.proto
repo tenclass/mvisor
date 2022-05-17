@@ -31,8 +31,9 @@ enum SweetCommand {
   kStopRecordStream       = 0x71;
   kSendRecordStreamData   = 0x72;
   /* Clipboard */
-  kCopyToGuest            = 0x80;
-  kPasteFromGuest         = 0x81;
+  kClipboardDataToGuest   = 0x80;
+  kStartClipboardStream   = 0x81;
+  kStopClipboardStream    = 0x82;
   /* USB */
   kConnectUsb             = 0x90;
   kDisconnectUsb          = 0x91;
@@ -42,6 +43,9 @@ enum SweetCommand {
   kConnectTcp             = 0xA1;
   kCloseTcp               = 0xA2;
   kSendTcpData            = 0xA3;
+  /* VirtioFs */
+  kStartVirtioFs          = 0xB0;
+  kStopVirtioFs           = 0xB1;
 }
 
 enum SweetResponseAndEvent {
@@ -59,8 +63,25 @@ enum SweetResponseAndEvent {
   kPlaybackStreamStartEvent   = 0x1060;
   kPlaybackStreamStopEvent    = 0x1061;
   kPlaybackStreamDataEvent    = 0x1062;
+
+  kVirtioFsStartEvent         = 0x1070; 
+  kVirtioFsStopEvent          = 0x1071;
+  kVirtioFsNotifyEvent        = 0x1072;
+
+  kClipboardStreamStartEvent  = 0x1080;
+  kClipboardStreamStopEvent   = 0x1081;
+  kClipboardStreamDataEvent   = 0x1082;
 }
 
+enum ClipboardDataType {
+  kSweetClipboard_NONE          = 0;
+  kSweetClipboard_UTF8_TEXT     = 1;
+  kSweetClipboard_IMAGE_PNG     = 2;
+  kSweetClipboard_IMAGE_BMP     = 3;
+  kSweetClipboard_IMAGE_TIFF    = 4;
+  kSweetClipboard_IMAGE_JPG     = 5;
+  kSweetClipboard_FILE_LIST     = 6;
+}
 
 message QueryStatusResponse {
   bool      debug       = 1;
@@ -180,5 +201,17 @@ message PlaybackStreamStartEvent {
   uint32    format      = 3;
   uint32    channels    = 4;
   uint32    frequency   = 5;
+}
+
+message ClipboardDataToGuest {
+  ClipboardDataType   type       = 1;
+  bytes               data       = 2;
+  string              file_name  = 3;
+}
+
+message ClipboardStreamDataEvent {
+  ClipboardDataType   type       = 1;
+  bytes               data       = 2;
+  string              file_name  = 3;
 }
 

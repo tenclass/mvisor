@@ -111,6 +111,15 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kQueryScreenshot:
     OnQueryScreenshot();
     break;
+  case kClipboardDataToGuest:
+    OnClipboardDataToGuest();
+    break;
+  case kStartClipboardStream:
+    OnStartClipboardStream();
+    break;
+  case kStopClipboardStream:
+    OnStopClipboardStream();
+    break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
     return;
@@ -332,6 +341,21 @@ void SweetConnection::SendPlaybackStreamDataEvent(void* data, size_t length) {
   Send(kPlaybackStreamDataEvent, data, length);
 }
 
+void SweetConnection::SendClipboardStreamStartEvent() {
+  Send(kClipboardStreamStartEvent);
+}
+
+void SweetConnection::SendClipboardStreamStopEvent() {
+  Send(kClipboardStreamStopEvent);
+}
+
+void SweetConnection::SendClipboardStreamDataEvent(ClipboardData& clipboard_data) {
+  ClipboardStreamDataEvent  event;
+  event.set_type(SweetProtocol::ClipboardDataType(clipboard_data.type));
+  event.set_data(clipboard_data.msg_data, clipboard_data.msg_size);
+  Send(kClipboardStreamDataEvent, event);
+}
+
 void SweetConnection::OnQueryScreenshot() {
   QueryScreeenshot query;
   if (!query.ParseFromString(buffer_)) {
@@ -349,4 +373,48 @@ void SweetConnection::OnQueryScreenshot() {
   response.set_height(query.height());
   response.set_data(image_data);
   Send(kQueryScreenshotResponse, response);
+}
+
+void SweetConnection::OnClipboardDataToGuest() {
+  ClipboardDataToGuest clipboard;
+  if(!clipboard.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+
+  switch(clipboard.type()) {
+    case kSweetClipboard_NONE: {
+      MV_LOG("sweet clipboard type none");
+      break;
+    }
+    case kSweetClipboard_UTF8_TEXT: {
+      auto clipboard_interface = server_->clipboard();
+      if(clipboard_interface)
+        clipboard_interface->ClipboardDataToGuest(clipboard.type(), clipboard.data().size(), (void*)clipboard.data().data());
+      break;
+    }
+    case kSweetClipboard_IMAGE_PNG:
+      break;
+    case kSweetClipboard_IMAGE_BMP:
+      break;
+    case kSweetClipboard_IMAGE_TIFF:
+      break;
+    case kSweetClipboard_IMAGE_JPG:
+      break;
+    case kSweetClipboard_FILE_LIST:
+      break;
+    default:
+    break;
+  }
+}
+
+void SweetConnection::OnStartClipboardStream() {
+  if(server_) {
+    server_->StartClipboardStreamOnConnection(this);
+  }
+}
+
+void SweetConnection::OnStopClipboardStream() {
+  if(server_) {
+    server_->StopClipboardStream();
+  }
 }
