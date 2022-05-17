@@ -364,8 +364,9 @@ void SweetConnection::OnQueryScreenshot() {
   std::string image_data;
 
   auto encoder = server_->display_encoder();
-  if (encoder)
-    encoder->Screendump(query.format(), query.width(), query.height(), 50, image_data);
+  if (encoder) {
+    encoder->Screendump(query.format(), query.width(), query.height(), 80, image_data);
+  }
 
   QueryScreenshotResponse response;
   response.set_format(query.format());

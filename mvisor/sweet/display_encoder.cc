@@ -401,7 +401,7 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
   size_t bitmap_stride = w * 4;
   uint8_t bitmap[bitmap_stride * h];
   libyuv::ARGBScale(screen_bitmap_, screen_stride_, screen_width_, screen_height_,
-    bitmap, bitmap_stride, w, h, libyuv::kFilterNone);
+    bitmap, bitmap_stride, w, h, libyuv::kFilterBilinear);
 
   /* bitmap to jpeg */
   jpeg_compress_struct cinfo;
@@ -417,7 +417,6 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
   cinfo.image_height = h;
   cinfo.input_components = 4;
   cinfo.in_color_space = JCS_EXT_BGRA;
-
   jpeg_set_defaults(&cinfo);
   jpeg_set_quality(&cinfo, quality, true);
   jpeg_start_compress(&cinfo, true);
