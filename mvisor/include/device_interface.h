@@ -52,6 +52,11 @@ class DisplayResizeInterface {
   virtual bool Resize(uint width, uint height) = 0;
 };
 
+typedef std::function <void()> VirtioFsListener;
+class VirtioFsInterface {
+ public:
+  virtual void RegisterVirtioFsListener(VirtioFsListener callback) = 0;
+};
 
 struct ClipboardData {
   uint32_t        type;

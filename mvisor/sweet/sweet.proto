@@ -64,9 +64,9 @@ enum SweetResponseAndEvent {
   kPlaybackStreamStopEvent    = 0x1061;
   kPlaybackStreamDataEvent    = 0x1062;
 
-  kVirtioFsStartEvent         = 0x1070; 
-  kVirtioFsStopEvent          = 0x1071;
-  kVirtioFsNotifyEvent        = 0x1072;
+  kVirtioFsStartEvent         = 0x10B0; 
+  kVirtioFsStopEvent          = 0x10B1;
+  kVirtioFsNotifyEvent        = 0x10B2;
 
   kClipboardStreamStartEvent  = 0x1080;
   kClipboardStreamStopEvent   = 0x1081;

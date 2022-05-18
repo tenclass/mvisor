@@ -33,6 +33,10 @@ objects:
     image: /data/empty.qcow2
     snapshot: No
 
+  # - class: virtio-fs
+  #   path: /tmp/fuse
+  #   disk_name: mvisor-fs
+
   # - class: vfio-pci
   #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b
   #   debug: Yes

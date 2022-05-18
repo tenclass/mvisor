@@ -75,6 +75,8 @@ class SweetConnection {
   void OnClipboardDataToGuest();
   void OnStartClipboardStream();
   void OnStopClipboardStream();
+  void OnStartVirtioFs();
+  void OnStopVirtioFs();
 
 
   Machine*      machine_;

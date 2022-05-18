@@ -119,6 +119,11 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
     break;
   case kStopClipboardStream:
     OnStopClipboardStream();
+  case kStartVirtioFs:
+    OnStartVirtioFs();
+    break;
+  case kStopVirtioFs:
+    OnStopVirtioFs();
     break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
@@ -418,4 +423,11 @@ void SweetConnection::OnStopClipboardStream() {
   if(server_) {
     server_->StopClipboardStream();
   }
+}
+void SweetConnection::OnStartVirtioFs(){
+  server_->StartVirtioFsConnection(this);
+}
+
+void SweetConnection::OnStopVirtioFs() {
+  server_->StopVirtioFsConnection();
 }

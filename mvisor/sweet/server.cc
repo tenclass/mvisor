@@ -214,6 +214,9 @@ void SweetServer::RemoveConnection(SweetConnection* conn) {
   if (guest_command_connection_ == conn) {
     guest_command_connection_ = nullptr;
   }
+  if (virtio_fs_connection_ == conn) {
+    virtio_fs_connection_ = nullptr;
+  }
   connections_.remove(conn);
   delete conn;
 }
@@ -221,6 +224,9 @@ void SweetServer::RemoveConnection(SweetConnection* conn) {
 void SweetServer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
     keyboard_ = dynamic_cast<KeyboardInputInterface*>(o);
+  }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<VirtioFsInterface*>(o); })) {
+    virtio_fs_ = dynamic_cast<VirtioFsInterface*>(o);
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayInterface*>(o); })) {
     display_ = dynamic_cast<DisplayInterface*>(o);
@@ -262,6 +268,13 @@ void SweetServer::LookupDevices() {
     clipboard_->RegisterClipboardListener([this](ClipboardData clipboard_data) {
       std::lock_guard<std::mutex> lock(mutex_);
       OnClipboardEvent(clipboard_data);
+    });
+  }
+  if (virtio_fs_) {
+    virtio_fs_->RegisterVirtioFsListener([this]() {
+      if (virtio_fs_connection_) {
+        virtio_fs_connection_->Send(kVirtioFsNotifyEvent);
+      }
     });
   }
   if (qemu_guest_agent_) {
@@ -426,3 +439,18 @@ void SweetServer::OnClipboardEvent(ClipboardData clipboard_data) {
     clipboard_connection_->SendClipboardStreamDataEvent(clipboard_data);
   }
 }
+
+void SweetServer::StartVirtioFsConnection(SweetConnection* conn) {
+  virtio_fs_connection_ = conn;
+  if(virtio_fs_connection_){
+    virtio_fs_connection_->Send(kVirtioFsStartEvent);
+  }
+}
+
+void SweetServer::StopVirtioFsConnection() {
+  if(virtio_fs_connection_){
+    virtio_fs_connection_->Send(kVirtioFsStopEvent);
+  }
+  virtio_fs_connection_ = nullptr;
+}
+

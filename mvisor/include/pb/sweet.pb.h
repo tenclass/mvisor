@@ -234,9 +234,9 @@ enum SweetResponseAndEvent {
   kPlaybackStreamStartEvent = 4192,
   kPlaybackStreamStopEvent = 4193,
   kPlaybackStreamDataEvent = 4194,
-  kVirtioFsStartEvent = 4208,
-  kVirtioFsStopEvent = 4209,
-  kVirtioFsNotifyEvent = 4210,
+  kVirtioFsStartEvent = 4272,
+  kVirtioFsStopEvent = 4273,
+  kVirtioFsNotifyEvent = 4274,
   kClipboardStreamStartEvent = 4224,
   kClipboardStreamStopEvent = 4225,
   kClipboardStreamDataEvent = 4226,
@@ -245,7 +245,7 @@ enum SweetResponseAndEvent {
 };
 bool SweetResponseAndEvent_IsValid(int value);
 const SweetResponseAndEvent SweetResponseAndEvent_MIN = kInvalidResponse;
-const SweetResponseAndEvent SweetResponseAndEvent_MAX = kClipboardStreamDataEvent;
+const SweetResponseAndEvent SweetResponseAndEvent_MAX = kVirtioFsNotifyEvent;
 const int SweetResponseAndEvent_ARRAYSIZE = SweetResponseAndEvent_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetResponseAndEvent_descriptor();

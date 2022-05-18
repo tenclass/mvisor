@@ -50,7 +50,9 @@ class SweetServer {
   void StopClipboardStream();
   void RefreshDisplayStream();
   void QemuGuestCommand(SweetConnection* conn, std::string& command);
-
+  void StartVirtioFsConnection(SweetConnection* conn);
+  void StopVirtioFsConnection();
+  
   inline Machine* machine() { return machine_; }
   inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
   inline std::vector<DisplayResizeInterface*>& resizers() { return resizers_; }
@@ -77,6 +79,7 @@ class SweetServer {
   int                         server_fd_ = -1;
   int                         event_fd_ = -1;
   
+  VirtioFsInterface*                    virtio_fs_ = nullptr;
   DisplayInterface*                     display_ = nullptr;
   PlaybackInterface*                    playback_ = nullptr;
   KeyboardInputInterface*               keyboard_ = nullptr;
@@ -96,6 +99,7 @@ class SweetServer {
   SweetConnection*            playback_connection_ = nullptr;
   SweetConnection*            clipboard_connection_ = nullptr;
   SweetConnection*            guest_command_connection_ = nullptr;
+  SweetConnection*            virtio_fs_connection_ = nullptr;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

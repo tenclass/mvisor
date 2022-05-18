@@ -5,3 +5,4 @@ build/
 *.iso
 *.qcow2
 tmp/
+.vscode/
