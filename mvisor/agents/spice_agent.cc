@@ -117,7 +117,8 @@ class SpiceAgent : public Object, public SerialPortInterface,
       break;
     default:
       MV_LOG("Unhandled agent message type=0x%x", message->type);
-      DumpHex(message, sizeof(*message) + message->size);
+      if(debug_)
+        DumpHex(message, sizeof(*message) + message->size);
       break;
     }
   }
