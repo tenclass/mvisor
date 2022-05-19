@@ -108,8 +108,12 @@ void IoThread::RunLoop() {
     }
     
     for (int i = 0; i < nfds; i++) {
-      auto event = (EpollEvent*)events[i].data.ptr;
-      MV_ASSERT(event);
+      auto event_it = epoll_events_.find(events[i].data.fd);
+      if (event_it == epoll_events_.end()) {
+        /* Maybe the fd is deleted just now */
+        continue;
+      }
+      auto event = event_it->second;
       auto start_time = std::chrono::steady_clock::now();
       event->callback(events[i].events);
 
@@ -131,10 +135,10 @@ EpollEvent* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) 
   EpollEvent* event = new EpollEvent {
     .fd = fd, .callback = callback
   };
-  event->event = {
+  event->event = epoll_event {
     .events = poll_mask,
     .data = {
-      .ptr = event
+      .fd = fd
     }
   };
   int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event->event);

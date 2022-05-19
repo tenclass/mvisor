@@ -6,3 +6,4 @@ build/
 *.qcow2
 tmp/
 .vscode/
+config/default.yaml

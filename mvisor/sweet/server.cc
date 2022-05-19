@@ -152,26 +152,24 @@ void SweetServer::SetDefaultConfig() {
   display_config_.set_flags(0b111);
 }
 
+void SweetServer::Schedule(VoidCallback callback) {
+  mutex_.lock();
+  tasks_.emplace_back(std::move(callback));
+  mutex_.unlock();
+  WakeUp();
+}
+
 void SweetServer::OnEvent() {
   uint64_t tmp;
   read(event_fd_, &tmp, sizeof(tmp));
 
-  if (display_mode_changed_) {
-    display_mode_changed_ = false;
-    /* Recreate renderer if resolution changed */
-    StartDisplayStreamOnConnection(display_connection_, nullptr);
-  }
-
-  if (display_updated_) {
-    display_updated_ = false;
-
-    DisplayUpdate update;
-    display_->AcquireUpdate(update);
-    if (display_connection_) {
-      display_connection_->UpdateCursor(&update.cursor);
-    }
-    display_encoder_->Render(update.partials);
-    display_->ReleaseUpdate();
+  std::unique_lock<std::mutex> lock(mutex_);
+  while (!tasks_.empty()) {
+    auto& task = tasks_.front();
+    lock.unlock();
+    task();
+    lock.lock();
+    tasks_.pop_front();
   }
 }
 
@@ -247,49 +245,82 @@ void SweetServer::LookupDevices() {
     } else if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
       clipboard_ = dynamic_cast<ClipboardInterface*>(o);
     }
+    port->set_callback([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
+      Schedule([this, port, event, data = std::string((const char*)data, size)] () {
+        switch (event)
+        {
+        case kSerialPortStatusChanged:
+          for (auto conn : connections_) {
+            conn->SendSerialPortStatusEvent(port->port_name(), port->ready());
+          }
+          break;
+        case kSerialPortData:
+          if (port == qemu_guest_agent_ && guest_command_connection_) {
+            guest_command_connection_->Send(kQemuGuestCommandResponse, data);
+          }
+        }
+      });
+    });
   }
   MV_ASSERT(display_);
 
   display_->RegisterDisplayModeChangeListener([this]() {
-    display_mode_changed_ = true;
-    WakeUp();
+    Schedule([this] () {
+      /* Recreate renderer if resolution changed */
+      StartDisplayStreamOnConnection(display_connection_, nullptr);
+    });
   });
   display_->RegisterDisplayUpdateListener([this]() {
-    display_updated_ = true;
-    WakeUp();
+    Schedule([this] () {
+      UpdateDisplay();
+    });
   });
   if (playback_) {
     playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
-      std::lock_guard<std::mutex> lock(mutex_);
-      OnPlayback(state, iov);
+      Schedule([this, state, data = std::string((const char*)iov.iov_base, iov.iov_len)] () {
+        OnPlayback(state, data);
+      });
     });
   }
   if(clipboard_) {
-    clipboard_->RegisterClipboardListener([this](ClipboardData clipboard_data) {
-      std::lock_guard<std::mutex> lock(mutex_);
-      OnClipboardEvent(clipboard_data);
+    clipboard_->RegisterClipboardListener([this](const ClipboardData clipboard_data) {
+      /* std::move don't copy data, but replace data reference */
+      Schedule([this, clipboard_data = std::move(clipboard_data)] () {
+        if(clipboard_connection_) {
+          clipboard_connection_->SendClipboardStreamDataEvent(clipboard_data);
+        }
+      });
     });
   }
   if (virtio_fs_) {
     virtio_fs_->RegisterVirtioFsListener([this]() {
-      if (virtio_fs_connection_) {
-        virtio_fs_connection_->Send(kVirtioFsNotifyEvent);
-      }
+      Schedule([this] () {
+        if (virtio_fs_connection_) {
+          virtio_fs_connection_->Send(kVirtioFsNotifyEvent);
+        }
+      });
     });
   }
-  if (qemu_guest_agent_) {
-    qemu_guest_agent_->set_callback([this](uint8_t* data, size_t size) {
-      std::lock_guard<std::mutex> lock(mutex_);
-      if (guest_command_connection_) {
-        guest_command_connection_->Send(kQemuGuestCommandResponse, data, size);
-      }
-    });
+}
+
+void SweetServer::UpdateDisplay() {
+  DisplayUpdate update;
+  display_->AcquireUpdate(update);
+  if (display_connection_) {
+    display_connection_->UpdateCursor(&update.cursor);
   }
+  display_encoder_->Render(update.partials);
+  display_->ReleaseUpdate();
 }
 
 /* There maybe more than one connections at the same time,
  * but only one display stream connection allowed */
 void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetProtocol::DisplayStreamConfig* config) {
+  /* Send stop to previous connection */
+  if (display_connection_) {
+    display_connection_->Send(kDisplayStreamStopEvent);
+  }
+
   if (config) {
     display_config_ = *config;
   }
@@ -304,21 +335,16 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
 
   /* Regenerate all partials after encoder recreated */
   display_->Redraw();
-  if (!display_updated_) {
-    display_updated_ = true;
-    WakeUp();
-  }
-
-  /* Send stop to previous connection */
-  if (display_connection_) {
-    display_connection_->SendDisplayStreamStopEvent();
-  }
+  UpdateDisplay();
 
   display_connection_ = conn;
   if (display_connection_) {
     display_connection_->SendDisplayStreamStartEvent(w, h);
     display_encoder_->Start([this](void* data, size_t length) {
-      display_connection_->SendDisplayStreamDataEvent(data, length);
+      /* Use sweet server thread to send data */
+      Schedule([this, data = std::string((const char*)data, length)]() {
+        display_connection_->Send(kDisplayStreamDataEvent, data);
+      });
     });
   }
 }
@@ -326,7 +352,7 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
 void SweetServer::StopDisplayStream() {
   display_encoder_->Stop();
   if (display_connection_) {
-    display_connection_->SendDisplayStreamStopEvent();
+    display_connection_->Send(kDisplayStreamStopEvent);
     display_connection_ = nullptr;
   }
 }
@@ -342,12 +368,12 @@ void SweetServer::QemuGuestCommand(SweetConnection* conn, std::string& command) 
       qemu_guest_agent_->SendMessage((uint8_t*)command.data(), command.size());
     } else {
       /* FIXME: how to send error response??? */
-      conn->Send(kQemuGuestCommandResponse, nullptr, 0);
+      conn->Send(kQemuGuestCommandResponse);
     }
   }
 }
 
-void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {
+void SweetServer::OnPlayback(PlaybackState state, const std::string& data) {
   switch (state)
   {
   case kPlaybackStart:
@@ -359,7 +385,7 @@ void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {
       opus_encoder_destroy(playback_encoder_);
       playback_encoder_ = nullptr;
       if (playback_connection_) {
-        playback_connection_->SendPlaybackStreamStopEvent();
+        playback_connection_->Send(kPlaybackStreamStopEvent);
       }
     }
     break;
@@ -378,12 +404,12 @@ void SweetServer::OnPlayback(PlaybackState state, struct iovec& iov) {
       uint8_t buffer[1000];
       int frame_size = 480;
       size_t frame_bytes = frame_size * playback_format_.channels * sizeof(opus_int16);
-      auto remain = iov.iov_len;
-      auto ptr = (uint8_t*)iov.iov_base;
+      auto remain = data.size();
+      auto ptr = (uint8_t*)data.data();
       while (remain >= frame_bytes) {
         auto ret = opus_encode(playback_encoder_, (const opus_int16*)ptr, frame_size, buffer, sizeof(buffer));
         if (ret > 0) {
-          playback_connection_->SendPlaybackStreamDataEvent(buffer, ret);
+          playback_connection_->Send(kPlaybackStreamDataEvent, buffer, ret);
         }
         ptr += frame_bytes;
         remain -= frame_bytes;
@@ -397,7 +423,7 @@ void SweetServer::StartPlaybackStreamOnConnection(SweetConnection* conn, Playbac
   bool is_playing = playback_encoder_ != nullptr;
   /* Send stop to previous connection */
   if (playback_connection_ && is_playing) {
-    playback_connection_->SendPlaybackStreamStopEvent();
+    playback_connection_->Send(kPlaybackStreamStopEvent);
   }
 
   playback_connection_ = conn;
@@ -409,7 +435,7 @@ void SweetServer::StartPlaybackStreamOnConnection(SweetConnection* conn, Playbac
 void SweetServer::StopPlaybackStream() {
   bool is_playing = playback_encoder_ != nullptr;
   if (playback_connection_ && is_playing) {
-    playback_connection_->SendPlaybackStreamStopEvent();
+    playback_connection_->Send(kPlaybackStreamStopEvent);
   }
   playback_connection_ = nullptr;
 }
@@ -417,27 +443,21 @@ void SweetServer::StopPlaybackStream() {
 void SweetServer::StartClipboardStreamOnConnection(SweetConnection* conn) {
   /* Send stop to previous connection */
   if (clipboard_connection_ ) {
-    clipboard_connection_->SendClipboardStreamStopEvent();
+    clipboard_connection_->Send(kClipboardStreamStopEvent);
   }
 
   clipboard_connection_ = conn;
 
   if (clipboard_connection_) {
-    clipboard_connection_->SendClipboardStreamStartEvent();
+    clipboard_connection_->Send(kClipboardStreamStartEvent);
   }
 }
 
 void SweetServer::StopClipboardStream() {
   if (clipboard_connection_) {
-    clipboard_connection_->SendClipboardStreamStopEvent();
+    clipboard_connection_->Send(kClipboardStreamStopEvent);
   }
   clipboard_connection_ = nullptr;
-}
-
-void SweetServer::OnClipboardEvent(ClipboardData clipboard_data) {
-  if(clipboard_connection_) {
-    clipboard_connection_->SendClipboardStreamDataEvent(clipboard_data);
-  }
 }
 
 void SweetServer::StartVirtioFsConnection(SweetConnection* conn) {

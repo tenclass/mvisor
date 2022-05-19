@@ -37,7 +37,7 @@ namespace protobuf_sweet_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[16];
+  static const ::google::protobuf::internal::ParseTable schema[17];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -45,6 +45,8 @@ struct TableStruct {
 void AddDescriptors();
 void InitDefaultsQueryStatusResponseImpl();
 void InitDefaultsQueryStatusResponse();
+void InitDefaultsSerialPortStatusEventImpl();
+void InitDefaultsSerialPortStatusEvent();
 void InitDefaultsSaveMachineOptionsImpl();
 void InitDefaultsSaveMachineOptions();
 void InitDefaultsSendKeyboardInputImpl();
@@ -77,6 +79,7 @@ void InitDefaultsClipboardStreamDataEventImpl();
 void InitDefaultsClipboardStreamDataEvent();
 inline void InitDefaults() {
   InitDefaultsQueryStatusResponse();
+  InitDefaultsSerialPortStatusEvent();
   InitDefaultsSaveMachineOptions();
   InitDefaultsSendKeyboardInput();
   InitDefaultsSendPointerInput();
@@ -137,6 +140,9 @@ extern SendKeyboardInputDefaultTypeInternal _SendKeyboardInput_default_instance_
 class SendPointerInput;
 class SendPointerInputDefaultTypeInternal;
 extern SendPointerInputDefaultTypeInternal _SendPointerInput_default_instance_;
+class SerialPortStatusEvent;
+class SerialPortStatusEventDefaultTypeInternal;
+extern SerialPortStatusEventDefaultTypeInternal _SerialPortStatusEvent_default_instance_;
 class SetCursorEvent;
 class SetCursorEventDefaultTypeInternal;
 extern SetCursorEventDefaultTypeInternal _SetCursorEvent_default_instance_;
@@ -226,6 +232,7 @@ enum SweetResponseAndEvent {
   kCommandAcknowledge = 4096,
   kQueryStatusResponse = 4112,
   kQemuGuestCommandResponse = 4144,
+  kSerialPortStatusEvent = 4145,
   kQueryScreenshotResponse = 4176,
   kSetCursorEvent = 4177,
   kDisplayStreamStartEvent = 4178,
@@ -487,6 +494,120 @@ class QueryStatusResponse : public ::google::protobuf::Message /* @@protoc_inser
 };
 // -------------------------------------------------------------------
 
+class SerialPortStatusEvent : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SerialPortStatusEvent) */ {
+ public:
+  SerialPortStatusEvent();
+  virtual ~SerialPortStatusEvent();
+
+  SerialPortStatusEvent(const SerialPortStatusEvent& from);
+
+  inline SerialPortStatusEvent& operator=(const SerialPortStatusEvent& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  SerialPortStatusEvent(SerialPortStatusEvent&& from) noexcept
+    : SerialPortStatusEvent() {
+    *this = ::std::move(from);
+  }
+
+  inline SerialPortStatusEvent& operator=(SerialPortStatusEvent&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SerialPortStatusEvent& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SerialPortStatusEvent* internal_default_instance() {
+    return reinterpret_cast<const SerialPortStatusEvent*>(
+               &_SerialPortStatusEvent_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    1;
+
+  void Swap(SerialPortStatusEvent* other);
+  friend void swap(SerialPortStatusEvent& a, SerialPortStatusEvent& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SerialPortStatusEvent* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  SerialPortStatusEvent* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const SerialPortStatusEvent& from);
+  void MergeFrom(const SerialPortStatusEvent& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(SerialPortStatusEvent* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string port_name = 1;
+  void clear_port_name();
+  static const int kPortNameFieldNumber = 1;
+  const ::std::string& port_name() const;
+  void set_port_name(const ::std::string& value);
+  #if LANG_CXX11
+  void set_port_name(::std::string&& value);
+  #endif
+  void set_port_name(const char* value);
+  void set_port_name(const char* value, size_t size);
+  ::std::string* mutable_port_name();
+  ::std::string* release_port_name();
+  void set_allocated_port_name(::std::string* port_name);
+
+  // bool ready = 2;
+  void clear_ready();
+  static const int kReadyFieldNumber = 2;
+  bool ready() const;
+  void set_ready(bool value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SerialPortStatusEvent)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr port_name_;
+  bool ready_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSerialPortStatusEventImpl();
+};
+// -------------------------------------------------------------------
+
 class SaveMachineOptions : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SaveMachineOptions) */ {
  public:
   SaveMachineOptions();
@@ -522,7 +643,7 @@ class SaveMachineOptions : public ::google::protobuf::Message /* @@protoc_insert
                &_SaveMachineOptions_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    1;
+    2;
 
   void Swap(SaveMachineOptions* other);
   friend void swap(SaveMachineOptions& a, SaveMachineOptions& b) {
@@ -629,7 +750,7 @@ class SendKeyboardInput : public ::google::protobuf::Message /* @@protoc_inserti
                &_SendKeyboardInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    2;
+    3;
 
   void Swap(SendKeyboardInput* other);
   friend void swap(SendKeyboardInput& a, SendKeyboardInput& b) {
@@ -742,7 +863,7 @@ class SendPointerInput : public ::google::protobuf::Message /* @@protoc_insertio
                &_SendPointerInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    3;
+    4;
 
   void Swap(SendPointerInput* other);
   friend void swap(SendPointerInput& a, SendPointerInput& b) {
@@ -890,7 +1011,7 @@ class QueryScreeenshot : public ::google::protobuf::Message /* @@protoc_insertio
                &_QueryScreeenshot_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    4;
+    5;
 
   void Swap(QueryScreeenshot* other);
   friend void swap(QueryScreeenshot& a, QueryScreeenshot& b) {
@@ -1011,7 +1132,7 @@ class QueryScreenshotResponse : public ::google::protobuf::Message /* @@protoc_i
                &_QueryScreenshotResponse_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(QueryScreenshotResponse* other);
   friend void swap(QueryScreenshotResponse& a, QueryScreenshotResponse& b) {
@@ -1147,7 +1268,7 @@ class MonitorsConfig_Monitor : public ::google::protobuf::Message /* @@protoc_in
                &_MonitorsConfig_Monitor_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(MonitorsConfig_Monitor* other);
   friend void swap(MonitorsConfig_Monitor& a, MonitorsConfig_Monitor& b) {
@@ -1281,7 +1402,7 @@ class MonitorsConfig : public ::google::protobuf::Message /* @@protoc_insertion_
                &_MonitorsConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(MonitorsConfig* other);
   friend void swap(MonitorsConfig& a, MonitorsConfig& b) {
@@ -1395,7 +1516,7 @@ class SetCursorEvent_CursorShape : public ::google::protobuf::Message /* @@proto
                &_SetCursorEvent_CursorShape_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(SetCursorEvent_CursorShape* other);
   friend void swap(SetCursorEvent_CursorShape& a, SetCursorEvent_CursorShape& b) {
@@ -1537,7 +1658,7 @@ class SetCursorEvent : public ::google::protobuf::Message /* @@protoc_insertion_
                &_SetCursorEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(SetCursorEvent* other);
   friend void swap(SetCursorEvent& a, SetCursorEvent& b) {
@@ -1662,7 +1783,7 @@ class DisplayStreamConfig : public ::google::protobuf::Message /* @@protoc_inser
                &_DisplayStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(DisplayStreamConfig* other);
   friend void swap(DisplayStreamConfig& a, DisplayStreamConfig& b) {
@@ -1849,7 +1970,7 @@ class PlaybackStreamConfig : public ::google::protobuf::Message /* @@protoc_inse
                &_PlaybackStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(PlaybackStreamConfig* other);
   friend void swap(PlaybackStreamConfig& a, PlaybackStreamConfig& b) {
@@ -1956,7 +2077,7 @@ class DisplayStreamStartEvent : public ::google::protobuf::Message /* @@protoc_i
                &_DisplayStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(DisplayStreamStartEvent* other);
   friend void swap(DisplayStreamStartEvent& a, DisplayStreamStartEvent& b) {
@@ -2062,7 +2183,7 @@ class PlaybackStreamStartEvent : public ::google::protobuf::Message /* @@protoc_
                &_PlaybackStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(PlaybackStreamStartEvent* other);
   friend void swap(PlaybackStreamStartEvent& a, PlaybackStreamStartEvent& b) {
@@ -2197,7 +2318,7 @@ class ClipboardDataToGuest : public ::google::protobuf::Message /* @@protoc_inse
                &_ClipboardDataToGuest_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    14;
+    15;
 
   void Swap(ClipboardDataToGuest* other);
   friend void swap(ClipboardDataToGuest& a, ClipboardDataToGuest& b) {
@@ -2326,7 +2447,7 @@ class ClipboardStreamDataEvent : public ::google::protobuf::Message /* @@protoc_
                &_ClipboardStreamDataEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    15;
+    16;
 
   void Swap(ClipboardStreamDataEvent* other);
   friend void swap(ClipboardStreamDataEvent& a, ClipboardStreamDataEvent& b) {
@@ -2737,6 +2858,77 @@ inline void QueryStatusResponse::set_tenclass_agent(bool value) {
   
   tenclass_agent_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.QueryStatusResponse.tenclass_agent)
+}
+
+// -------------------------------------------------------------------
+
+// SerialPortStatusEvent
+
+// string port_name = 1;
+inline void SerialPortStatusEvent::clear_port_name() {
+  port_name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& SerialPortStatusEvent::port_name() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SerialPortStatusEvent.port_name)
+  return port_name_.GetNoArena();
+}
+inline void SerialPortStatusEvent::set_port_name(const ::std::string& value) {
+  
+  port_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.SerialPortStatusEvent.port_name)
+}
+#if LANG_CXX11
+inline void SerialPortStatusEvent::set_port_name(::std::string&& value) {
+  
+  port_name_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.SerialPortStatusEvent.port_name)
+}
+#endif
+inline void SerialPortStatusEvent::set_port_name(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  port_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.SerialPortStatusEvent.port_name)
+}
+inline void SerialPortStatusEvent::set_port_name(const char* value, size_t size) {
+  
+  port_name_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.SerialPortStatusEvent.port_name)
+}
+inline ::std::string* SerialPortStatusEvent::mutable_port_name() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.SerialPortStatusEvent.port_name)
+  return port_name_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* SerialPortStatusEvent::release_port_name() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.SerialPortStatusEvent.port_name)
+  
+  return port_name_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SerialPortStatusEvent::set_allocated_port_name(::std::string* port_name) {
+  if (port_name != NULL) {
+    
+  } else {
+    
+  }
+  port_name_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), port_name);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.SerialPortStatusEvent.port_name)
+}
+
+// bool ready = 2;
+inline void SerialPortStatusEvent::clear_ready() {
+  ready_ = false;
+}
+inline bool SerialPortStatusEvent::ready() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SerialPortStatusEvent.ready)
+  return ready_;
+}
+inline void SerialPortStatusEvent::set_ready(bool value) {
+  
+  ready_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SerialPortStatusEvent.ready)
 }
 
 // -------------------------------------------------------------------
@@ -4223,6 +4415,8 @@ inline void ClipboardStreamDataEvent::set_allocated_file_name(::std::string* fil
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

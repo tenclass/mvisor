@@ -41,10 +41,8 @@ class SpiceAgent : public Object, public SerialPortInterface,
   public ClipboardInterface
 {
  private:
-  bool                            pending_resize_event_;
   VDAgentMouseState               last_mouse_state_;
   steady_clock::time_point        last_send_mouse_time_;
-  uint32_t                        width_, height_;
   int                             num_monitors_;
   std::string                     last_send_clipboard_;
   std::vector<ClipboardListener>  clipboard_listeners_;
@@ -55,7 +53,6 @@ class SpiceAgent : public Object, public SerialPortInterface,
     set_parent_name("virtio-console");
   
     strcpy(port_name_, "com.redhat.spice.0");
-    pending_resize_event_ = false;
     last_send_mouse_time_ = steady_clock::now();
     num_monitors_ = 1;
     clipboard_enabled_ = false;
@@ -87,10 +84,6 @@ class SpiceAgent : public Object, public SerialPortInterface,
 
       uint32_t max_clipboard = 0x06400000;
       SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MAX_CLIPBOARD, &max_clipboard, sizeof(max_clipboard));
-
-      if (pending_resize_event_) {
-        Resize(width_, height_);
-      }
 
       if(!clipboard_enabled_) { 
         SendAgentCapabilities();
@@ -185,10 +178,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
     if (height & 1)
       height++;
 
-    width_ = width;
-    height_ = height;
     if (!ready_) {
-      pending_resize_event_ = true;
       return false;
     }
 
@@ -197,8 +187,8 @@ class SpiceAgent : public Object, public SerialPortInterface,
     bzero(config, config_size);
     config->num_of_monitors = 1;
     config->monitors[0].depth = 32;
-    config->monitors[0].width = width_;
-    config->monitors[0].height = height_;
+    config->monitors[0].width = width;
+    config->monitors[0].height = height;
     SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, config, config_size);
     free(config);
     return true;
@@ -253,8 +243,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
     for (auto& cb : clipboard_listeners_) {
       cb(ClipboardData {
         .type = clipboard->type,
-        .msg_size = msg_size,
-        .msg_data = clipboard->data
+        .data = std::string((const char*)clipboard->data, msg_size)
       });
     }
   }

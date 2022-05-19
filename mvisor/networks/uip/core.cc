@@ -273,7 +273,11 @@ class Uip : public Object, public NetworkBackendInterface {
       int flag = 1;
       setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
   
-      MV_ASSERT(bind(fd, (sockaddr*)&addr, sizeof(addr)) == 0);
+      if (bind(fd, (sockaddr*)&addr, sizeof(addr)) != 0) {
+        MV_LOG("failed to bind address %s:%d", inet_ntoa(addr.sin_addr), rule.listen_port);
+        safe_close(&fd);
+        continue;
+      }
       MV_ASSERT(listen(fd, 128) == 0);
       map_fds_.push_back(fd);
       if (real_device_->debug()) {
@@ -373,6 +377,7 @@ class Uip : public Object, public NetworkBackendInterface {
       return nullptr;
     }
     Ipv4Packet* packet = new Ipv4Packet;
+    MV_ASSERT(packet);
     packet->mtu = mtu_;
     packet->eth = (ethhdr*)packet->buffer;
     packet->ip = (iphdr*)&packet->eth[1];
@@ -514,12 +519,6 @@ class Uip : public Object, public NetworkBackendInterface {
       socket->ReplyReset(packet);
       return true;
     }
-  
-    // Guest is closing the TCP
-    if (tcp->fin) {
-      socket->Shutdown(SHUT_WR);
-      return true;
-    }
 
     if (tcp->rst) {
       socket->Reset();
@@ -540,9 +539,6 @@ class Uip : public Object, public NetworkBackendInterface {
     packet->data = (uint8_t*)tcp + tcp->doff * 4;
     packet->data_offset = 0;
     packet->data_length = ntohs(ip->tot_len) - ip->ihl * 4 - tcp->doff * 4;
-    if (packet->data_length == 0) {
-      return true;
-    }
     socket->OnPacketFromGuest(packet);
     return false;
   }

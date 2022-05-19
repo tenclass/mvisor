@@ -60,12 +60,11 @@ class VirtioFsInterface {
 
 struct ClipboardData {
   uint32_t        type;
-  uint32_t        msg_size;
-  void*           msg_data;
+  std::string     data;
   std::string     file_name;
 };
 
-typedef std::function <void(ClipboardData clipboard_data)> ClipboardListener;
+typedef std::function <void(const ClipboardData clipboard_data)> ClipboardListener;
 class ClipboardInterface {
   public:
     virtual void RegisterClipboardListener(ClipboardListener callback) = 0;
@@ -144,12 +143,15 @@ class SerialDeviceInterface {
  public:
   virtual void SendMessage(SerialPortInterface* port, uint8_t* data, size_t size) = 0;
 };
-
+enum SerialPortEvent {
+  kSerialPortStatusChanged,
+  kSerialPortData
+};
 class SerialPortInterface {
  public:
   virtual void OnMessage(uint8_t* data, size_t size) {
     if (callback_)
-      callback_(data, size);
+      callback_(kSerialPortData, data, size);
   }
   virtual void OnWritable() {
     writable_ = true;
@@ -165,9 +167,12 @@ class SerialPortInterface {
 
   virtual void set_ready(bool ready) {
     ready_ = ready;
+    if (callback_) {
+      callback_(kSerialPortStatusChanged, nullptr, 0);
+    }
   }
 
-  virtual void set_callback(std::function<void(uint8_t*, size_t)> callback) {
+  virtual void set_callback(std::function<void(SerialPortEvent, uint8_t*, size_t)> callback) {
     callback_ = callback;
   }
 
@@ -177,7 +182,7 @@ class SerialPortInterface {
 
  protected:
   SerialDeviceInterface* device_;
-  std::function<void(uint8_t*, size_t)> callback_;
+  std::function<void(SerialPortEvent, uint8_t*, size_t)> callback_;
   uint32_t  port_id_;
   char      port_name_[100];
   bool      ready_ = false;

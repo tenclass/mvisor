@@ -66,11 +66,12 @@ class SweetServer {
   SweetConnection* GetConnectionByFd(int fd);
   void RemoveConnection(SweetConnection* conn);
   void LookupDevices();
+  void Schedule(VoidCallback callback);
   void OnEvent();
   void OnAccept();
-  void OnPlayback(PlaybackState state, struct iovec& iov);
+  void OnPlayback(PlaybackState state, const std::string& data);
   void SetDefaultConfig();
-  void OnClipboardEvent(ClipboardData clipboard_data);
+  void UpdateDisplay();
 
   Machine*                    machine_;
   std::list<SweetConnection*> connections_;
@@ -78,6 +79,7 @@ class SweetServer {
   std::string                 unix_path_;
   int                         server_fd_ = -1;
   int                         event_fd_ = -1;
+  std::list<VoidCallback>     tasks_;
   
   VirtioFsInterface*                    virtio_fs_ = nullptr;
   DisplayInterface*                     display_ = nullptr;
@@ -90,8 +92,6 @@ class SweetServer {
 
   PlaybackFormat                        playback_format_;
 
-  bool                        display_mode_changed_ = false;
-  bool                        display_updated_ = false;
   SweetDisplayEncoder*        display_encoder_ = nullptr;
   SweetConnection*            display_connection_ = nullptr;
   DisplayStreamConfig         display_config_;

@@ -18,6 +18,7 @@ objects:
   - class: virtio-network
     backend: uip
     mac: 00:50:00:11:22:33
+    map: tcp:0.0.0.0:8022-:22
 
   - class: ahci-cdrom 
     image: /data/ubuntu-21.10-desktop-amd64.iso
@@ -26,12 +27,12 @@ objects:
     image: /data/virtio.iso
 
   - class: virtio-block
-    image: /data/win11.qcow2
-    snapshot: No
-
-  - class: virtio-block
     image: /data/empty.qcow2
     snapshot: No
+
+  # - class: virtio-block
+  #   image: /data/win11.qcow2
+  #   snapshot: No
 
   # - class: virtio-fs
   #   path: /tmp/fuse

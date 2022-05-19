@@ -123,7 +123,7 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
   // Initialize redirect states
   connected_ = false;
   fd_ = socket(AF_INET, SOCK_STREAM, 0);
-  MV_ASSERT(fd_ >= 0);
+  MV_ASSERT(fd_ > 0);
 
   if (debug_) {
     MV_LOG("TCP fd=%d %x:%u -> %x:%u", fd_, sip_, sport_, dip_, dport_);
@@ -175,7 +175,7 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
 }
 
 void RedirectTcpSocket::OnRemoteConnected() {
-  MV_ASSERT(!connected_);
+  MV_ASSERT(fd_ > 0);
   connected_ = true;
   auto packet = AllocatePacket(true);
   if (packet) {
@@ -258,6 +258,9 @@ void RedirectTcpSocket::StartWriting() {
     }
     packet->data_offset += ret;
     if (packet->data_offset == packet->data_length) {
+      if (packet->tcp->fin) {
+        Shutdown(SHUT_WR);
+      }
       packet->Release();
       send_queue_.pop_front();
     }

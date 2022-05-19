@@ -52,7 +52,9 @@ enum SweetResponseAndEvent {
   kInvalidResponse            = 0x0000;
   kCommandAcknowledge         = 0x1000;
   kQueryStatusResponse        = 0x1010;
+
   kQemuGuestCommandResponse   = 0x1030;
+  kSerialPortStatusEvent      = 0x1031;
 
   kQueryScreenshotResponse    = 0x1050;
   kSetCursorEvent             = 0x1051;
@@ -97,6 +99,11 @@ message QueryStatusResponse {
   bool      spice_agent     = 1001;
   bool      qemu_agent      = 1002;
   bool      tenclass_agent  = 1005;
+}
+
+message SerialPortStatusEvent {
+  string    port_name   = 1;
+  bool      ready       = 2;
 }
 
 message SaveMachineOptions {

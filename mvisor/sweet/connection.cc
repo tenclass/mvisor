@@ -135,9 +135,6 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
 }
 
 bool SweetConnection::Send(uint32_t type, void* data, size_t length) {
-  /* Send() is called by encoder thread to send encoded frames */
-  std::lock_guard<std::mutex> lock(mutex_);
-
   SweetPacketHeader header = {
     .type = type,
     .length = (uint32_t)length
@@ -158,7 +155,11 @@ bool SweetConnection::Send(uint32_t type, void* data, size_t length) {
   return true;
 }
 
-bool SweetConnection::Send(uint32_t type, Message& message) {
+bool SweetConnection::Send(uint32_t type, const std::string& data) {
+  return Send(type, (void*)data.data(), data.size());
+}
+
+bool SweetConnection::Send(uint32_t type, const Message& message) {
   /* Reuse the buffer */
   if (!message.SerializeToString(&buffer_)) {
     MV_LOG("failed to serialize message type=0x%x", type);
@@ -183,11 +184,11 @@ void SweetConnection::OnQueryStatus() {
   response.set_config_path(machine_->configuration()->path());
 
   auto spice_agent = dynamic_cast<SerialPortInterface*>(machine_->LookupObjectByClass("SpiceAgent"));
-  if (spice_agent) {
+  if (spice_agent && spice_agent->ready()) {
     response.set_spice_agent(true);
   }
   auto qemu_agent = dynamic_cast<SerialPortInterface*>(machine_->LookupObjectByClass("QemuGuestAgent"));
-  if (qemu_agent) {
+  if (qemu_agent && qemu_agent->ready()) {
     response.set_qemu_agent(true);
   }
 
@@ -287,14 +288,6 @@ void SweetConnection::SendDisplayStreamStartEvent(uint w, uint h) {
   Send(kDisplayStreamStartEvent, event);
 }
 
-void SweetConnection::SendDisplayStreamStopEvent() {
-  Send(kDisplayStreamStopEvent);
-}
-
-void SweetConnection::SendDisplayStreamDataEvent(void* data, size_t length) {
-  Send(kDisplayStreamDataEvent, data, length);
-}
-
 void SweetConnection::UpdateCursor(const DisplayMouseCursor* cursor_update) {
   if (cursor_update->visible) {
     if (cursor_update->shape.id == cursor_shape_id_) {
@@ -338,27 +331,18 @@ void SweetConnection::SendPlaybackStreamStartEvent(std::string codec, uint forma
   Send(kPlaybackStreamStartEvent, event);
 }
 
-void SweetConnection::SendPlaybackStreamStopEvent() {
-  Send(kPlaybackStreamStopEvent);
-}
-
-void SweetConnection::SendPlaybackStreamDataEvent(void* data, size_t length) {
-  Send(kPlaybackStreamDataEvent, data, length);
-}
-
-void SweetConnection::SendClipboardStreamStartEvent() {
-  Send(kClipboardStreamStartEvent);
-}
-
-void SweetConnection::SendClipboardStreamStopEvent() {
-  Send(kClipboardStreamStopEvent);
-}
-
-void SweetConnection::SendClipboardStreamDataEvent(ClipboardData& clipboard_data) {
-  ClipboardStreamDataEvent  event;
+void SweetConnection::SendClipboardStreamDataEvent(const ClipboardData& clipboard_data) {
+  ClipboardStreamDataEvent event;
   event.set_type(SweetProtocol::ClipboardDataType(clipboard_data.type));
-  event.set_data(clipboard_data.msg_data, clipboard_data.msg_size);
+  event.set_data(clipboard_data.data);
   Send(kClipboardStreamDataEvent, event);
+}
+
+void SweetConnection::SendSerialPortStatusEvent(std::string name, bool ready) {
+  SerialPortStatusEvent event;
+  event.set_port_name(name);
+  event.set_ready(ready);
+  Send(kSerialPortStatusEvent, event);
 }
 
 void SweetConnection::OnQueryScreenshot() {

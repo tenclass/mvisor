@@ -47,20 +47,18 @@ class SweetConnection {
 
   int fd() { return fd_; }
   bool OnReceive();
+
+  /* Not thread-safe. The caller must be sweet server thread */
   bool Send(uint32_t type);
-  bool Send(uint32_t type, Message& message);
+  bool Send(uint32_t type, const Message& message);
   bool Send(uint32_t type, void* data, size_t length);
+  bool Send(uint32_t type, const std::string& data);
 
   void SendDisplayStreamStartEvent(uint w, uint h);
-  void SendDisplayStreamStopEvent();
-  void SendDisplayStreamDataEvent(void* data, size_t length);
   void UpdateCursor(const DisplayMouseCursor* cursor_update);
   void SendPlaybackStreamStartEvent(std::string codec, uint format, uint channels, uint frequency);
-  void SendPlaybackStreamStopEvent();
-  void SendPlaybackStreamDataEvent(void* data, size_t length);
-  void SendClipboardStreamStartEvent();
-  void SendClipboardStreamStopEvent();
-  void SendClipboardStreamDataEvent(ClipboardData& clipboard_data);
+  void SendClipboardStreamDataEvent(const ClipboardData& clipboard_data);
+  void SendSerialPortStatusEvent(std::string name, bool ready);
 
  private:
   void ParsePacket(SweetPacketHeader* header);
