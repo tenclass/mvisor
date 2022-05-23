@@ -41,28 +41,20 @@
 #include "fuse/fuse_lowlevel.h"
 #include "logger.h"
 
+#define BLOCK_SIZE 4096
 #define OFFSET(in_arg) (((char*)(in_arg)) + sizeof(*(in_arg)))
 
 struct lo_inode {
-  struct lo_inode* next; /* protected by lo->mutex */
-  struct lo_inode* prev; /* protected by lo->mutex */
   int fd;
+  int refcount;
   ino_t ino;
   dev_t dev;
-  uint64_t refcount; /* protected by lo->mutex */
 };
 
 struct lo_data {
-  pthread_mutex_t mutex;
-  int debug;
-  int writeback;
-  int flock;
-  int xattr;
-  const char* source;
   double timeout;
-  int cache;
-  int timeout_set;
-  struct lo_inode* root; /* protected by lo->mutex */
+  const char* source;
+  struct lo_inode* root;
 };
 
 struct lo_dirp {
@@ -71,60 +63,34 @@ struct lo_dirp {
   off_t offset;
 };
 
-enum {
-  CACHE_NEVER,
-  CACHE_NORMAL,
-  CACHE_ALWAYS,
-};
-
 class Fuse {
  private:
-  Fuse(std::string& mount_path);
-
-  static Fuse* instance_;
   struct lo_data* lo_data_;
   std::list<lo_inode*> inode_list_;
+  uint64_t disk_size_;
+  uint64_t disk_size_limit_;
+  uint64_t inode_count_limit_;
 
-  struct lo_inode* LowLevelFind(struct stat* stat);
+  lo_inode* GetLowLevelInode(fuse_ino_t inode);
+  lo_inode* CreateInodeFromFd(int fd, struct stat* stat, int refcount);
 
-  /* fuse functions */
-  int FuseBufvecAdvance(struct fuse_bufvec* buf_vec, size_t length);
+  void UnrefInode(struct lo_inode* inode, uint64_t refcount);
   void FuseFillEntry(struct fuse_entry_out* arg, const struct fuse_entry_param* entry_param);
+
+  bool FilePathSafeCheck(int fd);
+  bool FuseBufvecAdvance(struct fuse_bufvec* buf_vec, size_t length);
+
   size_t FuseBufSize(const struct fuse_bufvec* buf_vec);
-  size_t FuseAddDirentryPlus(char* buf, size_t buf_size, const char* name,
-                             const struct fuse_entry_param* entry_param, off_t off);
   size_t FuseAddDirentry(char* buf, size_t buf_size, const char* name, const struct stat* stbuf, off_t off);
-  ssize_t FuseBufWrite(const struct fuse_buf* dst_buf, size_t dst_offset,
-                       const struct fuse_buf* src_buf, size_t src_offset, size_t length);
-  ssize_t FuseBufRead(const struct fuse_buf* dst_buf, size_t dst_offset,
-                      const struct fuse_buf* src_buf, size_t src_offset, size_t length);
-  ssize_t FuseBufCopyOne(const struct fuse_buf* dst, size_t dst_offset, const struct fuse_buf* src,
-                         size_t src_offset, size_t length, enum fuse_buf_copy_flags flags);
+  size_t FuseAddDirentryPlus(char* buf, size_t buf_size, const char* name, const struct fuse_entry_param* entry_param,
+                             off_t off);
 
- public:
-  static Fuse* GetInstance(std::string& mount_path) {
-    // no need to share
-    if (instance_ == nullptr) {
-      instance_ = new Fuse(mount_path);
-    }
-    return instance_;
-  }
-  virtual ~Fuse();
-
-  int LowLevelFd(fuse_ino_t ino);
-  int LowLevelLookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param);
-  int MakeNodeWrapper(int dirfd, const char* path, const char* link, int mode, dev_t rdev);
-
-  void UnrefInode(struct lo_data* lo, struct lo_inode* inode, uint64_t n);
-  void ConvertStat(const struct stat* stbuf, struct fuse_attr* attr);
-  void ConvertStatfs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs);
-  void LowLevelForgetOne(fuse_ino_t ino, uint64_t nlookup);
-
-  bool LowLevelReadDir(fuse_in_header* in, char* result_buf, uint32_t* remain_size, bool is_plus);
-  ssize_t FuseBufCopy(struct fuse_bufvec* dstv, struct fuse_bufvec* srcv, enum fuse_buf_copy_flags flags);
-  struct lo_inode* GetLowLevelInode(fuse_ino_t inode);
-
-  inline struct lo_data* get_lo_data() { return lo_data_; }
+  ssize_t FuseBufRead(const struct fuse_buf* dst_buf, size_t dst_offset, const struct fuse_buf* src_buf,
+                      size_t src_offset, size_t length);
+  ssize_t FuseBufWrite(const struct fuse_buf* dst_buf, size_t dst_offset, const struct fuse_buf* src_buf,
+                       size_t src_offset, size_t length);
+  ssize_t FuseBufCopyOne(const struct fuse_buf* dst, size_t dst_offset, const struct fuse_buf* src, size_t src_offset,
+                         size_t length, enum fuse_buf_copy_flags flags);
 
   inline const struct fuse_buf* FuseBufvecCurrent(struct fuse_bufvec* buf_vec) {
     if (buf_vec->idx < buf_vec->count) {
@@ -133,6 +99,42 @@ class Fuse {
       return nullptr;
     }
   }
+
+  inline bool IsDotOrDotdot(const char* name) {
+    return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
+  }
+
+ public:
+  Fuse(std::string& mount_path, uint64_t disk_size_limit, uint64_t inode_count_limit);
+  virtual ~Fuse();
+
+  int GetFdFromInode(fuse_ino_t ino);
+  int MakeNodeWrapper(int dirfd, const char* path, const char* link, int mode, dev_t rdev);
+
+  void ConvertStat(const struct stat* stbuf, struct fuse_attr* attr);
+  void ConvertStatfs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs);
+  void LowLevelForget(lo_inode* inode, uint64_t refcount);
+  void ModifyDiskInformationToVm(struct statvfs* new_stat_vfs);
+
+  bool IsDiskSpaceLeftEnough(uint64_t size) { return disk_size_ > size; }
+  bool LowLevelLookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param);
+  bool LowLevelReadDir(fuse_in_header* in, char* result_buf, uint32_t* remain_size, bool is_plus);
+
+  ssize_t FuseBufCopy(struct fuse_bufvec* dstv, struct fuse_bufvec* srcv, enum fuse_buf_copy_flags flags);
+
+  lo_inode* GetInodeFromFd(int fd);
+  lo_inode* LowLevelFind(struct stat* stat);
+
+  inline struct lo_data* get_lo_data() { return lo_data_; }
+
+  inline bool IsInodeListFull() { return inode_list_.size() > inode_count_limit_; }
+
+  inline void CostDiskSpace(uint64_t size) {
+    MV_ASSERT(size < disk_size_);
+    disk_size_ -= size;
+  }
+
+  inline void ReleaseDiskSpace(uint64_t size) { disk_size_ += size; }
 
   inline unsigned long CalcTimeoutSecond(double t) {
     if (t > (double)ULONG_MAX) {
@@ -155,12 +157,7 @@ class Fuse {
     }
   }
 
-  inline int IsDotOrDotdot(const char* name) {
-    return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
-  }
-
-  inline void MakeResponse(fuse_out_header* response, uint32_t len, int32_t error,
-                           uint64_t unique) {
+  inline void MakeResponse(fuse_out_header* response, uint32_t len, int32_t error, uint64_t unique) {
     MV_ASSERT(response != nullptr && len >= 0);
     response->error = error;
     response->unique = unique;
