@@ -290,7 +290,7 @@ class Ich9Hda : public PciDevice {
         .data = (uint8_t*)manager_->TranslateGuestMemory(entries[i].address),
         .length = entries[i].length,
         .interrupt_on_completion = !!(entries[i].flags & 1),
-        .read_counter =0
+        .read_counter = 0
       };
       if (buffer.interrupt_on_completion) {
         has_ioc = true;
@@ -299,6 +299,7 @@ class Ich9Hda : public PciDevice {
       if (debug_) {
         MV_LOG("buffer addr=0x%lx len=0x%x ioc=%d", entries[i].address, buffer.length, entries[i].flags);
       }
+      bzero(buffer.data, buffer.length);
       stream_state.buffers.push_back(buffer);
     }
     if (!has_ioc) {

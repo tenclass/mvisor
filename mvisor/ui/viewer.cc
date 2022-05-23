@@ -248,9 +248,9 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
         pcm_playback_error_ = true;
         break;
       }
-      /* set the latency to 10 times of interval to buffer some more data */
+      /* set the latency to multiple times of interval to buffer some more data */
       err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
-        playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 10);
+        playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 50);
       if (err < 0) {
         MV_PANIC("snd_pcm_set_params error: %s\n", snd_strerror(err));
       }

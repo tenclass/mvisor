@@ -58,7 +58,6 @@ struct HdaStream {
   TransferCallback transfer_callback;
   uint8_t   buffer[HDA_STREAM_BUFFER_SIZE];
   size_t    buffer_pointer;
-  bool      first_buffer;
 };
 
 struct HdaNode {
@@ -376,8 +375,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
 
   void OnStreamTimer(HdaStream* stream) {
     if (stream->output) {
-      /* To prevent underrun, notify after the second frame is ready */
-      auto buffer_size = stream->first_buffer ? HDA_STREAM_BUFFER_SIZE : stream->bytes_per_frame;
+      auto buffer_size = stream->bytes_per_frame;
+      if (buffer_size > HDA_STREAM_BUFFER_SIZE)
+        buffer_size = HDA_STREAM_BUFFER_SIZE;
       auto to_transfer = buffer_size - stream->buffer_pointer;
       size_t bytes = stream->transfer_callback(&stream->buffer[stream->buffer_pointer], to_transfer);
       stream->position += bytes;
@@ -386,7 +386,6 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       if (stream->buffer_pointer >= buffer_size) {
         NotifyPlayback(kPlaybackData, stream->buffer, stream->buffer_pointer);
         stream->buffer_pointer = 0;
-        stream->first_buffer = false;
       }
     } else {
       /* no data input now, but move position to fix the timer interval */
@@ -426,7 +425,6 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       if (stream->output) {
         NotifyPlayback(kPlaybackStart, nullptr, 0);
       }
-      stream->first_buffer = true;
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
       MV_ASSERT(stream->timer == nullptr);
