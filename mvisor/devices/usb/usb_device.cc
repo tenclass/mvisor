@@ -43,9 +43,6 @@ void UsbDevice::Reset() {
 
   /* remove all endpoints */
   for (auto endpoint : endpoints_) {
-    if (endpoint->timer) {
-      manager_->io()->RemoveTimer(endpoint->timer);
-    }
     delete endpoint;
   }
   endpoints_.clear();
@@ -104,7 +101,7 @@ UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64
 bool UsbDevice::HandlePacket(UsbPacket* packet) {
   if (packet->endpoint_address & 0xF) { // data endpoints
     auto endpoint = packet->endpoint;
-    if (endpoint->type == kUsbEndpointIsochronous || endpoint->type == kUsbEndpointInterrupt) {
+    if (endpoint->type == kUsbEndpointIsochronous || endpoint->type == kUsbEndpointInterrupt || endpoint->type == kUsbEndpointBulk) {
       packet->status = USB_RET_NAK;
       endpoint->tokens.insert(packet);
       NotifyEndpoint(endpoint->address);
@@ -172,26 +169,18 @@ void UsbDevice::OnDataPacket(UsbPacket* packet) {
 void UsbDevice::NotifyEndpoint(uint endpoint_address) {
   auto endpoint = FindEndpoint(endpoint_address);
   if (endpoint) {
-    auto timer_callback = [this, endpoint]() {
-      if (endpoint->tokens.empty()) {
-        /* wait for next tick */
-        return;
-      }
-      auto it = endpoint->tokens.begin();
-      auto packet = *it;
-      endpoint->tokens.erase(it);
-      OnDataPacket(packet);
-      if (packet->status == USB_RET_NAK) {
-        manager_->io()->RemoveTimer(endpoint->timer);
-        endpoint->timer = nullptr;
-        endpoint->tokens.insert(packet);
-      } else {
-        packet->OnComplete();
-      }
-    };
-  
-    if (!endpoint->timer) {
-      endpoint->timer = manager_->io()->AddTimer(endpoint->interval, true, timer_callback);
+    if (endpoint->tokens.empty()) {
+      /* wait for next tick */
+      return;
+    }
+    auto it = endpoint->tokens.begin();
+    auto packet = *it;
+    endpoint->tokens.erase(it);
+    OnDataPacket(packet);
+    if (packet->status == USB_RET_NAK) {
+      endpoint->tokens.insert(packet);
+    } else {
+      packet->OnComplete();
     }
   } else {
     MV_PANIC("endpoint not found 0x%x", endpoint_address);

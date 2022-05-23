@@ -48,8 +48,6 @@ struct UsbEndpoint {
   std::set<UsbPacket*>    tokens;
   uint                    interface;
   uint                    interval;
-  /* for interrupt/isoch endpoints */
-  IoTimer*                timer;
 };
 
 struct UsbPacket {
