@@ -22,6 +22,7 @@
 #include "logger.h"
 #include "keymap.h"
 #include "spice/enums.h"
+#include "spice/vd_agent.h"
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   SDL_Init(SDL_INIT_VIDEO);
@@ -180,12 +181,6 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
 
 /* Only use mutex with dequee, since we don't want to block the IoThread */
 void Viewer::Render() {
-  if (requested_update_window_) {
-    requested_update_window_ = false;
-    DestroyWindow();
-    CreateWindow();
-  }
-
   DisplayUpdate update;
   if (display_->AcquireUpdate(update)) {
     RenderCursor(&update.cursor);
@@ -222,7 +217,7 @@ PointerInputInterface* Viewer::GetActivePointer() {
   return nullptr;
 }
 
-void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
+void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
   if (pcm_playback_error_) {
     return;
   }
@@ -261,7 +256,7 @@ void Viewer::OnPlayback(PlaybackState state, struct iovec& iov) {
       }
     }
     /* assume format is s16le */
-    auto frames = snd_pcm_writei(pcm_playback_, iov.iov_base, iov.iov_len / playback_format_.channels / 2);
+    auto frames = snd_pcm_writei(pcm_playback_, data.data(), data.size() / playback_format_.channels / 2);
     if (frames < 0) {
       MV_LOG("snd_pcm_writei failed: %s\n", snd_strerror(frames));
     }
@@ -291,23 +286,87 @@ void Viewer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayResizeInterface*>(o); })) {
     resizers_.push_back(dynamic_cast<DisplayResizeInterface*>(o));
   }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<SerialPortInterface*>(o); })) {
+    auto port = dynamic_cast<SerialPortInterface*>(o);
+    if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
+      clipboard_ = dynamic_cast<ClipboardInterface*>(o);
+    }
+    port->set_callback([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
+      Schedule([this, port, event, data = std::string((const char*)data, size)] () {
+        OnSerialPortEvent(port, event, data);
+      });
+    });
+  }
   /* At least one display device is required for SDL viewer */
   MV_ASSERT(display_);
 
   display_->RegisterDisplayModeChangeListener([this]() {
-    requested_update_window_ = true;
-    SDL_Event event = { .type = SDL_USEREVENT };
-    SDL_PushEvent(&event);
+    Schedule([this]() {
+      DestroyWindow();
+      CreateWindow();
+    });
   });
   display_->RegisterDisplayUpdateListener([this]() {
-    SDL_Event event = { .type = SDL_USEREVENT };
-    SDL_PushEvent(&event);
+    Schedule([this]() {
+      Render();
+    });
   });
   if (playback_) {
     playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
-      OnPlayback(state, iov);
+      Schedule([this, state, data = std::string((const char*)iov.iov_base, iov.iov_len)] () {
+        OnPlayback(state, data);
+      });
     });
   }
+  if(clipboard_) {
+    clipboard_->RegisterClipboardListener([this](const ClipboardData clipboard_data) {
+      /* std::move don't copy data, but replace data reference */
+      Schedule([this, clipboard_data = std::move(clipboard_data)] () {
+        OnClipboardFromGuest(clipboard_data);
+      });
+    });
+  }
+}
+
+void Viewer::OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data) {
+  switch (event)
+  {
+  case kSerialPortStatusChanged:
+    if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
+      /* Set screen size when VDAgent is ready */
+      SendResizerEvent();
+    }
+    break;
+  case kSerialPortData:
+    /* Handle Qemu guest agent data here */
+    break;
+  }
+}
+
+void Viewer::OnClipboardFromGuest(const ClipboardData& clipboard_data) {
+  switch (clipboard_data.type)
+  {
+  case VD_AGENT_CLIPBOARD_NONE:
+    clipboard_data_ = "";
+    SDL_SetClipboardText("");
+    break;
+  case VD_AGENT_CLIPBOARD_UTF8_TEXT:
+    clipboard_data_ = clipboard_data.data;
+    SDL_SetClipboardText(clipboard_data_.c_str());
+    break;
+  default:
+    MV_LOG("Unhandled clipboard type=0x%x", clipboard_data.type);
+    break;
+  }
+}
+
+/* Use viewer UI thread to handle tasks */
+void Viewer::Schedule(VoidCallback callback) {
+  mutex_.lock();
+  tasks_.emplace_back(std::move(callback));
+  mutex_.unlock();
+  SDL_Event event = { .type = SDL_USEREVENT };
+  SDL_PushEvent(&event);
 }
 
 /* Reference about SDL-2:
@@ -328,18 +387,25 @@ int Viewer::MainLoop() {
     /* Check viewer window resize */
     if (pending_resize_.triggered && frame_start_time - pending_resize_.time >= std::chrono::milliseconds(200)) {
       pending_resize_.triggered = false;
-      for (auto resizer : resizers_) {
-        if (resizer->Resize(pending_resize_.width, pending_resize_.height)) {
-          if (machine_->debug()) {
-            MV_LOG("%s resize to %dx%d", dynamic_cast<Object*>(resizer)->name(),
-              pending_resize_.width, pending_resize_.height);
-          }
-          break;
-        }
-      }
+      SendResizerEvent();
     }
   }
   return 0;
+}
+
+void Viewer::SendResizerEvent() {
+  if (!pending_resize_.width || !pending_resize_.height) {
+    return;
+  }
+  for (auto resizer : resizers_) {
+    if (resizer->Resize(pending_resize_.width, pending_resize_.height)) {
+      if (machine_->debug()) {
+        MV_LOG("%s resize to %dx%d", dynamic_cast<Object*>(resizer)->name(),
+          pending_resize_.width, pending_resize_.height);
+      }
+      break;
+    }
+  }
 }
 
 void Viewer::SendPointerEvent() {
@@ -362,9 +428,17 @@ void Viewer::HandleEvent(const SDL_Event& event) {
 
   switch (event.type)
   {
-  case SDL_USEREVENT:
-    Render();
+  case SDL_USEREVENT: {
+    std::unique_lock<std::mutex> lock(mutex_);
+    while (!tasks_.empty()) {
+      auto& task = tasks_.front();
+      lock.unlock();
+      task();
+      lock.lock();
+      tasks_.pop_front();
+    }
     break;
+  }
   case SDL_KEYDOWN:
     if (event.key.keysym.sym == SDLK_PAUSE) {
       if (machine_->IsPaused()) {
@@ -426,6 +500,15 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       pending_resize_.time = std::chrono::steady_clock::now();
       break;
     }
+    case SDL_WINDOWEVENT_FOCUS_GAINED:
+      /* When viewer got focused, check clipboard if changed */
+      if (SDL_HasClipboardText() && clipboard_data_ != SDL_GetClipboardText()) {
+        clipboard_data_ = SDL_GetClipboardText();
+        if (clipboard_) {
+          clipboard_->ClipboardDataToGuest(VD_AGENT_CLIPBOARD_UTF8_TEXT, clipboard_data_);
+        }
+      }
+      break;
     break;
   case SDL_QUIT:
     machine_->Quit();

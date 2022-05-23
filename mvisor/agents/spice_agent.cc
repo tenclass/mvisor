@@ -41,12 +41,18 @@ class SpiceAgent : public Object, public SerialPortInterface,
   public ClipboardInterface
 {
  private:
+  int                             num_monitors_ = 1;
+  /* Limit mouse event frequency */
   VDAgentMouseState               last_mouse_state_;
   steady_clock::time_point        last_send_mouse_time_;
-  int                             num_monitors_;
-  std::string                     last_send_clipboard_;
+  /* Cache clipboard data */
+  std::string                     outgoing_clipboard_;
   std::vector<ClipboardListener>  clipboard_listeners_;
-  bool                            clipboard_enabled_;
+  /* Buffer to build incoming message */
+  uint                            incoming_message_written_ = 0;
+  std::string                     incoming_message_;
+  /* Max clipboard size, default is 1MB */
+  uint32_t                        max_clipboard_ = 1024 * 1024;
 
  public:
   SpiceAgent() {
@@ -54,10 +60,9 @@ class SpiceAgent : public Object, public SerialPortInterface,
   
     strcpy(port_name_, "com.redhat.spice.0");
     last_send_mouse_time_ = steady_clock::now();
-    num_monitors_ = 1;
-    clipboard_enabled_ = false;
   }
 
+  /* The message may consists of more than one chunk */
   virtual void OnMessage(uint8_t* data, size_t size) {
     if (size < sizeof(VDIChunkHeader) + sizeof(VDAgentMessage)) {
       MV_PANIC("Chunk too small, size=0x%lx", size);
@@ -68,25 +73,51 @@ class SpiceAgent : public Object, public SerialPortInterface,
       MV_PANIC("Invalid chunk size=0x%lx", size);
       return;
     }
-    VDAgentMessage* message = (VDAgentMessage*)(data + sizeof(VDIChunkHeader));
-    HandleAgentMessage(message);
+    auto chunk_data = data + sizeof(VDIChunkHeader);
+
+    if (incoming_message_written_ == 0) {
+      VDAgentMessage* message = (VDAgentMessage*)chunk_data;
+      incoming_message_.resize(sizeof(VDAgentMessage) + message->size);
+    }
+    if (incoming_message_written_ + chunk_header->size > incoming_message_.size()) {
+      MV_PANIC("incoming message buffer overflow message=%lu chunk=%u written=%u",
+        incoming_message_.size(), chunk_header->size, incoming_message_written_);
+    }
+
+    memcpy(incoming_message_.data() + incoming_message_written_, chunk_data, chunk_header->size);
+    incoming_message_written_ += chunk_header->size;
+    if (incoming_message_written_ == incoming_message_.size()) {
+      HandleAgentMessage((VDAgentMessage*)incoming_message_.data());
+      incoming_message_written_ = 0;
+    }
   }
 
   void HandleAgentMessage(VDAgentMessage* message) {
     switch (message->type)
     {
     case VD_AGENT_ANNOUNCE_CAPABILITIES: {
-      /* ui effects & color depth */
-      VDAgentDisplayConfig display_config = {
-        .flags = 0
-      };
-      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, &display_config, sizeof(display_config));
-
-      uint32_t max_clipboard = 0x06400000;
-      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MAX_CLIPBOARD, &max_clipboard, sizeof(max_clipboard));
-
-      if(!clipboard_enabled_) { 
+      /* This is the first message from VDAgent */
+      auto announce_caps = (VDAgentAnnounceCapabilities*)message->data;
+      auto caps_size = message->size - sizeof(VDAgentAnnounceCapabilities);
+      auto caps = announce_caps->caps;
+      if (announce_caps->request) {
         SendAgentCapabilities();
+      }
+
+      if (VD_AGENT_HAS_CAPABILITY(caps, caps_size, VD_AGENT_CAP_MAX_CLIPBOARD)) {
+        if (has_key("max_clipboard")) {
+          /* Read max_clipboard from configuration */
+          max_clipboard_ = (uint32_t)std::get<uint64_t>(key_values_["max_clipboard"]);
+        }
+        SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MAX_CLIPBOARD, &max_clipboard_, sizeof(max_clipboard_));
+      }
+
+      if (VD_AGENT_HAS_CAPABILITY(caps, caps_size, VD_AGENT_CAP_DISPLAY_CONFIG)) {
+        /* ui effects & color depth */
+        VDAgentDisplayConfig display_config = {
+          .flags = 0
+        };
+        SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, &display_config, sizeof(display_config));
       }
       break;
     }
@@ -103,40 +134,65 @@ class SpiceAgent : public Object, public SerialPortInterface,
       VDAgentClipboardRequest request = {
         .type = grab->types[0]
       };
-      SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_CLIPBOARD_REQUEST, &request, sizeof(request));
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_CLIPBOARD_REQUEST, &request, sizeof(request));
       break;
     }
     case VD_AGENT_CLIPBOARD: {
-      auto clipboard = (VDAgentClipboard*) message->data;
-      uint32_t msg_size = message->size - sizeof(message->type);
-      NotifyClipboardEvent(clipboard, msg_size);
+      auto clipboard = (VDAgentClipboard*)message->data;
+      auto clipboard_data = ClipboardData {
+        .type = clipboard->type,
+        .data = std::string((const char*)clipboard->data, message->size - sizeof(VDAgentClipboard))
+      };
+      NotifyClipboardEvent(clipboard_data);
       break;
     }
     case VD_AGENT_CLIPBOARD_REQUEST:
-      SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_CLIPBOARD, last_send_clipboard_.data(), last_send_clipboard_.size());
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_CLIPBOARD, outgoing_clipboard_.data(), outgoing_clipboard_.size());
       break;
+    case VD_AGENT_CLIPBOARD_RELEASE: {
+      /* VM asks us to clear the clipboard */
+      auto clipboard_data = ClipboardData {
+        .type = VD_AGENT_CLIPBOARD_NONE,
+        .data = ""
+      };
+      NotifyClipboardEvent(clipboard_data);
+      break;
+    }
     default:
-      MV_LOG("Unhandled agent message type=0x%x", message->type);
-      if(debug_)
-        DumpHex(message, sizeof(*message) + message->size);
+      MV_LOG("Unhandled agent message type=0x%x size=%d", message->type, message->size);
+      // DumpHex(message, sizeof(*message) + message->size);
       break;
     }
   }
 
+  void SendMessage(int port, const std::string& message) {
+    std::string buffer;
+    size_t bytes_sent = 0;
+    while (bytes_sent < message.size()) {
+      size_t chunk_size = message.size() - bytes_sent;
+      if (chunk_size > VD_AGENT_MAX_DATA_SIZE - sizeof(VDIChunkHeader)) {
+        chunk_size = VD_AGENT_MAX_DATA_SIZE - sizeof(VDIChunkHeader);
+      }
+      buffer.resize(sizeof(VDIChunkHeader) + chunk_size);
+      auto chunk_header = (VDIChunkHeader*)buffer.data();
+      chunk_header->port = port;
+      chunk_header->size = chunk_size;
+      memcpy(buffer.data() + sizeof(VDIChunkHeader), message.data() + bytes_sent, chunk_size);
+      bytes_sent += chunk_size;
+      device_->SendMessage(this, (uint8_t*)buffer.data(), buffer.size());
+    }
+  }
+
   void SendAgentMessage(int port, int type, void* data, size_t length) {
-    size_t buffer_size = sizeof(VDIChunkHeader) + sizeof(VDAgentMessage) + length;
-    uint8_t* buffer = new uint8_t[buffer_size];
-    VDIChunkHeader* chunk_header = (VDIChunkHeader*)buffer;
-    chunk_header->port = port;
-    chunk_header->size = sizeof(VDAgentMessage) + length;
-    VDAgentMessage* agent_message = (VDAgentMessage*)(buffer + sizeof(VDIChunkHeader));
+    std::string outgoing_message;
+    outgoing_message.resize(sizeof(VDAgentMessage) + length);
+    VDAgentMessage* agent_message = (VDAgentMessage*)outgoing_message.data();
     agent_message->type = type;
     agent_message->protocol = 1;
     agent_message->opaque = 0UL;
     agent_message->size = length;
     memcpy(agent_message->data, data, length);
-    device_->SendMessage(this, buffer, buffer_size);
-    delete buffer;
+    SendMessage(port, outgoing_message);
   }
 
   void QueueEvent(uint buttons, int x, int y) {
@@ -173,79 +229,66 @@ class SpiceAgent : public Object, public SerialPortInterface,
   }
 
   virtual bool Resize(uint32_t width, uint32_t height) {
+    if (!ready_) {
+      return false;
+    }
+
     /* For H264, resolution must be multiple of 2 */
     if (width & 1)
       width++;
     if (height & 1)
       height++;
 
-    if (!ready_) {
-      return false;
-    }
-
-    size_t config_size = sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig);
-    VDAgentMonitorsConfig* config = (VDAgentMonitorsConfig*)malloc(config_size);
-    bzero(config, config_size);
+    auto buffer = std::string(sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig), '\0');
+    auto config = (VDAgentMonitorsConfig*)buffer.data();
     config->num_of_monitors = 1;
     config->monitors[0].depth = 32;
     config->monitors[0].width = width;
     config->monitors[0].height = height;
-    SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, config, config_size);
-    free(config);
+    SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, buffer.data(), buffer.size());
     return true;
   }
 
   void SendAgentCapabilities() {
-    size_t size = sizeof(VDAgentAnnounceCapabilities) + VD_AGENT_CAPS_BYTES;
-    VDAgentAnnounceCapabilities * caps = (VDAgentAnnounceCapabilities*)malloc(size);
-    caps->request = true;
+    auto buffer = std::string(sizeof(VDAgentAnnounceCapabilities) + VD_AGENT_CAPS_BYTES, '\0');
+    auto caps = (VDAgentAnnounceCapabilities*)buffer.data();
+    caps->request = false;
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MOUSE_STATE);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MONITORS_CONFIG);
+    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_SPARSE_MONITORS_CONFIG);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_REPLY);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_DISPLAY_CONFIG);
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_BY_DEMAND);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_SELECTION);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MONITORS_CONFIG_POSITION);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_FILE_XFER_DETAILED_ERRORS);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_NO_RELEASE_ON_REGRAB);
-    VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_CLIPBOARD_GRAB_SERIAL);
-    SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_ANNOUNCE_CAPABILITIES, caps, size);
-    free(caps);
-    clipboard_enabled_ = true;
+    SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_ANNOUNCE_CAPABILITIES, buffer.data(), buffer.size());
   }
 
   void SendAgentClipboardGrab(uint type) {
-    size_t size = sizeof(VDAgentClipboardGrab) + sizeof(uint32_t)* 2;
-    VDAgentClipboardGrab* grab = (VDAgentClipboardGrab *) malloc(size);
-    grab->types[0] = VD_AGENT_CLIPBOARD_UTF8_TEXT;
-    SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_CLIPBOARD_GRAB, grab, size);
-    free(grab);
+    if (type == VD_AGENT_CLIPBOARD_UTF8_TEXT) {
+      auto buffer = std::string(sizeof(VDAgentClipboardGrab) + sizeof(uint32_t), '\0');
+      auto grab = (VDAgentClipboardGrab*)buffer.data();
+      grab->types[0] = VD_AGENT_CLIPBOARD_UTF8_TEXT;
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_CLIPBOARD_GRAB, buffer.data(), buffer.size());
+    } else {
+      MV_LOG("unsupported clipboard type=0x%x", type);
+    }
   }
 
-  void SetAgentClipboardData(uint type, uint32_t msg_size, void* msg_data) {
-    size_t size = sizeof(VDAgentClipboard) + msg_size;
-    last_send_clipboard_.resize(size);  
-    VDAgentClipboard* clipboard = (VDAgentClipboard*) last_send_clipboard_.data();
+  virtual bool ClipboardDataToGuest(uint type, const std::string& data) {
+    if (!ready_) {
+      return false;
+    }
+    outgoing_clipboard_.resize(sizeof(VDAgentClipboard) + data.size());  
+    auto clipboard = (VDAgentClipboard*)outgoing_clipboard_.data();
     clipboard->type = type;
-    memcpy(clipboard->data, msg_data, msg_size);
-  }
-
-  virtual bool ClipboardDataToGuest(uint type, uint32_t msg_size, void* msg_data) {
-    SendAgentCapabilities();
-
-    SetAgentClipboardData(type, msg_size, msg_data);
+    memcpy(clipboard->data, data.data(), data.size());
 
     SendAgentClipboardGrab(type);
-
     return true;
   }
 
-  void NotifyClipboardEvent(VDAgentClipboard* clipboard, uint32_t msg_size) {
+  void NotifyClipboardEvent(const ClipboardData& data) {
     for (auto& cb : clipboard_listeners_) {
-      cb(ClipboardData {
-        .type = clipboard->type,
-        .data = std::string((const char*)clipboard->data, msg_size)
-      });
+      cb(data);
     }
   }
 

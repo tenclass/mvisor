@@ -379,7 +379,7 @@ void SweetConnection::OnClipboardDataToGuest() {
     case kSweetClipboard_UTF8_TEXT: {
       auto clipboard_interface = server_->clipboard();
       if(clipboard_interface)
-        clipboard_interface->ClipboardDataToGuest(clipboard.type(), clipboard.data().size(), (void*)clipboard.data().data());
+        clipboard_interface->ClipboardDataToGuest(clipboard.type(), clipboard.data());
       break;
     }
     case kSweetClipboard_IMAGE_PNG:

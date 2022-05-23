@@ -68,7 +68,7 @@ typedef std::function <void(const ClipboardData clipboard_data)> ClipboardListen
 class ClipboardInterface {
   public:
     virtual void RegisterClipboardListener(ClipboardListener callback) = 0;
-    virtual bool ClipboardDataToGuest(uint type, uint32_t msg_size, void* msg_data) = 0;
+    virtual bool ClipboardDataToGuest(uint type, const std::string& data) = 0;
 };
 
 

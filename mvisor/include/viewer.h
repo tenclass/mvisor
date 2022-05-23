@@ -32,8 +32,8 @@
 
 struct PendingResize {
   bool triggered = false;
-  int width;
-  int height;
+  int width = 0;
+  int height = 0;
   std::chrono::steady_clock::time_point time;
 };
 
@@ -55,9 +55,15 @@ class Viewer {
   void HandleEvent(const SDL_Event& event);
   PointerInputInterface* GetActivePointer();
   void SendPointerEvent();
-  void OnPlayback(PlaybackState state, struct iovec& iov);
+  void SendResizerEvent();
+  void OnPlayback(PlaybackState state, const std::string& data);
+  void OnClipboardFromGuest(const ClipboardData& clipboard_data);
+  void OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data);
+  void Schedule(VoidCallback callback);
 
   Machine* machine_;
+  ClipboardInterface* clipboard_;
+  std::string clipboard_data_;
   DisplayInterface* display_;
   PlaybackInterface* playback_;
   KeyboardInputInterface* keyboard_;
@@ -72,7 +78,7 @@ class Viewer {
   SDL_Cursor* cursor_ = nullptr;
 
   std::mutex mutex_;
-  bool requested_update_window_ = false;
+  std::deque<VoidCallback> tasks_;
   bool cursor_visible_ = false;
   uint64_t cursor_shape_id_ = 0;
 
