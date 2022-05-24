@@ -77,7 +77,6 @@ class Fuse {
   void UnrefInode(struct lo_inode* inode, uint64_t refcount);
   void FuseFillEntry(struct fuse_entry_out* arg, const struct fuse_entry_param* entry_param);
 
-  bool FilePathSafeCheck(int fd);
   bool FuseBufvecAdvance(struct fuse_bufvec* buf_vec, size_t length);
 
   size_t FuseBufSize(const struct fuse_bufvec* buf_vec);
@@ -119,7 +118,8 @@ class Fuse {
   bool IsDiskSpaceLeftEnough(uint64_t size) { return disk_size_ > size; }
   bool LowLevelLookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param);
   bool LowLevelReadDir(fuse_in_header* in, char* result_buf, uint32_t* remain_size, bool is_plus);
-
+  bool FilePathSafeCheck(int fd);
+  
   ssize_t FuseBufCopy(struct fuse_bufvec* dstv, struct fuse_bufvec* srcv, enum fuse_buf_copy_flags flags);
 
   lo_inode* GetInodeFromFd(int fd);
