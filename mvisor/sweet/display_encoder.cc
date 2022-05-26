@@ -104,6 +104,11 @@ void SweetDisplayEncoder::InitializeX264() {
   param.i_keyint_max = 7200;
   param.i_scenecut_threshold = 0;
 
+  /* colorspace */
+  param.vui.i_colorprim = 6; // bt601
+  param.vui.i_transfer = 13; // sRGB
+  param.vui.i_colmatrix = 6; // bt601
+
   /* check CABAC and num_ref_frames */
   if (config_->flags() & 2) {
     param.b_cabac = 1;
