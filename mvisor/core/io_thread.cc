@@ -186,7 +186,7 @@ IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callba
   IoTimer* timer = new IoTimer {
     .permanent = permanent,
     .interval_ms = interval_ms,
-    .callback = callback
+    .callback = std::move(callback)
   };
   timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
 
@@ -250,7 +250,7 @@ int IoThread::CheckTimers() {
 }
 
 void IoThread::Schedule(VoidCallback callback) {
-  AddTimer(0, false, callback);
+  AddTimer(0, false, std::move(callback));
 }
 
 void IoThread::RegisterDiskImage(DiskImage* image) {

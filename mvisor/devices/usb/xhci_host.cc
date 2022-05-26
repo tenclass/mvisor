@@ -1311,7 +1311,7 @@ class XhciHost : public PciDevice {
 
   bool SetupTransfer(XhciTransfer* transfer) {
     auto packet = transfer->device->CreatePacket(transfer->endpoint->endpoint_address,
-      transfer->stream_id, transfer->trbs[0].address, [=]()
+      transfer->stream_id, transfer->trbs[0].address, [this, transfer]()
     {
       CompleteTransfer(transfer);
       FreeTransfer(transfer);

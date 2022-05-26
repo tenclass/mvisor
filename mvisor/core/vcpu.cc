@@ -459,7 +459,7 @@ void Vcpu::Kick() {
 void Vcpu::Schedule(VoidCallback callback) {
   std::lock_guard<std::mutex> lock(mutex_);
   tasks_.emplace_back(VcpuTask {
-    .callback = callback
+    .callback = std::move(callback)
   });
   Kick();
 }

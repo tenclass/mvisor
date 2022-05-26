@@ -78,14 +78,14 @@ UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64
     .id = id,
     .status = USB_RET_SUCCESS,
     .size = 0,
-    .OnComplete = on_complete
+    .OnComplete = std::move(on_complete)
   };
   if (endpoint_address & 0xF) {
     packet->endpoint = FindEndpoint(endpoint_address);
     MV_ASSERT(packet->endpoint);
   }
   /* called by XHCI controller */
-  packet->Release = [=]() {
+  packet->Release = [packet]() {
     auto endpoint = packet->endpoint;
     if (endpoint) {
       auto it = endpoint->tokens.find(packet);

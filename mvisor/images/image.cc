@@ -101,7 +101,7 @@ void DiskImage::WorkerProcess() {
     if (worker_queue_.empty()) {
       break;
     }
-    auto callback = worker_queue_.front();
+    auto& callback = worker_queue_.front();
     lock.unlock();
   
     callback();
@@ -118,7 +118,7 @@ void DiskImage::WorkerProcess() {
 
 void DiskImage::ReadAsync(void *buffer, off_t position, size_t length, IoCallback callback) {
   worker_mutex_.lock();
-  worker_queue_.push_back([this, buffer, position, length, callback]() {
+  worker_queue_.emplace_back([this, buffer, position, length, callback = std::move(callback)]() {
     auto ret = Read(buffer, position, length);
     io_->Schedule([=]() { callback(ret); });
   });
@@ -132,7 +132,7 @@ void DiskImage::WriteAsync(void *buffer, off_t position, size_t length, IoCallba
   }
 
   worker_mutex_.lock();
-  worker_queue_.push_back([this, buffer, position, length, callback]() {
+  worker_queue_.emplace_back([this, buffer, position, length, callback = std::move(callback)]() {
     auto ret = Write(buffer, position, length);
     io_->Schedule([=]() { callback(ret); });
   });
@@ -146,7 +146,7 @@ void DiskImage::DiscardAsync(off_t position, size_t length, bool write_zeros, Io
   }
 
   worker_mutex_.lock();
-  worker_queue_.push_back([this, position, length, write_zeros, callback]() {
+  worker_queue_.emplace_back([this, position, length, write_zeros, callback = std::move(callback)]() {
     auto ret = Discard(position, length, write_zeros);
     io_->Schedule([=]() { callback(ret); });
   });
@@ -156,7 +156,7 @@ void DiskImage::DiscardAsync(off_t position, size_t length, bool write_zeros, Io
 
 void DiskImage::FlushAsync(IoCallback callback) {
   worker_mutex_.lock();
-  worker_queue_.push_back([this, callback]() {
+  worker_queue_.emplace_back([this, callback = std::move(callback)]() {
     auto ret = Flush();
     io_->Schedule([=]() {
       callback(ret);

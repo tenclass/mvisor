@@ -111,7 +111,7 @@ bool IdeStorageDevice::StartCommand(VoidCallback iocp) {
     }
   }
 
-  io_complete_ = iocp;
+  io_complete_ = std::move(iocp);
   io_async_ = false;
   regs_.status = ATA_SR_DRDY | ATA_SR_BSY;
 

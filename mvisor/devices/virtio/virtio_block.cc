@@ -130,7 +130,7 @@ class VirtioBlock : public VirtioPci {
       void* buffer = iov.iov_base;
       size_t length = iov.iov_len;
 
-      auto io_complete = [=](auto ret) {
+      auto io_complete = [element, position, length, is_write, callback](auto ret) {
         if (!is_write && ret != (ssize_t)length) {
           MV_PANIC("failed IO ret=%lx pos=%lx length=%lx", ret, position, length);
         }
@@ -170,24 +170,18 @@ class VirtioBlock : public VirtioPci {
 
     switch (request->type)
     {
-    case VIRTIO_BLK_T_IN: {
-      size_t position = request->sector * block_config_.blk_size;
-      BlockIoAsync(element, position, false, [callback, status](auto ret) {
-        *status = ret;
-        callback();
-      });
-      break;
-    }
+    case VIRTIO_BLK_T_IN:
     case VIRTIO_BLK_T_OUT: {
       size_t position = request->sector * block_config_.blk_size;
-      BlockIoAsync(element, position, true, [callback, status](auto ret) {
+      bool is_write = request->type == VIRTIO_BLK_T_OUT;
+      BlockIoAsync(element, position, is_write, [callback = std::move(callback), status](auto ret) {
         *status = ret;
         callback();
       });
       break;
     }
     case VIRTIO_BLK_T_FLUSH:
-      image_->FlushAsync([callback, status](ssize_t ret) {
+      image_->FlushAsync([callback = std::move(callback), status](ssize_t ret) {
         *status = ret == 0 ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });
@@ -211,7 +205,7 @@ class VirtioBlock : public VirtioPci {
       size_t position = discard->sector * block_config_.blk_size;
       size_t length = discard->num_sectors * block_config_.blk_size;
       bool write_zeros = request->type == VIRTIO_BLK_T_WRITE_ZEROES;
-      image_->DiscardAsync(position, length, write_zeros, [status, callback, length](auto ret) {
+      image_->DiscardAsync(position, length, write_zeros, [status, callback = std::move(callback), length](auto ret) {
         *status = ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });
