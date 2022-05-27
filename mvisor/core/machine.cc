@@ -60,11 +60,11 @@ Machine::Machine(std::string config_path) {
 
   /* Create vcpu objects */
   for (int i = 0; i < num_vcpus_; ++i) {
-    Vcpu* vcpu = new Vcpu(this, i);
-    vcpus_.push_back(vcpu);
+    vcpus_.push_back(new Vcpu(this, i));
   }
 
   /* Start threads and wait to resume */
+  std::unique_lock<std::mutex> lock(mutex_);
   wait_count_ = num_vcpus_ + 1;
   paused_ = true;
 
@@ -72,6 +72,10 @@ Machine::Machine(std::string config_path) {
     vcpu->Start();
   }
   io_thread_->Start();
+  /* Wait for all threads ready */
+  wait_to_pause_condition_.wait(lock, [this]() {
+    return wait_count_ == 0;
+  });
 
   /* Reset devices after vCPU created and paused */
   device_manager_->ResetDevices();
@@ -95,10 +99,8 @@ Machine::~Machine() {
     delete it->second;
   }
 
-  if (vm_fd_ > 0)
-    safe_close(&vm_fd_);
-  if (kvm_fd_ > 0)
-    safe_close(&kvm_fd_);
+  safe_close(&vm_fd_);
+  safe_close(&kvm_fd_);
   delete config_;
 }
 
@@ -271,7 +273,7 @@ void Machine::Save(const std::string path) {
   MigrationWriter writer(path);
   /* Save device states */
   if (!device_manager_->SaveState(&writer)) {
-    MV_LOG("failed to save device states");
+    MV_ERROR("failed to save device states");
     return;
   }
   /* Save vcpu states */
@@ -280,17 +282,17 @@ void Machine::Save(const std::string path) {
   }
   /* Save system RAM */
   if (!memory_manager_->SaveState(&writer)) {
-    MV_LOG("failed to save RAM");
+    MV_ERROR("failed to save RAM");
     return;
   }
   /* Save disk images */
   if (!io_thread_->SaveDiskImage(&writer)) {
-    MV_LOG("failed to sync disk images");
+    MV_ERROR("failed to sync disk images");
     return;
   }
   /* Save configuration after saving disk images (paths might changed) */
   if (!config_->Save(path + "/configuration.yaml")) {
-    MV_LOG("failed to save configuration yaml");
+    MV_ERROR("failed to save configuration yaml");
     return;
   }
 

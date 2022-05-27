@@ -26,6 +26,7 @@
 #include <algorithm>
 
 #include <zlib.h>
+#include <sys/mman.h>
 
 #include "vga.h"
 #include "logger.h"
@@ -103,8 +104,11 @@ class Qxl : public Vga, public DisplayResizeInterface {
     /* Bar 1: Windows driver uses this block of memory as a normal memslot
      * Linux driver named it surface RAM */
     qxl_vram32_size_ = _MB(16);
-    qxl_vram32_base_ = (uint8_t*)valloc(qxl_vram32_size_);
+    qxl_vram32_base_ = (uint8_t*)mmap(nullptr, qxl_vram32_size_, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     pci_bars_[1].host_memory = qxl_vram32_base_;
+
+    MV_ASSERT(madvise(qxl_vram32_base_, qxl_vram32_size_, MADV_DONTDUMP) == 0);
 
     /* Bar 2: 8KB ROM */
     qxl_rom_size_ = 8192;
@@ -118,7 +122,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
   virtual ~Qxl() {
     if (qxl_vram32_base_) {
-      free(qxl_vram32_base_);
+      munmap(qxl_vram32_base_, qxl_vram32_size_);
     }
     if (qxl_rom_base_) {
       free(qxl_rom_base_);
@@ -193,7 +197,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
 
     writer->WriteProtobuf("QXL", state);
-    writer->WriteRaw("VRAM32", qxl_vram32_base_, qxl_vram32_size_);
+    writer->WriteMemoryPages("VRAM32", qxl_vram32_base_, qxl_vram32_size_);
     return Vga::SaveState(writer);
   }
 
@@ -202,9 +206,14 @@ class Qxl : public Vga, public DisplayResizeInterface {
     if (!Vga::LoadState(reader)) {
       return false;
     }
-    if (!reader->ReadRaw("VRAM32", qxl_vram32_base_, qxl_vram32_size_)) {
+
+    if (qxl_vram32_base_) {
+      munmap(qxl_vram32_base_, qxl_vram32_size_);
+    }
+    if (!reader->ReadMemoryPages("VRAM32", (void**)&qxl_vram32_base_, qxl_vram32_size_)) {
       return false;
     }
+
     QxlState state;
     if (!reader->ReadProtobuf("QXL", state)) {
       return false;

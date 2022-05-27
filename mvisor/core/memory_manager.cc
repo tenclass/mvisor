@@ -74,7 +74,7 @@ void MemoryManager::InitializeSystemRam() {
     MV_LOG("RAM size: %lu MB", machine_->ram_size_ >> 20);
 
   ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   MV_ASSERT(ram_host_ != MAP_FAILED);
 
   /* Make host RAM mergeable (for KSM) */
@@ -394,20 +394,7 @@ bool MemoryManager::SaveState(MigrationWriter* writer) {
   writer->WriteRaw("BIOS", bios_data_, bios_size_);
 
   /* Write RAM to sparse file */
-  int fd = writer->BeginWrite("RAM");
-  ftruncate(fd, machine_->ram_size_);
-
-  auto ptr = (uint8_t*)ram_host_;
-  for (size_t pos = 0; pos < machine_->ram_size_; pos += PAGE_SIZE) {
-    if (!machine_->saving_) {
-      return false;
-    }
-    if (!test_zero(ptr, PAGE_SIZE)) {
-      pwrite(fd, ptr, PAGE_SIZE, pos);
-    }
-    ptr += PAGE_SIZE;
-  }
-  writer->EndWrite("RAM");
+  writer->WriteMemoryPages("RAM", ram_host_, machine_->ram_size_);
   return true;
 }
 
@@ -419,17 +406,13 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
   }
 
   /* Unmap the preallocated */
-  munmap(ram_host_, machine_->ram_size_);
+  if (ram_host_) {
+    munmap(ram_host_, machine_->ram_size_);
+  }
 
   /* Map the RAM file as copy on write memory */
-  int fd = reader->BeginRead("RAM");
-  ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-  if (ram_host_ == MAP_FAILED) {
-    MV_PANIC("failed to map memory");
+  if (!reader->ReadMemoryPages("RAM", &ram_host_, machine_->ram_size_)) {
+    return false;
   }
-  reader->EndRead("RAM");
-
-  /* Make host RAM DONTDUMP */
-  madvise(ram_host_, machine_->ram_size_, MADV_DONTDUMP);
   return true;
 }

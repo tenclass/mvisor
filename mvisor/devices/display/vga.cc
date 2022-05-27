@@ -58,7 +58,7 @@ Vga::Vga() {
   
 
   /* Bar 0: 256MB VRAM */
-  vga_mem_size_ = _MB(32);
+  vga_mem_size_ = _MB(16);
   vram_size_ = _MB(256);
 
   AddPciBar(0, vram_size_, kIoResourceTypeRam);    /* vgamem */
@@ -111,7 +111,7 @@ bool Vga::SaveState(MigrationWriter* writer) {
   vbe_state.set_index(vbe_.index);
   vbe_state.set_registers(vbe_.registers, sizeof(vbe_.registers));
   writer->WriteProtobuf("VBE", vbe_state);
-  writer->WriteRaw("VRAM", vram_base_, vram_size_);
+  writer->WriteMemoryPages("VRAM", vram_base_, vram_size_);
   return PciDevice::SaveState(writer);
 }
 
@@ -119,9 +119,15 @@ bool Vga::LoadState(MigrationReader* reader) {
   if (!PciDevice::LoadState(reader)) {
     return false;
   }
-  if (!reader->ReadRaw("VRAM", vram_base_, vram_size_)) {
+
+  /* Unmap the preallocated */
+  if (vram_base_) {
+    munmap(vram_base_, vram_size_);
+  }
+  if (!reader->ReadMemoryPages("VRAM", (void**)&vram_base_, vram_size_)) {
     return false;
   }
+
   VgaState state;
   if (!reader->ReadProtobuf("VGA", state)) {
     return false;
@@ -168,13 +174,26 @@ void Vga::Connect() {
   if (!vram_base_) {
     if (has_key("vram_size")) {
       uint64_t size = std::get<uint64_t>(key_values_["vram_size"]);
-      MV_ASSERT(size >= 32 && size <= 1024);
+      MV_ASSERT(size >= 32 && size <= 512);
+      if (size & (size - 1)) {
+        MV_PANIC("vram_size must be power of 2");
+      }
       vram_size_ = size << 20;
+    }
+    if (has_key("vga_size")) {
+      uint64_t size = std::get<uint64_t>(key_values_["vga_size"]);
+      MV_ASSERT(size >= 2 && size <= 256);
+      if (size & (size - 1)) {
+        MV_PANIC("vga_size must be power of 2");
+      }
+      vga_mem_size_ = size << 20;
     }
     vram_base_ = (uint8_t*)mmap(nullptr, vram_size_, PROT_READ | PROT_WRITE,
       MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
     pci_bars_[0].size = vram_size_;
     pci_bars_[0].host_memory = vram_base_;
+
+    MV_ASSERT(madvise(vram_base_, vram_size_, MADV_DONTDUMP) == 0);
   }
 
   PciDevice::Connect();

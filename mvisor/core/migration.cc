@@ -17,14 +17,18 @@
  */
 
 #include "migration.h"
+
 #include <cstdio>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <filesystem>
+#include <google/protobuf/text_format.h>
+
 #include "logger.h"
 #include "utilities.h"
-#include <google/protobuf/text_format.h>
+#include "machine.h"
 
 using namespace std::filesystem;
 
@@ -70,8 +74,19 @@ void MigrationWriter::WriteProtobuf(std::string tag, const Message& message) {
   EndWrite(tag);
 }
 
-void MigrationWriter::WriteMemoryPages(std::string tag, void* target, size_t size, uint64_t base) {
-  MV_PANIC("not impl");
+void MigrationWriter::WriteMemoryPages(std::string tag, void* pages, size_t size) {
+  /* Write RAM to sparse file */
+  BeginWrite(tag);
+  ftruncate(fd_, size);
+
+  auto ptr = (uint8_t*)pages;
+  for (size_t pos = 0; pos < size; pos += PAGE_SIZE) {
+    if (!test_zero(ptr, PAGE_SIZE)) {
+      pwrite(fd_, ptr, PAGE_SIZE, pos);
+    }
+    ptr += PAGE_SIZE;
+  }
+  EndWrite(tag);
 }
 
 int MigrationWriter::BeginWrite(std::string tag) {
@@ -142,8 +157,17 @@ bool MigrationReader::ReadProtobuf(std::string tag, Message& message) {
   return ret;
 }
 
-bool MigrationReader::ReadMemoryPages(std::string tag, void* target, size_t size, uint64_t base) {
-  MV_PANIC("not impl");
+bool MigrationReader::ReadMemoryPages(std::string tag, void** pages_ptr, size_t size) {
+  BeginRead(tag);
+  *pages_ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_NORESERVE, fd_, 0);
+  if (*pages_ptr == MAP_FAILED) {
+    MV_PANIC("failed to map memory %s", tag.c_str());
+  }
+  EndRead(tag);
+
+  /* Make memory pages DONTDUMP */
+  MV_ASSERT(madvise(*pages_ptr, size, MADV_MERGEABLE) == 0);
+  MV_ASSERT(madvise(*pages_ptr, size, MADV_DONTDUMP) == 0);
   return true;
 }
 
