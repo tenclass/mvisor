@@ -343,7 +343,9 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
     display_encoder_->Start([this](void* data, size_t length) {
       /* Use sweet server thread to send data */
       Schedule([this, data = std::string((const char*)data, length)]() {
-        display_connection_->Send(kDisplayStreamDataEvent, data);
+        if (display_connection_) {
+          display_connection_->Send(kDisplayStreamDataEvent, data);
+        }
       });
     });
   }

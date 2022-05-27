@@ -141,14 +141,14 @@ bool SweetConnection::Send(uint32_t type, void* data, size_t length) {
   };
   int ret = send(fd_, &header, sizeof(header), 0);
   if (ret != sizeof(header)) {
-    MV_LOG("failed to send message, ret=%d", ret);
+    MV_LOG("failed to send message, type=0x%x ret=%d", type, ret);
     return false;
   }
 
   if (length > 0) {
     ret = send(fd_, data, length, 0);
     if (ret != (int)length) {
-      MV_LOG("failed to send message, ret=%d", ret);
+      MV_LOG("failed to send message, type=0x%x ret=%d", type, ret);
       return false;
     }
   }
