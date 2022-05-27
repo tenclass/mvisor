@@ -69,26 +69,26 @@ struct DrawRect {
 
 class Qxl : public Vga, public DisplayResizeInterface {
  private:
-  uint32_t  qxl_rom_size_;
+  uint32_t  qxl_rom_size_ = 0;
   void*     qxl_rom_base_ = nullptr;
-  uint32_t  qxl_vram32_size_;
+  uint32_t  qxl_vram32_size_ = 0;
   uint8_t*  qxl_vram32_base_ = nullptr;
 
-  QXLRom*   qxl_rom_;
-  QXLModes* qxl_modes_;
-  QXLRam*   qxl_ram_;
+  QXLRom*   qxl_rom_ = nullptr;
+  QXLModes* qxl_modes_ = nullptr;
+  QXLRam*   qxl_ram_ = nullptr;
 
   struct guest_slots {
     QXLMemSlot    slot;
     uint64_t      offset;
     bool          active;
     uint8_t*      hva; 
-  } guest_slots_[NUM_MEMSLOTS];
+  } guest_slots_[NUM_MEMSLOTS] = {0};
 
-  PrimarySurface                primary_surface_;
+  PrimarySurface                primary_surface_ = {0};
   std::map<uint, Surface>       surfaces_;
   std::vector<QXLReleaseInfo*>  free_resources_;
-  DisplayMouseCursor            current_cursor_;
+  DisplayMouseCursor            current_cursor_ = {0};
   std::list<Drawable*>          drawables_;
   std::list<DrawRect>           draw_rects_;
 

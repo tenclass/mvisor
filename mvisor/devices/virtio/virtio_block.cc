@@ -146,9 +146,9 @@ class VirtioBlock : public VirtioPci {
         MV_LOG("%s pos=0x%lx len=0x%lx ", is_write ? "write" : "read", position, length);
       }
       if (is_write) {
-        image_->WriteAsync(buffer, position, length, io_complete);
+        image_->WriteAsync(buffer, position, length, std::move(io_complete));
       } else {
-        image_->ReadAsync(buffer, position, length, io_complete);
+        image_->ReadAsync(buffer, position, length, std::move(io_complete));
       }
       position += length;
     }
