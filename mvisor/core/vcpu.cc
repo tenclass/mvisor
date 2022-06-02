@@ -397,6 +397,10 @@ void Vcpu::PrepareX86Vcpu() {
   MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, &msr_list) == 0);
 
   for (uint i = 0; i < msr_list.list.nmsrs; i++) {
+    // MSR_CORE_PERF_FIXED_CTR3 is not supported now
+    if(msr_list.indices[i] == 0x30c) {
+      continue;
+    }
     msr_indices_.insert(msr_list.indices[i]);
   }
 
