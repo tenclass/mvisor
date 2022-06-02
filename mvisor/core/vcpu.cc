@@ -26,19 +26,17 @@
 #include "machine.h"
 #include "logger.h"
 #include "hyperv/hyperv.h"
+#include "hyperv/cpuid.h"
+
 
 #define MAX_KVM_MSR_ENTRIES           256
 #define MAX_KVM_CPUID_ENTRIES         100
-#define CPUID_TOPOLOGY_LEVEL_SMT      (1U << 8)
-#define CPUID_TOPOLOGY_LEVEL_CORE     (2U << 8)
-#define CPUID_TOPOLOGY_LEVEL_INVALID  (0U << 8)
-
-#define MSR_IA32_TSC                  0x10
-#define MSR_IA32_UCODE_REV            0x8B
 #define KVM_MSR_ENTRY(_index, _data)  (struct kvm_msr_entry) { .index = _index, .data = _data }
+
 
 /* Use Vcpu::current_vcpu() */
 __thread Vcpu* Vcpu::current_vcpu_ = nullptr;
+
 
 Vcpu::Vcpu(Machine* machine, int vcpu_id)
     : machine_(machine), vcpu_id_(vcpu_id) {
@@ -85,6 +83,7 @@ void Vcpu::Reset() {
  * Intel CPUID Instruction Reference
  * https://www.intel.com/content/dam/develop/external/us/en/documents/ \
  * architecture-instruction-set-extensions-programming-reference.pdf
+ * Model: Skylake-Server Compatible
  */
 void Vcpu::SetupCpuid() {
   struct {
@@ -98,25 +97,45 @@ void Vcpu::SetupCpuid() {
   
   for (uint i = 0; i < cpuid.cpuid2.nent; i++) {
     auto entry = &cpuid.entries[i];
+
+    // MV_LOG("vCPU %d function=0x%x index=%d flags=0x%x eax=0x%x ebx=0x%x ecx=0x%x edx=0x%x", vcpu_id_,
+    //   entry->function, entry->index, entry->flags, entry->eax, entry->ebx, entry->ecx, entry->edx);
+
     switch (entry->function)
     {
-    case 0x1: // ACPI ID & Features
-      if (machine_->hypervisor_) {
-        entry->ecx |= (1 << 31);
-      } else {
-        entry->ecx &= ~(1 << 31); // disable hypervisor mode now
-      }
+    case 0x1: { // ACPI ID & Features
+      bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
+      ALTER_FEATURE(entry->ecx, CPUID_EXT_TSC_DEADLINE_TIMER, tsc_deadline);
+      ALTER_FEATURE(entry->ecx, CPUID_EXT_HYPERVISOR, machine_->hypervisor_);
+      ALTER_FEATURE(entry->edx, CPUID_SS, false); // Self snoop
+      ALTER_FEATURE(entry->edx, CPUID_HT, true);  // Max ACPI IDs reserved field is valid
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
       cpuid_features_ = (uint64_t(entry->edx) << 32) | entry->ecx;
       break;
+    }
     case 0x6: // Thermal and Power Management Leaf
-      entry->ecx = entry->ecx & ~(1 << 3); // don't touch MSR IA32_ENERGY_PERF_BIAS(0x1B0)
+      entry->ecx = entry->ecx & ~(1u << 3); // don't touch MSR IA32_ENERGY_PERF_BIAS(0x1B0)
+      break;
+    case 0x7: // Extended CPU features 7
+      if (entry->index == 0) {
+        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_TSC_ADJUST_MSR, false);
+        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_MPX, false); // Disable MPX (Intel Memory Protection Extensions)
+        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_HLE, false);
+        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_RTM, false);
+        /* Skylake only support a few features in ECX */
+        entry->ecx &= CPUID_7_0_ECX_PKU | CPUID_7_0_ECX_UMIP;
+      }
       break;
     case 0xB: // CPU topology (cores = num_vcpus / 2, threads per core = 2)
       entry->edx = vcpu_id_;
       break;
+    case 0xD:
+      if (entry->index == 0) {
+        entry->eax &= 0x2E7; // MPX is disabled in CPU features 7
+      }
+      break;
     case 0x80000002 ... 0x80000004: { // Setup CPU model string
-      static const char cpu_model[48] = "Intel Xeon Processor (Cascadelake)";
+      static const char cpu_model[48] = "Intel Xeon Processor (Skylake-Server)";
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
@@ -551,6 +570,14 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   kvm_guest_debug debug;
   MV_ASSERT(ioctl(fd_, KVM_GET_DEBUGREGS, &debug) == 0);
   state.set_debug_regs(&debug, sizeof(debug));
+  
+  /* CPUID (save for future use) */
+  struct {
+    struct kvm_cpuid2 cpuid2;
+    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
+  } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+  MV_ASSERT(ioctl(fd_, KVM_GET_CPUID2, &cpuid) == 0);
+  state.set_cpuid(&cpuid, sizeof(cpuid));
 }
 
 void Vcpu::LoadStateFrom(VcpuState& state) {

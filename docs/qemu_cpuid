@@ -11,7 +11,7 @@ compare default vs QEMU config
 eax=0x50657 vs 0x50656        // different stepping
 ebx=0x4c400800 vs 0x40800     // different cpu acpi index
 ecx=0x76fab223 vs 0x77fa3203  // xor = 0b1(No TSC-Deadline) 00000000 10000000 (Perf MSR) 00100000 (VMX)
-edx=0xf8bfbff vs 0x178bfbff   // xor = 0b00011000 00000000 00000000 00000000 (Valid Max APIC IDs in EBX, No Self Snoop)
+edx=0x0f8bfbff vs 0x178bfbff  // xor = 0b00011000 00000000 00000000 00000000 (Valid Max APIC IDs in EBX, No Self Snoop)
 flags=0x0
 
 function=0x2 index=0x0        // Cache and TLB information
