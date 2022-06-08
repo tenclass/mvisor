@@ -24,19 +24,35 @@
 #include "logger.h"
 
 
+static bool version_checked = false;
+
+
 SweetDisplayEncoder::SweetDisplayEncoder(uint width, uint height, DisplayStreamConfig* config) :
   screen_width_(width), screen_height_(height), config_(config)
 {
+  if (!version_checked) {
+    /* make sure libyuv with BT.709. if failed, checkout https://github.com/tenclass/libyuv */
+    uint8_t test_argb[128] = { 0, 0, 255, 0 };
+    uint8_t test_y[128] = {0}, test_u[128] = {0}, test_v[128] = {0};
+    libyuv::ARGBToI420(test_argb, 128, test_y, 128, test_u, 128, test_v, 128, 32, 1);
+    if (test_y[0] == 0x3f && test_u[0] == 0x73 && test_v[0] == 0xb8) {
+      version_checked = true;
+    } else {
+      MV_PANIC("failed checking libyuv with BT.709, yuv=0x%x 0x%x 0x%x",
+        test_y[0], test_u[0], test_v[0]);
+    }
+  }
+
   /* make sure screen size is multiple of 2 */
   MV_ASSERT(screen_width_ % 2 == 0);
   MV_ASSERT(screen_height_ % 2 == 0);
 
   /* set screen bpp to ARGB */
   screen_bpp_ = 32;
-  /* aligned screen stride by 64 */
+  /* aligned screen stride by 128 */
   screen_stride_ = screen_width_ * 4;
-  if (screen_stride_ % 64)
-    screen_stride_ += 64 - (screen_stride_ % 64);
+  if (screen_stride_ % 128)
+    screen_stride_ += 128 - (screen_stride_ % 128);
 
   screen_bitmap_ = new uint8_t[screen_stride_ * screen_height_];
   bzero(screen_bitmap_, screen_stride_ * screen_height_);
@@ -89,7 +105,7 @@ void SweetDisplayEncoder::InitializeX264() {
   /* rate control method is not configurable now */
   param.rc.i_rc_method = X264_RC_CRF;
   param.rc.f_rf_constant = config_->qmin();
-  param.rc.i_qp_max = config_->qmin() + 6;
+  param.rc.i_qp_max = config_->qmin() + 9;
   param.rc.i_vbv_max_bitrate = config_->bitrate() / 1000;
   param.rc.i_vbv_buffer_size = config_->bitrate() * 2 / 1000;
 
@@ -105,9 +121,9 @@ void SweetDisplayEncoder::InitializeX264() {
   param.i_scenecut_threshold = 0;
 
   /* colorspace */
-  param.vui.i_colorprim = 6; // bt601
+  param.vui.i_colorprim = 1; // BT.709
   param.vui.i_transfer = 13; // sRGB
-  param.vui.i_colmatrix = 6; // bt601
+  param.vui.i_colmatrix = 1; // BT.709
 
   /* check CABAC and num_ref_frames */
   if (config_->flags() & 2) {
@@ -321,6 +337,7 @@ void SweetDisplayEncoder::ConvertSlices() {
   for (auto slice: encode_slices_) {
     uint8_t* src = screen_bitmap_ + screen_stride_ * slice->y + slice->x * (screen_bpp_ >> 3);
     auto dst = &slice->yuv.img;
+    /* libyuv here must be modified to use BT.709 */
     libyuv::ARGBToI420(src, screen_stride_,
       dst->plane[0], dst->i_stride[0],
       dst->plane[1], dst->i_stride[1],
