@@ -220,6 +220,9 @@ void SweetServer::RemoveConnection(SweetConnection* conn) {
 }
 
 void SweetServer::LookupDevices() {
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<WacomInputInterface*>(o); })) {
+    wacom_ = dynamic_cast<WacomInputInterface*>(o);
+  }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
     keyboard_ = dynamic_cast<KeyboardInputInterface*>(o);
   }
@@ -492,3 +495,18 @@ void SweetServer::StopMidiConnection() {
   }
   midi_connection_ = nullptr;
 }
+void SweetServer::StartWacomConnection(SweetConnection* conn) {
+  wacom_connection_ = conn;
+  if(wacom_connection_) {
+    wacom_connection_->Send(kWacomStartEvent);
+  }
+}
+
+void SweetServer::StopWacomConnection() {
+  if(wacom_connection_) {
+    wacom_connection_->Send(kWacomStopEvent);
+  }
+  wacom_connection_ = nullptr;
+}
+
+

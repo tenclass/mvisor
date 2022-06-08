@@ -61,6 +61,21 @@ class MidiInputInterface {
   virtual void Stop() = 0;
   virtual bool is_start() = 0;
 };
+struct WacomEvent {
+  double x;
+  double y;
+  double pressure;
+  uint32_t buttons;
+  uint32_t tilt_x;
+  uint32_t tilt_y;
+};
+class WacomInputInterface {
+ public:
+  virtual bool QueueWacomEvent(WacomEvent event) = 0;
+  virtual bool InputAcceptable() = 0;
+  virtual void Start() = 0;
+  virtual void Stop() = 0;
+};
 
 class DisplayResizeInterface {
  public:

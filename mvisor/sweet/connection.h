@@ -79,6 +79,10 @@ class SweetConnection {
   void OnStartMidi();
   void OnStopMidi();
 
+  void OnStartWacom();
+  void OnStopWacom();
+  void OnWacomInput();
+
 
   Machine*      machine_;
   SweetServer*  server_;

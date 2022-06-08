@@ -50,6 +50,10 @@ enum SweetCommand {
   kStartMidi              = 0xC0;
   kStopMidi               = 0xC1;
   kSendMidiInput          = 0xC2;
+  /* Wacom */
+  kStartWacom             = 0xD0;
+  kStopWacom              = 0xD1;
+  kSendWacomInput         = 0xD2;
 }
 
 enum SweetResponseAndEvent {
@@ -80,6 +84,8 @@ enum SweetResponseAndEvent {
 
   kMidiStartEvent             = 0x10C0;
   kMidiStopEvent              = 0x10C1;
+  kWacomStartEvent            = 0x10D0;
+  kWacomStopEvent             = 0x10D1;
 }
 
 enum ClipboardDataType {
@@ -234,5 +240,14 @@ message ClipboardStreamDataEvent {
   ClipboardDataType   type       = 1;
   bytes               data       = 2;
   string              file_name  = 3;
+}
+
+message SendWacomInput {
+  double x = 1;
+  double y = 2;
+  double pressure = 3;
+  uint32 buttons = 4;
+  uint32 tilt_x = 5;
+  uint32 tilt_y = 6;
 }
 

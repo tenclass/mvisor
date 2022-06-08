@@ -37,7 +37,7 @@ namespace protobuf_sweet_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[18];
+  static const ::google::protobuf::internal::ParseTable schema[19];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -79,6 +79,8 @@ void InitDefaultsClipboardDataToGuestImpl();
 void InitDefaultsClipboardDataToGuest();
 void InitDefaultsClipboardStreamDataEventImpl();
 void InitDefaultsClipboardStreamDataEvent();
+void InitDefaultsSendWacomInputImpl();
+void InitDefaultsSendWacomInput();
 inline void InitDefaults() {
   InitDefaultsQueryStatusResponse();
   InitDefaultsSerialPortStatusEvent();
@@ -98,6 +100,7 @@ inline void InitDefaults() {
   InitDefaultsPlaybackStreamStartEvent();
   InitDefaultsClipboardDataToGuest();
   InitDefaultsClipboardStreamDataEvent();
+  InitDefaultsSendWacomInput();
 }
 }  // namespace protobuf_sweet_2eproto
 namespace SweetProtocol {
@@ -146,6 +149,9 @@ extern SendMidiInputDefaultTypeInternal _SendMidiInput_default_instance_;
 class SendPointerInput;
 class SendPointerInputDefaultTypeInternal;
 extern SendPointerInputDefaultTypeInternal _SendPointerInput_default_instance_;
+class SendWacomInput;
+class SendWacomInputDefaultTypeInternal;
+extern SendWacomInputDefaultTypeInternal _SendWacomInput_default_instance_;
 class SerialPortStatusEvent;
 class SerialPortStatusEventDefaultTypeInternal;
 extern SerialPortStatusEventDefaultTypeInternal _SerialPortStatusEvent_default_instance_;
@@ -218,12 +224,15 @@ enum SweetCommand {
   kStartMidi = 192,
   kStopMidi = 193,
   kSendMidiInput = 194,
+  kStartWacom = 208,
+  kStopWacom = 209,
+  kSendWacomInput = 210,
   SweetCommand_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetCommand_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetCommand_IsValid(int value);
 const SweetCommand SweetCommand_MIN = kInvalid;
-const SweetCommand SweetCommand_MAX = kSendMidiInput;
+const SweetCommand SweetCommand_MAX = kSendWacomInput;
 const int SweetCommand_ARRAYSIZE = SweetCommand_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetCommand_descriptor();
@@ -258,12 +267,14 @@ enum SweetResponseAndEvent {
   kClipboardStreamDataEvent = 4226,
   kMidiStartEvent = 4288,
   kMidiStopEvent = 4289,
+  kWacomStartEvent = 4304,
+  kWacomStopEvent = 4305,
   SweetResponseAndEvent_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetResponseAndEvent_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetResponseAndEvent_IsValid(int value);
 const SweetResponseAndEvent SweetResponseAndEvent_MIN = kInvalidResponse;
-const SweetResponseAndEvent SweetResponseAndEvent_MAX = kMidiStopEvent;
+const SweetResponseAndEvent SweetResponseAndEvent_MAX = kWacomStopEvent;
 const int SweetResponseAndEvent_ARRAYSIZE = SweetResponseAndEvent_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetResponseAndEvent_descriptor();
@@ -2670,6 +2681,140 @@ class ClipboardStreamDataEvent : public ::google::protobuf::Message /* @@protoc_
   friend struct ::protobuf_sweet_2eproto::TableStruct;
   friend void ::protobuf_sweet_2eproto::InitDefaultsClipboardStreamDataEventImpl();
 };
+// -------------------------------------------------------------------
+
+class SendWacomInput : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendWacomInput) */ {
+ public:
+  SendWacomInput();
+  virtual ~SendWacomInput();
+
+  SendWacomInput(const SendWacomInput& from);
+
+  inline SendWacomInput& operator=(const SendWacomInput& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  SendWacomInput(SendWacomInput&& from) noexcept
+    : SendWacomInput() {
+    *this = ::std::move(from);
+  }
+
+  inline SendWacomInput& operator=(SendWacomInput&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SendWacomInput& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SendWacomInput* internal_default_instance() {
+    return reinterpret_cast<const SendWacomInput*>(
+               &_SendWacomInput_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    18;
+
+  void Swap(SendWacomInput* other);
+  friend void swap(SendWacomInput& a, SendWacomInput& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SendWacomInput* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  SendWacomInput* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const SendWacomInput& from);
+  void MergeFrom(const SendWacomInput& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(SendWacomInput* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // double x = 1;
+  void clear_x();
+  static const int kXFieldNumber = 1;
+  double x() const;
+  void set_x(double value);
+
+  // double y = 2;
+  void clear_y();
+  static const int kYFieldNumber = 2;
+  double y() const;
+  void set_y(double value);
+
+  // double pressure = 3;
+  void clear_pressure();
+  static const int kPressureFieldNumber = 3;
+  double pressure() const;
+  void set_pressure(double value);
+
+  // uint32 buttons = 4;
+  void clear_buttons();
+  static const int kButtonsFieldNumber = 4;
+  ::google::protobuf::uint32 buttons() const;
+  void set_buttons(::google::protobuf::uint32 value);
+
+  // uint32 tilt_x = 5;
+  void clear_tilt_x();
+  static const int kTiltXFieldNumber = 5;
+  ::google::protobuf::uint32 tilt_x() const;
+  void set_tilt_x(::google::protobuf::uint32 value);
+
+  // uint32 tilt_y = 6;
+  void clear_tilt_y();
+  static const int kTiltYFieldNumber = 6;
+  ::google::protobuf::uint32 tilt_y() const;
+  void set_tilt_y(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SendWacomInput)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  double x_;
+  double y_;
+  double pressure_;
+  ::google::protobuf::uint32 buttons_;
+  ::google::protobuf::uint32 tilt_x_;
+  ::google::protobuf::uint32 tilt_y_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSendWacomInputImpl();
+};
 // ===================================================================
 
 
@@ -4603,9 +4748,99 @@ inline void ClipboardStreamDataEvent::set_allocated_file_name(::std::string* fil
   // @@protoc_insertion_point(field_set_allocated:SweetProtocol.ClipboardStreamDataEvent.file_name)
 }
 
+// -------------------------------------------------------------------
+
+// SendWacomInput
+
+// double x = 1;
+inline void SendWacomInput::clear_x() {
+  x_ = 0;
+}
+inline double SendWacomInput::x() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendWacomInput.x)
+  return x_;
+}
+inline void SendWacomInput::set_x(double value) {
+  
+  x_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendWacomInput.x)
+}
+
+// double y = 2;
+inline void SendWacomInput::clear_y() {
+  y_ = 0;
+}
+inline double SendWacomInput::y() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendWacomInput.y)
+  return y_;
+}
+inline void SendWacomInput::set_y(double value) {
+  
+  y_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendWacomInput.y)
+}
+
+// double pressure = 3;
+inline void SendWacomInput::clear_pressure() {
+  pressure_ = 0;
+}
+inline double SendWacomInput::pressure() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendWacomInput.pressure)
+  return pressure_;
+}
+inline void SendWacomInput::set_pressure(double value) {
+  
+  pressure_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendWacomInput.pressure)
+}
+
+// uint32 buttons = 4;
+inline void SendWacomInput::clear_buttons() {
+  buttons_ = 0u;
+}
+inline ::google::protobuf::uint32 SendWacomInput::buttons() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendWacomInput.buttons)
+  return buttons_;
+}
+inline void SendWacomInput::set_buttons(::google::protobuf::uint32 value) {
+  
+  buttons_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendWacomInput.buttons)
+}
+
+// uint32 tilt_x = 5;
+inline void SendWacomInput::clear_tilt_x() {
+  tilt_x_ = 0u;
+}
+inline ::google::protobuf::uint32 SendWacomInput::tilt_x() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendWacomInput.tilt_x)
+  return tilt_x_;
+}
+inline void SendWacomInput::set_tilt_x(::google::protobuf::uint32 value) {
+  
+  tilt_x_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendWacomInput.tilt_x)
+}
+
+// uint32 tilt_y = 6;
+inline void SendWacomInput::clear_tilt_y() {
+  tilt_y_ = 0u;
+}
+inline ::google::protobuf::uint32 SendWacomInput::tilt_y() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendWacomInput.tilt_y)
+  return tilt_y_;
+}
+inline void SendWacomInput::set_tilt_y(::google::protobuf::uint32 value) {
+  
+  tilt_y_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendWacomInput.tilt_y)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

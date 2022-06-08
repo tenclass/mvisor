@@ -273,7 +273,7 @@ void UsbDevice::SetupDescriptor(const UsbDeviceDescriptor* device_desc,
 }
 
 int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
-  if (length < 4) {
+  if (length < 2) {
     MV_LOG("length too short, index=0x%x length=%d", index, length);
     return USB_RET_IOERROR;
   }

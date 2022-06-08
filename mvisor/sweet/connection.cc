@@ -134,6 +134,16 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kSendMidiInput:
     OnMidiInput();
     break;
+  case kStartWacom:
+    OnStartWacom();
+    break;
+  case kStopWacom:
+    OnStopWacom();
+    break;
+  case kSendWacomInput:
+    OnWacomInput();
+    break;
+
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
     return;
@@ -447,6 +457,31 @@ void SweetConnection::OnMidiInput() {
   midi->QueueMidiEvent(event);
 }
 
+void SweetConnection::OnWacomInput() {
+  if (machine_->IsPaused()) {
+    return;
+  }
+
+  auto wacom = server_->wacom();
+  if(!wacom || !wacom->InputAcceptable()) {
+    return;
+  }
+
+  SendWacomInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+  
+  WacomEvent event = {0};
+  event.x = input.x();
+  event.y = input.y();
+  event.buttons = input.buttons();
+  event.pressure = input.pressure();
+  event.tilt_x = input.tilt_x();
+  event.tilt_y = input.tilt_y();
+  wacom->QueueWacomEvent(event);
+}
+
 void SweetConnection::OnStartMidi() {
   server_->StartMidiConnection(this);
   auto midi = server_->midi();
@@ -460,5 +495,21 @@ void SweetConnection::OnStopMidi() {
   auto midi = server_->midi();
   if(midi) {
     midi->Stop();
+  }
+}
+
+void SweetConnection::OnStartWacom() {
+  server_->StartWacomConnection(this);
+  auto wacom = server_->wacom();
+  if(wacom) {
+    wacom->Start();
+  }
+}
+
+void SweetConnection::OnStopWacom() {
+  server_->StopWacomConnection();
+  auto wacom = server_->wacom();
+  if(wacom) {
+    wacom->Stop();
   }
 }

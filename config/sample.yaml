@@ -15,6 +15,7 @@ objects:
   - class: qemu-guest-agent
   - class: usb-tablet
   # - class: usb-midi
+  # - class: usb-wacom
 
   - class: virtio-network
     backend: uip
