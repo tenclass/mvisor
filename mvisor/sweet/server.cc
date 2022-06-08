@@ -223,6 +223,9 @@ void SweetServer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
     keyboard_ = dynamic_cast<KeyboardInputInterface*>(o);
   }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<MidiInputInterface*>(o); })) {
+    midi_ = dynamic_cast<MidiInputInterface*>(o);
+  }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<VirtioFsInterface*>(o); })) {
     virtio_fs_ = dynamic_cast<VirtioFsInterface*>(o);
   }
@@ -464,15 +467,28 @@ void SweetServer::StopClipboardStream() {
 
 void SweetServer::StartVirtioFsConnection(SweetConnection* conn) {
   virtio_fs_connection_ = conn;
-  if(virtio_fs_connection_){
+  if(virtio_fs_connection_) {
     virtio_fs_connection_->Send(kVirtioFsStartEvent);
   }
 }
 
 void SweetServer::StopVirtioFsConnection() {
-  if(virtio_fs_connection_){
+  if(virtio_fs_connection_) {
     virtio_fs_connection_->Send(kVirtioFsStopEvent);
   }
   virtio_fs_connection_ = nullptr;
 }
 
+void SweetServer::StartMidiConnection(SweetConnection* conn) {
+  midi_connection_ = conn;
+  if(midi_connection_) {
+    midi_connection_->Send(kMidiStartEvent);
+  }
+}
+
+void SweetServer::StopMidiConnection() {
+  if(midi_connection_) {
+    midi_connection_->Send(kMidiStopEvent);
+  }
+  midi_connection_ = nullptr;
+}

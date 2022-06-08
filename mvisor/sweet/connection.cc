@@ -125,6 +125,15 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kStopVirtioFs:
     OnStopVirtioFs();
     break;
+  case kStartMidi:
+    OnStartMidi();
+    break;
+  case kStopMidi:
+    OnStopMidi();
+    break;
+  case kSendMidiInput:
+    OnMidiInput();
+    break;
   default:
     MV_LOG("unhandled sweet type=0x%x", header->type);
     return;
@@ -408,10 +417,48 @@ void SweetConnection::OnStopClipboardStream() {
     server_->StopClipboardStream();
   }
 }
-void SweetConnection::OnStartVirtioFs(){
+void SweetConnection::OnStartVirtioFs() {
   server_->StartVirtioFsConnection(this);
 }
 
 void SweetConnection::OnStopVirtioFs() {
   server_->StopVirtioFsConnection();
+}
+
+void SweetConnection::OnMidiInput() {
+  if (machine_->IsPaused()) {
+    return;
+  }
+  auto midi = server_->midi();
+  if(!midi || !midi->is_start() || !midi->InputAcceptable()) {
+    return;
+  }
+
+  SendMidiInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+
+  MidiEvent event = {0};
+  event.midi_0 = input.midi_0();
+  event.midi_1 = input.midi_1();
+  event.midi_2 = input.midi_2();
+  event.cable_code_index = input.cable_code_index();
+  midi->QueueMidiEvent(event);
+}
+
+void SweetConnection::OnStartMidi() {
+  server_->StartMidiConnection(this);
+  auto midi = server_->midi();
+  if(midi) {
+    midi->Start();
+  }
+}
+
+void SweetConnection::OnStopMidi() {
+  server_->StopMidiConnection();
+  auto midi = server_->midi();
+  if(midi) {
+    midi->Stop();
+  }
 }

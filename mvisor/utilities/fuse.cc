@@ -159,9 +159,8 @@ lo_inode* Fuse::CreateInodeFromFd(int fd, struct stat* stat, int refcount) {
 }
 
 bool Fuse::LowLevelLookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param) {
-  auto lo_data = get_lo_data();
-  entry_param->attr_timeout = lo_data->timeout;
-  entry_param->entry_timeout = lo_data->timeout;
+  entry_param->attr_timeout = lo_data_->timeout;
+  entry_param->entry_timeout = lo_data_->timeout;
 
   auto parent_fd = GetFdFromInode(parent);
   auto ret = fstatat(parent_fd, name, &entry_param->attr, 0);

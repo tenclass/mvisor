@@ -47,6 +47,21 @@ class PointerInputInterface {
   virtual bool InputAcceptable() = 0;
 };
 
+struct MidiEvent {
+  uint8_t cable_code_index;
+  uint8_t midi_0;
+  uint8_t midi_1;
+  uint8_t midi_2;
+};
+class MidiInputInterface {
+ public:
+  virtual bool QueueMidiEvent(MidiEvent event) = 0;
+  virtual bool InputAcceptable() = 0;
+  virtual void Start() = 0;
+  virtual void Stop() = 0;
+  virtual bool is_start() = 0;
+};
+
 class DisplayResizeInterface {
  public:
   virtual bool Resize(uint width, uint height) = 0;

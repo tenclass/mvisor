@@ -14,6 +14,7 @@ objects:
   - class: spice-agent
   - class: qemu-guest-agent
   - class: usb-tablet
+  # - class: usb-midi
 
   - class: virtio-network
     backend: uip

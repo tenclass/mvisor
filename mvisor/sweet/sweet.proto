@@ -46,6 +46,10 @@ enum SweetCommand {
   /* VirtioFs */
   kStartVirtioFs          = 0xB0;
   kStopVirtioFs           = 0xB1;
+  /* Midi */
+  kStartMidi              = 0xC0;
+  kStopMidi               = 0xC1;
+  kSendMidiInput          = 0xC2;
 }
 
 enum SweetResponseAndEvent {
@@ -73,6 +77,9 @@ enum SweetResponseAndEvent {
   kClipboardStreamStartEvent  = 0x1080;
   kClipboardStreamStopEvent   = 0x1081;
   kClipboardStreamDataEvent   = 0x1082;
+
+  kMidiStartEvent             = 0x10C0;
+  kMidiStopEvent              = 0x10C1;
 }
 
 enum ClipboardDataType {
@@ -114,6 +121,13 @@ message SendKeyboardInput {
   uint32    scancode    = 1;
   bool      pressed     = 2;
   uint32    modifiers   = 3;
+}
+
+message SendMidiInput {
+  uint32 cable_code_index   = 1; 
+  uint32 midi_0             = 2;
+  uint32 midi_1             = 3;
+  uint32 midi_2             = 4;
 }
 
 message SendPointerInput {

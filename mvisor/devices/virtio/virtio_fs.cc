@@ -596,7 +596,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     struct stat stat = {0};
     MV_ASSERT(fstatat(fd, "", &stat, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != -1);
 
-    auto lo_data = fuse_->get_lo_data();
+    auto lo_data = fuse_->lo_data();
     auto out = (struct fuse_attr_out*)((uint8_t*)response + sizeof(fuse_out_header));
     out->attr_valid = fuse_->CalcTimeoutSecond(lo_data->timeout);
     out->attr_valid_nsec = fuse_->CalcTimeoutNsecond(lo_data->timeout);

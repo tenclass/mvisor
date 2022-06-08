@@ -22,7 +22,7 @@
 #include "device.h"
 #include "usb_descriptor.h"
 #include <sys/uio.h>
-#include <set>
+#include <list>
 #include "io_thread.h"
 
 #define USB_MAX_INTERFACES 16
@@ -45,7 +45,7 @@ struct UsbPacket;
 struct UsbEndpoint {
   uint                    address;
   UsbEndpointType         type;
-  std::set<UsbPacket*>    tokens;
+  std::list<UsbPacket*>   tokens;
   uint                    interface;
   uint                    interval;
 };

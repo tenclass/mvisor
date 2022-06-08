@@ -125,7 +125,7 @@ class Fuse {
   lo_inode* GetInodeFromFd(int fd);
   lo_inode* LowLevelFind(struct stat* stat);
 
-  inline struct lo_data* get_lo_data() { return lo_data_; }
+  inline struct lo_data* lo_data() const { return lo_data_; }
 
   inline bool IsInodeListFull() { return inode_list_.size() > inode_count_limit_; }
 

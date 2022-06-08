@@ -666,6 +666,8 @@ class XhciHost : public PciDevice {
           DisableEndpoint(slot_id, i + 1);
         }
       }
+
+      slot.device = nullptr;
       slot.enabled = false;
       slot.addressed = false;
     }
@@ -829,7 +831,7 @@ class XhciHost : public PciDevice {
 
     for (uint i = 0; i < max_slots_; i++) {
       if (i != slot_id - 1 && slots_[i].device == device) {
-        MV_LOG("USB device %s is already assigned to slot %u", device->name(), slot_id);
+        MV_LOG("USB device %s is already assigned to slot %u", device->name(), i + 1);
         return CC_TRB_ERROR;
       }
     }
@@ -1332,7 +1334,7 @@ class XhciHost : public PciDevice {
       case TR_NORMAL:
       case TR_ISOCH:
         if (trb.control & TRB_TR_IDT) {
-          MV_ASSERT(chunk == 8 && !transfer->in_direction);
+          MV_ASSERT(chunk <= 8 && !transfer->in_direction);
           address = trb.address;
         }
         packet->iov.push_back(iovec {
@@ -1438,11 +1440,18 @@ class XhciHost : public PciDevice {
 
     auto &ring = endpoint->ring;
     MV_ASSERT(stream_id == 0);
-    SetEndpointState(endpoint, EP_RUNNING);
+
+    if(!endpoint->transfers.empty()) {
+      return;
+    }
+
+    if(endpoint->state != EP_RUNNING) {
+      SetEndpointState(endpoint, EP_RUNNING);
+    }
     MV_ASSERT(ring.dequeue);
 
     endpoint->kick_active++;
-    while (endpoint->state != EP_HALTED) {
+    while (endpoint->state != EP_HALTED && endpoint->transfers.empty()) {
       int length = GetRingChainLength(ring);
       if (debug_) {
         MV_LOG("ring chain length=%d", length);

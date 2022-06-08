@@ -52,6 +52,8 @@ class SweetServer {
   void QemuGuestCommand(SweetConnection* conn, std::string& command);
   void StartVirtioFsConnection(SweetConnection* conn);
   void StopVirtioFsConnection();
+  void StartMidiConnection(SweetConnection* conn);
+  void StopMidiConnection();
   
   inline Machine* machine() { return machine_; }
   inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
@@ -61,6 +63,7 @@ class SweetServer {
   inline DisplayInterface* display() { return display_; }
   inline SweetDisplayEncoder* display_encoder() { return display_encoder_; }
   inline ClipboardInterface* clipboard() { return clipboard_; }
+  inline MidiInputInterface* midi() { return midi_; }
 
  private:
   SweetConnection* GetConnectionByFd(int fd);
@@ -81,6 +84,7 @@ class SweetServer {
   int                         event_fd_ = -1;
   std::list<VoidCallback>     tasks_;
   
+  MidiInputInterface*                   midi_ = nullptr;
   VirtioFsInterface*                    virtio_fs_ = nullptr;
   DisplayInterface*                     display_ = nullptr;
   PlaybackInterface*                    playback_ = nullptr;
@@ -100,6 +104,7 @@ class SweetServer {
   SweetConnection*            clipboard_connection_ = nullptr;
   SweetConnection*            guest_command_connection_ = nullptr;
   SweetConnection*            virtio_fs_connection_ = nullptr;
+  SweetConnection*            midi_connection_ = nullptr;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

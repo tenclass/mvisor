@@ -70,7 +70,6 @@ bool UsbDevice::LoadState(MigrationReader* reader) {
   return true;
 }
 
-
 UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete) {
   auto packet = new UsbPacket {
     .endpoint_address = endpoint_address,
@@ -88,10 +87,7 @@ UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64
   packet->Release = [packet]() {
     auto endpoint = packet->endpoint;
     if (endpoint) {
-      auto it = endpoint->tokens.find(packet);
-      if (it != endpoint->tokens.end()) {
-        endpoint->tokens.erase(it);
-      }
+      endpoint->tokens.remove(packet);
     }
     delete packet;
   };
@@ -103,7 +99,7 @@ bool UsbDevice::HandlePacket(UsbPacket* packet) {
     auto endpoint = packet->endpoint;
     if (endpoint->type == kUsbEndpointIsochronous || endpoint->type == kUsbEndpointInterrupt || endpoint->type == kUsbEndpointBulk) {
       packet->status = USB_RET_NAK;
-      endpoint->tokens.insert(packet);
+      endpoint->tokens.push_back(packet);
       NotifyEndpoint(endpoint->address);
       return false;
     } else {
@@ -173,15 +169,12 @@ void UsbDevice::NotifyEndpoint(uint endpoint_address) {
       /* wait for next tick */
       return;
     }
-    auto it = endpoint->tokens.begin();
-    auto packet = *it;
-    endpoint->tokens.erase(it);
+    auto packet = endpoint->tokens.front();
     OnDataPacket(packet);
-    if (packet->status == USB_RET_NAK) {
-      endpoint->tokens.insert(packet);
-    } else {
+    if (packet->status != USB_RET_NAK) {
+      endpoint->tokens.pop_front();
       packet->OnComplete();
-    }
+    } 
   } else {
     MV_PANIC("endpoint not found 0x%x", endpoint_address);
   }

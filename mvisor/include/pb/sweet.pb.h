@@ -37,7 +37,7 @@ namespace protobuf_sweet_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[17];
+  static const ::google::protobuf::internal::ParseTable schema[18];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -51,6 +51,8 @@ void InitDefaultsSaveMachineOptionsImpl();
 void InitDefaultsSaveMachineOptions();
 void InitDefaultsSendKeyboardInputImpl();
 void InitDefaultsSendKeyboardInput();
+void InitDefaultsSendMidiInputImpl();
+void InitDefaultsSendMidiInput();
 void InitDefaultsSendPointerInputImpl();
 void InitDefaultsSendPointerInput();
 void InitDefaultsQueryScreeenshotImpl();
@@ -82,6 +84,7 @@ inline void InitDefaults() {
   InitDefaultsSerialPortStatusEvent();
   InitDefaultsSaveMachineOptions();
   InitDefaultsSendKeyboardInput();
+  InitDefaultsSendMidiInput();
   InitDefaultsSendPointerInput();
   InitDefaultsQueryScreeenshot();
   InitDefaultsQueryScreenshotResponse();
@@ -137,6 +140,9 @@ extern SaveMachineOptionsDefaultTypeInternal _SaveMachineOptions_default_instanc
 class SendKeyboardInput;
 class SendKeyboardInputDefaultTypeInternal;
 extern SendKeyboardInputDefaultTypeInternal _SendKeyboardInput_default_instance_;
+class SendMidiInput;
+class SendMidiInputDefaultTypeInternal;
+extern SendMidiInputDefaultTypeInternal _SendMidiInput_default_instance_;
 class SendPointerInput;
 class SendPointerInputDefaultTypeInternal;
 extern SendPointerInputDefaultTypeInternal _SendPointerInput_default_instance_;
@@ -209,12 +215,15 @@ enum SweetCommand {
   kSendTcpData = 163,
   kStartVirtioFs = 176,
   kStopVirtioFs = 177,
+  kStartMidi = 192,
+  kStopMidi = 193,
+  kSendMidiInput = 194,
   SweetCommand_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetCommand_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetCommand_IsValid(int value);
 const SweetCommand SweetCommand_MIN = kInvalid;
-const SweetCommand SweetCommand_MAX = kStopVirtioFs;
+const SweetCommand SweetCommand_MAX = kSendMidiInput;
 const int SweetCommand_ARRAYSIZE = SweetCommand_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetCommand_descriptor();
@@ -247,12 +256,14 @@ enum SweetResponseAndEvent {
   kClipboardStreamStartEvent = 4224,
   kClipboardStreamStopEvent = 4225,
   kClipboardStreamDataEvent = 4226,
+  kMidiStartEvent = 4288,
+  kMidiStopEvent = 4289,
   SweetResponseAndEvent_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   SweetResponseAndEvent_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool SweetResponseAndEvent_IsValid(int value);
 const SweetResponseAndEvent SweetResponseAndEvent_MIN = kInvalidResponse;
-const SweetResponseAndEvent SweetResponseAndEvent_MAX = kVirtioFsNotifyEvent;
+const SweetResponseAndEvent SweetResponseAndEvent_MAX = kMidiStopEvent;
 const int SweetResponseAndEvent_ARRAYSIZE = SweetResponseAndEvent_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* SweetResponseAndEvent_descriptor();
@@ -828,6 +839,126 @@ class SendKeyboardInput : public ::google::protobuf::Message /* @@protoc_inserti
 };
 // -------------------------------------------------------------------
 
+class SendMidiInput : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendMidiInput) */ {
+ public:
+  SendMidiInput();
+  virtual ~SendMidiInput();
+
+  SendMidiInput(const SendMidiInput& from);
+
+  inline SendMidiInput& operator=(const SendMidiInput& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  SendMidiInput(SendMidiInput&& from) noexcept
+    : SendMidiInput() {
+    *this = ::std::move(from);
+  }
+
+  inline SendMidiInput& operator=(SendMidiInput&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SendMidiInput& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SendMidiInput* internal_default_instance() {
+    return reinterpret_cast<const SendMidiInput*>(
+               &_SendMidiInput_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    4;
+
+  void Swap(SendMidiInput* other);
+  friend void swap(SendMidiInput& a, SendMidiInput& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SendMidiInput* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  SendMidiInput* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const SendMidiInput& from);
+  void MergeFrom(const SendMidiInput& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(SendMidiInput* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // uint32 cable_code_index = 1;
+  void clear_cable_code_index();
+  static const int kCableCodeIndexFieldNumber = 1;
+  ::google::protobuf::uint32 cable_code_index() const;
+  void set_cable_code_index(::google::protobuf::uint32 value);
+
+  // uint32 midi_0 = 2;
+  void clear_midi_0();
+  static const int kMidi0FieldNumber = 2;
+  ::google::protobuf::uint32 midi_0() const;
+  void set_midi_0(::google::protobuf::uint32 value);
+
+  // uint32 midi_1 = 3;
+  void clear_midi_1();
+  static const int kMidi1FieldNumber = 3;
+  ::google::protobuf::uint32 midi_1() const;
+  void set_midi_1(::google::protobuf::uint32 value);
+
+  // uint32 midi_2 = 4;
+  void clear_midi_2();
+  static const int kMidi2FieldNumber = 4;
+  ::google::protobuf::uint32 midi_2() const;
+  void set_midi_2(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SendMidiInput)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::uint32 cable_code_index_;
+  ::google::protobuf::uint32 midi_0_;
+  ::google::protobuf::uint32 midi_1_;
+  ::google::protobuf::uint32 midi_2_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSendMidiInputImpl();
+};
+// -------------------------------------------------------------------
+
 class SendPointerInput : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendPointerInput) */ {
  public:
   SendPointerInput();
@@ -863,7 +994,7 @@ class SendPointerInput : public ::google::protobuf::Message /* @@protoc_insertio
                &_SendPointerInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    4;
+    5;
 
   void Swap(SendPointerInput* other);
   friend void swap(SendPointerInput& a, SendPointerInput& b) {
@@ -1011,7 +1142,7 @@ class QueryScreeenshot : public ::google::protobuf::Message /* @@protoc_insertio
                &_QueryScreeenshot_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    5;
+    6;
 
   void Swap(QueryScreeenshot* other);
   friend void swap(QueryScreeenshot& a, QueryScreeenshot& b) {
@@ -1132,7 +1263,7 @@ class QueryScreenshotResponse : public ::google::protobuf::Message /* @@protoc_i
                &_QueryScreenshotResponse_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    6;
+    7;
 
   void Swap(QueryScreenshotResponse* other);
   friend void swap(QueryScreenshotResponse& a, QueryScreenshotResponse& b) {
@@ -1268,7 +1399,7 @@ class MonitorsConfig_Monitor : public ::google::protobuf::Message /* @@protoc_in
                &_MonitorsConfig_Monitor_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    7;
+    8;
 
   void Swap(MonitorsConfig_Monitor* other);
   friend void swap(MonitorsConfig_Monitor& a, MonitorsConfig_Monitor& b) {
@@ -1402,7 +1533,7 @@ class MonitorsConfig : public ::google::protobuf::Message /* @@protoc_insertion_
                &_MonitorsConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    8;
+    9;
 
   void Swap(MonitorsConfig* other);
   friend void swap(MonitorsConfig& a, MonitorsConfig& b) {
@@ -1516,7 +1647,7 @@ class SetCursorEvent_CursorShape : public ::google::protobuf::Message /* @@proto
                &_SetCursorEvent_CursorShape_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(SetCursorEvent_CursorShape* other);
   friend void swap(SetCursorEvent_CursorShape& a, SetCursorEvent_CursorShape& b) {
@@ -1658,7 +1789,7 @@ class SetCursorEvent : public ::google::protobuf::Message /* @@protoc_insertion_
                &_SetCursorEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    10;
+    11;
 
   void Swap(SetCursorEvent* other);
   friend void swap(SetCursorEvent& a, SetCursorEvent& b) {
@@ -1783,7 +1914,7 @@ class DisplayStreamConfig : public ::google::protobuf::Message /* @@protoc_inser
                &_DisplayStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(DisplayStreamConfig* other);
   friend void swap(DisplayStreamConfig& a, DisplayStreamConfig& b) {
@@ -1970,7 +2101,7 @@ class PlaybackStreamConfig : public ::google::protobuf::Message /* @@protoc_inse
                &_PlaybackStreamConfig_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(PlaybackStreamConfig* other);
   friend void swap(PlaybackStreamConfig& a, PlaybackStreamConfig& b) {
@@ -2077,7 +2208,7 @@ class DisplayStreamStartEvent : public ::google::protobuf::Message /* @@protoc_i
                &_DisplayStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(DisplayStreamStartEvent* other);
   friend void swap(DisplayStreamStartEvent& a, DisplayStreamStartEvent& b) {
@@ -2183,7 +2314,7 @@ class PlaybackStreamStartEvent : public ::google::protobuf::Message /* @@protoc_
                &_PlaybackStreamStartEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    14;
+    15;
 
   void Swap(PlaybackStreamStartEvent* other);
   friend void swap(PlaybackStreamStartEvent& a, PlaybackStreamStartEvent& b) {
@@ -2318,7 +2449,7 @@ class ClipboardDataToGuest : public ::google::protobuf::Message /* @@protoc_inse
                &_ClipboardDataToGuest_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    15;
+    16;
 
   void Swap(ClipboardDataToGuest* other);
   friend void swap(ClipboardDataToGuest& a, ClipboardDataToGuest& b) {
@@ -2447,7 +2578,7 @@ class ClipboardStreamDataEvent : public ::google::protobuf::Message /* @@protoc_
                &_ClipboardStreamDataEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    16;
+    17;
 
   void Swap(ClipboardStreamDataEvent* other);
   friend void swap(ClipboardStreamDataEvent& a, ClipboardStreamDataEvent& b) {
@@ -3032,6 +3163,66 @@ inline void SendKeyboardInput::set_modifiers(::google::protobuf::uint32 value) {
   
   modifiers_ = value;
   // @@protoc_insertion_point(field_set:SweetProtocol.SendKeyboardInput.modifiers)
+}
+
+// -------------------------------------------------------------------
+
+// SendMidiInput
+
+// uint32 cable_code_index = 1;
+inline void SendMidiInput::clear_cable_code_index() {
+  cable_code_index_ = 0u;
+}
+inline ::google::protobuf::uint32 SendMidiInput::cable_code_index() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendMidiInput.cable_code_index)
+  return cable_code_index_;
+}
+inline void SendMidiInput::set_cable_code_index(::google::protobuf::uint32 value) {
+  
+  cable_code_index_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendMidiInput.cable_code_index)
+}
+
+// uint32 midi_0 = 2;
+inline void SendMidiInput::clear_midi_0() {
+  midi_0_ = 0u;
+}
+inline ::google::protobuf::uint32 SendMidiInput::midi_0() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendMidiInput.midi_0)
+  return midi_0_;
+}
+inline void SendMidiInput::set_midi_0(::google::protobuf::uint32 value) {
+  
+  midi_0_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendMidiInput.midi_0)
+}
+
+// uint32 midi_1 = 3;
+inline void SendMidiInput::clear_midi_1() {
+  midi_1_ = 0u;
+}
+inline ::google::protobuf::uint32 SendMidiInput::midi_1() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendMidiInput.midi_1)
+  return midi_1_;
+}
+inline void SendMidiInput::set_midi_1(::google::protobuf::uint32 value) {
+  
+  midi_1_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendMidiInput.midi_1)
+}
+
+// uint32 midi_2 = 4;
+inline void SendMidiInput::clear_midi_2() {
+  midi_2_ = 0u;
+}
+inline ::google::protobuf::uint32 SendMidiInput::midi_2() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendMidiInput.midi_2)
+  return midi_2_;
+}
+inline void SendMidiInput::set_midi_2(::google::protobuf::uint32 value) {
+  
+  midi_2_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendMidiInput.midi_2)
 }
 
 // -------------------------------------------------------------------
@@ -4415,6 +4606,8 @@ inline void ClipboardStreamDataEvent::set_allocated_file_name(::std::string* fil
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
