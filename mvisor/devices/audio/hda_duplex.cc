@@ -71,13 +71,15 @@ struct HdaNode {
   HdaStream*  stream;
 };
 
-class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterface {
+class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterface, public RecordInterface {
  private:
   uint32_t                  subsystem_id_;
   uint32_t                  pcm_formats_;
   std::vector<HdaNode>      nodes_;
   std::array<HdaStream, 2>  streams_ = { 0 };
-  std::vector<PlaybackListener> playback_listerns_;
+  std::vector<PlaybackListener> playback_listeners_;
+  std::vector<RecordListener>   record_listeners_;
+  std::deque<std::string>        record_buffer_;
 
  public:
   HdaDuplex() {
@@ -388,25 +390,35 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
         stream->buffer_pointer = 0;
       }
     } else {
-      /* no data input now, but move position to fix the timer interval */
-      stream->position += stream->bytes_per_frame;
+      if(!record_buffer_.empty()) {
+        auto buffer = record_buffer_.front();
+        record_buffer_.pop_front();
+        stream->transfer_callback((uint8_t*)buffer.data(), buffer.size());
+        stream->position += buffer.size();
+      } else {
+        auto buffer_size = stream->bytes_per_frame;
+        uint8_t zero[buffer_size] = { 0 };
+        stream->transfer_callback(zero, buffer_size);
+        stream->position += buffer_size;
+      }
     }
 
     auto started_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - stream->start_time).count();
     auto current_ms = stream->position * 1000 / stream->bytes_per_second;
     long next_interval = current_ms - started_ms;
+    
     if (next_interval < 1) {
       /* If we cannot catch up, reset timer */
       if (next_interval < -100) {
-        MV_LOG("stream[%d] reset timer, interval=%dms", stream->id, next_interval);
+        MV_LOG("stream[%d] reset timer, current_ms=%dms started_ms=%dms interval=%dms", stream->id, current_ms, started_ms, next_interval);
         stream->position = 0;
         stream->start_time = std::chrono::steady_clock::now();
-      }
+      } 
       next_interval = 1;
     }
 
-    // MV_LOG("stream[%d] next interval=%lu", stream->id, next_interval);
+    // MV_LOG("stream[%d] current_ms=%lu started_ms=%lu next interval=%lu", stream->id, current_ms, started_ms, next_interval);
     if (stream->timer->interval_ms != next_interval) {
       manager_->io()->ModifyTimer(stream->timer, next_interval);
     }
@@ -424,6 +436,11 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     if (running) {
       if (stream->output) {
         NotifyPlayback(kPlaybackStart, nullptr, 0);
+      } else {
+        NotifyRecordEvent(kRecordStart);
+        if(!record_buffer_.empty()) {
+          record_buffer_.clear();
+        }
       }
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
@@ -438,6 +455,11 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       stream->transfer_callback = nullptr;
       if (stream->output) {
         NotifyPlayback(kPlaybackStop, nullptr, 0);
+      } else {
+        if(!record_buffer_.empty()) {
+          record_buffer_.clear();
+        }
+        NotifyRecordEvent(kRecordStop);
       }
     }
   }
@@ -467,7 +489,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   }
 
   void NotifyPlayback(PlaybackState state, void* data, size_t length) {
-    for (auto& cb : playback_listerns_) {
+    for (auto& cb : playback_listeners_) {
       cb(state, iovec {
         .iov_base = data,
         .iov_len = length
@@ -484,7 +506,43 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   }
 
   void RegisterPlaybackListener(PlaybackListener callback) {
-    playback_listerns_.push_back(callback);
+    playback_listeners_.push_back(callback);
+  }
+
+  void WriteStreamToSharedBuffer(HdaStream* stream, const std::string& record_data) {
+    size_t frame_bytes = stream->bytes_per_frame;
+    size_t write_pos = 0;
+    size_t size = record_data.size();
+    std::string buffer;
+    buffer.resize(frame_bytes);
+    while (size >= frame_bytes) {
+      memcpy(buffer.data(), record_data.data() + write_pos, frame_bytes);
+      record_buffer_.push_back(buffer);
+      write_pos += frame_bytes;
+      size -= frame_bytes;
+    }
+  }
+
+  void WriteRecordDataToDevice(const std::string& record_data) {
+    HdaStream* stream = FindStreamById(1, false);
+    if(stream == nullptr) {
+      MV_ERROR("can't find stream by id");
+      return;
+    }
+
+    manager_->io()->Schedule([this, stream, record_data]() {
+        WriteStreamToSharedBuffer(stream, record_data);
+    });
+  }
+
+  void NotifyRecordEvent(RecordState state) {
+    for (auto& cb : record_listeners_) {
+      cb(state);
+    }
+  }
+
+  void RegisterRecordListener(RecordListener callback) {
+    record_listeners_.push_back(callback);
   }
 };
 

@@ -70,6 +70,10 @@ SweetServer::~SweetServer() {
     opus_encoder_destroy(playback_encoder_);
     playback_encoder_ = nullptr;
   }
+  if (record_decoder_) {
+    opus_decoder_destroy(record_decoder_);
+    record_decoder_ = nullptr;
+  }
 
   safe_close(&event_fd_);
   safe_close(&server_fd_);
@@ -206,6 +210,9 @@ void SweetServer::RemoveConnection(SweetConnection* conn) {
   if (playback_connection_ == conn) {
     playback_connection_ = nullptr;
   }
+  if (audio_record_connection_ == conn) {
+    audio_record_connection_ = nullptr;
+  }
   if (clipboard_connection_ == conn) {
     clipboard_connection_ = nullptr;
   }
@@ -237,6 +244,9 @@ void SweetServer::LookupDevices() {
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PlaybackInterface*>(o); })) {
     playback_ = dynamic_cast<PlaybackInterface*>(o);
+  }
+  for (auto o : machine_->LookupObjects([](auto o){ return dynamic_cast<RecordInterface*>(o); })) {
+    audio_record_ = dynamic_cast<RecordInterface*>(o);
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
     pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));
@@ -285,6 +295,13 @@ void SweetServer::LookupDevices() {
     playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
       Schedule([this, state, data = std::string((const char*)iov.iov_base, iov.iov_len)] () {
         OnPlayback(state, data);
+      });
+    });
+  }
+  if(audio_record_) {
+    audio_record_->RegisterRecordListener([this](RecordState state){
+      Schedule([this, state] () {
+        OnRecordStats(state);
       });
     });
   }
@@ -509,4 +526,62 @@ void SweetServer::StopWacomConnection() {
   wacom_connection_ = nullptr;
 }
 
+void SweetServer::StartRecordStreamOnConnection(SweetConnection* conn, RecordStreamConfig* config) {
+  record_format_.frequency = config->frequency();
+  record_format_.channels = config->channels();
+  audio_record_connection_ = conn;
+  if (recording_) {
+    audio_record_connection_->Send(kAudioRecordStartEvent);
+  }
+}
 
+void SweetServer::StopRecordStream() {
+  if (recording_) {
+    audio_record_connection_->Send(kAudioRecoreStopEvent);
+  }
+  audio_record_connection_ = nullptr;
+}
+
+void SweetServer::OnRecordStats(RecordState state) {
+  if(state == kRecordStart) {
+    if(!record_decoder_) {
+      int error;
+      record_decoder_ = opus_decoder_create(record_format_.frequency, record_format_.channels, &error);
+      if (!record_decoder_ || error != OPUS_OK) {
+          MV_PANIC("failed to create opus decoder, error=%d", error);
+          return;
+      }
+      recording_ = true;
+    }
+
+    if (audio_record_connection_) {
+      audio_record_connection_->Send(kAudioRecordStartEvent);
+    }
+  } else if(state == kRecordStop) {
+    if(record_decoder_) {
+      opus_decoder_destroy(record_decoder_);
+      record_decoder_ = nullptr;
+    }
+
+    recording_ = false;
+    if (audio_record_connection_) {
+      audio_record_connection_->Send(kAudioRecoreStopEvent);
+    }
+  } else {
+    MV_LOG("unknown record event");
+  }
+}
+
+void SweetServer::SendRecordStreamData(const std::string& data) {
+  if(record_decoder_ && audio_record_connection_) {
+    opus_int16 out[3840] = {0};
+    int samples = opus_decode(record_decoder_, (const unsigned char *)data.data(),  data.size(), out, 1920, 0);
+    if (samples < OPUS_OK) {
+      MV_ERROR("opus decode failed:%s", opus_strerror(samples));
+      return;
+    }
+
+    size_t pcm_length = samples * record_format_.channels * sizeof(opus_int16);
+    audio_record_->WriteRecordDataToDevice(std::string((const char*)out, pcm_length));
+  }
+}

@@ -37,7 +37,7 @@ namespace protobuf_sweet_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[19];
+  static const ::google::protobuf::internal::ParseTable schema[21];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -75,6 +75,10 @@ void InitDefaultsDisplayStreamStartEventImpl();
 void InitDefaultsDisplayStreamStartEvent();
 void InitDefaultsPlaybackStreamStartEventImpl();
 void InitDefaultsPlaybackStreamStartEvent();
+void InitDefaultsRecordStreamConfigImpl();
+void InitDefaultsRecordStreamConfig();
+void InitDefaultsSendRecordStreamDataImpl();
+void InitDefaultsSendRecordStreamData();
 void InitDefaultsClipboardDataToGuestImpl();
 void InitDefaultsClipboardDataToGuest();
 void InitDefaultsClipboardStreamDataEventImpl();
@@ -98,6 +102,8 @@ inline void InitDefaults() {
   InitDefaultsPlaybackStreamConfig();
   InitDefaultsDisplayStreamStartEvent();
   InitDefaultsPlaybackStreamStartEvent();
+  InitDefaultsRecordStreamConfig();
+  InitDefaultsSendRecordStreamData();
   InitDefaultsClipboardDataToGuest();
   InitDefaultsClipboardStreamDataEvent();
   InitDefaultsSendWacomInput();
@@ -137,6 +143,9 @@ extern QueryScreenshotResponseDefaultTypeInternal _QueryScreenshotResponse_defau
 class QueryStatusResponse;
 class QueryStatusResponseDefaultTypeInternal;
 extern QueryStatusResponseDefaultTypeInternal _QueryStatusResponse_default_instance_;
+class RecordStreamConfig;
+class RecordStreamConfigDefaultTypeInternal;
+extern RecordStreamConfigDefaultTypeInternal _RecordStreamConfig_default_instance_;
 class SaveMachineOptions;
 class SaveMachineOptionsDefaultTypeInternal;
 extern SaveMachineOptionsDefaultTypeInternal _SaveMachineOptions_default_instance_;
@@ -149,6 +158,9 @@ extern SendMidiInputDefaultTypeInternal _SendMidiInput_default_instance_;
 class SendPointerInput;
 class SendPointerInputDefaultTypeInternal;
 extern SendPointerInputDefaultTypeInternal _SendPointerInput_default_instance_;
+class SendRecordStreamData;
+class SendRecordStreamDataDefaultTypeInternal;
+extern SendRecordStreamDataDefaultTypeInternal _SendRecordStreamData_default_instance_;
 class SendWacomInput;
 class SendWacomInputDefaultTypeInternal;
 extern SendWacomInputDefaultTypeInternal _SendWacomInput_default_instance_;
@@ -259,6 +271,8 @@ enum SweetResponseAndEvent {
   kPlaybackStreamStartEvent = 4192,
   kPlaybackStreamStopEvent = 4193,
   kPlaybackStreamDataEvent = 4194,
+  kAudioRecordStartEvent = 4208,
+  kAudioRecoreStopEvent = 4209,
   kVirtioFsStartEvent = 4272,
   kVirtioFsStopEvent = 4273,
   kVirtioFsNotifyEvent = 4274,
@@ -2425,6 +2439,241 @@ class PlaybackStreamStartEvent : public ::google::protobuf::Message /* @@protoc_
 };
 // -------------------------------------------------------------------
 
+class RecordStreamConfig : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.RecordStreamConfig) */ {
+ public:
+  RecordStreamConfig();
+  virtual ~RecordStreamConfig();
+
+  RecordStreamConfig(const RecordStreamConfig& from);
+
+  inline RecordStreamConfig& operator=(const RecordStreamConfig& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  RecordStreamConfig(RecordStreamConfig&& from) noexcept
+    : RecordStreamConfig() {
+    *this = ::std::move(from);
+  }
+
+  inline RecordStreamConfig& operator=(RecordStreamConfig&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const RecordStreamConfig& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const RecordStreamConfig* internal_default_instance() {
+    return reinterpret_cast<const RecordStreamConfig*>(
+               &_RecordStreamConfig_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    16;
+
+  void Swap(RecordStreamConfig* other);
+  friend void swap(RecordStreamConfig& a, RecordStreamConfig& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline RecordStreamConfig* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  RecordStreamConfig* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const RecordStreamConfig& from);
+  void MergeFrom(const RecordStreamConfig& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(RecordStreamConfig* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // string codec = 1;
+  void clear_codec();
+  static const int kCodecFieldNumber = 1;
+  const ::std::string& codec() const;
+  void set_codec(const ::std::string& value);
+  #if LANG_CXX11
+  void set_codec(::std::string&& value);
+  #endif
+  void set_codec(const char* value);
+  void set_codec(const char* value, size_t size);
+  ::std::string* mutable_codec();
+  ::std::string* release_codec();
+  void set_allocated_codec(::std::string* codec);
+
+  // uint32 channels = 2;
+  void clear_channels();
+  static const int kChannelsFieldNumber = 2;
+  ::google::protobuf::uint32 channels() const;
+  void set_channels(::google::protobuf::uint32 value);
+
+  // uint32 frequency = 3;
+  void clear_frequency();
+  static const int kFrequencyFieldNumber = 3;
+  ::google::protobuf::uint32 frequency() const;
+  void set_frequency(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.RecordStreamConfig)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr codec_;
+  ::google::protobuf::uint32 channels_;
+  ::google::protobuf::uint32 frequency_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsRecordStreamConfigImpl();
+};
+// -------------------------------------------------------------------
+
+class SendRecordStreamData : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.SendRecordStreamData) */ {
+ public:
+  SendRecordStreamData();
+  virtual ~SendRecordStreamData();
+
+  SendRecordStreamData(const SendRecordStreamData& from);
+
+  inline SendRecordStreamData& operator=(const SendRecordStreamData& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  SendRecordStreamData(SendRecordStreamData&& from) noexcept
+    : SendRecordStreamData() {
+    *this = ::std::move(from);
+  }
+
+  inline SendRecordStreamData& operator=(SendRecordStreamData&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const SendRecordStreamData& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const SendRecordStreamData* internal_default_instance() {
+    return reinterpret_cast<const SendRecordStreamData*>(
+               &_SendRecordStreamData_default_instance_);
+  }
+  static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
+    17;
+
+  void Swap(SendRecordStreamData* other);
+  friend void swap(SendRecordStreamData& a, SendRecordStreamData& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline SendRecordStreamData* New() const PROTOBUF_FINAL { return New(NULL); }
+
+  SendRecordStreamData* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  void CopyFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void MergeFrom(const ::google::protobuf::Message& from) PROTOBUF_FINAL;
+  void CopyFrom(const SendRecordStreamData& from);
+  void MergeFrom(const SendRecordStreamData& from);
+  void Clear() PROTOBUF_FINAL;
+  bool IsInitialized() const PROTOBUF_FINAL;
+
+  size_t ByteSizeLong() const PROTOBUF_FINAL;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) PROTOBUF_FINAL;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const PROTOBUF_FINAL;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* target) const PROTOBUF_FINAL;
+  int GetCachedSize() const PROTOBUF_FINAL { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const PROTOBUF_FINAL;
+  void InternalSwap(SendRecordStreamData* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const PROTOBUF_FINAL;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // bytes data = 1;
+  void clear_data();
+  static const int kDataFieldNumber = 1;
+  const ::std::string& data() const;
+  void set_data(const ::std::string& value);
+  #if LANG_CXX11
+  void set_data(::std::string&& value);
+  #endif
+  void set_data(const char* value);
+  void set_data(const void* value, size_t size);
+  ::std::string* mutable_data();
+  ::std::string* release_data();
+  void set_allocated_data(::std::string* data);
+
+  // uint32 timestamp = 2;
+  void clear_timestamp();
+  static const int kTimestampFieldNumber = 2;
+  ::google::protobuf::uint32 timestamp() const;
+  void set_timestamp(::google::protobuf::uint32 value);
+
+  // @@protoc_insertion_point(class_scope:SweetProtocol.SendRecordStreamData)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr data_;
+  ::google::protobuf::uint32 timestamp_;
+  mutable int _cached_size_;
+  friend struct ::protobuf_sweet_2eproto::TableStruct;
+  friend void ::protobuf_sweet_2eproto::InitDefaultsSendRecordStreamDataImpl();
+};
+// -------------------------------------------------------------------
+
 class ClipboardDataToGuest : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:SweetProtocol.ClipboardDataToGuest) */ {
  public:
   ClipboardDataToGuest();
@@ -2460,7 +2709,7 @@ class ClipboardDataToGuest : public ::google::protobuf::Message /* @@protoc_inse
                &_ClipboardDataToGuest_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    16;
+    18;
 
   void Swap(ClipboardDataToGuest* other);
   friend void swap(ClipboardDataToGuest& a, ClipboardDataToGuest& b) {
@@ -2589,7 +2838,7 @@ class ClipboardStreamDataEvent : public ::google::protobuf::Message /* @@protoc_
                &_ClipboardStreamDataEvent_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    17;
+    19;
 
   void Swap(ClipboardStreamDataEvent* other);
   friend void swap(ClipboardStreamDataEvent& a, ClipboardStreamDataEvent& b) {
@@ -2718,7 +2967,7 @@ class SendWacomInput : public ::google::protobuf::Message /* @@protoc_insertion_
                &_SendWacomInput_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
-    18;
+    20;
 
   void Swap(SendWacomInput* other);
   friend void swap(SendWacomInput& a, SendWacomInput& b) {
@@ -4502,6 +4751,162 @@ inline void PlaybackStreamStartEvent::set_frequency(::google::protobuf::uint32 v
 
 // -------------------------------------------------------------------
 
+// RecordStreamConfig
+
+// string codec = 1;
+inline void RecordStreamConfig::clear_codec() {
+  codec_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& RecordStreamConfig::codec() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.RecordStreamConfig.codec)
+  return codec_.GetNoArena();
+}
+inline void RecordStreamConfig::set_codec(const ::std::string& value) {
+  
+  codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.RecordStreamConfig.codec)
+}
+#if LANG_CXX11
+inline void RecordStreamConfig::set_codec(::std::string&& value) {
+  
+  codec_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.RecordStreamConfig.codec)
+}
+#endif
+inline void RecordStreamConfig::set_codec(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.RecordStreamConfig.codec)
+}
+inline void RecordStreamConfig::set_codec(const char* value, size_t size) {
+  
+  codec_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.RecordStreamConfig.codec)
+}
+inline ::std::string* RecordStreamConfig::mutable_codec() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.RecordStreamConfig.codec)
+  return codec_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* RecordStreamConfig::release_codec() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.RecordStreamConfig.codec)
+  
+  return codec_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void RecordStreamConfig::set_allocated_codec(::std::string* codec) {
+  if (codec != NULL) {
+    
+  } else {
+    
+  }
+  codec_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), codec);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.RecordStreamConfig.codec)
+}
+
+// uint32 channels = 2;
+inline void RecordStreamConfig::clear_channels() {
+  channels_ = 0u;
+}
+inline ::google::protobuf::uint32 RecordStreamConfig::channels() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.RecordStreamConfig.channels)
+  return channels_;
+}
+inline void RecordStreamConfig::set_channels(::google::protobuf::uint32 value) {
+  
+  channels_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.RecordStreamConfig.channels)
+}
+
+// uint32 frequency = 3;
+inline void RecordStreamConfig::clear_frequency() {
+  frequency_ = 0u;
+}
+inline ::google::protobuf::uint32 RecordStreamConfig::frequency() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.RecordStreamConfig.frequency)
+  return frequency_;
+}
+inline void RecordStreamConfig::set_frequency(::google::protobuf::uint32 value) {
+  
+  frequency_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.RecordStreamConfig.frequency)
+}
+
+// -------------------------------------------------------------------
+
+// SendRecordStreamData
+
+// bytes data = 1;
+inline void SendRecordStreamData::clear_data() {
+  data_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& SendRecordStreamData::data() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendRecordStreamData.data)
+  return data_.GetNoArena();
+}
+inline void SendRecordStreamData::set_data(const ::std::string& value) {
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendRecordStreamData.data)
+}
+#if LANG_CXX11
+inline void SendRecordStreamData::set_data(::std::string&& value) {
+  
+  data_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:SweetProtocol.SendRecordStreamData.data)
+}
+#endif
+inline void SendRecordStreamData::set_data(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:SweetProtocol.SendRecordStreamData.data)
+}
+inline void SendRecordStreamData::set_data(const void* value, size_t size) {
+  
+  data_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:SweetProtocol.SendRecordStreamData.data)
+}
+inline ::std::string* SendRecordStreamData::mutable_data() {
+  
+  // @@protoc_insertion_point(field_mutable:SweetProtocol.SendRecordStreamData.data)
+  return data_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* SendRecordStreamData::release_data() {
+  // @@protoc_insertion_point(field_release:SweetProtocol.SendRecordStreamData.data)
+  
+  return data_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void SendRecordStreamData::set_allocated_data(::std::string* data) {
+  if (data != NULL) {
+    
+  } else {
+    
+  }
+  data_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), data);
+  // @@protoc_insertion_point(field_set_allocated:SweetProtocol.SendRecordStreamData.data)
+}
+
+// uint32 timestamp = 2;
+inline void SendRecordStreamData::clear_timestamp() {
+  timestamp_ = 0u;
+}
+inline ::google::protobuf::uint32 SendRecordStreamData::timestamp() const {
+  // @@protoc_insertion_point(field_get:SweetProtocol.SendRecordStreamData.timestamp)
+  return timestamp_;
+}
+inline void SendRecordStreamData::set_timestamp(::google::protobuf::uint32 value) {
+  
+  timestamp_ = value;
+  // @@protoc_insertion_point(field_set:SweetProtocol.SendRecordStreamData.timestamp)
+}
+
+// -------------------------------------------------------------------
+
 // ClipboardDataToGuest
 
 // .SweetProtocol.ClipboardDataType type = 1;
@@ -4839,6 +5244,10 @@ inline void SendWacomInput::set_tilt_y(::google::protobuf::uint32 value) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

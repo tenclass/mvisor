@@ -46,6 +46,8 @@ class SweetServer {
   void StopDisplayStream();
   void StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config);
   void StopPlaybackStream();
+  void StartRecordStreamOnConnection(SweetConnection* conn, RecordStreamConfig* config);
+  void StopRecordStream();
   void StartClipboardStreamOnConnection(SweetConnection* conn);
   void StopClipboardStream();
   void RefreshDisplayStream();
@@ -56,6 +58,7 @@ class SweetServer {
   void StopMidiConnection();
   void StartWacomConnection(SweetConnection* conn);
   void StopWacomConnection();
+  void SendRecordStreamData(const std::string& data);
   
   inline Machine* machine() { return machine_; }
   inline std::vector<PointerInputInterface*>& pointers() { return pointers_; }
@@ -67,6 +70,7 @@ class SweetServer {
   inline ClipboardInterface* clipboard() { return clipboard_; }
   inline MidiInputInterface* midi() { return midi_; }
   inline WacomInputInterface* wacom() { return wacom_; }
+  inline RecordInterface* audio_record() {return audio_record_;}
 
  private:
   SweetConnection* GetConnectionByFd(int fd);
@@ -77,6 +81,7 @@ class SweetServer {
   void OnAccept();
   void OnPlayback(PlaybackState state, const std::string& data);
   void SetDefaultConfig();
+  void OnRecordStats(RecordState state);
   void UpdateDisplay();
 
   Machine*                    machine_;
@@ -95,21 +100,26 @@ class SweetServer {
   KeyboardInputInterface*               keyboard_ = nullptr;
   SerialPortInterface*                  qemu_guest_agent_ = nullptr;
   ClipboardInterface*                   clipboard_ = nullptr;
+  RecordInterface*                      audio_record_ = nullptr;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
 
   PlaybackFormat                        playback_format_;
+  RecordFormat                          record_format_;
+  bool                                  recording_ = false;
 
   SweetDisplayEncoder*        display_encoder_ = nullptr;
   SweetConnection*            display_connection_ = nullptr;
   DisplayStreamConfig         display_config_;
   OpusEncoder*                playback_encoder_ = nullptr;
+  OpusDecoder*                record_decoder_   = nullptr;
   SweetConnection*            playback_connection_ = nullptr;
   SweetConnection*            clipboard_connection_ = nullptr;
   SweetConnection*            guest_command_connection_ = nullptr;
   SweetConnection*            virtio_fs_connection_ = nullptr;
   SweetConnection*            midi_connection_ = nullptr;
   SweetConnection*            wacom_connection_ = nullptr;
+  SweetConnection*            audio_record_connection_ = nullptr;
 };
 
 #endif // _MVISOR_SWEET_SERVER_H

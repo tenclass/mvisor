@@ -167,6 +167,23 @@ class PlaybackInterface {
   virtual void RegisterPlaybackListener(PlaybackListener callback) = 0;
 };
 
+struct RecordFormat {
+  int frequency = 48000;
+  int channels = 2;
+};
+
+enum RecordState {
+  kRecordStart,
+  kRecordStop
+};
+
+typedef std::function <void(RecordState state)>   RecordListener;
+class RecordInterface {
+  public:
+  virtual void WriteRecordDataToDevice(const std::string& record_data) = 0;
+  virtual void RegisterRecordListener(RecordListener callback) = 0;
+};
+
 
 class SerialPortInterface;
 class SerialDeviceInterface {

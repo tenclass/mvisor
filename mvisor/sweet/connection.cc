@@ -111,6 +111,15 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kQueryScreenshot:
     OnQueryScreenshot();
     break;
+    case kStartRecordStream:
+    OnStartRecordStream();
+    break;
+  case kStopRecordStream:
+    OnStopRecordStream();
+    break;
+  case kSendRecordStreamData:
+    OnSendRecordStreamData();
+    break;
   case kClipboardDataToGuest:
     OnClipboardDataToGuest();
     break;
@@ -512,4 +521,25 @@ void SweetConnection::OnStopWacom() {
   if(wacom) {
     wacom->Stop();
   }
+}
+void SweetConnection::OnStartRecordStream() {
+  RecordStreamConfig record_config;
+  if(!record_config.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+
+  server_->StartRecordStreamOnConnection(this, &record_config);
+}
+
+void SweetConnection::OnStopRecordStream() {
+  server_->StopRecordStream();
+}
+
+void SweetConnection::OnSendRecordStreamData() {
+  SendRecordStreamData record_data;
+  if(!record_data.ParseFromString(buffer_)) {
+    MV_PANIC("failed to parse buffer");
+  }
+
+  server_->SendRecordStreamData(record_data.data());
 }

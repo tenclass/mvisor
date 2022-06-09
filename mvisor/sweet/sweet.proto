@@ -74,6 +74,9 @@ enum SweetResponseAndEvent {
   kPlaybackStreamStopEvent    = 0x1061;
   kPlaybackStreamDataEvent    = 0x1062;
 
+  kAudioRecordStartEvent      = 0x1070;
+  kAudioRecoreStopEvent       = 0x1071;
+
   kVirtioFsStartEvent         = 0x10B0; 
   kVirtioFsStopEvent          = 0x10B1;
   kVirtioFsNotifyEvent        = 0x10B2;
@@ -228,6 +231,18 @@ message PlaybackStreamStartEvent {
   uint32    format      = 3;
   uint32    channels    = 4;
   uint32    frequency   = 5;
+}
+
+message RecordStreamConfig {
+  /* pcm / opus */
+  string    codec       = 1;
+  uint32    channels    = 2;
+  uint32    frequency   = 3;
+}
+
+message SendRecordStreamData {
+  bytes     data        = 1;
+  uint32    timestamp   = 2;
 }
 
 message ClipboardDataToGuest {

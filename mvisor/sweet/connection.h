@@ -82,6 +82,9 @@ class SweetConnection {
   void OnStartWacom();
   void OnStopWacom();
   void OnWacomInput();
+  void OnStartRecordStream();
+  void OnStopRecordStream();
+  void OnSendRecordStreamData();
 
 
   Machine*      machine_;
