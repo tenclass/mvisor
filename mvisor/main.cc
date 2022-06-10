@@ -25,6 +25,8 @@
 #include "machine.h"
 #include "viewer.h"
 #include "sweet/server.h"
+#include "version.h"
+#include <filesystem>
 
 using namespace std;
 
@@ -55,17 +57,43 @@ void IntializeArguments(int argc, char* argv[]) {
 }
 
 void PrintHelp() {
-  printf("mvisor -config [config_path]\n");
+  printf("Usage: mvisor [option]\n");
+  printf("Options\n");
+  printf("  -h, --help            Display this information.\n");
+  printf("  -v, --version         Display mvisor version information.\n");
+  printf("  -u, --uuid            Specified mvisor uuid information.\n");
+  printf("  -n, --name            Specified mvisor name information.\n");
+  printf("  -c, --config          Specified mvisor config file path.\n");
+  printf("  -s, --sweet           Specified mvisor socket file path.\n");
+  printf("  -p, --pidfile         Specified mvisor pid file path.\n");
+  printf("  -l, --load            Load mvisor snapshot information.\n");
+}
+
+void PrintVersion() {
+  printf("MVisor: %s\n", VERSION);
+  printf("Copyright (C) 2022 Terrence <terrence@tenclass.com>.\n");
+  printf("License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n");
+  printf("This is free software: you are free to change and redistribute it.\n");
+  printf("There is NO WARRANTY, to the extent permitted by law\n");
+}
+
+bool VerifyArg(const std::string& parent_path) {
+  if (!std::filesystem::is_directory(parent_path)) {
+    return false;
+  }
+  return true;
 }
 
 static struct option long_options[] = {
   {"help", no_argument, 0, 'h'},
-  {"uuid", required_argument, 0, 0},
-  {"name", required_argument, 0, 0},
+  {"uuid", required_argument, 0, 'u'},
+  {"name", required_argument, 0, 'n'},
   {"config", required_argument, 0, 'c'},
-  {"sweet", required_argument, 0, 0},
-  {"pidfile", required_argument, 0, 0},
-  {"load", required_argument, 0, 0}
+  {"sweet", required_argument, 0, 's'},
+  {"pidfile", required_argument, 0, 'p'},
+  {"load", required_argument, 0, 'l'},
+  {"version", no_argument, 0, 'v'},
+  {NULL, 0, 0, 0}
 };
 
 static Machine*     machine = nullptr;
@@ -82,31 +110,85 @@ int main(int argc, char* argv[])
   std::string pid_path;
   std::string load_path;
 
-  int option_index = 0;
-  while (getopt_long_only(argc, argv, "hc:", long_options, &option_index) != -1) {
-    switch (option_index)
+  int c, option_index = 0;
+  while ((c = getopt_long_only(argc, argv, "hvc:u:n:s:p:l:", long_options, &option_index)) != -1) {
+    switch (c)
     {
-    case 0:
+    case 'h':
       PrintHelp();
       return 0;
-    case 1:
+    case 'u': {
       vm_uuid = optarg;
+      if (vm_uuid.empty()) {
+        printf("must specified uuid! run terminated\n");  
+        return 0;
+      }
       break;
-    case 2:
+    }
+    case 'n': {
       vm_name = optarg;
+      if (vm_name.empty()) {
+        printf("must specified name! run terminated\n");  
+        return 0;
+      }
       break;
-    case 3:
+    }
+    case 'c': {
       config_path = optarg;
+      if (config_path.empty()) {
+        printf("must specified config! run terminated\n");
+        return 0;
+      }
+      if (!std::filesystem::exists(config_path)) {
+        printf("config:%s not exists! run terminated\n", config_path.c_str());
+        return 0;
+      }
       break;
-    case 4:
+    }
+    case 's': {
       sweet_path = optarg;
+      if (sweet_path.empty()) {
+        printf("must specified sweet socket path! run terminated\n");  
+        return 0;
+      }
+      std::filesystem::path path(sweet_path);
+      if (!VerifyArg(path.parent_path())) {
+        printf("sweet socket path:%s not exists! run terminated\n", path.parent_path().c_str());  
+        return 0;
+      }
       break;
-    case 5:
+    }
+    case 'p': {
       pid_path = optarg;
+      if (pid_path.empty()) {
+        printf("must specified pid file path! run terminated\n");  
+        return 0;
+      }
+      std::filesystem::path path(pid_path);
+      if (!VerifyArg(path.parent_path())) {
+        printf("pid file path:%s not exists! run terminated\n", path.parent_path().c_str());  
+        return 0;
+      }
       break;
-    case 6:
+    }
+    case 'l': {
       load_path = optarg;
+      if (load_path.empty()) {
+        printf("must specified snapshot path! run terminated\n");  
+        return 0;
+      }
+      if (!VerifyArg(load_path)) {
+        printf("snapshot path:%s not exists! run terminated\n", load_path.c_str());  
+        return 0;
+      }
       break;
+    }
+    case 'v':
+      PrintVersion();
+      return 0;
+    case '?':
+      PrintHelp();
+      return 0;
     }
   }
 

@@ -4,6 +4,9 @@ LIBS := stdc++ stdc++fs
 LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound x264 yuv opus jpeg
 MKDIR_P = mkdir -p
 
+VERSION = "1.0.0"
+VERSION_FILE = "./include/version.h"
+
 # FIXME: Add -g only if debug mode is on
 CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -g
 CCFLAGS = $(CFLAGS) -std=c++17 -mavx2
@@ -63,7 +66,11 @@ sweet_js:
 	$(PROTOC) --js_out=import_style=commonjs,binary:. sweet/sweet.proto
 	mv sweet/sweet_pb.js /mnt/server/sfcloud/sfspice/
 
-all: $(EXECUTABLE)
+all: version $(EXECUTABLE)
+
+version:
+	@if [ -e $(VERSION_FILE) ]; then $(RM) -rf $(VERSION_FILE) else touch $(VERSION_FILE); fi
+	@echo "#define VERSION \"$(VERSION)\"" > $(VERSION_FILE)
 
 proto: $(MV_PROTOBUF_CC)
 
@@ -72,6 +79,7 @@ $(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/ui/keymap.o
 
 clean:
 	$(RM) -rf $(BUILD_DIR)/*
+	$(RM) -rf $(VERSION_FILE)
 
 $(MV_OBJECTS): $(BUILD_DIR)/%.o: %.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<
