@@ -436,7 +436,7 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
 
   /* Scale screen bitmap to w x h */
   size_t bitmap_stride = w * 4;
-  uint8_t bitmap[bitmap_stride * h];
+  uint8_t* bitmap = new uint8_t[bitmap_stride * h];
   libyuv::ARGBScale(screen_bitmap_, screen_stride_, screen_width_, screen_height_,
     bitmap, bitmap_stride, w, h, libyuv::kFilterBilinear);
 
@@ -463,6 +463,8 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
   }
   jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);
+  delete bitmap;
+  
   if (out_buffer) {
     output.resize(out_size);
     memcpy(output.data(), out_buffer, out_size);

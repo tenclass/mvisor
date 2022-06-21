@@ -111,7 +111,7 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kQueryScreenshot:
     OnQueryScreenshot();
     break;
-    case kStartRecordStream:
+  case kStartRecordStream:
     OnStartRecordStream();
     break;
   case kStopRecordStream:
