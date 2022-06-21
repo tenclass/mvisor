@@ -94,10 +94,8 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       std::string name;
       if (has_key("disk_name")) {
         name = std::get<std::string>(key_values_["disk_name"]);
-      } else {
-        name = "mvisor-fs";
-      }
-      strncpy((char*)fs_config_.tag, name.c_str(), sizeof(fs_config_.tag) - 1);
+        strncpy((char*)fs_config_.tag, name.c_str(), sizeof(fs_config_.tag) - 1);
+      } 
 
       // connect
       VirtioPci::Connect();
