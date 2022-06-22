@@ -27,11 +27,15 @@
 #include <vector>
 #include "logger.h"
 
+#define REFCOUNT_CACHE_ITEMS        128
+#define L2_CACHE_ITEMS              128
+#define CLUSTER_CACHE_ITEMS         128
 
 Qcow2Image::~Qcow2Image() {
   /* Flush caches if dirty */
   l2_cache_.Clear();
   rfb_cache_.Clear();
+  cluster_cache_.Clear();
 
   if (fd_ != -1) {
     Flush();
@@ -203,6 +207,9 @@ void Qcow2Image::InitializeLruCache() {
     }
     // MV_LOG("free l2_table 0x%lx", l2_table->offset_in_file);
     free(l2_table);
+  });
+  cluster_cache_.Initialize(CLUSTER_CACHE_ITEMS, [this](auto offset_in_file, auto data) {
+    delete data;
   });
 }
 
@@ -376,18 +383,25 @@ ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_
       (cluster_start & ~QCOW2_COMPRESSED_SECTOR_MASK);
     cluster_start &= (1ULL << x) - 1;
 
-    if (compressed_.size() < compressed_length)
-      compressed_.resize(compressed_length);
-    ssize_t bytes_read = ReadFile(compressed_.data(), compressed_length, cluster_start);
-    if (bytes_read < 0) {
-      return bytes_read;
+    uint8_t* decompressed = nullptr;
+    if (!cluster_cache_.Get(cluster_start, decompressed)) {
+      if (compressed_.size() < compressed_length)
+        compressed_.resize(compressed_length);
+      ssize_t bytes_read = ReadFile(compressed_.data(), compressed_length, cluster_start);
+      if (bytes_read < 0) {
+        return bytes_read;
+      }
+
+      decompressed = new uint8_t[cluster_size_];
+      auto ret = zstd_decompress(compressed_.data(), compressed_length, decompressed, cluster_size_);
+      if (ret < 0) {
+        delete decompressed;
+        MV_ERROR("failed to decompressed length=0x%x ret=%d", compressed_length, ret);
+        return ret;
+      }
+      cluster_cache_.Put(cluster_start, decompressed);
     }
-    auto ret = zstd_decompress(compressed_.data(), compressed_length, copied_cluster_, cluster_size_);
-    if (ret < 0) {
-      MV_PANIC("failed to decompressed length=0x%x ret=%d", compressed_length, ret);
-      return ret;
-    }
-    memcpy(buffer, copied_cluster_ + offset_in_cluster, length);
+    memcpy(buffer, decompressed + offset_in_cluster, length);
   } else { /* Normal descriptor */
     cluster_start &= QCOW2_OFFSET_MASK;
 

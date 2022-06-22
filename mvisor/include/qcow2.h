@@ -30,8 +30,6 @@
 #define QCOW2_COMPRESSED_SECTOR_SIZE  512
 #define QCOW2_COMPRESSED_SECTOR_MASK  (~(QCOW2_COMPRESSED_SECTOR_SIZE - 1LL))
 
-#define REFCOUNT_CACHE_ITEMS      128
-#define L2_CACHE_ITEMS            128
 
 static inline void be32_to_cpus(uint32_t* x) {
   *x = be32toh(*x);
@@ -139,8 +137,9 @@ class Qcow2Image : public DiskImage {
   bool l1_table_dirty_ = false;
   bool refcount_table_dirty_ = false;
 
-  SimpleLRUCache<uint64_t, L2Table*> l2_cache_;
-  SimpleLRUCache<uint64_t, RefcountBlock*> rfb_cache_;
+  SimpleLRUCache<uint64_t, L2Table*>        l2_cache_;
+  SimpleLRUCache<uint64_t, RefcountBlock*>  rfb_cache_;
+  SimpleLRUCache<uint64_t, uint8_t*>        cluster_cache_;
 
   Qcow2Header image_header_;
   std::string backing_filepath_;
