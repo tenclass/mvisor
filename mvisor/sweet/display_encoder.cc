@@ -201,26 +201,30 @@ void SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
   auto& iov = partial->vector.front();
   auto src = (uint8_t*)iov.iov_base;
 
-  if (partial->bpp == 8) {
-    /* Convert from 8 bit to ARGB */
-    for (uint y = 0; y < partial->height; y++) {
-      uint8_t* from = src + partial->stride * y;
-      uint8_t* to = screen_bitmap_ + screen_stride_ * y;
-      for (uint x = 0; x < partial->width; x++) {
-        auto pallete = &partial->pallete[from[x] * 3];
-        to[0] = pallete[0] << 2;
-        to[1] = pallete[1] << 2;
-        to[2] = pallete[2] << 2;
-        to[3] = 0;
-        to += 4;
+  switch(partial->bpp) {
+    case 8:
+      /* Convert from 8 bit to ARGB */
+      for (uint y = 0; y < partial->height; y++) {
+        uint8_t* from = src + partial->stride * y;
+        uint8_t* to = screen_bitmap_ + screen_stride_ * y;
+        for (uint x = 0; x < partial->width; x++) {
+          auto pallete = &partial->pallete[from[x] * 3];
+          to[0] = pallete[0] << 2;
+          to[1] = pallete[1] << 2;
+          to[2] = pallete[2] << 2;
+          to[3] = 0;
+          to += 4;
+        }
       }
-    }
-  } else if (partial->bpp == 24) {
-    libyuv::RGB24ToARGB(src, partial->stride,
-      screen_bitmap_, screen_stride_,
-      partial->width, partial->height);
-  } else {
-    MV_PANIC("cannot convert bpp=%u", partial->bpp);
+      break;
+    case 16:
+      libyuv::RGB565ToARGB(src, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
+      break;
+    case 24:
+      libyuv::RGB24ToARGB(src, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
+      break;
+    default:
+      MV_PANIC("cannot convert bpp=%u", partial->bpp);
   }
 }
 

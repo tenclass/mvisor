@@ -72,7 +72,7 @@ void Viewer::CreateWindow() {
     screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 24, SDL_PIXELFORMAT_BGR24);
     break;
   case 16:
-    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 16, SDL_PIXELFORMAT_BGR565);
+    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 16, SDL_PIXELFORMAT_RGB565);
     break;
   case 8:
     screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 32, SDL_PIXELFORMAT_BGRA32);

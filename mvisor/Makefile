@@ -4,7 +4,7 @@ LIBS := stdc++ stdc++fs
 LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound x264 yuv opus jpeg
 MKDIR_P = mkdir -p
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 VERSION_FILE = "./include/version.h"
 
 # FIXME: Add -g only if debug mode is on
