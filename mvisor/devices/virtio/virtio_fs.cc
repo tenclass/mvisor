@@ -19,6 +19,9 @@
 
 #include <linux/virtio_fs.h>
 #include <sys/stat.h>
+#include <sys/xattr.h>
+
+#include <filesystem>
 
 #include "device_interface.h"
 #include "fuse.h"
@@ -52,6 +55,9 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   virtual void Disconnect() {
     Reset();
 
+    // free dir handle
+    ClearDirectoryPointerSet();
+
     // delete Fuse object
     if (fuse_) {
       delete fuse_;
@@ -65,6 +71,8 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     if (has_key("path")) {
       // init fuse
       mount_path_ = std::get<std::string>(key_values_["path"]);
+      MV_ASSERT(std::filesystem::exists(mount_path_));
+      MV_ASSERT(std::filesystem::is_directory(mount_path_));
 
       // set disk space
       auto disk_size_limit = (uint64_t)2 * 1024 * 1024 * 1024;
@@ -91,10 +99,10 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       bzero(&fs_config_, sizeof(fs_config_));
       fs_config_.num_request_queues = 1;
 
-      std::string name;
       if (has_key("disk_name")) {
-        name = std::get<std::string>(key_values_["disk_name"]);
-        strncpy((char*)fs_config_.tag, name.c_str(), sizeof(fs_config_.tag) - 1);
+        std::string name = std::get<std::string>(key_values_["disk_name"]);
+        MV_ASSERT(name.length() < sizeof(fs_config_.tag));
+        strcpy((char*)fs_config_.tag, name.c_str());
       } 
 
       // connect
@@ -117,16 +125,9 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     /* Reset all queues */
     VirtioPci::Reset();
 
-    for (uint32_t i = 0; i < fs_config_.num_request_queues; ++i) {
+    for (uint32_t i = 0; i < 1 + fs_config_.num_request_queues; ++i) {
       AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioFs::OnOutput, this, i));
     }
-
-    // free dir handle
-    for (auto dirp_pointer : dirp_pointer_set_) {
-      closedir(((lo_dirp*)dirp_pointer)->dp);
-      free((void*)dirp_pointer);
-    }
-    dirp_pointer_set_.clear();
   }
 
   void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
@@ -147,26 +148,32 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     NotifyQueue(vq);
   }
 
+  void ClearDirectoryPointerSet() {
+    for (auto dirp_pointer : dirp_pointer_set_) {
+      closedir(((Directory*)dirp_pointer)->dp);
+      delete (Directory*)dirp_pointer;
+    }
+    dirp_pointer_set_.clear();
+  }
+
   void FuseInit(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    auto out = (fuse_init_out*)OFFSET(response);
-    vector.pop_front();
+    fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_init_in));
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_init_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_init_out)).address;
 
     // set out params
     out->major = FUSE_KERNEL_VERSION;
     out->minor = FUSE_KERNEL_MINOR_VERSION;
-    out->flags |= FUSE_BIG_WRITES | FUSE_DO_READDIRPLUS;
+    out->flags = FUSE_BIG_WRITES | FUSE_DO_READDIRPLUS;
     out->max_readahead = UINT32_MAX;
     out->max_write = UINT32_MAX;
     fuse_->MakeResponse(response, sizeof(fuse_init_out), 0, request->unique);
     element->length = response->len;
   }
 
-  void FuseStatfs(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+  void FuseStatFs(VirtElement* element, fuse_in_header* request) {
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_statfs_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_statfs_out)).address;
 
     int fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(fd != -1);
@@ -177,40 +184,38 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     // modify disk information to vm
     fuse_->ModifyDiskInformationToVm(&new_stat_vfs);
 
-    auto out = (fuse_statfs_out*)OFFSET(response);
-    fuse_->ConvertStatfs(&new_stat_vfs, &out->st);
+    fuse_->CopyStatFs(&new_stat_vfs, &out->st);
     fuse_->MakeResponse(response, sizeof(fuse_statfs_out), 0, request->unique);
     element->length = response->len;
   }
 
   void FuseLookup(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
-    auto name = (const char*)OFFSET(request);
+    auto name = (const char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_entry_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_entry_out)).address;
+
     struct fuse_entry_param entry_param = {0};
-    if (!fuse_->LowLevelLookup(request->nodeid, name, &entry_param)) {
+    if (!fuse_->Lookup(request->nodeid, name, &entry_param)) {
       fuse_->MakeResponse(response, 0, -errno, request->unique);
       element->length = response->len;
       return;
     } 
 
-    auto out = (fuse_entry_out*)OFFSET(response);
     out->nodeid = entry_param.ino;
     out->generation = entry_param.generation;
     out->entry_valid = fuse_->CalcTimeoutSecond(entry_param.entry_timeout);
     out->entry_valid_nsec = fuse_->CalcTimeoutNsecond(entry_param.entry_timeout);
     out->attr_valid = fuse_->CalcTimeoutSecond(entry_param.attr_timeout);
     out->attr_valid_nsec = fuse_->CalcTimeoutNsecond(entry_param.attr_timeout);
-    fuse_->ConvertStat(&entry_param.attr, &out->attr);
+    fuse_->ConvertStatToFuseAttr(&entry_param.attr, &out->attr);
     fuse_->MakeResponse(response, sizeof(fuse_entry_out), 0, request->unique);
     element->length = response->len;
   }
 
   void FuseOpen(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_open_in));
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_open_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_open_out)).address;
 
     int fd = fuse_->GetFdFromInode(request->nodeid);
     if (fd == -1) {
@@ -219,57 +224,41 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       return;
     }
 
-    // add reference count
-    ((lo_inode*)request->nodeid)->refcount++;
-
-    fuse_open_out* out = (fuse_open_out*)OFFSET(response);
     out->fh = fd;
     fuse_->MakeResponse(response, sizeof(fuse_open_out), 0, request->unique);
     element->length = response->len;
   }
 
   void FuseReadLink(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    auto iov_len = vector.back().iov_len;
-    vector.pop_front();
-    auto out = (char*)OFFSET(response);
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out_len = request->len - sizeof(fuse_in_header);
+    auto out = (char*)fuse_->GetDataBufferFromIovec(element->vector, out_len).address;
 
     int fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(fd != -1);
 
-    auto ret = readlinkat(fd, "", out, iov_len);
-    MV_ASSERT(ret != -1 && ret <= (ssize_t)iov_len);
+    auto ret = readlinkat(fd, "", out, out_len);
+    MV_ASSERT(ret != -1);
     fuse_->MakeResponse(response, ret, 0, request->unique);
     element->length = response->len;
   }
 
   void FuseRelease(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
-
-    auto in = (fuse_release_in*)OFFSET(request);
-    if(!fuse_->FilePathSafeCheck(in->fh)) {
-      return;
-    }
-
+    auto in = (fuse_release_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_release_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
     auto inode = fuse_->GetInodeFromFd(in->fh);
-    if (inode != nullptr) {
-      fuse_->LowLevelForget(inode, 1);
-    }
-    fuse_->MakeResponse(response, 0, 0, request->unique);
+    fuse_->MakeResponse(response, 0, inode != nullptr ? 0 : -2, request->unique);
     element->length = response->len;
   }
 
   void FuseOpenDir(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_open_in));
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_open_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_open_out)).address;
 
     int fd = fuse_->GetFdFromInode(request->nodeid);
     if (fd == -1) {
-      fuse_->MakeResponse(response, 0, -errno, request->unique);
+      fuse_->MakeResponse(response, 0, -2, request->unique);
       element->length = response->len;
       return;
     }
@@ -282,35 +271,28 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       return;
     }
 
-    auto dirp = (struct lo_dirp*)malloc(sizeof(struct lo_dirp));
-    MV_ASSERT(dirp != nullptr);
-    dirp->dp = fdopendir(fd_copy);
-    MV_ASSERT(dirp->dp != nullptr);
-    dirp->offset = 0;
-    dirp->entry = nullptr;
-
-    // add reference count
-    ((lo_inode*)request->nodeid)->refcount++;
+    // we need to remember directory pointer to release in FuseReleaseDir
+    auto dirp = new Directory{ 
+      .dp = fdopendir(fd_copy),
+      .entry = nullptr,
+      .offset = 0
+    };
+    MV_ASSERT(dirp != nullptr && dirp->dp != nullptr);
     dirp_pointer_set_.insert((uint64_t)dirp);
 
-    auto out = (fuse_open_out*)OFFSET(response);
     out->fh = (uint64_t)dirp;
     fuse_->MakeResponse(response, sizeof(fuse_open_out), 0, request->unique);
     element->length = response->len;
   }
 
   void FuseReleaseDir(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    auto in = (fuse_release_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_release_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
 
-    auto in = (fuse_release_in*)OFFSET(request);
     if (dirp_pointer_set_.erase(in->fh)) {
-      auto dirp = (lo_dirp*)in->fh;
-      MV_ASSERT(dirp != nullptr);
+      auto dirp = (Directory*)in->fh;
       closedir(dirp->dp);
-      free(dirp);
-      fuse_->LowLevelForget((lo_inode*)request->nodeid, 1);
+      delete dirp;
     }
 
     fuse_->MakeResponse(response, 0, 0, request->unique);
@@ -318,27 +300,21 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   }
 
   void FuseReadDir(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto in = (fuse_read_in*)OFFSET(request);
-    auto response = (fuse_out_header*)vector.front().iov_base;
+    auto in = (fuse_read_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_read_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
     std::string result_buf(in->size, '\0');
-    uint32_t remain_size = 0;
-    if (!fuse_->LowLevelReadDir(request, (char*)result_buf.data(), &remain_size, request->opcode == FUSE_READDIRPLUS)) {
-      fuse_->MakeResponse(response, 0, -errno, request->unique);
-      element->length = response->len;
-      return;
-    }
+
+    // get result buf length
+    uint32_t result_buf_len = 0;
 
     // set result_buf_pointer to the head of result_buf
     auto result_buf_pointer = result_buf.data();
 
-    // get result buf length
-    auto res_len = in->size - remain_size;
-
-    // put result_buf into return vector
-    auto tmp_buf_len = vector.front().iov_len - sizeof(fuse_out_header);
-    auto tmp_out_buf = OFFSET(response);
-    vector.pop_front();
+    if (!fuse_->ReadDirectory(in, request->nodeid, result_buf_pointer, &result_buf_len, request->opcode == FUSE_READDIRPLUS)) {
+      fuse_->MakeResponse(response, 0, -errno, request->unique);
+      element->length = response->len;
+      return;
+    }
 
     // init out header base size
     bzero(response, sizeof(fuse_out_header));
@@ -346,89 +322,80 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     response->len = sizeof(fuse_out_header);
 
     // loop
-    while (res_len > 0) {
-      if (res_len > tmp_buf_len) {
-        memcpy(tmp_out_buf, result_buf_pointer, tmp_buf_len);
-        res_len -= tmp_buf_len;
-        response->len += tmp_buf_len;
-        result_buf_pointer += tmp_buf_len;
+    while (result_buf_len > 0) {
+      auto buffer = fuse_->GetDataBufferFromIovec(element->vector, 0);
+      if (result_buf_len > buffer.size) {
+        memcpy(buffer.address, result_buf_pointer, buffer.size);
+        result_buf_len -= buffer.size;
+        response->len += buffer.size;
+        result_buf_pointer += buffer.size;
       } else {
-        memcpy(tmp_out_buf, result_buf_pointer, res_len);
-        response->len += res_len;
+        memcpy(buffer.address, result_buf_pointer, result_buf_len);
+        response->len += result_buf_len;
         break;
       }
-
-      // impossible to be empty here
-      MV_ASSERT(!vector.empty());
-
-      tmp_out_buf = (char*)vector.front().iov_base;
-      tmp_buf_len = vector.front().iov_len;
-      vector.pop_front();
     }
 
     element->length = response->len;
   }
 
   void FuseUnlink(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    fuse_out_header* response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    auto name = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+
     auto parent_fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(parent_fd != -1);
 
     // get file information
     struct stat stat = {0};
-    auto name = (char*)OFFSET(request);
     MV_ASSERT(fstatat(parent_fd, name, &stat, 0) != -1);
 
-    // release disk space
-    fuse_->ReleaseDiskSpace(stat.st_size);
-
     // release inode
-    auto inode = fuse_->LowLevelFind(&stat);
-    MV_ASSERT(inode != nullptr);
-    fuse_->LowLevelForget(inode, 1);
+    auto ret = -1;
+    auto inode = fuse_->GetInodeFromStat(&stat);
+    if(inode) {
+      ret = unlinkat(parent_fd, name, 0);
+    }
 
-    // unlink
-    auto ret = unlinkat(parent_fd, name, 0);
-    fuse_->MakeResponse(response, 0, (ret == -1 ? -errno : 0), request->unique);
+    // update disk info
+    if (!ret) {
+      fuse_->ReleaseDiskSpace(stat.st_size);
+    }
+    fuse_->MakeResponse(response, 0, (ret == 0 ? 0 : -errno), request->unique);
     element->length = response->len;
   }
 
+  /*
+  * The inode's lookup count increases by one for every call to lookup. 
+  * The nlookup parameter indicates by how much the lookup count should be decreased.
+  */
   void FuseForget(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    fuse_out_header* response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
-
-    MV_ASSERT(fuse_->GetFdFromInode(request->nodeid) != -1);
-    auto* in = (fuse_forget_in*)OFFSET(request);
-    fuse_->LowLevelForget((lo_inode*)request->nodeid, in->nlookup);
-    fuse_->MakeResponse(response, 0, 0, request->unique);
-    element->length = response->len;
+    auto in = (fuse_forget_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_forget_in)).address;
+    auto inode = fuse_->GetInode(request->nodeid);
+    if(inode) {
+      fuse_->UnrefInode(inode, in->nlookup);
+      if (debug_) {
+        MV_LOG("call forget fd=%d refcount=%d nlookup=%d", inode->fd, inode->refcount, in->nlookup);
+      }
+    } else {
+      MV_ERROR("can't find inode nodeid=%d", request->nodeid);
+    }
   }
 
   void FuseFlush(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
-
-    auto in = (fuse_flush_in*)OFFSET(request);
-    auto inode = fuse_->GetInodeFromFd(in->fh);
-    MV_ASSERT(inode != nullptr);
-
-    auto ret = close(dup(inode->fd));
-    fuse_->MakeResponse(response, 0, ret == -1 ? -errno : 0, request->unique);
+    auto in = (fuse_flush_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_flush_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    MV_ASSERT(fuse_->GetInodeFromFd(in->fh) != nullptr);
+    fuse_->MakeResponse(response, 0, close(dup(in->fh)) == -1 ? -errno : 0, request->unique);
     element->length = response->len;
   }
 
   void FuseWrite(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.back().iov_base;
-    vector.pop_back();
+    auto in = (fuse_write_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_write_in)).address;
 
-    auto in = (fuse_write_in*)vector.front().iov_base;
-  
+    // check disk space
     if (!fuse_->IsDiskSpaceLeftEnough(in->size)) {
+      auto response = (fuse_out_header*)element->vector.back().iov_base;
       fuse_->MakeResponse(response, 0, -28, request->unique);
       element->length = response->len;
       return;
@@ -437,29 +404,30 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     // check the fd from vm is valid
     auto inode = fuse_->GetInodeFromFd(in->fh);
     if (inode == nullptr) {
+      auto response = (fuse_out_header*)element->vector.back().iov_base;
       fuse_->MakeResponse(response, 0, -2, request->unique);
       element->length = response->len;
       return;
     }
-    // skip fuse_write_in
-    vector.front().iov_len -= sizeof(fuse_write_in);
-    vector.front().iov_base = (uint8_t*)vector.front().iov_base + sizeof(fuse_write_in);
-
-    size_t remain = in->size;
+    
+    auto remain = in->size;
     off_t offset = in->offset;
-    while (remain > 0 && !vector.empty()) {
-      auto& iov = vector.front();
-      size_t count = remain < iov.iov_len ? remain : iov.iov_len;
-      int ret = pwrite(in->fh, iov.iov_base, count, offset);
-      if (ret != (int)count) {
-        MV_PANIC("failed to write count=%lu ret=%d", count, ret);
+    while (remain > 0) {
+      auto write_in_data_buffer = fuse_->GetDataBufferFromIovec(element->vector, 0);
+      auto write_size = MIN(remain, write_in_data_buffer.size);
+
+      auto ret = pwrite(in->fh, write_in_data_buffer.address, write_size, offset);
+      if (ret != (ssize_t )write_size) {
+        MV_PANIC("failed to write count=%lu ret=%d", write_size, ret);
       }
+
       remain -= ret;
       offset += ret;
-      vector.pop_front();
     }
+    
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_write_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_write_out)).address;
 
-    auto out = (fuse_write_out*)OFFSET(response);
     bzero(out, sizeof(fuse_write_out));
     out->size = in->size - remain;
     fuse_->CostDiskSpace(out->size);
@@ -468,45 +436,38 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   }
 
   void FuseRead(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-
-    auto in = (fuse_read_in*)vector.front().iov_base;
-    MV_ASSERT(vector.front().iov_len == sizeof(fuse_read_in));
-    vector.pop_front();
-
-    auto response = (fuse_out_header*)vector.front().iov_base;
+    auto in = (fuse_read_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_read_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
     fuse_->MakeResponse(response, 0, 0, request->unique);
-    element->length = response->len;
 
-    // skip fuse_out_header
-    vector.front().iov_len -= sizeof(fuse_out_header);
-    vector.front().iov_base = (uint8_t*)vector.front().iov_base + sizeof(fuse_out_header);
-  
-    size_t remain = in->size;
+    auto remain = in->size;
     off_t offset = in->offset;
-    while (remain > 0 && !vector.empty()) {
-      auto& iov = vector.front();
-      size_t count = remain < iov.iov_len ? remain : iov.iov_len;
-      int ret = pread(in->fh, iov.iov_base, count, offset);
+    while (remain > 0) {
+      auto read_in_data_buffer = fuse_->GetDataBufferFromIovec(element->vector, 0);
+      auto read_size = MIN(remain, read_in_data_buffer.size);
+
+      auto ret = pread(in->fh, read_in_data_buffer.address, read_size, offset);
       if (ret < 0) {
         response->error = -errno;
-        MV_LOG("failed to read count=%lu ret=%d", count, ret);
+        MV_ERROR("failed to read count=%lu error=%d", read_size, -errno);
         break;
-      } else if (ret == 0) {
-        // read finish
-        break;
+      } else {
+        remain -= ret;
+        offset += ret;
+        if (ret < (ssize_t)read_size) {
+          // read finish
+          break;
+        }
       }
-      remain -= ret;
-      offset += ret;
-      vector.pop_front();
     }
 
     response->len += in->size - remain;
     element->length = response->len;
   }
 
-  void FuseSetAttribute(fuse_in_header* request) {
-    auto in = (fuse_setattr_in*)OFFSET(request);
+  void FuseSetAttribute(VirtElement* element, fuse_in_header* request) {
+    auto in = (fuse_setattr_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_setattr_in)).address;
+
     struct stat stat = {0};
     stat.st_mode = in->mode;
     stat.st_uid = in->uid;
@@ -556,8 +517,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       MV_ASSERT(ret != -1);
     }
     if (in->valid & (FUSE_SET_ATTR_ATIME | FUSE_SET_ATTR_MTIME)) {
-      struct timespec tv[2];
-
+      struct timespec tv[2] = {0};
       tv[0].tv_sec = 0;
       tv[1].tv_sec = 0;
       tv[0].tv_nsec = UTIME_OMIT;
@@ -584,9 +544,11 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   }
 
   void FuseGetAttribute(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    if(request->opcode == FUSE_GETATTR) {
+      fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_getattr_in));
+    }
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_attr_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_attr_out)).address;
 
     int fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(fd != -1);
@@ -594,30 +556,28 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     struct stat stat = {0};
     MV_ASSERT(fstatat(fd, "", &stat, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != -1);
 
-    auto lo_data = fuse_->lo_data();
-    auto out = (struct fuse_attr_out*)((uint8_t*)response + sizeof(fuse_out_header));
-    out->attr_valid = fuse_->CalcTimeoutSecond(lo_data->timeout);
-    out->attr_valid_nsec = fuse_->CalcTimeoutNsecond(lo_data->timeout);
-    fuse_->ConvertStat(&stat, &out->attr);
+    auto user_config = fuse_->user_config();
+    out->attr_valid = fuse_->CalcTimeoutSecond(user_config.timeout);
+    out->attr_valid_nsec = fuse_->CalcTimeoutNsecond(user_config.timeout);
+    fuse_->ConvertStatToFuseAttr(&stat, &out->attr);
     fuse_->MakeResponse(response, sizeof(fuse_attr_out), 0, request->unique);
     element->length = response->len;
   }
 
   void FuseFallocate(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
-
-    auto in = (fuse_fallocate_in*)OFFSET(request);
-    int ret = fallocate(in->fh, FALLOC_FL_KEEP_SIZE, in->offset, in->length);
+    auto in = (fuse_fallocate_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_fallocate_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto ret = fallocate(in->fh, FALLOC_FL_KEEP_SIZE, in->offset, in->length);
     fuse_->MakeResponse(response, 0, ret == -1 ? -errno : 0, request->unique);
     element->length = response->len;
   }
 
   void FuseCreate(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.back().iov_base;
-    vector.pop_back();
+    auto in = (fuse_create_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_create_in)).address;
+    auto name = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header) - sizeof(fuse_create_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto entry_out_arg = (fuse_entry_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_entry_out)).address;
+    auto open_out_arg = (fuse_open_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_open_out)).address;
 
     if (fuse_->IsInodeListFull()) {
       fuse_->MakeResponse(response, 0, -24, request->unique);
@@ -627,9 +587,6 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
 
     auto parent_fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(parent_fd != -1);
-
-    auto in = (fuse_create_in*)OFFSET(request);
-    auto name = OFFSET(in);
 
     // create new empty file
     int fd = openat(parent_fd, name, (in->flags | O_CREAT) & ~O_NOFOLLOW, in->mode);
@@ -644,46 +601,98 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
 
     // create new inode
     struct fuse_entry_param entry_param = {0};
-    if (!fuse_->LowLevelLookup(request->nodeid, name, &entry_param)) {
+    if (!fuse_->Lookup(request->nodeid, name, &entry_param)) {
       fuse_->MakeResponse(response, 0, -errno, request->unique);
       element->length = response->len;
       return;
     }
 
-    auto entry_out_arg = (struct fuse_entry_out*)OFFSET(response);
     entry_out_arg->nodeid = (uintptr_t)entry_param.ino;
     entry_out_arg->generation = entry_param.generation;
     entry_out_arg->entry_valid = fuse_->CalcTimeoutSecond(entry_param.entry_timeout);
     entry_out_arg->entry_valid_nsec = fuse_->CalcTimeoutNsecond(entry_param.entry_timeout);
     entry_out_arg->attr_valid = fuse_->CalcTimeoutSecond(entry_param.attr_timeout);
     entry_out_arg->attr_valid_nsec = fuse_->CalcTimeoutNsecond(entry_param.attr_timeout);
-    fuse_->ConvertStat(&entry_param.attr, &entry_out_arg->attr);
+    fuse_->ConvertStatToFuseAttr(&entry_param.attr, &entry_out_arg->attr);
 
-    auto open_out_arg = (struct fuse_open_out*)OFFSET(entry_out_arg);
-    open_out_arg->fh = ((lo_inode*)entry_param.ino)->fd;
+    auto out_fd = fuse_->GetFdFromInode(entry_param.ino);
+    MV_ASSERT(out_fd != -1);
+    open_out_arg->fh = out_fd;
 
     fuse_->MakeResponse(response, sizeof(fuse_entry_out) + sizeof(fuse_open_out), 0, request->unique);
     element->length = response->len;
   }
 
   void FuseRemoveDir(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    auto name = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
 
-    auto ret = -1;
     auto parent_fd = fuse_->GetFdFromInode(request->nodeid);
-    if (parent_fd != -1) {
-      auto name = (const char*)OFFSET(request);
+    MV_ASSERT(parent_fd != -1);
 
-      struct stat stat = {0};
-      MV_ASSERT(fstatat(parent_fd, name, &stat, 0) != -1);
+    struct stat stat = {0};
+    MV_ASSERT(fstatat(parent_fd, name, &stat, 0) != -1);
 
-      auto inode = fuse_->LowLevelFind(&stat);
-      MV_ASSERT(inode != nullptr);
-      fuse_->LowLevelForget(inode, 1);
+    auto ret = unlinkat(parent_fd, name, AT_REMOVEDIR);
+    fuse_->MakeResponse(response, 0, ret == -1 ? -errno : 0, request->unique);
+    element->length = response->len;
+  }
 
-      ret = unlinkat(parent_fd, name, AT_REMOVEDIR);
+  void FuseGetXAttr(VirtElement* element, fuse_in_header* request) {
+    auto in = (fuse_getxattr_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_getxattr_in)).address;
+    auto name = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header) - sizeof(fuse_getxattr_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_getxattr_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_getxattr_out)).address;
+
+    char procname[64] = {0};
+    auto fd = fuse_->GetFdFromInode(request->nodeid);
+    MV_ASSERT(fd != -1);
+    sprintf(procname, "/proc/self/fd/%i", fd);
+
+    ssize_t ret = 0;
+    if (in->size) {
+      auto out_buf = fuse_->GetDataBufferFromIovec(element->vector, 0);
+      ret = getxattr(procname, name, out_buf.address, out_buf.size);
+    } else {
+      ret = getxattr(procname, name, nullptr, 0);
+    }
+    
+    if(ret == -1) {
+      fuse_->MakeResponse(response, 0, -errno, request->unique);
+    } else {
+      out->size = ret;
+      out->padding = 0;
+      fuse_->MakeResponse(response, ret, 0, request->unique);
+    }
+    element->length = response->len;
+  } 
+
+  void FuseSetXAttr(VirtElement* element, fuse_in_header* request) {
+    auto in = (fuse_setxattr_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_setxattr_in)).address;
+    auto name_value = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header) - sizeof(fuse_setxattr_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+
+	  char procname[64] = {0};
+    auto fd = fuse_->GetFdFromInode(request->nodeid);
+    MV_ASSERT(fd != -1);
+    sprintf(procname, "/proc/self/fd/%i", fd);
+
+    auto name = name_value;
+    auto value = name_value + strlen(name) + 1;
+	  auto ret = setxattr(procname, name, value, in->size, in->flags);
+    fuse_->MakeResponse(response, 0, ret == -1 ? -errno : 0, request->unique);
+    element->length = response->len;
+  }
+  
+  void FuseFSync(VirtElement* element, fuse_in_header* request) {
+    auto in = (fuse_fsync_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_fsync_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+
+    int ret = -1;
+    if(in->fsync_flags & 1) {
+      ret = fdatasync(in->fh);
+    } else {
+      ret = fsync(in->fh);
     }
 
     fuse_->MakeResponse(response, 0, ret == -1 ? -errno : 0, request->unique);
@@ -691,10 +700,10 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   }
 
   void FuseRename2(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto in = (fuse_rename2_in*)OFFSET(request);
-    auto old_name = (char*)((uint8_t*)in + sizeof(fuse_rename2_in));
+    auto in = (fuse_rename2_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_rename2_in)).address;
+    auto old_name = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header) - sizeof(fuse_rename2_in)).address;
     auto new_name = old_name + strlen(old_name) + 1;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
 
     auto old_fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(old_fd != -1);
@@ -702,16 +711,28 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     MV_ASSERT(new_fd != -1);
 
     auto ret = renameat(old_fd, old_name, new_fd, new_name);
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
     fuse_->MakeResponse(response, 0, ret == -1 ? -errno : 0, request->unique);
     element->length = response->len;
   }
 
+  void FuseDestroy(VirtElement* element, fuse_in_header* request) {
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+
+    // free dir handle
+    ClearDirectoryPointerSet();
+
+    // free inode list
+    fuse_->ClearInodeList(false);
+
+    fuse_->MakeResponse(response, 0, 0, request->unique);
+    element->length = response->len;
+  }
+
   void FuseMakeDir(VirtElement* element, fuse_in_header* request) {
-    auto& vector = element->vector;
-    auto response = (fuse_out_header*)vector.front().iov_base;
-    vector.pop_front();
+    auto in = (fuse_mkdir_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_mkdir_in)).address;
+    auto name = (char*)fuse_->GetDataBufferFromIovec(element->vector, request->len - sizeof(fuse_in_header) - sizeof(fuse_mkdir_in)).address;
+    auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
+    auto out = (fuse_entry_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_entry_out)).address;
 
     if (fuse_->IsInodeListFull()) {
       fuse_->MakeResponse(response, 0, -24, request->unique);
@@ -723,16 +744,13 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     auto parent_fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(parent_fd != -1);
 
-    auto in = (fuse_mkdir_in*)OFFSET(request);
-    auto name = (char*)((uint8_t*)in + sizeof(fuse_mkdir_in));
-    auto ret = fuse_->MakeNodeWrapper(parent_fd, name, NULL, S_IFDIR | in->mode, 0);
-    if (ret != 0 || !fuse_->LowLevelLookup(request->nodeid, name, &entry_param)) {
+    auto ret = mkdirat(parent_fd, name, S_IFDIR | in->mode);
+    if (ret != 0 || !fuse_->Lookup(request->nodeid, name, &entry_param)) {
       fuse_->MakeResponse(response, 0, -errno, request->unique);
       element->length = response->len;
       return;
     }
 
-    auto out = (struct fuse_entry_out*)OFFSET(response);
     bzero(out, sizeof(fuse_entry_out));
     out->nodeid = entry_param.ino;
     out->generation = entry_param.generation;
@@ -740,24 +758,13 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     out->entry_valid_nsec = fuse_->CalcTimeoutNsecond(entry_param.entry_timeout);
     out->attr_valid = fuse_->CalcTimeoutSecond(entry_param.attr_timeout);
     out->attr_valid_nsec = fuse_->CalcTimeoutNsecond(entry_param.attr_timeout);
-    fuse_->ConvertStat(&entry_param.attr, &out->attr);
+    fuse_->ConvertStatToFuseAttr(&entry_param.attr, &out->attr);
     fuse_->MakeResponse(response, sizeof(fuse_entry_out), 0, request->unique);
     element->length = response->len;
   }
 
   void HandleCommand(VirtElement* element) {
-    // get request from guest
-    auto& vector = element->vector;
-    auto& front = vector.front();
-
-    // remove request from vector
-    auto request = (fuse_in_header*)front.iov_base;
-    if (request->opcode == FUSE_WRITE || request->opcode == FUSE_READ) {
-      front.iov_len -= sizeof(fuse_in_header);
-      front.iov_base = (uint8_t*)front.iov_base + sizeof(fuse_in_header);
-    } else {
-      vector.pop_front();
-    }
+    auto request = (fuse_in_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_in_header)).address;
 
     if (debug_) {
       MV_LOG(
@@ -772,7 +779,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
         FuseInit(element, request);
         break;
       case FUSE_STATFS:
-        FuseStatfs(element, request);
+        FuseStatFs(element, request);
         break;
       case FUSE_LOOKUP:
         FuseLookup(element, request);
@@ -814,7 +821,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
         FuseWrite(element, request);
         break;
       case FUSE_SETATTR:
-        FuseSetAttribute(request);
+        FuseSetAttribute(element, request);
         NotifyVirtioFs();
         /* [[fallthrough]] */
       case FUSE_GETATTR:
@@ -831,6 +838,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
         FuseRemoveDir(element, request);
         NotifyVirtioFs();
         break;
+      case FUSE_RENAME:
       case FUSE_RENAME2:
         FuseRename2(element, request);
         NotifyVirtioFs();
@@ -839,9 +847,21 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
         FuseMakeDir(element, request);
         NotifyVirtioFs();
         break;
+      case FUSE_GETXATTR:
+        FuseGetXAttr(element, request);
+        break;
+      case FUSE_SETXATTR:
+        FuseSetXAttr(element, request);
+        break;
+      case FUSE_FSYNC:
+        FuseFSync(element, request);
+        break;
+      case FUSE_DESTROY:
+        FuseDestroy(element, request);
+        break;
       default:
-        MV_LOG("no implement opcode=%d", request->opcode);
-        auto response = (fuse_out_header*)vector.front().iov_base;
+        MV_ERROR("no implement opcode=%d", request->opcode);
+        auto response = (fuse_out_header*)element->vector.front().iov_base;
         fuse_->MakeResponse(response, 0, -EACCES, request->unique);
         element->length = response->len;
         break;

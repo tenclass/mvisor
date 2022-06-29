@@ -5,6 +5,6 @@ build/
 *.iso
 *.qcow2
 tmp/
-.vscode/
+.vscode/*
 config/default.yaml
 .clang-format

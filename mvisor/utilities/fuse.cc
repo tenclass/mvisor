@@ -1,6 +1,6 @@
 /*
  * MVisor
- * fuse.c is based on libfuse3
+ * fuse.cc is based on libfuse3
  * Copyright (C) 2022 cair <rui.cai@tenclass.com>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,60 +21,60 @@
 
 Fuse::Fuse(std::string& mount_path, uint64_t disk_size_limit, uint64_t inode_count_limit) {
   // start fuse init process
-  lo_data_ = (struct lo_data*)malloc(sizeof(struct lo_data));
-  bzero(lo_data_, sizeof(struct lo_data));
-  lo_data_->timeout = 1.0;
+  user_config_.timeout = 1.0;
 
   // set mount path from config
-  mount_path += '\0';
-  lo_data_->source = (const char*)malloc(mount_path.length());
-  memcpy((void*)lo_data_->source, mount_path.c_str(), mount_path.length());
+  user_config_.source = new char[mount_path.length() + 1];
+  strcpy(user_config_.source, mount_path.c_str());
 
   // check mount path must be director
   struct stat stat = {0};
-  MV_ASSERT(lstat(lo_data_->source, &stat) != -1);
+  MV_ASSERT(lstat(user_config_.source, &stat) != -1);
   MV_ASSERT(S_ISDIR(stat.st_mode));
 
-  // open root dir
-  lo_data_->root = (struct lo_inode*)malloc(sizeof(struct lo_inode));
-  bzero(lo_data_->root, sizeof(struct lo_inode));
+  // new root dir
+  user_config_.root = new Inode{ 0 };
+  MV_ASSERT(user_config_.root != nullptr);
 
   // in case vm start from snapshot
-  lo_data_->root->refcount = 2;
-  lo_data_->root->ino = stat.st_ino;
-  lo_data_->root->dev = stat.st_dev;
-  lo_data_->root->fd = open(lo_data_->source, O_PATH);
-  MV_ASSERT(lo_data_->root->fd != -1);
-  inode_list_.push_front(lo_data_->root);
+  user_config_.root->refcount = 2;
+  user_config_.root->ino = stat.st_ino;
+  user_config_.root->dev = stat.st_dev;
+  user_config_.root->fd = open(user_config_.source, O_PATH);
+  MV_ASSERT(user_config_.root->fd != -1);
+  inode_list_.push_front(user_config_.root);
 
   // init disk size
-  disk_size_ = disk_size_limit;
-  disk_size_limit_ = disk_size_limit;
-  inode_count_limit_ = inode_count_limit;
+  disk_info_.size_limit = disk_size_limit;
+  disk_info_.inode_limit = inode_count_limit;
+  UpdateDiskInfo();
+  MV_ASSERT(disk_info_.size_limit >= disk_info_.size_used && disk_info_.inode_limit >= disk_info_.inode_count);
 }
 
 Fuse::~Fuse() {
-  for (auto inode : inode_list_) {
-    close(inode->fd);
-    free(inode);
+  if (user_config_.source) {
+    delete[] user_config_.source;
   }
+  
+  ClearInodeList(true);
+}
 
-  if (lo_data_->source) {
-    free((void*)lo_data_->source);
-    lo_data_->source = nullptr;
-  }
-
-  if (lo_data_) {
-    free(lo_data_);
-    lo_data_ = nullptr;
+void Fuse::UpdateDiskInfo() {
+  disk_info_.size_used = 0;
+  disk_info_.inode_count = 0;
+  for (auto& entry : std::filesystem::recursive_directory_iterator(user_config_.source)) {
+    if (entry.is_regular_file()) {
+      disk_info_.size_used += entry.file_size();
+    }
+    disk_info_.inode_count++;
   }
 }
 
-struct lo_inode* Fuse::GetLowLevelInode(fuse_ino_t inode) {
+struct Inode* Fuse::GetInode(fuse_ino_t inode) {
   if (inode == FUSE_ROOT_ID) {
-    return lo_data_->root;
+    return user_config_.root;
   }
-  auto iter = std::find(inode_list_.begin(), inode_list_.end(), (struct lo_inode*)(uintptr_t)inode);
+  auto iter = std::find(inode_list_.begin(), inode_list_.end(), (struct Inode*)(uintptr_t)inode);
   if (iter != inode_list_.end()) {
     return *iter;
   } else {
@@ -83,21 +83,27 @@ struct lo_inode* Fuse::GetLowLevelInode(fuse_ino_t inode) {
 }
 
 int Fuse::GetFdFromInode(fuse_ino_t ino) {
-  lo_inode* inode = GetLowLevelInode(ino);
+  Inode* inode = GetInode(ino);
   if (inode == nullptr) {
     return -1;
   }
   return inode->fd;
 }
 
-lo_inode* Fuse::GetInodeFromFd(int fd) {
-  struct stat stat = {0};
-  MV_ASSERT(fstatat(fd, "", &stat, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != -1);
-  return LowLevelFind(&stat);
+Inode* Fuse::GetInodeFromFd(int fd) {
+  auto inode = std::find_if(inode_list_.begin(), inode_list_.end(), [=](struct Inode* inode) -> bool {
+    return inode->fd == fd;
+  });
+
+  if (inode == inode_list_.end()) {
+    return nullptr;
+  } else {
+    return *inode;
+  }
 }
 
-struct lo_inode* Fuse::LowLevelFind(struct stat* stat) {
-  auto inode = std::find_if(inode_list_.begin(), inode_list_.end(), [=](lo_inode* inode) -> bool {
+struct Inode* Fuse::GetInodeFromStat(struct stat* stat) {
+  auto inode = std::find_if(inode_list_.begin(), inode_list_.end(), [=](struct Inode* inode) -> bool {
     return inode->dev == stat->st_dev && inode->ino == stat->st_ino;
   });
 
@@ -109,10 +115,33 @@ struct lo_inode* Fuse::LowLevelFind(struct stat* stat) {
 }
 
 void Fuse::ModifyDiskInformationToVm(struct statvfs* new_stat_vfs) {
-  new_stat_vfs->f_files = inode_count_limit_;
-  new_stat_vfs->f_blocks = disk_size_limit_ / BLOCK_SIZE;
-  new_stat_vfs->f_bfree = new_stat_vfs->f_bavail = disk_size_ / BLOCK_SIZE;
-  new_stat_vfs->f_ffree = new_stat_vfs->f_favail = inode_list_.size();
+  // we need to update disk info in case that the host files in mount path was updated
+  UpdateDiskInfo();
+
+  // the host can write in the mount path shared with vm
+  if (disk_info_.size_used > disk_info_.size_limit) {
+    disk_info_.size_limit = disk_info_.size_used;
+  }
+  if (disk_info_.inode_count > disk_info_.inode_limit) {
+    disk_info_.inode_limit = disk_info_.inode_count;
+  }
+
+  new_stat_vfs->f_files = disk_info_.inode_limit;
+  new_stat_vfs->f_blocks = disk_info_.size_limit / BLOCK_SIZE;
+  new_stat_vfs->f_bfree = new_stat_vfs->f_bavail = (disk_info_.size_limit - disk_info_.size_used) / BLOCK_SIZE;
+  new_stat_vfs->f_ffree = new_stat_vfs->f_favail = disk_info_.inode_limit - inode_list_.size();
+}
+
+void Fuse::ClearInodeList(bool is_clear_root) {
+  for (auto it = inode_list_.begin(); it != inode_list_.end();) {
+    if(!is_clear_root && (*it)->fd == user_config_.root->fd) {
+      it++;
+    } else {
+      close((*it)->fd);
+      delete *it;
+      it = inode_list_.erase(it);
+    }
+  }
 }
 
 bool Fuse::FilePathSafeCheck(int fd) {
@@ -121,14 +150,14 @@ bool Fuse::FilePathSafeCheck(int fd) {
   auto fd_path = "/proc/self/fd/" + std::to_string(fd);
   auto len = readlink(fd_path.c_str(), file_path, PATH_MAX);
   if (len == -1) {
-    MV_LOG("readlink failed fd=%d", fd);
+    MV_ERROR("readlink failed fd=%d errno=%d", fd, -errno);
     return false;
   }
 
-  std::string mount_path = lo_data_->source;
+  std::string mount_path = user_config_.source;
   auto compare_len = mount_path.size();
   if (len < (ssize_t)compare_len) {
-    MV_LOG("file path too short len=%d", len);
+    MV_ERROR("file path too short len=%d", len);
     return false;
   }
 
@@ -142,49 +171,54 @@ bool Fuse::FilePathSafeCheck(int fd) {
   return true;
 }
 
-lo_inode* Fuse::CreateInodeFromFd(int fd, struct stat* stat, int refcount) {
+Inode* Fuse::CreateInodeFromFd(int fd, struct stat* stat, int refcount) {
   if (!FilePathSafeCheck(fd)) {
     return nullptr;
   }
 
-  lo_inode* inode = (struct lo_inode*)malloc(sizeof(struct lo_inode));
+  Inode* inode = new Inode{
+    .fd = fd,
+    .refcount = refcount,
+    .ino = stat->st_ino,
+    .dev = stat->st_dev
+  };
   MV_ASSERT(inode != nullptr);
-
-  inode->fd = fd;
-  inode->refcount = refcount;
-  inode->ino = stat->st_ino;
-  inode->dev = stat->st_dev;
   inode_list_.push_front(inode);
   return inode;
 }
 
-bool Fuse::LowLevelLookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param) {
-  entry_param->attr_timeout = lo_data_->timeout;
-  entry_param->entry_timeout = lo_data_->timeout;
+bool Fuse::Lookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param) {
+  entry_param->attr_timeout = user_config_.timeout;
+  entry_param->entry_timeout = user_config_.timeout;
 
   auto parent_fd = GetFdFromInode(parent);
+  MV_ASSERT(parent_fd != -1);
+  
   auto ret = fstatat(parent_fd, name, &entry_param->attr, 0);
   if (ret != 0) {
     return false;
   }
 
-  lo_inode* inode = LowLevelFind(&entry_param->attr);
+  Inode* inode = GetInodeFromStat(&entry_param->attr);
   if (!inode) {
-    auto open_flags = S_ISDIR(entry_param->attr.st_mode) ? O_PATH | O_NOFOLLOW : O_RDWR;
+    auto open_flags = S_ISREG(entry_param->attr.st_mode) ? O_RDWR : O_PATH | O_NOFOLLOW;
     int new_fd = openat(parent_fd, name, open_flags);
     if (new_fd == -1) {
+      MV_ERROR("lookup openat err name=%s open_flags=%d", name, open_flags);
       return false;
     }
 
     inode = CreateInodeFromFd(new_fd, &entry_param->attr, 1);
     MV_ASSERT(inode != nullptr);
+  } else {
+    inode->refcount++;
   }
-
+  
   entry_param->ino = (uintptr_t)inode;
   return true;
 }
 
-void Fuse::ConvertStat(const struct stat* stbuf, struct fuse_attr* attr) {
+void Fuse::ConvertStatToFuseAttr(const struct stat* stbuf, struct fuse_attr* attr) {
   attr->ino = stbuf->st_ino;
   attr->mode = stbuf->st_mode;
   attr->nlink = stbuf->st_nlink;
@@ -202,7 +236,7 @@ void Fuse::ConvertStat(const struct stat* stbuf, struct fuse_attr* attr) {
   attr->ctimensec = 0;
 }
 
-void Fuse::ConvertStatfs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs) {
+void Fuse::CopyStatFs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs) {
   kstatfs->bsize = stbuf->f_bsize;
   kstatfs->frsize = stbuf->f_frsize;
   kstatfs->blocks = stbuf->f_blocks;
@@ -213,82 +247,52 @@ void Fuse::ConvertStatfs(const struct statvfs* stbuf, struct fuse_kstatfs* kstat
   kstatfs->namelen = stbuf->f_namemax;
 }
 
-int Fuse::MakeNodeWrapper(int dirfd, const char* path, const char* link, int mode, dev_t rdev) {
-  int res;
-
-  if (S_ISREG(mode)) {
-    res = openat(dirfd, path, O_CREAT | O_EXCL | O_WRONLY, mode);
-    if (res >= 0) res = close(res);
-  } else if (S_ISDIR(mode)) {
-    res = mkdirat(dirfd, path, mode);
-  } else if (S_ISLNK(mode) && link != NULL) {
-    res = symlinkat(link, dirfd, path);
-  } else if (S_ISFIFO(mode)) {
-    res = mkfifoat(dirfd, path, mode);
-  } else {
-    res = mknodat(dirfd, path, mode, rdev);
-  }
-
-  return res;
-}
-
-void Fuse::UnrefInode(struct lo_inode* inode, uint64_t refcount) {
+void Fuse::UnrefInode(struct Inode* inode, uint64_t refcount) {
   inode->refcount -= refcount;
-  if (!inode->refcount) {
+  MV_ASSERT(inode->refcount >= 0);
+
+  if (inode->refcount == 0) {
     close(inode->fd);
-    free(inode);
     inode_list_.remove(inode);
-    inode = nullptr;
+    delete inode;
   }
 }
 
-void Fuse::LowLevelForget(lo_inode* inode, uint64_t refcount) {
-  if (refcount == 0) {
-    UnrefInode(inode, inode->refcount);
-  } else {
-    UnrefInode(inode, refcount);
-  }
-}
-
-void Fuse::FuseFillEntry(struct fuse_entry_out* arg, const struct fuse_entry_param* entry_param) {
-  arg->nodeid = entry_param->ino;
-  arg->generation = entry_param->generation;
-  arg->entry_valid = CalcTimeoutSecond(entry_param->entry_timeout);
-  arg->entry_valid_nsec = CalcTimeoutNsecond(entry_param->entry_timeout);
-  arg->attr_valid = CalcTimeoutSecond(entry_param->attr_timeout);
-  arg->attr_valid_nsec = CalcTimeoutNsecond(entry_param->attr_timeout);
-  ConvertStat(&entry_param->attr, &arg->attr);
-}
-
-size_t Fuse::FuseAddDirentryPlus(char* buf, size_t buf_size, const char* name,
+size_t Fuse::AddDirentryPlus(char* buf, size_t buf_size, const char* name,
                                  const struct fuse_entry_param* entry_param, off_t off) {
   size_t name_length = strlen(name);
   size_t entry_length = FUSE_NAME_OFFSET_DIRENTPLUS + name_length;
   size_t entry_length_padded = FUSE_DIRENT_ALIGN(entry_length);
-  if ((buf == nullptr) || (entry_length_padded > buf_size)) {
-    return entry_length_padded;
+  if (entry_length_padded > buf_size) {
+    return 0;
   }
 
   struct fuse_direntplus* dp = (struct fuse_direntplus*)buf;
-  memset(&dp->entry_out, 0, sizeof(dp->entry_out));
-  FuseFillEntry(&dp->entry_out, entry_param);
+  bzero(&dp->entry_out, sizeof(dp->entry_out));
+  
+  dp->entry_out.nodeid = entry_param->ino;
+  dp->entry_out.generation = entry_param->generation;
+  dp->entry_out.entry_valid = CalcTimeoutSecond(entry_param->entry_timeout);
+  dp->entry_out.entry_valid_nsec = CalcTimeoutNsecond(entry_param->entry_timeout);
+  dp->entry_out.attr_valid = CalcTimeoutSecond(entry_param->attr_timeout);
+  dp->entry_out.attr_valid_nsec = CalcTimeoutNsecond(entry_param->attr_timeout);
+  ConvertStatToFuseAttr(&entry_param->attr, &dp->entry_out.attr);
 
-  struct fuse_dirent* dirent = &dp->dirent;
-  dirent->ino = entry_param->attr.st_ino;
-  dirent->off = off;
-  dirent->namelen = name_length;
-  dirent->type = (entry_param->attr.st_mode & S_IFMT) >> 12;
-  memcpy(dirent->name, name, name_length);
-  memset(dirent->name + name_length, 0, entry_length_padded - entry_length);
+  dp->dirent.ino = entry_param->attr.st_ino;
+  dp->dirent.off = off;
+  dp->dirent.namelen = name_length;
+  dp->dirent.type = (entry_param->attr.st_mode & S_IFMT) >> 12;
+  memcpy(dp->dirent.name, name, name_length);
+  bzero(dp->dirent.name + name_length, entry_length_padded - entry_length);
   return entry_length_padded;
 }
 
-size_t Fuse::FuseAddDirentry(char* buf, size_t buf_size, const char* name, const struct stat* stat, off_t off) {
+size_t Fuse::AddDirentry(char* buf, size_t buf_size, const char* name, const struct stat* stat, off_t off) {
   size_t name_length = strlen(name);
   size_t entry_length = FUSE_NAME_OFFSET + name_length;
   size_t enttry_length_padded = FUSE_DIRENT_ALIGN(entry_length);
-  if ((buf == nullptr) || (enttry_length_padded > buf_size)) {
-    return enttry_length_padded;
+  if (enttry_length_padded > buf_size) {
+    return 0;
   }
 
   struct fuse_dirent* dirent;
@@ -298,29 +302,22 @@ size_t Fuse::FuseAddDirentry(char* buf, size_t buf_size, const char* name, const
   dirent->namelen = name_length;
   dirent->type = (stat->st_mode & S_IFMT) >> 12;
   memcpy(dirent->name, name, name_length);
-  memset(dirent->name + name_length, 0, enttry_length_padded - entry_length);
+  bzero(dirent->name + name_length, enttry_length_padded - entry_length);
   return enttry_length_padded;
 }
 
-bool Fuse::LowLevelReadDir(fuse_in_header* request, char* result_buf, uint32_t* remain_size, bool is_plus) {
-  auto in = (fuse_read_in*)OFFSET(request);
-  *remain_size = in->size;
-
-  auto dirp = (lo_dirp*)in->fh;
-  if (in->offset != (uint64_t)dirp->offset) {
-    seekdir(dirp->dp, in->offset);
+bool Fuse::ReadDirectory(fuse_read_in* read_in, uint64_t nodeid, char* result_buf, uint32_t* result_buf_len, bool is_plus) {
+  auto dirp = (Directory*)read_in->fh;
+  if (read_in->offset != (uint64_t)dirp->offset) {
+    seekdir(dirp->dp, read_in->offset);
     dirp->entry = nullptr;
-    dirp->offset = in->offset;
   }
 
   // get result in loop
   bool lookup_err = false;
+  auto remain_buf_len = read_in->size;
   auto result_buf_pointer = result_buf;
   while (true) {
-    uint64_t entry_size;
-    off_t next_off;
-    const char* name;
-
     if (!dirp->entry) {
       dirp->entry = readdir(dirp->dp);
       if (!dirp->entry) {
@@ -328,201 +325,66 @@ bool Fuse::LowLevelReadDir(fuse_in_header* request, char* result_buf, uint32_t* 
       }
     }
 
-    next_off = dirp->entry->d_off;
-    name = dirp->entry->d_name;
     fuse_ino_t entry_ino = 0;
-
-    if (is_plus) {
-      struct fuse_entry_param entry_param = {0};
-      if (IsDotOrDotdot(name)) {
-        entry_param.attr.st_ino = dirp->entry->d_ino;
-        entry_param.attr.st_mode = dirp->entry->d_type << 12;
-      } else {
-        if (!LowLevelLookup(request->nodeid, name, &entry_param)) {
+    struct fuse_entry_param entry_param = {0};
+    auto name = dirp->entry->d_name;
+    auto next_off = dirp->entry->d_off;
+    if (!is_plus || IsDotOrDotdot(name)) {
+      entry_param.attr.st_ino = dirp->entry->d_ino;
+      entry_param.attr.st_mode = dirp->entry->d_type << 12;
+    } else {
+      if (!Lookup(nodeid, name, &entry_param)) {
           lookup_err = true;
           break;
-        }
-        entry_ino = entry_param.ino;
       }
-      entry_size = FuseAddDirentryPlus(result_buf_pointer, *remain_size, name, &entry_param, next_off);
-    } else {
-      struct stat stat = {0};
-      stat.st_ino = dirp->entry->d_ino;
-      stat.st_mode = (mode_t)dirp->entry->d_type << 12;
-      entry_size = FuseAddDirentry(result_buf_pointer, *remain_size, name, &stat, next_off);
+      entry_ino = entry_param.ino;
     }
 
-    if (entry_size > *remain_size) {
-      if (entry_ino != 0) {
-        LowLevelForget((lo_inode*)entry_ino, 1);
+    size_t entry_size;
+    if (is_plus) {
+      entry_size = AddDirentryPlus(result_buf_pointer, remain_buf_len, name, &entry_param, next_off);
+    } else {
+      entry_size = AddDirentry(result_buf_pointer, remain_buf_len, name, &entry_param.attr, next_off);
+    }
+
+    if (!entry_size) {
+      if (entry_ino) {
+        UnrefInode((Inode*)entry_ino, 1);
       }
+      MV_ERROR("FuseAddDirentry/FuseAddDirentryPlus error name=%s is_plus=%d errno=%d", name, is_plus, -errno);
+      lookup_err = true;
       break;
     }
 
+    MV_ASSERT(remain_buf_len > entry_size);
+    remain_buf_len -= entry_size;
     result_buf_pointer += entry_size;
-    *remain_size -= entry_size;
     dirp->entry = nullptr;
-    dirp->offset = next_off;
   }
 
+  *result_buf_len = read_in->size - remain_buf_len;
   return !lookup_err;
 }
 
-size_t Fuse::FuseBufSize(const struct fuse_bufvec* buf_vec) {
-  size_t index;
-  size_t size = 0;
+DataBuffer Fuse::GetDataBufferFromIovec(std::deque<struct iovec>& iovec, size_t size) {
+  // get request from guest
+  MV_ASSERT(!iovec.empty());
 
-  for (index = 0; index < buf_vec->count; index++) {
-    if (buf_vec->buf[index].size == SIZE_MAX) {
-      size = SIZE_MAX;
-      break;
-    } else if (SIZE_MAX - buf_vec->buf[index].size < size) {
-      size = SIZE_MAX;
-      break;
-    } else {
-      size += buf_vec->buf[index].size;
-    }
-  }
-  return size;
-}
+  auto& front = iovec.front();
+  MV_ASSERT(front.iov_len >= size);
 
-ssize_t Fuse::FuseBufWrite(const struct fuse_buf* dst_buf, size_t dst_offset, const struct fuse_buf* src_buf,
-                           size_t src_offset, size_t length) {
-  ssize_t res = 0;
-  size_t copied = 0;
+  DataBuffer buffer = {
+    .address = front.iov_base,
+    .size = size == 0 ? front.iov_len : size
+  };
 
-  while (length) {
-    if (dst_buf->flags & FUSE_BUF_FD_SEEK) {
-      res = pwrite(dst_buf->fd, (char*)src_buf->mem + src_offset, length, dst_buf->pos + dst_offset);
-    } else {
-      res = write(dst_buf->fd, (char*)src_buf->mem + src_offset, length);
-    }
-    if (res == -1) {
-      if (!copied) {
-        return -errno;
-      }
-      break;
-    }
-
-    if (res == 0) {
-      break;
-    }
-    copied += res;
-    if (!(dst_buf->flags & FUSE_BUF_FD_RETRY)) {
-      break;
-    }
-    src_offset += res;
-    dst_offset += res;
-    length -= res;
+  if(buffer.size == front.iov_len) {
+    // run out of this iov
+    iovec.pop_front();
+  } else {
+    front.iov_len -= buffer.size;
+    front.iov_base = (uint8_t*)front.iov_base + buffer.size;
   }
 
-  return copied;
-}
-
-ssize_t Fuse::FuseBufRead(const struct fuse_buf* dst_buf, size_t dst_offset, const struct fuse_buf* src_buf,
-                          size_t src_offset, size_t length) {
-  ssize_t res = 0;
-  size_t copied = 0;
-
-  while (length) {
-    if (src_buf->flags & FUSE_BUF_FD_SEEK) {
-      res = pread(src_buf->fd, (char*)dst_buf->mem + dst_offset, length, src_buf->pos + src_offset);
-    } else {
-      res = read(src_buf->fd, (char*)dst_buf->mem + dst_offset, length);
-    }
-    if (res == -1) {
-      if (!copied) {
-        return -errno;
-      }
-      break;
-    }
-
-    if (res == 0) {
-      break;
-    }
-    copied += res;
-    if (!(src_buf->flags & FUSE_BUF_FD_RETRY)) {
-      break;
-    }
-    dst_offset += res;
-    src_offset += res;
-    length -= res;
-  }
-
-  return copied;
-}
-
-ssize_t Fuse::FuseBufCopyOne(const struct fuse_buf* dst, size_t dst_offset, const struct fuse_buf* src,
-                             size_t src_offset, size_t length, enum fuse_buf_copy_flags flags) {
-  if (src->flags & FUSE_BUF_IS_FD) {
-    return FuseBufRead(dst, dst_offset, src, src_offset, length);
-  }
-
-  if (dst->flags & FUSE_BUF_IS_FD) {
-    return FuseBufWrite(dst, dst_offset, src, src_offset, length);
-  }
-
-  MV_PANIC("not implement this kind of copy operation");
-  return 0;
-}
-
-bool Fuse::FuseBufvecAdvance(struct fuse_bufvec* buf_vec, size_t length) {
-  const struct fuse_buf* buf = FuseBufvecCurrent(buf_vec);
-  if (!buf) {
-    return false;
-  }
-
-  buf_vec->off += length;
-  MV_ASSERT(buf_vec->off <= buf->size);
-  if (buf_vec->off == buf->size) {
-    MV_ASSERT(buf_vec->idx < buf_vec->count);
-    buf_vec->idx++;
-    if (buf_vec->idx == buf_vec->count) {
-      return false;
-    }
-    buf_vec->off = 0;
-  }
-  return true;
-}
-
-ssize_t Fuse::FuseBufCopy(struct fuse_bufvec* dst_buf_vec, struct fuse_bufvec* src_buf_vec,
-                          enum fuse_buf_copy_flags flags) {
-  if (dst_buf_vec == src_buf_vec) {
-    return FuseBufSize(dst_buf_vec);
-  }
-
-  ssize_t res = -1;
-  size_t copied = 0;
-  size_t src_buf_length = 0;
-  size_t dst_buf_length = 0;
-  size_t length = 0;
-  for (;;) {
-    const struct fuse_buf* src_buf = FuseBufvecCurrent(src_buf_vec);
-    const struct fuse_buf* dst_buf = FuseBufvecCurrent(dst_buf_vec);
-    if (src_buf == nullptr || dst_buf == nullptr) {
-      break;
-    }
-
-    src_buf_length = src_buf->size - src_buf_vec->off;
-    dst_buf_length = dst_buf->size - dst_buf_vec->off;
-    length = std::min(src_buf_length, dst_buf_length);
-    res = FuseBufCopyOne(dst_buf, dst_buf_vec->off, src_buf, src_buf_vec->off, length, flags);
-    if (res < 0) {
-      if (!copied) {
-        return res;
-      }
-      break;
-    }
-    copied += res;
-
-    if (!FuseBufvecAdvance(src_buf_vec, res) || !FuseBufvecAdvance(dst_buf_vec, res)) {
-      break;
-    }
-
-    if (res < (ssize_t)length) {
-      break;
-    }
-  }
-
-  return copied;
+  return buffer;
 }

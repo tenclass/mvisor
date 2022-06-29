@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <thread>
 
 #define FUSE_USE_VERSION 34
@@ -32,7 +33,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
-
+#include <deque>
 #include <algorithm>
 #include <climits>
 #include <list>
@@ -41,63 +42,54 @@
 #include "fuse/fuse_lowlevel.h"
 #include "logger.h"
 
+#define MAX_PATH 260
 #define BLOCK_SIZE 4096
-#define OFFSET(in_arg) (((char*)(in_arg)) + sizeof(*(in_arg)))
 
-struct lo_inode {
+struct Inode {
   int fd;
   int refcount;
   ino_t ino;
   dev_t dev;
 };
 
-struct lo_data {
+struct UserConfig {
+  char* source;
   double timeout;
-  const char* source;
-  struct lo_inode* root;
+  struct Inode* root;
 };
 
-struct lo_dirp {
+struct Directory {
   DIR* dp;
   struct dirent* entry;
   off_t offset;
 };
 
+struct DataBuffer {
+  void* address;
+  size_t   size;
+};
+
+struct DiskInfo {
+  uint64_t size_used;
+  uint64_t size_limit;
+  uint64_t inode_count;
+  uint64_t inode_limit;
+};
+
 class Fuse {
  private:
-  struct lo_data* lo_data_;
-  std::list<lo_inode*> inode_list_;
-  uint64_t disk_size_;
-  uint64_t disk_size_limit_;
-  uint64_t inode_count_limit_;
+  struct UserConfig user_config_;
+  std::list<Inode*> inode_list_;
+  DiskInfo disk_info_;
 
-  lo_inode* GetLowLevelInode(fuse_ino_t inode);
-  lo_inode* CreateInodeFromFd(int fd, struct stat* stat, int refcount);
+  bool FilePathSafeCheck(int fd);
 
-  void UnrefInode(struct lo_inode* inode, uint64_t refcount);
-  void FuseFillEntry(struct fuse_entry_out* arg, const struct fuse_entry_param* entry_param);
+  Inode* CreateInodeFromFd(int fd, struct stat* stat, int refcount);
 
-  bool FuseBufvecAdvance(struct fuse_bufvec* buf_vec, size_t length);
+  void UpdateDiskInfo();
 
-  size_t FuseBufSize(const struct fuse_bufvec* buf_vec);
-  size_t FuseAddDirentry(char* buf, size_t buf_size, const char* name, const struct stat* stbuf, off_t off);
-  size_t FuseAddDirentryPlus(char* buf, size_t buf_size, const char* name, const struct fuse_entry_param* entry_param,
-                             off_t off);
-
-  ssize_t FuseBufRead(const struct fuse_buf* dst_buf, size_t dst_offset, const struct fuse_buf* src_buf,
-                      size_t src_offset, size_t length);
-  ssize_t FuseBufWrite(const struct fuse_buf* dst_buf, size_t dst_offset, const struct fuse_buf* src_buf,
-                       size_t src_offset, size_t length);
-  ssize_t FuseBufCopyOne(const struct fuse_buf* dst, size_t dst_offset, const struct fuse_buf* src, size_t src_offset,
-                         size_t length, enum fuse_buf_copy_flags flags);
-
-  inline const struct fuse_buf* FuseBufvecCurrent(struct fuse_bufvec* buf_vec) {
-    if (buf_vec->idx < buf_vec->count) {
-      return &buf_vec->buf[buf_vec->idx];
-    } else {
-      return nullptr;
-    }
-  }
+  size_t AddDirentry(char* buf, size_t buf_size, const char* name, const struct stat* stbuf, off_t off);
+  size_t AddDirentryPlus(char* buf, size_t buf_size, const char* name, const struct fuse_entry_param* entry_param, off_t off);
 
   inline bool IsDotOrDotdot(const char* name) {
     return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
@@ -108,33 +100,38 @@ class Fuse {
   virtual ~Fuse();
 
   int GetFdFromInode(fuse_ino_t ino);
-  int MakeNodeWrapper(int dirfd, const char* path, const char* link, int mode, dev_t rdev);
 
-  void ConvertStat(const struct stat* stbuf, struct fuse_attr* attr);
-  void ConvertStatfs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs);
-  void LowLevelForget(lo_inode* inode, uint64_t refcount);
+  void ClearInodeList(bool is_clear_root);
+  void UnrefInode(struct Inode* inode, uint64_t refcount);
+  void CopyStatFs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs);
+  void ConvertStatToFuseAttr(const struct stat* stbuf, struct fuse_attr* attr);
   void ModifyDiskInformationToVm(struct statvfs* new_stat_vfs);
 
-  bool IsDiskSpaceLeftEnough(uint64_t size) { return disk_size_ > size; }
-  bool LowLevelLookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param);
-  bool LowLevelReadDir(fuse_in_header* in, char* result_buf, uint32_t* remain_size, bool is_plus);
-  bool FilePathSafeCheck(int fd);
+  bool Lookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param);
+  bool ReadDirectory(fuse_read_in* read_in, uint64_t nodeid, char* result_buf, uint32_t* result_buf_len, bool is_plus);
   
-  ssize_t FuseBufCopy(struct fuse_bufvec* dstv, struct fuse_bufvec* srcv, enum fuse_buf_copy_flags flags);
+  Inode* GetInode(fuse_ino_t inode);
+  Inode* GetInodeFromFd(int fd);
+  Inode* GetInodeFromStat(struct stat* stat);
 
-  lo_inode* GetInodeFromFd(int fd);
-  lo_inode* LowLevelFind(struct stat* stat);
+  DataBuffer GetDataBufferFromIovec(std::deque<struct iovec>& iovec, size_t size);
 
-  inline struct lo_data* lo_data() const { return lo_data_; }
+  inline struct UserConfig user_config() const { return user_config_; }
 
-  inline bool IsInodeListFull() { return inode_list_.size() > inode_count_limit_; }
+  inline bool IsDiskSpaceLeftEnough(uint64_t size) { return disk_info_.size_used + size <= disk_info_.size_limit; }
 
-  inline void CostDiskSpace(uint64_t size) {
-    MV_ASSERT(size < disk_size_);
-    disk_size_ -= size;
+  inline bool IsInodeListFull() { return inode_list_.size() > disk_info_.inode_limit; }
+
+  inline void CostDiskSpace(uint64_t size) { disk_info_.size_used += size; }
+
+  inline void ReleaseDiskSpace(uint64_t size) { 
+    if (disk_info_.size_used < size) {
+      // the host can write in the mount path shared with vm
+      UpdateDiskInfo();
+    } else {
+      disk_info_.size_used -= size;
+    }
   }
-
-  inline void ReleaseDiskSpace(uint64_t size) { disk_size_ += size; }
 
   inline unsigned long CalcTimeoutSecond(double t) {
     if (t > (double)ULONG_MAX) {
