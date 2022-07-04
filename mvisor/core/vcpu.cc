@@ -373,7 +373,7 @@ void Vcpu::SignalHandler(int signum) {
 }
 
 /* Vcpu thread only response to SIG_USER at the moment */
-void Vcpu::SetupSingalHandler() {
+void Vcpu::SetupSignalHandler() {
   sigset_t sigset;
   sigemptyset(&sigset);
   pthread_sigmask(SIG_BLOCK, &sigset, nullptr);
@@ -414,7 +414,7 @@ void Vcpu::Process() {
   sprintf(name_, "mvisor-vcpu-%d", vcpu_id_);
   SetThreadName(name_);
   
-  SetupSingalHandler();
+  SetupSignalHandler();
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 

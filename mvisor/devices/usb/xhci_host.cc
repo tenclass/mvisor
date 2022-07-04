@@ -1190,7 +1190,7 @@ class XhciHost : public PciDevice {
   }
 
   void FreeTransfer(XhciTransfer* transfer) {
-    if (transfer->packet) {
+    if (transfer->packet && transfer->device->configured()) {
       transfer->packet->Release();
     }
     transfer->packet = nullptr;

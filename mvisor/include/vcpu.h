@@ -77,7 +77,7 @@ class Vcpu {
  private:
   static void SignalHandler(int signum);
   void PrepareX86Vcpu();
-  void SetupSingalHandler();
+  void SetupSignalHandler();
   void SetupCpuid();
   void SetupHyperV(kvm_cpuid2* cpuid);
   void SetupMachineCheckException();

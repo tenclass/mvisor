@@ -43,6 +43,10 @@ void UsbDevice::Reset() {
 
   /* remove all endpoints */
   for (auto endpoint : endpoints_) {
+    while (!endpoint->tokens.empty()) {
+      auto packet = *endpoint->tokens.begin();
+      packet->Release();
+    }
     delete endpoint;
   }
   endpoints_.clear();
