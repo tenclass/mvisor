@@ -78,10 +78,11 @@ class SweetDisplayEncoder {
   std::condition_variable     encode_cv_;
   std::vector<EncodeSlice*>   encode_slices_;
 
-  x264_t*                     x264_;
+  x264_param_t                x264_param_;
+  x264_t*                     x264_ = nullptr;
   x264_picture_t              input_yuv_;
   x264_picture_t              output_yuv_;
-  x264_nal_t*                 output_nal_;
+  x264_nal_t*                 output_nal_ = nullptr;
   int                         output_nal_size_;
   int                         output_nal_sequence_;
 };
