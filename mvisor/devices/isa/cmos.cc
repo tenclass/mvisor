@@ -134,7 +134,15 @@ class Cmos : public Device {
   void UpdateFromHostTime() {
     time_t timestamp;
     time(&timestamp);
-    struct tm* tm = gmtime(&timestamp);
+
+    struct tm* tm = nullptr;
+    if (has_key("rtc") && !std::get<std::string>(key_values_["rtc"]).compare("gmtime")) {
+      tm = gmtime(&timestamp);
+    } else {
+      tm = localtime(&timestamp);
+    }
+    MV_ASSERT(tm != nullptr);
+
     cmos_data_[RTC_SECONDS] = bin2bcd(tm->tm_sec);
     cmos_data_[RTC_MINUTES] = bin2bcd(tm->tm_min);
     cmos_data_[RTC_HOURS] = bin2bcd(tm->tm_hour);

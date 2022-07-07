@@ -10,6 +10,10 @@ machine:
   hypervisor: Yes
 
 objects:
+  - class: cmos
+    # gmtime for linux, localtime for windows
+    rtc: gmtime
+    
   - class: qxl
   - class: spice-agent
   - class: qemu-guest-agent
