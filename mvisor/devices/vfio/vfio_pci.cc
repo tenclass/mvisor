@@ -117,20 +117,12 @@ void VfioPci::SetupPciConfiguration() {
     auto &bar = pci_header_.bars[i];
     if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
       AddPciBar(i, bar_region.size, kIoResourceTypePio);
-      pci_bars_[i].address = pci_header_.bars[i] & pci_bars_[i].address_mask;
-      if (pci_bars_[i].address && pci_header_.command & PCI_COMMAND_IO) {
-        ActivatePciBar(i);
-      }
     } else {
       /* 64bit bar is not supported yet */
       if (bar & PCI_BASE_ADDRESS_MEM_TYPE_64) {
         bar &= ~PCI_BASE_ADDRESS_MEM_TYPE_64;
       }
       AddPciBar(i, bar_region.size, kIoResourceTypeMmio);
-      pci_bars_[i].address = pci_header_.bars[i] & pci_bars_[i].address_mask;
-      if (pci_bars_[i].address && pci_header_.command & PCI_COMMAND_MEMORY) {
-        ActivatePciBar(i);
-      }
     }
   }
 
@@ -150,7 +142,7 @@ void VfioPci::SetupPciConfiguration() {
         if (msi_config_.is_64bit) {
           msi_config_.msi64 = (MsiCapability64*)cap;
           msi_config_.length = sizeof(MsiCapability64);
-          msi_config_.enabled = msi_config_.msi64->control & PCI_MSIX_FLAGS_ENABLE;
+          msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
         } else {
           msi_config_.msi32 = (MsiCapability32*)cap;
           msi_config_.length = sizeof(MsiCapability32);
@@ -464,12 +456,11 @@ bool VfioPci::ActivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-    MV_ASSERT(!bar.active);
+    MV_ASSERT(!bar.active && bar.type == kIoResourceTypeMmio);
     MapBarRegion(index);
     bar.active = true;
     return true;
   }
-
   return PciDevice::ActivatePciBar(index);
 }
 
@@ -477,14 +468,13 @@ bool VfioPci::DeactivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-    MV_ASSERT(bar.active);
+    MV_ASSERT(bar.active && bar.type == kIoResourceTypeMmio);
     UnmapBarRegion(index);
     bar.active = false;
     return true;
   }
   return PciDevice::DeactivatePciBar(index);
 }
-
 
 ssize_t VfioPci::ReadRegion(uint8_t index, uint64_t offset, void* data, uint32_t length) {
   MV_ASSERT(index < MAX_VFIO_REGIONS);
@@ -557,6 +547,17 @@ void VfioPci::UpdateMsiRoutes() {
     if (msi_config_.enabled) {
       if (interrupt.gsi == -1) {
         interrupt.gsi = manager_->AddMsiRoute(msi_address, msi_data, interrupt.event_fd);
+
+        // set irq with KVM_IRQFD
+        uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int)];
+        auto irq_set = (vfio_irq_set*)buffer;
+        irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
+        irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+        irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
+        irq_set->start = vector;
+        irq_set->count = 1;
+        memcpy(irq_set->data, &interrupt.event_fd, sizeof(int));
+        MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set) == 0);
       } else {
         manager_->UpdateMsiRoute(interrupt.gsi, msi_address, msi_data, interrupt.event_fd);
       }
@@ -566,25 +567,27 @@ void VfioPci::UpdateMsiRoutes() {
         interrupt.gsi = -1;
       }
     }
-  
-    uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int)];
-    auto irq_set = (vfio_irq_set*)buffer;
-    irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
-    irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
-    irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
-    irq_set->start = vector;
-    irq_set->count = 1;
-    int event_fd = msi_config_.enabled ? interrupt.event_fd : -1;
-    memcpy(irq_set->data, &event_fd, sizeof(int));
+  }
+}
 
-    auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);
-    if (debug_) {
-      MV_LOG("update MSI %d eventfd=%d ret=%d", vector, event_fd, ret);
-      if (ret < 0) {
-        MV_LOG("failed to set MSI %u event_fd=%d", vector, event_fd);
-      }
+void VfioPci::WritePciCommand(uint16_t new_command) {
+  int toggle_io = (pci_header_.command ^ new_command) & PCI_COMMAND_IO;
+  int toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
+
+  for (int i = 0; i < PCI_BAR_NUMS; i++) {
+    auto &bar = pci_bars_[i];
+    if (!bar.address || bar.active) {
+      continue;
+    }
+
+    // DeactivatePciBar only can be called in vfio-pci Disconnect routine
+    if (toggle_io && bar.type == kIoResourceTypePio && (new_command & PCI_COMMAND_IO)) {
+      ActivatePciBar(i);
+    } else if (toggle_mem && bar.type != kIoResourceTypePio && (new_command & PCI_COMMAND_MEMORY)) {
+      ActivatePciBar(i);
     }
   }
+  pci_header_.command = new_command;
 }
 
 void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {

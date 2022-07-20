@@ -398,8 +398,10 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
   }
 
   if (bar.active) {
-    if (!DeactivatePciBar(index))
+    if(!DeactivatePciBar(index)){
+      MV_PANIC("DeactivatePciBar would never fail");
       return;
+    }
   }
 
   bar.address = new_address;

@@ -27,7 +27,6 @@
 #include "machine.h"
 #include "logger.h"
 
-using namespace std;
 
 Configuration::Configuration(Machine* machine) : machine_(machine) {
   InitializePaths();
@@ -82,7 +81,7 @@ bool Configuration::LoadFile(std::string path) {
     char temp[1024] = { 0 };
     strcpy(temp, path.c_str());
     directories_.insert(dirname(temp));
-    Load(config["base"].as<string>());
+    Load(config["base"].as<std::string>());
   }
 
   if (config["machine"]) {
@@ -171,7 +170,7 @@ void Configuration::SetObjectKeyValue(Object* object, std::string key, const YAM
     return;
   } catch (const YAML::BadConversion& e) { }
   try {
-    auto string_value = value.as<string>();
+    auto string_value = value.as<std::string>();
     (*object)[key] = string_value;
     return;
   } catch (const YAML::BadConversion& e) { }
@@ -181,7 +180,7 @@ void Configuration::SetObjectKeyValue(Object* object, std::string key, const YAM
 /* Extract machine configs */
 void Configuration::LoadMachine(const YAML::Node& node) {
   if (node["memory"]) {
-    string memory = node["memory"].as<string>();
+    auto memory = node["memory"].as<std::string>();
     long value = atol(memory.substr(0, memory.length() - 1).c_str());
     if (memory.back() == 'G') {
       machine_->ram_size_ = (1UL << 30) * value;
@@ -195,7 +194,7 @@ void Configuration::LoadMachine(const YAML::Node& node) {
     machine_->num_vcpus_ = node["vcpu"].as<uint64_t>();
   }
   if (node["bios"]) {
-    bios_path_ = FindPath(node["bios"].as<string>());
+    bios_path_ = FindPath(node["bios"].as<std::string>());
   } else {
     bios_path_ = FindPath("../share/bios-256k.bin");
   }
@@ -213,10 +212,10 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
   /* Create objects */
   for (auto it = objects_node.begin(); it != objects_node.end(); it++) {
     auto node = *it;
-    string class_name = node["class"].as<string>();
-    string name;
+    auto class_name = node["class"].as<std::string>();
+    std::string name;
     if (node["name"]) {
-      name = node["name"].as<string>();
+      name = node["name"].as<std::string>();
     } else {
       name = GenerateObjectName(class_name);
     }
@@ -224,7 +223,7 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
 
     /* Load object properties */
     for (auto it2 = node.begin(); it2 != node.end(); it2++) {
-      string key = it2->first.as<string>();
+      auto key = it2->first.as<std::string>();
       auto value = it2->second;
       if (key == "name" || key == "class") {
         continue;
@@ -233,7 +232,7 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
         object->set_debug(value.as<bool>());
         continue;
       } else if (key == "parent") {
-        object->set_parent_name(value.as<string>().c_str());
+        object->set_parent_name(value.as<std::string>().c_str());
         continue;
       }
       SetObjectKeyValue(object, key, value);

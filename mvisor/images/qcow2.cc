@@ -159,6 +159,7 @@ ssize_t Qcow2Image::ReadFile(void* buffer, size_t length, off_t offset) {
 
 void Qcow2Image::InitializeL1Table() {
   l1_table_.resize(image_header_.l1_size);
+  bzero(l1_table_.data(), sizeof(uint64_t) * image_header_.l1_size);
   ReadFile(l1_table_.data(), sizeof(uint64_t) * image_header_.l1_size,
     image_header_.l1_table_offset
   );
@@ -167,6 +168,7 @@ void Qcow2Image::InitializeL1Table() {
 void Qcow2Image::InitializeRefcountTable() {
   size_t refcount_bytes = image_header_.refcount_table_clusters * cluster_size_;
   refcount_table_.resize(refcount_bytes  / sizeof(uint64_t));
+  bzero(refcount_table_.data(), refcount_bytes);
   ReadFile(refcount_table_.data(), refcount_bytes, image_header_.refcount_table_offset);
 }
 
@@ -216,6 +218,7 @@ void Qcow2Image::InitializeLruCache() {
 RefcountBlock* Qcow2Image::NewRefcountBlock(uint64_t block_offset) {
   size_t size = sizeof(RefcountBlock) + rfb_entries_ * sizeof(uint16_t);
   RefcountBlock* block = (RefcountBlock*)malloc(size);
+  bzero(block, size);
   block->dirty = false;
   block->offset_in_file = block_offset;
   return block;
@@ -239,7 +242,6 @@ RefcountBlock* Qcow2Image::GetRefcountBlock(uint64_t cluster_index, uint64_t* rf
     }
     block_offset = cluster_index << cluster_bits_;
     rfb = NewRefcountBlock(block_offset);
-    bzero(rfb->entries, rfb_entries_ * sizeof(uint16_t));
     rfb_cache_.Put(block_offset, rfb);
     rfb->entries[*rfb_index] = htobe16(1);
     rfb->dirty = true;
@@ -303,6 +305,7 @@ uint64_t Qcow2Image::AllocateCluster() {
 L2Table* Qcow2Image::NewL2Table(uint64_t l2_offset) {
   size_t size = sizeof(L2Table) + l2_entries_ * sizeof(uint64_t);
   L2Table* table = (L2Table*)malloc(size);
+  bzero(table, size);
   table->dirty = false;
   table->offset_in_file = l2_offset;
   return table;

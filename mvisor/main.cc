@@ -28,7 +28,6 @@
 #include "version.h"
 #include <filesystem>
 
-using namespace std;
 
 /* For vfio mdev, -uuid xxx is necessary */
 void IntializeArguments(int argc, char* argv[]) {

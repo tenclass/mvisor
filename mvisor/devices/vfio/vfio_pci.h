@@ -68,6 +68,7 @@ class VfioPci : public PciDevice {
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
+  virtual void WritePciCommand(uint16_t new_command);
 
   /* VFIO migration */
   virtual bool SaveState(MigrationWriter* writer);
