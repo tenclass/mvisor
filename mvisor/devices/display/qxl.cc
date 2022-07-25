@@ -960,7 +960,9 @@ class Qxl : public Vga, public DisplayResizeInterface {
       }
 
       QXLBitmap* bitmap = &image->bitmap;
-      MV_ASSERT(bitmap->format == SPICE_BITMAP_FMT_RGBA || bitmap->format == SPICE_BITMAP_FMT_32BIT);
+      MV_ASSERT(bitmap->format == SPICE_BITMAP_FMT_RGBA || bitmap->format == SPICE_BITMAP_FMT_8BIT
+        || bitmap->format == SPICE_BITMAP_FMT_16BIT || bitmap->format == SPICE_BITMAP_FMT_24BIT
+        || bitmap->format == SPICE_BITMAP_FMT_32BIT);
       MV_ASSERT(bitmap->palette == 0);
       MV_ASSERT(partial.width == bitmap->x && partial.height == bitmap->y);
       partial.bpp = primary_surface_.bits_pp;
