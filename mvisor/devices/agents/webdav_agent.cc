@@ -1,5 +1,5 @@
 /* 
- * MVisor Qemu Guest Agent
+ * MVisor WebDAV Agent
  * Copyright (C) 2022 Terrence <terrence@tenclass.com>
  * 
  * This program is free software: you can redistribute it and/or modify
@@ -22,25 +22,27 @@
 
 #include <string>
 
-#include "object.h"
+#include "device.h"
 #include "device_interface.h"
 #include "utilities.h"
 #include "logger.h"
 
-class QemuGuestAgent : public Object, public SerialPortInterface {
+class WebdavAgent : public Device, public SerialPortInterface {
+ private:
+  std::string buffer_;
+
  public:
-  QemuGuestAgent() {
+  WebdavAgent() {
     set_parent_name("virtio-console");
-    strcpy(port_name_, "org.qemu.guest_agent.0");
+    strcpy(port_name_, "org.spice-space.webdav.0");
   }
 
-  // virtual void set_ready(bool ready) {
-  //   SerialPortInterface::set_ready(ready);
-  //   if (ready) {
-  //     std::string cmd = "{\"execute\":\"guest-info\"}\n";
-  //     device_->SendMessage(this, (uint8_t*)cmd.data(), cmd.size());
-  //   }
-  // }
+  virtual void OnMessage(uint8_t* data, size_t size) {
+    if (debug_) {
+      MV_LOG("message");
+      DumpHex(data, size);
+    }
+  }
 };
 
-DECLARE_AGENT(QemuGuestAgent)
+DECLARE_DEVICE(WebdavAgent)

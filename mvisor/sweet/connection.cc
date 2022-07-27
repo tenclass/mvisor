@@ -449,7 +449,7 @@ void SweetConnection::OnMidiInput() {
     return;
   }
   auto midi = server_->midi();
-  if(!midi || !midi->is_start() || !midi->InputAcceptable()) {
+  if(!midi || !midi->InputAcceptable()) {
     return;
   }
 

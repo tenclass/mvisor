@@ -59,6 +59,7 @@ class IoThread {
   void Start();
   void Stop();
   void Kick();
+  bool IsCurrentThread();
 
   /* Async event polling */
   EpollEvent* StartPolling(int fd, uint poll_mask, IoCallback callback);

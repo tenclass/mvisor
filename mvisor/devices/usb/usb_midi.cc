@@ -247,7 +247,7 @@ class UsbMidi : public UsbHid, public MidiInputInterface {
   std::mutex mutex_;
   std::deque<MidiEvent> queue_;
   uint max_queue_size_ = 16;
-  bool is_start_ = false;
+  bool started_ = false;
 
  public:
   UsbMidi() { SetupDescriptor(&device_desc, &strings_desc); }
@@ -276,7 +276,7 @@ class UsbMidi : public UsbHid, public MidiInputInterface {
   virtual bool QueueMidiEvent(MidiEvent event) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    if (!is_start_) {
+    if (!started_) {
       return false;
     }
 
@@ -289,10 +289,9 @@ class UsbMidi : public UsbHid, public MidiInputInterface {
     return true;
   }
 
-  virtual bool InputAcceptable() { return configured(); }
-  virtual void Start() { is_start_ = true; }
-  virtual void Stop() { is_start_ = false; }
-  virtual bool is_start() { return is_start_; }
+  virtual bool InputAcceptable() { return started_ && configured(); }
+  virtual void Start() { started_ = true; }
+  virtual void Stop() { started_ = false; }
 };
 
 DECLARE_DEVICE(UsbMidi);

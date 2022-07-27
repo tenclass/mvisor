@@ -51,7 +51,6 @@ static void __attribute__ ((constructor)) __init__##cb(void) \
 #define DECLARE_DEVICE(classname)       __register_class(classname, 2)
 #define DECLARE_NETWORK(classname)      __register_class(classname, 3)
 #define DECLARE_DISK_IMAGE(classname)   __register_class(classname, 4)
-#define DECLARE_AGENT(classname)        __register_class(classname, 5)
 
 /* Close fd and set to -1 */
 static inline void safe_close(int *fd) {

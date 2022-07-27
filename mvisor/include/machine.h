@@ -24,6 +24,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <set>
 #include <mutex>
 #include <condition_variable>
 #include <map>
@@ -35,6 +36,9 @@
 #include "device_manager.h"
 #include "configuration.h"
 
+struct StateChangeListener {
+  VoidCallback callback;
+};
 
 class Machine {
  public:
@@ -56,7 +60,8 @@ class Machine {
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
   std::vector<Object*> LookupObjects(std::function<bool (Object*)> compare);
-  void RegisterStateChangeListener(VoidCallback callback);
+  const StateChangeListener* RegisterStateChangeListener(VoidCallback callback);
+  void UnregisterStateChangeListener(const StateChangeListener** plistener);
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
@@ -84,6 +89,7 @@ class Machine {
 
   bool valid_ = true;
   bool paused_ = true;
+  bool pausing_ = false;
   bool loading_ = false;
   bool saving_ = false;
   int kvm_fd_ = -1;
@@ -109,7 +115,7 @@ class Machine {
   std::condition_variable wait_to_resume_;
   std::condition_variable wait_to_pause_condition_;
   uint wait_count_ = 0;
-  std::vector<VoidCallback> state_change_listeners_;
+  std::set<const StateChangeListener*> state_change_listeners_;
 };
 
 #endif // MVISOR_MACHINE_H

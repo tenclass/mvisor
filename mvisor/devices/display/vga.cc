@@ -598,23 +598,23 @@ void Vga::UpdateDisplayMode() {
 }
 
 void Vga::NotifyDisplayModeChange() {
-  for (auto &listener : display_mode_change_listerners_) {
+  for (auto &listener : display_mode_change_listeners_) {
     listener();
   }
 }
 
 void Vga::NotifyDisplayUpdate() {
-  for (auto &listener : display_update_listerners_) {
+  for (auto &listener : display_update_listeners_) {
     listener();
   }
 }
 
 void Vga::RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) {
-  display_mode_change_listerners_.push_back(callback);
+  display_mode_change_listeners_.push_back(callback);
 }
 
 void Vga::RegisterDisplayUpdateListener(DisplayUpdateListener callback) {
-  display_update_listerners_.push_back(callback);
+  display_update_listeners_.push_back(callback);
 }
 
 bool Vga::AcquireUpdate(DisplayUpdate& update) {

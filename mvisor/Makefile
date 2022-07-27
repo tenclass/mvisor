@@ -4,7 +4,7 @@ LIBS := stdc++ stdc++fs
 LIBS += pthread SDL2 yaml-cpp uuid protobuf zstd z asound x264 yuv opus jpeg
 MKDIR_P = mkdir -p
 
-VERSION = "1.3.2"
+VERSION = "1.4.2"
 VERSION_FILE = "./include/version.h"
 
 # FIXME: Add -g only if debug mode is on
@@ -74,7 +74,7 @@ version:
 
 proto: $(MV_PROTOBUF_CC)
 
-$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/ui/keymap.o
+$(EXECUTABLE): $(MV_OBJECTS) $(BUILD_DIR)/sdl/keymap.o
 	$(CC) -o $@ $^ $(addprefix -l, $(LIBS))
 
 clean:
@@ -84,7 +84,7 @@ clean:
 $(MV_OBJECTS): $(BUILD_DIR)/%.o: %.cc
 	$(CC) $(CCFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/ui/keymap.o: $(BUILD_DIR)/ui/%.o: ui/%.c
+$(BUILD_DIR)/sdl/keymap.o: $(BUILD_DIR)/sdl/%.o: sdl/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(MV_PROTOBUF_CC): $(BUILD_DIR)/%.pb.cc: %.proto

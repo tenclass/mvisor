@@ -85,6 +85,10 @@ void IoThread::Kick() {
   }
 }
 
+bool IoThread::IsCurrentThread() {
+  return std::this_thread::get_id() == thread_.get_id();
+}
+
 void IoThread::RunLoop() {
   SetThreadName("mvisor-iothread");
   signal(SIGPIPE, SIG_IGN);
@@ -274,6 +278,8 @@ void IoThread::FlushDiskImages() {
 
 bool IoThread::CanPauseNow() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (machine_->pausing_)
+    return false;
 
   /* Drain all disk IO */
   for (auto image : disk_images_) {

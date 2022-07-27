@@ -166,7 +166,7 @@ void SweetDisplayEncoder::Stop() {
 }
 
 /* Copy bits from partial to screen buffer */
-void SweetDisplayEncoder::RenderPartial(DisplayPartialBitmap* partial) {
+bool SweetDisplayEncoder::RenderPartial(DisplayPartialBitmap* partial) {
   auto dst = (uint8_t*)screen_bitmap_;
   int dst_stride = screen_stride_;
   uint8_t* dst_end = dst + dst_stride * screen_height_;
@@ -197,12 +197,19 @@ void SweetDisplayEncoder::RenderPartial(DisplayPartialBitmap* partial) {
     }
     ++src_index;
   }
+  return true;
 }
 
 /* Supports 8 / 24 bit VGA mode */
-void SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
-  MV_ASSERT(partial->x == 0 && partial->y == 0 && partial->width == screen_width_ && partial->height == screen_height_);
+bool SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
   MV_ASSERT(partial->vector.size() == 1);
+
+  /* Only support converting the whole screen */
+  if (partial->x || partial->y || partial->width != screen_width_ || partial->height != screen_height_) {
+    MV_ERROR("failed to convert x=%u y=%u %ux%u to %ux%u", partial->x, partial->y,
+      partial->width, partial->height, screen_width_, screen_height_);
+    return false;
+  }
 
   auto& iov = partial->vector.front();
   auto src = (uint8_t*)iov.iov_base;
@@ -230,17 +237,21 @@ void SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
       libyuv::RGB24ToARGB(src, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
       break;
     default:
-      MV_PANIC("cannot convert bpp=%u", partial->bpp);
+      MV_ERROR("cannot convert bpp=%u", partial->bpp);
+      return false;
   }
+  return true;
 }
 
 void SweetDisplayEncoder::Render(std::vector<DisplayPartialBitmap>& partials) {
   std::lock_guard<std::mutex> lock(encode_mutex_);
   for (auto& partial : partials) {
     if (partial.bpp == 32) {
-      RenderPartial(&partial);
+      if (!RenderPartial(&partial))
+        continue;
     } else {
-      ConvertPartial(&partial);
+      if (!ConvertPartial(&partial))
+        continue;
     }
 
     if (started_) {

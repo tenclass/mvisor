@@ -24,19 +24,20 @@
 #include <chrono>
 #include <cstdlib>
 
-#include "object.h"
-#include "utilities.h"
-#include "logger.h"
+#include "device.h"
+#include "device_manager.h"
 #include "device_interface.h"
 #include "spice/vd_agent.h"
 #include "spice/enums.h"
+#include "utilities.h"
+#include "logger.h"
 
 using namespace std::chrono;
 
 /* Limit send mouse frequency */
 const auto kSendMouseInterval = milliseconds(20);
 
-class SpiceAgent : public Object, public SerialPortInterface,
+class SpiceAgent : public Device, public SerialPortInterface,
   public DisplayResizeInterface, public PointerInputInterface,
   public ClipboardInterface
 {
@@ -212,40 +213,46 @@ class SpiceAgent : public Object, public SerialPortInterface,
     return ready_;
   }
 
+  /* This interface function is called by UI thread */
   virtual bool QueuePointerEvent(PointerEvent event) {
     if (!ready_) {
       return false;
     }
-    if (event.z > 0) {
-      QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_UP), event.x, event.y);
-      QueueEvent(event.buttons, event.x, event.y);
-    } else if (event.z < 0) {
-      QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_DOWN), event.x, event.y);
-      QueueEvent(event.buttons, event.x, event.y);
-    } else {
-      QueueEvent(event.buttons, event.x, event.y);
-    }
+
+    manager_->io()->Schedule([this, event]() {
+      if (event.z > 0) {
+        QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_UP), event.x, event.y);
+        QueueEvent(event.buttons, event.x, event.y);
+      } else if (event.z < 0) {
+        QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_DOWN), event.x, event.y);
+        QueueEvent(event.buttons, event.x, event.y);
+      } else {
+        QueueEvent(event.buttons, event.x, event.y);
+      }
+    });
     return true;
   }
 
+  /* This interface function is called by UI thread */
   virtual bool Resize(uint32_t width, uint32_t height) {
     if (!ready_) {
       return false;
     }
-
     /* For H264, resolution must be multiple of 2 */
     if (width & 1)
       width++;
     if (height & 1)
       height++;
 
-    auto buffer = std::string(sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig), '\0');
-    auto config = (VDAgentMonitorsConfig*)buffer.data();
-    config->num_of_monitors = 1;
-    config->monitors[0].depth = 32;
-    config->monitors[0].width = width;
-    config->monitors[0].height = height;
-    SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, buffer.data(), buffer.size());
+    manager_->io()->Schedule([=]() {
+      auto buffer = std::string(sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig), '\0');
+      auto config = (VDAgentMonitorsConfig*)buffer.data();
+      config->num_of_monitors = 1;
+      config->monitors[0].depth = 32;
+      config->monitors[0].width = width;
+      config->monitors[0].height = height;
+      SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_MONITORS_CONFIG, buffer.data(), buffer.size());
+    });
     return true;
   }
 
@@ -273,6 +280,7 @@ class SpiceAgent : public Object, public SerialPortInterface,
     }
   }
 
+  /* This interface function is called by UI thread */
   virtual bool ClipboardDataToGuest(uint type, const std::string& data) {
     if (!ready_) {
       return false;
@@ -282,7 +290,9 @@ class SpiceAgent : public Object, public SerialPortInterface,
     clipboard->type = type;
     memcpy(clipboard->data, data.data(), data.size());
 
-    SendAgentClipboardGrab(type);
+    manager_->io()->Schedule([this, type]() {
+      SendAgentClipboardGrab(type);
+    });
     return true;
   }
 
@@ -297,4 +307,4 @@ class SpiceAgent : public Object, public SerialPortInterface,
   }
 };
 
-DECLARE_AGENT(SpiceAgent);
+DECLARE_DEVICE(SpiceAgent);

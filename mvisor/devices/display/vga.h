@@ -64,8 +64,8 @@ class Vga : public PciDevice, public DisplayInterface {
   uint8_t* vram_read_select_;
   bool     has_mapped_vga_ = false;
 
-  std::vector<DisplayModeChangeListener> display_mode_change_listerners_;
-  std::vector<DisplayUpdateListener> display_update_listerners_;
+  std::vector<DisplayModeChangeListener> display_mode_change_listeners_;
+  std::vector<DisplayUpdateListener> display_update_listeners_;
 
   void VbeReadPort(uint64_t port, uint16_t* data);
   void VbeWritePort(uint64_t port, uint16_t value);

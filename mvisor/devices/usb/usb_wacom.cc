@@ -172,14 +172,14 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
  public:
   UsbWacom() { SetupDescriptor(&device_desc, &strings_desc); }
 
-  void Reset() {
+  virtual void Reset() {
     // remove status report timer
     if (status_report_timer_) {
       manager_->io()->RemoveTimer(status_report_timer_);
       status_report_timer_ = nullptr;
     }
     
-    UsbDevice::Reset();
+    UsbHid::Reset();
   }
 
   void StartStatusReport() {

@@ -377,11 +377,13 @@ const MemoryListener* MemoryManager::RegisterMemoryListener(MemoryListenerCallba
   auto listener = new MemoryListener {
     .callback = callback
   };
+  std::unique_lock lock(mutex_);
   listeners_.insert(listener);
   return listener;
 }
 
 void MemoryManager::UnregisterMemoryListener(const MemoryListener** plistener) {
+  std::unique_lock lock(mutex_);
   if (listeners_.erase(*plistener)) {
     delete *plistener;
     *plistener = nullptr;

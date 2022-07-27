@@ -1559,7 +1559,7 @@ class XhciHost : public PciDevice {
         }
         break;
       default:
-        MV_PANIC("unhandled TRB type=%d", type);
+        MV_ERROR("unhandled TRB type=%d", type);
         break;
       }
       event.completion_code = code;

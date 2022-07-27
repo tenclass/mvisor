@@ -24,6 +24,7 @@
 #include "linuz/vfio.h"
 #include "pci_device.h"
 #include "memory_manager.h"
+#include "machine.h"
 
 #define MAX_VFIO_REGIONS      (12)
 #define MAX_VFIO_INTERRUPTS   (PCI_MAX_MSIX_ENTRIES)
@@ -104,8 +105,9 @@ class VfioPci : public PciDevice {
   vfio_device_info                                device_info_ = { 0 };
   std::array<VfioRegion, MAX_VFIO_REGIONS>        regions_;
   std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>  interrupts_;
+  VfioMigration                                   migration_;
   const MemoryListener*                           memory_listener_ = nullptr;
-  VfioMigration migration_;
+  const StateChangeListener*                      state_change_listener_ = nullptr;
 };
 
 #endif // _MVISOR_DEVICES_VFIO_VFIO_PCI_H

@@ -26,7 +26,6 @@
 #include <sys/mman.h>
 #include <sys/eventfd.h>
 #include "device_manager.h"
-#include "machine.h"
 #include "logger.h"
 
 VfioPci::VfioPci() {
@@ -58,10 +57,14 @@ void VfioPci::Connect() {
 }
 
 void VfioPci::Disconnect() {
+  auto machine = manager_->machine();
   if (memory_listener_) {
-    auto mm = manager_->machine()->memory_manager();
-    mm->UnregisterMemoryListener(&memory_listener_);
+    machine->memory_manager()->UnregisterMemoryListener(&memory_listener_);
   }
+  if (state_change_listener_) {
+    machine->UnregisterStateChangeListener(&state_change_listener_);
+  }
+
   for (auto &interrupt : interrupts_) {
     if (interrupt.gsi > 0) {
       manager_->UpdateMsiRoute(interrupt.gsi, 0, 0, -1);
@@ -404,7 +407,7 @@ void VfioPci::SetupMigraionInfo() {
   MV_ASSERT(migration_.region->mmap_areas.size() == 1);
 
   auto machine = manager_->machine();
-  machine->RegisterStateChangeListener([=]() {
+  state_change_listener_ = machine->RegisterStateChangeListener([=]() {
     if (machine->IsPaused()) {
       SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
     } else {

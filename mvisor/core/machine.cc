@@ -213,34 +213,43 @@ void Machine::Resume() {
   wait_to_resume_.notify_all();
 
   /* Here all the threads are running, broadcast messages */
-  for (auto &callback : state_change_listeners_) {
-    callback();
+  for (auto listener : state_change_listeners_) {
+    listener->callback();
   }
 }
 
 /* Currently this method can only be called from UI threads */
 void Machine::Pause() {
-  /* Mark paused state and wait for vCPU threads and IO thread to stop */
   std::unique_lock<std::mutex> lock(mutex_);
   if (!valid_ || paused_)
     return;
-  paused_ = true;
-  io_thread_->FlushDiskImages();
 
-  wait_count_ = num_vcpus_ + 1;
+  /* Mark paused state and wait for vCPU threads */
+  wait_count_ = num_vcpus_;
+  pausing_ = true;
+  paused_ = true;
+
   for (auto vcpu : vcpus_) {
     vcpu->Kick();
   }
-  io_thread_->Kick();
-
   wait_to_pause_condition_.wait(lock, [this]() {
     return wait_count_ == 0;
   });
 
   /* Here all the threads are stopped, broadcast messages */
-  for (auto &callback : state_change_listeners_) {
-    callback();
+  for (auto listener : state_change_listeners_) {
+    listener->callback();
   }
+
+  /* Wait for IO thread to stop */
+  io_thread_->FlushDiskImages();
+
+  wait_count_ = 1;
+  pausing_ = false;
+  io_thread_->Kick();
+  wait_to_pause_condition_.wait(lock, [this]() {
+    return wait_count_ == 0;
+  });
 }
 
 /* vCPU threads and IO threads call this method to sleep */
@@ -255,9 +264,21 @@ void Machine::WaitToResume() {
 }
 
 /* Listeners are called after Pause / Resume */
-void Machine::RegisterStateChangeListener(VoidCallback callback) {
+const StateChangeListener* Machine::RegisterStateChangeListener(VoidCallback callback) {
+  auto listener = new StateChangeListener {
+    .callback = callback
+  };
   std::lock_guard<std::mutex> lock(mutex_);
-  state_change_listeners_.push_back(callback);
+  state_change_listeners_.insert(listener);
+  return listener;
+}
+
+void Machine::UnregisterStateChangeListener(const StateChangeListener** plistener) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (state_change_listeners_.erase(*plistener)) {
+    delete *plistener;
+    *plistener = nullptr;
+  }
 }
 
 /* Should call by UI thread */

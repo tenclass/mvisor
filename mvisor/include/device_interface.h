@@ -59,7 +59,6 @@ class MidiInputInterface {
   virtual bool InputAcceptable() = 0;
   virtual void Start() = 0;
   virtual void Stop() = 0;
-  virtual bool is_start() = 0;
 };
 struct WacomEvent {
   double x;

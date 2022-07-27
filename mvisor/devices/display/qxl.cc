@@ -92,6 +92,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
   DisplayMouseCursor            current_cursor_ = {0};
   std::list<Drawable*>          drawables_;
   std::list<DrawRect>           draw_rects_;
+  const StateChangeListener*    state_change_listener_ = nullptr;
 
  public:
   Qxl() {
@@ -129,11 +130,26 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
   }
 
+  virtual void Connect() {
+    Vga::Connect();
+
+    /* Push all free resources to the ring before saving VM */
+    auto machine = manager_->machine();
+    state_change_listener_ = machine->RegisterStateChangeListener([=]() {
+      if (machine->IsPaused()) {
+        FreeGuestResources();
+      }
+    });
+  }
+
   virtual void Disconnect() {
     for (auto drawable: drawables_) {
       delete drawable;
     }
     drawables_.clear();
+
+    manager_->machine()->UnregisterStateChangeListener(&state_change_listener_);
+
     Vga::Disconnect();
   }
 
@@ -158,8 +174,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
   }
 
   virtual bool SaveState(MigrationWriter* writer) {
-    /* Add all free_sources to release ring, this causes interrupts :( */
-    FreeGuestResources();
+    /* We have added all free resources to release ring when VM pause */
+    MV_ASSERT(free_resources_.empty());
   
     QxlState state;
     for (int i = 0; i < NUM_MEMSLOTS; i++) {
@@ -396,6 +412,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
   /* Display resize interface */
   virtual bool Resize(uint width, uint height) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+
     if (mode_ != kDisplayQxlMode) {
       return false;
     }
