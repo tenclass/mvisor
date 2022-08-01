@@ -29,8 +29,7 @@
 #include <sys/prctl.h>
 #include <csignal>
 
-void Log(LogType type, const char* file, int line, const char* function, const char* format, ...)
-{
+void Log(LogType type, const char* file, int line, const char* function, const char* format, ...) {
   char message[512];
   va_list args;
   va_start(args, format);
@@ -43,16 +42,24 @@ void Log(LogType type, const char* file, int line, const char* function, const c
   char timestr[100];
   sprintf(timestr, "%.3lf", double(delta_us) / 1000);
 
-  if (type == kLogTypeDebug) {
-    fprintf(stdout, "[%s] %s:%d %s() %s\n", timestr, file, line, function, message);
-    fflush(stdout);
-  } else if (type == kLogTypeError) {
-    fprintf(stderr,"[%s] %s:%d %s() %s\n", timestr, file, line, function, message);
-  } else if (type == kLogTypePanic) {
-    fprintf(stderr,"[%s] %s:%d %s() fatal error: %s\n", timestr, file, line, function, message);
-    if (errno != 0) {
-      fprintf(stderr, "errno=%d, %s\n", errno, strerror(errno));
-    }
+  switch (type) {
+    case kLogTypeDebug:
+      fprintf(stdout, "[%s] %s:%d %s() debug: %s\n", timestr, file, line, function, message);
+      fflush(stdout);
+      break;
+    case kLogTypeError:
+    case kLogTypePanic:
+      if (!errno) {
+        fprintf(stderr,"[%s] %s:%d %s() %serror: %s\n", timestr, file, line, function, type == kLogTypePanic ? "panic-" : "", message);
+      } else {
+        fprintf(stderr,"[%s] %s:%d %s() %serror: %s errno=%d, %s\n", 
+          timestr, file, line, function, type == kLogTypePanic ? "panic-" : "", message, errno, strerror(errno));
+      }
+      fflush(stderr);
+      break;
+  }
+
+  if (type == kLogTypePanic) {
     std::raise(SIGINT);
     exit(1);
   }

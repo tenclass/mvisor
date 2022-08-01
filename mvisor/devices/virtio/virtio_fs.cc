@@ -662,7 +662,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     } else {
       out->size = ret;
       out->padding = 0;
-      fuse_->MakeResponse(response, ret, 0, request->unique);
+      fuse_->MakeResponse(response, ret + sizeof(fuse_getxattr_out), 0, request->unique);
     }
     element->length = response->len;
   } 

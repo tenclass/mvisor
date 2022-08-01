@@ -431,17 +431,19 @@ class Qxl : public Vga, public DisplayResizeInterface {
     if (height & 1)
       height++;
 
-    bzero(&qxl_rom_->client_monitors_config, sizeof(qxl_rom_->client_monitors_config));
-    qxl_rom_->client_monitors_config.count = 1;
-    auto& head = qxl_rom_->client_monitors_config.heads[0];
-    head.left = 0;
-    head.top = 0;
-    head.right = head.left + width;
-    head.bottom = head.top + height;
-    qxl_rom_->client_monitors_config_crc = crc32(0xFFFFFFFF,
-      (uint8_t*)&qxl_rom_->client_monitors_config, sizeof(qxl_rom_->client_monitors_config)) ^ 0xFFFFFFFF;
-    
-    SetInterrupt(QXL_INTERRUPT_CLIENT_MONITORS_CONFIG);
+    manager_->io()->Schedule([=]() {
+      bzero(&qxl_rom_->client_monitors_config, sizeof(qxl_rom_->client_monitors_config));
+      qxl_rom_->client_monitors_config.count = 1;
+      auto& head = qxl_rom_->client_monitors_config.heads[0];
+      head.left = 0;
+      head.top = 0;
+      head.right = head.left + width;
+      head.bottom = head.top + height;
+      qxl_rom_->client_monitors_config_crc = crc32(0xFFFFFFFF,
+        (uint8_t*)&qxl_rom_->client_monitors_config, sizeof(qxl_rom_->client_monitors_config)) ^ 0xFFFFFFFF;
+      SetInterrupt(QXL_INTERRUPT_CLIENT_MONITORS_CONFIG);
+    });
+
     return true;
   }
 
@@ -970,7 +972,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       MV_ASSERT(copy->rop_descriptor == SPICE_ROPD_OP_PUT);
       QXLImage* image = (QXLImage*)GetMemSlotAddress(copy->src_bitmap);
       if (image->descriptor.type != SPICE_IMAGE_TYPE_BITMAP) {
-        MV_PANIC("image->descriptor.type=0x%x", image->descriptor.type);
+        MV_ERROR("image->descriptor.type=0x%x", image->descriptor.type);
         break;
       }
       if (image->descriptor.flags != 0) {
@@ -978,9 +980,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
       }
 
       QXLBitmap* bitmap = &image->bitmap;
-      MV_ASSERT(bitmap->format == SPICE_BITMAP_FMT_RGBA || bitmap->format == SPICE_BITMAP_FMT_8BIT
-        || bitmap->format == SPICE_BITMAP_FMT_16BIT || bitmap->format == SPICE_BITMAP_FMT_24BIT
-        || bitmap->format == SPICE_BITMAP_FMT_32BIT);
+      if (bitmap->format != SPICE_BITMAP_FMT_RGBA &&
+          bitmap->format != SPICE_BITMAP_FMT_32BIT &&
+          bitmap->format != SPICE_BITMAP_FMT_16BIT) {
+        MV_ERROR("bitmap format=0x%x", bitmap->format);
+        break;
+      }
       MV_ASSERT(bitmap->palette == 0);
       MV_ASSERT(partial.width == bitmap->x && partial.height == bitmap->y);
       partial.bpp = primary_surface_.bits_pp;

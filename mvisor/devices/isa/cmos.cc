@@ -204,6 +204,7 @@ class Cmos : public Device {
       cmos_data_[RTC_REG_C] = 0;
       break;
     case RTC_SECONDS:
+    case RTC_MINUTES:
     case RTC_HOURS:
     case RTC_DAY_OF_WEEK:
     case RTC_DAY_OF_MONTH:
