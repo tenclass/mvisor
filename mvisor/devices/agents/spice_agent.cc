@@ -195,6 +195,12 @@ class SpiceAgent : public Device, public SerialPortInterface,
     if (last_mouse_state_.buttons == buttons && last_mouse_state_.x == (uint)x && last_mouse_state_.y == (uint)y) {
       return;
     }
+
+    /* This is a hack, flip the last bit to avoid guest frequency limitation */
+    if (!(last_mouse_state_.buttons & (1 << 31))) {
+      buttons |= 1 << 31;
+    }
+
     last_mouse_state_.display_id = 0;
     last_mouse_state_.buttons = buttons;
     last_mouse_state_.x = x;

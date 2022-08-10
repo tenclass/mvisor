@@ -374,23 +374,24 @@ ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_
     return backing_file_->ReadCluster(buffer, pos, length);
   }
 
-  uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-  if (cluster_start & QCOW2_OFLAG_COMPRESSED) { /* Compressed descriptor */
+  uint64_t l2_entry = be64toh(l2_table->entries[l2_index]);
+  uint64_t cluster_descriptor = l2_entry & QCOW2_DESCRIPTOR_MASK;
+
+  if (l2_entry & QCOW2_OFLAG_COMPRESSED) { /* Compressed descriptor */
     MV_ASSERT(image_header_.compression_type == kCompressionTypeZstd);
 
-    cluster_start &= QCOW2_OFFSET_MASK;
-    size_t x = (62 - (cluster_bits_ - 8));
-    size_t mask = (1ULL << (cluster_bits_ - 8)) - 1;
-    uint64_t sectors = ((cluster_start >> x) & mask) + 1;
-    size_t compressed_length = sectors * QCOW2_COMPRESSED_SECTOR_SIZE -
-      (cluster_start & ~QCOW2_COMPRESSED_SECTOR_MASK);
-    cluster_start &= (1ULL << x) - 1;
+    uint64_t x = (62 - (cluster_bits_ - 8));
+    uint64_t mask = (1ULL << (cluster_bits_ - 8)) - 1;
+    uint64_t sectors = ((cluster_descriptor >> x) & mask) + 1;
+    uint64_t compressed_length = sectors * QCOW2_COMPRESSED_SECTOR_SIZE -
+      (cluster_descriptor & ~QCOW2_COMPRESSED_SECTOR_MASK);
+    uint64_t host_offset = cluster_descriptor & ((1ULL << x) - 1);
 
     uint8_t* decompressed = nullptr;
-    if (!cluster_cache_.Get(cluster_start, decompressed)) {
+    if (!cluster_cache_.Get(host_offset, decompressed)) {
       if (compressed_.size() < compressed_length)
         compressed_.resize(compressed_length);
-      ssize_t bytes_read = ReadFile(compressed_.data(), compressed_length, cluster_start);
+      ssize_t bytes_read = ReadFile(compressed_.data(), compressed_length, host_offset);
       if (bytes_read < 0) {
         return bytes_read;
       }
@@ -402,13 +403,18 @@ ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_
         MV_ERROR("failed to decompressed length=0x%x ret=%d", compressed_length, ret);
         return ret;
       }
-      cluster_cache_.Put(cluster_start, decompressed);
+      cluster_cache_.Put(host_offset, decompressed);
     }
     memcpy(buffer, decompressed + offset_in_cluster, length);
-  } else { /* Normal descriptor */
-    cluster_start &= QCOW2_OFFSET_MASK;
+  } else { /* Standard descriptor */
+    if (cluster_descriptor & 1) { // Bit 0 means zero
+      bzero(buffer, length);
+      return length;
+    }
 
-    ssize_t bytes_read = ReadFile(buffer, length, cluster_start + offset_in_cluster);
+    uint64_t host_offset = cluster_descriptor & QCOW2_STANDARD_OFFSET_MASK;
+
+    ssize_t bytes_read = ReadFile(buffer, length, host_offset + offset_in_cluster);
     if (bytes_read < 0) {
       return bytes_read;
     }
@@ -426,25 +432,28 @@ ssize_t Qcow2Image::WriteCluster(void* buffer, off_t pos, size_t length) {
   L2Table* l2_table = GetL2Table(true, pos, &offset_in_cluster, &l2_index, &length);
   MV_ASSERT(l2_table);
 
-  uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-  uint64_t cluster_flags = cluster_start & QCOW2_OFLAGS_MASK;
-  cluster_start &= QCOW2_OFFSET_MASK;
+  uint64_t l2_entry = be64toh(l2_table->entries[l2_index]);
+  uint64_t cluster_descriptor = l2_entry & QCOW2_DESCRIPTOR_MASK;
 
-  if (cluster_flags & QCOW2_OFLAG_COPIED) {
-    if (WriteFile(buffer, length, cluster_start + offset_in_cluster) != (ssize_t)length) {
+  /* Writing compressed cluster is not supported */
+  MV_ASSERT(!(l2_entry & QCOW2_OFLAG_COMPRESSED));
+  uint64_t host_offset = cluster_descriptor & QCOW2_STANDARD_OFFSET_MASK;
+
+  if (l2_entry & QCOW2_OFLAG_COPIED) {
+    if (WriteFile(buffer, length, host_offset + offset_in_cluster) != (ssize_t)length) {
       return -1;
     }
   } else {
-    if (cluster_start) {
+    if (host_offset) {
       MV_PANIC("writing to images with snapshots is not supported yet");
     }
-    cluster_start = AllocateCluster();
-    if (cluster_start == 0) {
-      MV_LOG("failed to allocate cluster");
+    host_offset = AllocateCluster();
+    if (host_offset == 0) {
+      MV_ERROR("failed to allocate cluster");
       return -1;
     }
 
-    l2_table->entries[l2_index] = htobe64(cluster_start | QCOW2_OFLAG_COPIED);
+    l2_table->entries[l2_index] = htobe64(host_offset | QCOW2_OFLAG_COPIED);
     l2_table->dirty = true;
 
     /* If not writing the whole cluster, we should read the original data from the backing file
@@ -455,16 +464,16 @@ ssize_t Qcow2Image::WriteCluster(void* buffer, off_t pos, size_t length) {
       if (bytes > 0) { // Check if exists
         MV_ASSERT(bytes == (ssize_t)cluster_size_); // Make sure we have a whole cluster
         memcpy(copied_cluster_ + offset_in_cluster, buffer, length);
-        if (WriteFile(copied_cluster_, cluster_size_, cluster_start) != (ssize_t)cluster_size_) {
+        if (WriteFile(copied_cluster_, cluster_size_, host_offset) != (ssize_t)cluster_size_) {
           MV_PANIC("failed to copy cluster at pos=0x%lx length=0x%lx", pos, length);
         }
         return length; // Always return length of dirty data
       }
     }
 
-    if (WriteFile(buffer, length, cluster_start + offset_in_cluster) != (ssize_t)length) {
-      MV_PANIC("failed to write image file pos=0x%lx cluster_start=0x%lx offset=0x%lx length=0x%lx",
-        pos, cluster_start, offset_in_cluster, length);
+    if (WriteFile(buffer, length, host_offset + offset_in_cluster) != (ssize_t)length) {
+      MV_PANIC("failed to write image file pos=0x%lx host_offset=0x%lx offset=0x%lx length=0x%lx",
+        pos, host_offset, offset_in_cluster, length);
       return -1;
     }
   }
@@ -487,19 +496,20 @@ ssize_t Qcow2Image::DiscardCluster(off_t pos, size_t length) {
     return length;
   }
 
-  uint64_t cluster_start = be64toh(l2_table->entries[l2_index]);
-  if (cluster_start & QCOW2_OFLAG_COMPRESSED) {
-    MV_PANIC("not supported compressed pos=0x%lx cluster=0x%lx", pos, cluster_start);
-  } else {
-    cluster_start &= QCOW2_OFFSET_MASK;
-    if (cluster_start == 0) {
-      return length;
-    }
+  uint64_t l2_entry = be64toh(l2_table->entries[l2_index]);
+  uint64_t cluster_descriptor = l2_entry & QCOW2_DESCRIPTOR_MASK;
 
-    FreeCluster(cluster_start);
-    l2_table->entries[l2_index] = be64toh(0);
-    l2_table->dirty = true;
+  /* Writing compressed cluster is not supported */
+  MV_ASSERT(!(l2_entry & QCOW2_OFLAG_COMPRESSED));
+  uint64_t host_offset = cluster_descriptor & QCOW2_STANDARD_OFFSET_MASK;
+
+  if ((cluster_descriptor & 1) || host_offset == 0) {
+    return length;
   }
+
+  FreeCluster(host_offset);
+  l2_table->entries[l2_index] = be64toh(0);
+  l2_table->dirty = true;
   return length;
 }
 

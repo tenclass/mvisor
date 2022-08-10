@@ -199,7 +199,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
       case InterfaceRequest | USB_REQ_GET_DESCRIPTOR:
         if ((value >> 8) == 0x22) {
           MV_ASSERT(index < 2);
-          auto copy = (int)std::min((size_t)length, sizeof(hid_report_desc_interface[index]));
+          auto copy = std::min((size_t)length, sizeof(hid_report_desc_interface[index]));
           memcpy(data, hid_report_desc_interface[index], copy);
           return copy;
         } else {
