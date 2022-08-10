@@ -525,10 +525,8 @@ class Qxl : public Vga, public DisplayResizeInterface {
       }
 
       if (async) {
-        /* Do it like a real async command */
-        manager_->io()->Schedule([this]() {
-          SetInterrupt(QXL_INTERRUPT_IO_CMD);
-        });
+        /* Async command needs interrupt */
+        SetInterrupt(QXL_INTERRUPT_IO_CMD);
       }
     } else {
       Vga::Write(resource, offset, data, size);
@@ -546,7 +544,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       MV_LOG("force remove drawables=%lu", drawables_.size());
     }
     for (auto it = drawables_.begin(); it != drawables_.end();) {
-      ReleaseGuestResource(&(*it)->qxl_drawable->release_info);
+      free_resources_.push_back(&(*it)->qxl_drawable->release_info);
       delete *it;
       it = drawables_.erase(it);
     }

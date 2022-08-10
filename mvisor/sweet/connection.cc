@@ -246,7 +246,11 @@ void SweetConnection::OnKeyboardInput() {
     scancode[i] = (uint8_t)code;
     code >>= 8;
   }
-  server_->keyboard()->QueueKeyboardEvent(scancode, input.modifiers());
+
+  auto keyboard = server_->keyboard();
+  if (keyboard->InputAcceptable()) {
+    keyboard->QueueKeyboardEvent(scancode, input.modifiers());
+  }
 }
 
 void SweetConnection::OnSendPointerInput() {

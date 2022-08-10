@@ -125,7 +125,7 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
     }
   }
 
-  void UpdateRootComplexRegisterBLock() {
+  void UpdateRootComplexRegisterBlock() {
     uint32_t rcrb = *(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA);
     if (rcrb & ICH9_LPC_RCBA_EN) {
       if (!initialized_rcrb_) {
@@ -173,7 +173,7 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
       return false;
     }
     UpdatePmBase();
-    UpdateRootComplexRegisterBLock();
+    UpdateRootComplexRegisterBlock();
     return true;
   }
 
@@ -194,7 +194,7 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
     }
     if (ranges_overlap(offset, length, ICH9_LPC_RCBA, 4)) {
       /* set root complex register block BAR */
-      UpdateRootComplexRegisterBLock();
+      UpdateRootComplexRegisterBlock();
     }
     if (ranges_overlap(offset, length, ICH9_LPC_PIRQA_ROUT, 4)) {
       /* activate irq remapping in LPC A-D */

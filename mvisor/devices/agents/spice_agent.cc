@@ -34,9 +34,6 @@
 
 using namespace std::chrono;
 
-/* Limit send mouse frequency */
-const auto kSendMouseInterval = milliseconds(20);
-
 class SpiceAgent : public Device, public SerialPortInterface,
   public DisplayResizeInterface, public PointerInputInterface,
   public ClipboardInterface
@@ -45,7 +42,6 @@ class SpiceAgent : public Device, public SerialPortInterface,
   int                             num_monitors_ = 1;
   /* Limit mouse event frequency */
   VDAgentMouseState               last_mouse_state_;
-  steady_clock::time_point        last_send_mouse_time_;
   /* Cache clipboard data */
   std::string                     outgoing_clipboard_;
   std::vector<ClipboardListener>  clipboard_listeners_;
@@ -60,7 +56,6 @@ class SpiceAgent : public Device, public SerialPortInterface,
     set_parent_name("virtio-console");
   
     strcpy(port_name_, "com.redhat.spice.0");
-    last_send_mouse_time_ = steady_clock::now();
   }
 
   /* The message may consists of more than one chunk */
@@ -197,15 +192,13 @@ class SpiceAgent : public Device, public SerialPortInterface,
   }
 
   void QueueEvent(uint buttons, int x, int y) {
-    steady_clock::time_point now = steady_clock::now();
-    if (last_mouse_state_.buttons == buttons && now - last_send_mouse_time_ < kSendMouseInterval) {
+    if (last_mouse_state_.buttons == buttons && last_mouse_state_.x == (uint)x && last_mouse_state_.y == (uint)y) {
       return;
     }
     last_mouse_state_.display_id = 0;
     last_mouse_state_.buttons = buttons;
     last_mouse_state_.x = x;
     last_mouse_state_.y = y;
-    last_send_mouse_time_ = now;
     SendAgentMessage(VDP_SERVER_PORT, VD_AGENT_MOUSE_STATE, &last_mouse_state_, sizeof(last_mouse_state_));
   }
 

@@ -255,7 +255,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     switch (verb)
     {
     case AC_VERB_PARAMETERS:
-      callback(FindNodeParamter(node, payload));
+      callback(FindNodeParameter(node, payload));
       break;
     case AC_VERB_GET_STREAM_FORMAT:
       MV_ASSERT(node.stream);
@@ -297,7 +297,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       callback(node.config);
       break;
     case AC_VERB_GET_CONNECT_LIST: {
-      uint32_t count = FindNodeParamter(node, AC_PAR_CONNLIST_LEN);
+      uint32_t count = FindNodeParameter(node, AC_PAR_CONNLIST_LEN);
       uint32_t response = 0, shift = 0;
       while (payload < count && shift < 32) {
         response |= node.connection[payload] << shift;
@@ -342,7 +342,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     }
   }
 
-  uint32_t FindNodeParamter(const HdaNode& node, uint32_t id) {
+  uint32_t FindNodeParameter(const HdaNode& node, uint32_t id) {
     auto it = node.parameters.find(id);
     if (it == node.parameters.end()) {
       MV_PANIC("failed to find node %s parameter 0x%x", node.name.c_str(), id);

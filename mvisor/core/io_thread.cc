@@ -271,8 +271,7 @@ void IoThread::FlushDiskImages() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   for (auto image : disk_images_) {
-    image->FlushAsync([](auto ret) {
-    });
+    image->FlushAsync([](auto ret) {});
   }
 }
 

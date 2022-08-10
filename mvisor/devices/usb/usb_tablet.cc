@@ -176,7 +176,6 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
     lock.unlock();
     
     MV_ASSERT(length >= 6);
-    bzero(data, 6);
     data[0] = event.buttons;
     data[1] = event.x & 0xFF;
     data[2] = event.x >> 8;

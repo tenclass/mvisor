@@ -117,7 +117,7 @@ void VfioPci::SetupPciConfiguration() {
     auto &bar_region = regions_[i];
     if (!bar_region.size)
       continue;
-    auto &bar = pci_header_.bars[i];
+    auto bar = pci_header_.bars[i];
     if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
       AddPciBar(i, bar_region.size, kIoResourceTypePio);
     } else {
@@ -153,9 +153,22 @@ void VfioPci::SetupPciConfiguration() {
         }
         break;
       }
-      case PCI_CAP_ID_MSIX:
-        MV_PANIC("FIXME: not implemented vfio msix");
+      case PCI_CAP_ID_MSIX: {
+        uint16_t control = *(uint16_t*)&cap[1];
+        MV_ASSERT(!(control & PCI_MSIX_FLAGS_MASKALL));
+        msi_config_.is_64bit = true;
+        msi_config_.is_msix = true;
+        msi_config_.offset = pos;
+        msi_config_.msix = (MsiXCapability*)cap;
+        msi_config_.length = sizeof(MsiXCapability);
+        msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
+        msi_config_.msix_table_size = (control & PCI_MSIX_FLAGS_QSIZE) + 1;
+        msi_config_.msix_space_size = sizeof(msi_config_.msix_table);
+        msi_config_.msix_space_offset = msi_config_.msix->table_offset & PCI_MSIX_TABLE_OFFSET;
+        msi_config_.msix_bar = msi_config_.msix->table_offset & PCI_MSIX_TABLE_BIR;
+        MV_ASSERT(msi_config_.msix_bar < sizeof(pci_header_.bars) / sizeof(uint32_t));
         break;
+      }
       case PCI_CAP_ID_VNDR:
         /* ignore vendor specific data */
         break;
@@ -390,8 +403,11 @@ void VfioPci::SetupVfioDevice() {
     }
     /* FIXME: currently my mdev only uses one IRQ */
     if (index == VFIO_PCI_MSI_IRQ_INDEX) {
-      MV_ASSERT(irq_info.count == 1);
       MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+      MV_ASSERT(irq_info.count == 1 || irq_info.count == 3);
+    } else if (index == VFIO_PCI_MSIX_IRQ_INDEX) {
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+      MV_ASSERT(irq_info.count == 1 || irq_info.count == 3);
     }
   }
 }
@@ -504,6 +520,12 @@ void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, 
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (pci_bars_[i].address == resource->base) {
       WriteRegion(i, offset, data, size);
+      if (msi_config_.is_msix && i == msi_config_.msix_bar) {
+        // we need to continue to set msix table
+        break;
+      } 
+
+      // just return
       return;
     }
   }
@@ -520,16 +542,36 @@ void VfioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, u
   PciDevice::Read(resource, offset, data, size);
 }
 
+void VfioPci::EnableIRQ(uint32_t index, uint32_t vector, int *fds, uint8_t count) {
+  uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int) * count];
+  auto irq_set = (vfio_irq_set *)buffer;
+  irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int) * count;
+  irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+  irq_set->index = index;
+  irq_set->start = vector;
+  irq_set->count = count;
+  memcpy(irq_set->data, fds, sizeof(int) * count);
+  MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set) == 0);
+}
+
 void VfioPci::UpdateMsiRoutes() {
-  /* FIXME: only MSI is implemented now */
-  MV_ASSERT(!msi_config_.is_msix);
+  uint nr_vectors = 0;
+  uint16_t control = 0;
+  if (msi_config_.is_msix) {
+    control = msi_config_.msix->control;
+    nr_vectors = msi_config_.msix_table_size;
+    msi_config_.enabled = control & PCI_MSIX_FLAGS_ENABLE;
+  } else {
+    control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
+    nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
+    msi_config_.enabled = control & PCI_MSI_FLAGS_ENABLE;
+  }
 
-  uint16_t control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
-  msi_config_.enabled = control & PCI_MSI_FLAGS_ENABLE;
-  uint nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
-
-  /* FIXME: nr_vectors > 1 not tested yet */
-  MV_ASSERT(nr_vectors == 1);
+  if (msi_config_.enabled) {
+    int fds[nr_vectors];
+    memset(fds, -1, sizeof(fds));
+    EnableIRQ(msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX, 0, fds, nr_vectors);
+  }
 
   for (uint vector = 0; vector < nr_vectors; vector++) {
     auto &interrupt = interrupts_[vector];
@@ -539,7 +581,10 @@ void VfioPci::UpdateMsiRoutes() {
   
     uint64_t msi_address;
     uint32_t msi_data;
-    if (msi_config_.is_64bit) {
+    if (msi_config_.is_msix) {
+      msi_address = ((uint64_t)msi_config_.msix_table[vector].message.address_hi << 32) | msi_config_.msix_table[vector].message.address_lo;
+      msi_data = msi_config_.msix_table[vector].message.data;
+    } else if (msi_config_.is_64bit) {
       msi_address = ((uint64_t)msi_config_.msi64->address1 << 32) | msi_config_.msi64->address0;
       msi_data = msi_config_.msi64->data;
     } else {
@@ -547,20 +592,16 @@ void VfioPci::UpdateMsiRoutes() {
       msi_data = msi_config_.msi32->data;
     }
 
-    if (msi_config_.enabled) {
+    if (debug_) {
+      MV_LOG("msi_address=0x%lx msi_data=%d vector=%d", msi_address, msi_data, vector);
+    }
+
+    if (msi_config_.enabled && msi_address) {
       if (interrupt.gsi == -1) {
         interrupt.gsi = manager_->AddMsiRoute(msi_address, msi_data, interrupt.event_fd);
 
         // set irq with KVM_IRQFD
-        uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int)];
-        auto irq_set = (vfio_irq_set*)buffer;
-        irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int);
-        irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
-        irq_set->index = VFIO_PCI_MSI_IRQ_INDEX;
-        irq_set->start = vector;
-        irq_set->count = 1;
-        memcpy(irq_set->data, &interrupt.event_fd, sizeof(int));
-        MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set) == 0);
+        EnableIRQ(msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX, vector, &interrupt.event_fd, 1);
       } else {
         manager_->UpdateMsiRoute(interrupt.gsi, msi_address, msi_data, interrupt.event_fd);
       }

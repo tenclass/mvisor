@@ -99,8 +99,7 @@ static Machine*     machine = nullptr;
 static SweetServer* sweet_server = nullptr;
 static Viewer*      viewer = nullptr;
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   IntializeArguments(argc, argv);
 
   std::string config_path = "../config/default.yaml";

@@ -284,7 +284,6 @@ class Ich9Hda : public PciDevice {
     MV_ASSERT((addr & 127) == 0); // aligned by 128 bytes
 
     Ich9HdaBdlEntry* entries = (Ich9HdaBdlEntry*)manager_->TranslateGuestMemory(addr);
-    bool has_ioc = false;
     for (int i = 0; i <= stream.last_valid_index; i++) {
       auto buffer = HdaCodecBuffer {
         .data = (uint8_t*)manager_->TranslateGuestMemory(entries[i].address),
@@ -292,18 +291,11 @@ class Ich9Hda : public PciDevice {
         .interrupt_on_completion = !!(entries[i].flags & 1),
         .read_counter = 0
       };
-      if (buffer.interrupt_on_completion) {
-        has_ioc = true;
-      }
 
       if (debug_) {
         MV_LOG("buffer addr=0x%lx len=0x%x ioc=%d", entries[i].address, buffer.length, entries[i].flags);
       }
-      bzero(buffer.data, buffer.length);
       stream_state.buffers.push_back(buffer);
-    }
-    if (!has_ioc) {
-      MV_LOG("failed to setup hda buffer descriptor list, provide a timer or turn on hypervisor?");
     }
     stream_state.buffers_index = 0;
     stream.link_position_in_buffer = 0;
@@ -350,8 +342,8 @@ class Ich9Hda : public PciDevice {
     }
     /* Linux uses this */
     if(regs_.dp_base & 1) {
-      auto ptr = (uint32_t*)manager_->TranslateGuestMemory(regs_.dp_base & ~1);
-      ptr[0] = stream.link_position_in_buffer;
+      auto ptr = (uint64_t*)manager_->TranslateGuestMemory(regs_.dp_base & ~1);
+      ptr[index] = stream.link_position_in_buffer;
     }
     if (interrupt) {
       stream.status |= 1 << 2;

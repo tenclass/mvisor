@@ -407,7 +407,23 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
     return false;
   }
 
+  // get all system memory region from kvm_slots_
+  std::vector<MemorySlot> system_slots;
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ++it) {
+    auto slot = it->second;
+    if (strcmp(slot->region->name, "System") == 0) {
+      system_slots.push_back(*slot);
+      // we can't Unmap memory region here, because the different System slot may has same memory region
+    } 
+  }
+
+  // unmap all system memory region
+  for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
+    Unmap((const MemoryRegion **)&it->region);
+  }
+
   /* Unmap the preallocated */
+  auto old_ram_host = ram_host_;
   if (ram_host_) {
     munmap(ram_host_, machine_->ram_size_);
   }
@@ -416,5 +432,26 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
   if (!reader->ReadMemoryPages("RAM", &ram_host_, machine_->ram_size_)) {
     return false;
   }
+
+  // get offset between old_ram_host and ram_host_
+  int64_t offset = 0;
+  if (ram_host_ != old_ram_host) {
+    offset = (uint8_t*)ram_host_ - (uint8_t*)old_ram_host;
+    MV_LOG("we got different address with new ram_host_, old_ram_host=0x%lx ram_host_=0x%lx offset=0x%lx", 
+      old_ram_host, ram_host_, offset);
+  } 
+
+  // reset system memory region
+  for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
+    MemoryRegion* region = new MemoryRegion;
+    region->gpa = it->begin;
+    region->host = (void*)(it->hva + offset);
+    region->size = it->end - region->gpa;
+    region->type = it->type;
+    region->flags = it->flags;
+    strncpy(region->name, "System", 20 - 1);
+    AddMemoryRegion(region);
+  }
+
   return true;
 }

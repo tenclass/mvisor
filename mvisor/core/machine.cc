@@ -209,13 +209,18 @@ void Machine::Resume() {
   MV_ASSERT(wait_count_ == 0);
   paused_ = false;
 
-  /* Resume threads */
-  wait_to_resume_.notify_all();
-
-  /* Here all the threads are running, broadcast messages */
+  /* Before running, broadcast messages */
   for (auto listener : state_change_listeners_) {
     listener->callback();
   }
+
+  /* Synchronize vcpu kvm-clock */
+  for (auto vcpu: vcpus_) {
+    vcpu->SynchronizeKVMClock();
+  }
+
+  /* Resume threads */
+  wait_to_resume_.notify_all();
 }
 
 /* Currently this method can only be called from UI threads */

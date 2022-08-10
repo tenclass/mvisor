@@ -59,6 +59,8 @@ class Vcpu {
   void Schedule(VoidCallback callback);
   /* Reset vCPU registers to default values */
   void Reset();
+  /* Synchronize kvm clock */
+  void SynchronizeKVMClock();
 
   /* Used for migration */
   bool SaveState(MigrationWriter* writer);
@@ -79,6 +81,7 @@ class Vcpu {
   void PrepareX86Vcpu();
   void SetupSignalHandler();
   void SetupCpuid();
+  void SetupMsrIndices();
   void SetupHyperV(kvm_cpuid2* cpuid);
   void SetupMachineCheckException();
   void SetupModelSpecificRegisters();
@@ -90,7 +93,7 @@ class Vcpu {
   void ProcessHyperV();
   void ExecuteTasks();
   void SaveStateTo(VcpuState& state);
-  void LoadStateFrom(VcpuState& state);
+  void LoadStateFrom(VcpuState& state, bool load_cpuid);
 
   static __thread Vcpu*     current_vcpu_;
 

@@ -217,6 +217,6 @@ std::string DhcpServiceUdpSocket::CreateDhcpResponse(DhcpMessage* request, int d
     option_length += (4 - padding);
   }
   buffer.resize(body_length + option_length);
-  return std::move(buffer);
+  return buffer;
 }
 

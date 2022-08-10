@@ -174,16 +174,17 @@ void PciDevice::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
 }
 
 void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-  if (msi_config_.is_msix && resource->base == pci_bars_[msi_config_.msix_bar].address &&
-    offset >= msi_config_.msix_space_offset &&
-    offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size
-  ) {
-    offset -= msi_config_.msix_space_offset;
-    MV_ASSERT(offset + size <= sizeof(MsiXTableEntry) * msi_config_.msix_table_size);
-    memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
-  } else {
-    Device::Write(resource, offset, data, size);
-  }
+  if (msi_config_.is_msix && resource->base == pci_bars_[msi_config_.msix_bar].address) {
+    if ( offset >= msi_config_.msix_space_offset && offset + size <= msi_config_.msix_space_offset + msi_config_.msix_space_size) {
+      // set msix table
+      offset -= msi_config_.msix_space_offset;
+      MV_ASSERT(offset + size <= sizeof(MsiXTableEntry) * msi_config_.msix_table_size);
+      memcpy((uint8_t*)msi_config_.msix_table + offset, data, size);
+    } 
+    return;
+  } 
+
+  Device::Write(resource, offset, data, size);
 }
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
@@ -245,8 +246,10 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   if (ranges_overlap(offset, length, msi_config_.offset + PCI_MSI_FLAGS, 1)) {
     if (msi_config_.is_msix) {
       msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
-    } else {
+    } else if (msi_config_.is_64bit) {
       msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
+    } else {
+      msi_config_.enabled = msi_config_.msi32->control & PCI_MSI_FLAGS_ENABLE;
     }
   }
 }

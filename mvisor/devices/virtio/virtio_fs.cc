@@ -414,7 +414,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     off_t offset = in->offset;
     while (remain > 0) {
       auto write_in_data_buffer = fuse_->GetDataBufferFromIovec(element->vector, 0);
-      auto write_size = MIN(remain, write_in_data_buffer.size);
+      auto write_size = std::min((size_t)remain, write_in_data_buffer.size);
 
       auto ret = pwrite(in->fh, write_in_data_buffer.address, write_size, offset);
       if (ret != (ssize_t )write_size) {
@@ -444,7 +444,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     off_t offset = in->offset;
     while (remain > 0) {
       auto read_in_data_buffer = fuse_->GetDataBufferFromIovec(element->vector, 0);
-      auto read_size = MIN(remain, read_in_data_buffer.size);
+      auto read_size = std::min((size_t)remain, read_in_data_buffer.size);
 
       auto ret = pread(in->fh, read_in_data_buffer.address, read_size, offset);
       if (ret < 0) {

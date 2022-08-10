@@ -94,6 +94,7 @@ class VfioPci : public PciDevice {
   ssize_t WriteRegion(uint8_t index, uint64_t offset, void* data, uint32_t length);
   int     FindRegion(uint32_t type, uint32_t subtype);
   void SetMigrationDeviceState(uint32_t device_state);
+  void EnableIRQ(uint32_t index, uint32_t vector, int* fds, uint8_t count);
 
  private:
   std::string   sysfs_path_;

@@ -259,7 +259,6 @@ void SweetDisplayEncoder::Render(std::vector<DisplayPartialBitmap>& partials) {
     }
   }
 
-  // Wake up encode thread
   if (!encode_slices_.empty()) {
     encode_cv_.notify_all();
   }
@@ -296,9 +295,35 @@ void SweetDisplayEncoder::CreateEncodeSlice(uint top, uint left, uint bottom, ui
     .width = right - left,
     .height = bottom - top
   };
+  
+  /* convert to YUV */
   if (x264_picture_alloc(&slice->yuv, input_yuv_.img.i_csp, slice->width, slice->height) < 0) {
     MV_PANIC("failed to allocate yuv slice %dx%d", slice->width, slice->height);
   }
+
+  uint8_t* src = screen_bitmap_ + screen_stride_ * slice->y + slice->x * (screen_bpp_ >> 3);
+  auto dst = &slice->yuv.img;
+  /* libyuv here must be modified to use BT.709 */
+  switch (dst->i_csp)
+  {
+  case X264_CSP_I420:
+    libyuv::ARGBToI420(src, screen_stride_,
+      dst->plane[0], dst->i_stride[0],
+      dst->plane[1], dst->i_stride[1],
+      dst->plane[2], dst->i_stride[2],
+      slice->width, slice->height);
+    break;
+  case X264_CSP_I444:
+    libyuv::ARGBToI444(src, screen_stride_,
+      dst->plane[0], dst->i_stride[0],
+      dst->plane[1], dst->i_stride[1],
+      dst->plane[2], dst->i_stride[2],
+      slice->width, slice->height);
+    break;
+  default:
+    MV_PANIC("unsupported csp=0x%x", dst->i_csp);
+  }
+  
   encode_slices_.push_back(slice);
 }
 
@@ -316,7 +341,9 @@ void SweetDisplayEncoder::EncodeProcess() {
 
   while (!destroyed_) {
     std::unique_lock<std::mutex> lock(encode_mutex_);
-    encode_cv_.wait_for(lock, idle_interval);
+    encode_cv_.wait_for(lock, idle_interval, [this]() {
+      return destroyed_ || !encode_slices_.empty();
+    });
 
     if (destroyed_)
       break;
@@ -324,21 +351,16 @@ void SweetDisplayEncoder::EncodeProcess() {
     if (!started_)
       continue;
 
+    auto start_time = std::chrono::steady_clock::now();
+
     if (encode_slices_.empty()) {
       lock.unlock();
     } else {
-      ConvertSlices();
-
       auto copied(encode_slices_);
       encode_slices_.clear();
       lock.unlock();
 
       DrawSlices(copied);
-    }
-
-    auto start_time = std::chrono::steady_clock::now();
-    if (start_time < next_encode_time) {
-      continue;
     }
   
     Encode();
@@ -352,41 +374,13 @@ void SweetDisplayEncoder::EncodeProcess() {
     double overhead = double(output_nal_size_) / average_packet_size;
     if (overhead > 1.5 && overhead < config_->fps()) {
       next_encode_time = start_time + frame_interval * (overhead - 1.0);
+    } else {
+      next_encode_time = start_time + frame_interval;
+    }
+    if (std::chrono::steady_clock::now() < next_encode_time) {
+      std::this_thread::sleep_until(next_encode_time);
     }
   }
-}
-
-void SweetDisplayEncoder::ConvertSlices() {
-  // auto start_time = std::chrono::steady_clock::now();
-
-  for (auto slice: encode_slices_) {
-    uint8_t* src = screen_bitmap_ + screen_stride_ * slice->y + slice->x * (screen_bpp_ >> 3);
-    auto dst = &slice->yuv.img;
-    /* libyuv here must be modified to use BT.709 */
-    switch (dst->i_csp)
-    {
-    case X264_CSP_I420:
-      libyuv::ARGBToI420(src, screen_stride_,
-        dst->plane[0], dst->i_stride[0],
-        dst->plane[1], dst->i_stride[1],
-        dst->plane[2], dst->i_stride[2],
-        slice->width, slice->height);
-      break;
-    case X264_CSP_I444:
-      libyuv::ARGBToI444(src, screen_stride_,
-        dst->plane[0], dst->i_stride[0],
-        dst->plane[1], dst->i_stride[1],
-        dst->plane[2], dst->i_stride[2],
-        slice->width, slice->height);
-      break;
-    default:
-      MV_PANIC("unsupported csp=0x%x", dst->i_csp);
-    }
-  }
-
-  // auto delta = std::chrono::steady_clock::now() - start_time;
-  // auto delta_us = std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
-  // MV_LOG("converted cost %ld us", delta_us);
 }
 
 void SweetDisplayEncoder::DrawSlices(std::vector<EncodeSlice*>& slices) {

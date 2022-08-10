@@ -27,6 +27,7 @@
 #include "logger.h"
 #include "hyperv/hyperv.h"
 #include "hyperv/cpuid.h"
+#include "linuz/kvm_para.h"
 
 
 #define MAX_KVM_MSR_ENTRIES           256
@@ -76,7 +77,11 @@ void Vcpu::Start() {
 
 
 void Vcpu::Reset() {
-  LoadStateFrom(default_state_);
+  /* Reset CPU registers, MSRs */
+  LoadStateFrom(default_state_, false);
+
+  /* Adapt the CPU features to current model */
+  PrepareX86Vcpu();
 }
 
 /* 
@@ -90,40 +95,48 @@ void Vcpu::SetupCpuid() {
     struct kvm_cpuid2 cpuid2;
     struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
   } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
-  
+
   if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, &cpuid) < 0) {
     MV_PANIC("failed to get supported CPUID");
   }
-  
+
   for (uint i = 0; i < cpuid.cpuid2.nent; i++) {
     auto entry = &cpuid.entries[i];
-
-    // MV_LOG("vCPU %d function=0x%x index=%d flags=0x%x eax=0x%x ebx=0x%x ecx=0x%x edx=0x%x", vcpu_id_,
-    //   entry->function, entry->index, entry->flags, entry->eax, entry->ebx, entry->ecx, entry->edx);
-
     switch (entry->function)
     {
+    case 0x0: // CPUID Signature
+      entry->eax = 0xD; // Max input value for basic information
+      break;
     case 0x1: { // ACPI ID & Features
+      entry->ebx = (vcpu_id_ << 24) | (entry->ebx & 0xFFFF);
+
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_TSC_DEADLINE_TIMER, tsc_deadline);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_HYPERVISOR, machine_->hypervisor_);
+      ALTER_FEATURE(entry->ecx, CPUID_EXT_PDCM, false); // Disable PDU
+
       ALTER_FEATURE(entry->edx, CPUID_SS, false); // Self snoop
-      ALTER_FEATURE(entry->edx, CPUID_HT, true);  // Max ACPI IDs reserved field is valid
-      entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
+
       cpuid_features_ = (uint64_t(entry->edx) << 32) | entry->ecx;
       break;
     }
-    case 0x6: // Thermal and Power Management Leaf
-      entry->ecx = entry->ecx & ~(1u << 3); // don't touch MSR IA32_ENERGY_PERF_BIAS(0x1B0)
+    case 0x2: // Cache and TLB Information
+    case 0x4: // Deterministic Cache Parameters Leaf
       break;
     case 0x7: // Extended CPU features 7
       if (entry->index == 0) {
-        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_TSC_ADJUST_MSR, false);
-        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_MPX, false); // Disable MPX (Intel Memory Protection Extensions)
-        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_HLE, false);
-        ALTER_FEATURE(entry->ebx, CPUID_7_0_EBX_RTM, false);
-        /* Skylake only support a few features in ECX */
-        entry->ecx &= CPUID_7_0_ECX_PKU | CPUID_7_0_ECX_UMIP;
+        // Disable HLE, RTM, MPX (Intel Memory Protection Extensions)
+        entry->ebx &= (CPUID_7_0_EBX_FSGSBASE | CPUID_7_0_EBX_BMI1 |
+          CPUID_7_0_EBX_AVX2 | CPUID_7_0_EBX_SMEP | CPUID_7_0_EBX_BMI2 |
+          CPUID_7_0_EBX_ERMS | CPUID_7_0_EBX_INVPCID |
+          CPUID_7_0_EBX_RDSEED | CPUID_7_0_EBX_ADX |
+          CPUID_7_0_EBX_SMAP | CPUID_7_0_EBX_CLWB |
+          CPUID_7_0_EBX_AVX512F | CPUID_7_0_EBX_AVX512DQ |
+          CPUID_7_0_EBX_AVX512BW | CPUID_7_0_EBX_AVX512CD |
+          CPUID_7_0_EBX_AVX512VL | CPUID_7_0_EBX_CLFLUSHOPT);
+        // Disable PKU
+        entry->ecx &= 0;
+        entry->edx &= 0;
       }
       break;
     case 0xB: // CPU topology (cores = num_vcpus / 2, threads per core = 2)
@@ -134,18 +147,38 @@ void Vcpu::SetupCpuid() {
         entry->eax &= 0x2E7; // MPX is disabled in CPU features 7
       }
       break;
-    case 0x80000002 ... 0x80000004: { // Setup CPU model string
+    case 0x80000000 ... 0x80000001: // Extended CPUID Information
+      break;
+    case 0x80000002 ... 0x80000004: { // CPU Model String
       static const char cpu_model[48] = "Intel Xeon Processor (Skylake-Server)";
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
     }
+    case 0x80000006: // Cache Line Information
+    case 0x80000008: // Memory Address Size
+      break;
     case 0x40000000 ... 0x4000FFFF:
       /* Move KVM CPUID to 0x40000100, leaving the place for Hyper-V */
+      if (entry->function == 0x40000000) {
+        entry->eax += 0x100;
+      } else if (entry->function == 0x40000001) {
+        entry->eax &= (
+          KVM_FEATURE_CLOCKSOURCE | KVM_FEATURE_NOP_IO_DELAY | KVM_FEATURE_MMU_OP |
+          KVM_FEATURE_CLOCKSOURCE2 | KVM_FEATURE_ASYNC_PF | KVM_FEATURE_STEAL_TIME |
+          KVM_FEATURE_PV_EOI | KVM_FEATURE_PV_UNHALT | KVM_FEATURE_PV_TLB_FLUSH |       
+          KVM_FEATURE_ASYNC_PF_VMEXIT | KVM_FEATURE_PV_SEND_IPI | KVM_FEATURE_POLL_CONTROL |
+          KVM_FEATURE_PV_SCHED_YIELD | KVM_FEATURE_CLOCKSOURCE_STABLE_BIT
+        );
+      }
       entry->function += 0x100;
       break;
     default:
-      break;
+      /* Remove the function if not handled */
+      memmove(entry, entry + 1, sizeof(*entry) * (cpuid.cpuid2.nent - i - 1));
+      --i;
+      --cpuid.cpuid2.nent;
+      continue;
     }
   }
 
@@ -179,8 +212,11 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     {
     case 0x40000000: // HV_CPUID_VENDOR_AND_MAX_FUNCTIONS
       entry->eax = HV_CPUID_IMPLEMENT_LIMITS;
+      memcpy(&entry->ebx, "Microsoft Hv", 12);
       break;
     case 0x40000001: // HV_CPUID_INTERFACE
+      memcpy(&entry->eax, "Hv#1\0\0\0\0\0\0\0\0\0\0\0\0", 16);
+      break;
     case 0x40000002: // HV_CPUID_VERSION
     case 0x40000005: // HV_CPUID_IMPLEMENT_LIMITS
       /* use the default values */
@@ -195,10 +231,6 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
       entry->edx = HV_CPU_DYNAMIC_PARTITIONING_AVAILABLE;
 
       hyperv_features_ = entry->eax;
-      if (entry->eax & HV_SYNIC_AVAILABLE) {
-        struct kvm_enable_cap enable_cap = { .cap = KVM_CAP_HYPERV_SYNIC };
-        MV_ASSERT(ioctl(fd_, KVM_ENABLE_CAP, &enable_cap) == 0);
-      }
       break;
     case 0x40000004: // HV_CPUID_ENLIGHTMENT_INFO
       entry->eax = HV_APIC_ACCESS_RECOMMENDED | HV_RELAXED_TIMING_RECOMMENDED |
@@ -213,6 +245,11 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     if (entry->function) {
       cpuid->entries[cpuid->nent++] = *entry;
     }
+  }
+
+  if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
+    struct kvm_enable_cap enable_cap = { .cap = KVM_CAP_HYPERV_SYNIC };
+    MV_ASSERT(ioctl(fd_, KVM_ENABLE_CAP, &enable_cap) == 0);
   }
 }
 
@@ -238,7 +275,7 @@ uint64_t Vcpu::GetSupportedMsrFeature(uint index) {
     kvm_msr_entry entries[1];
   } msrs = { 0 };
 
-  msrs.entries[0].index = MSR_IA32_UCODE_REV;
+  msrs.entries[0].index = index;
   msrs.msrs.nmsrs = 1;
   if (ioctl(machine_->kvm_fd_, KVM_GET_MSRS, &msrs) != 1) {
     MV_PANIC("failed to get msr feature index=0x%x", index);
@@ -246,7 +283,36 @@ uint64_t Vcpu::GetSupportedMsrFeature(uint index) {
   return msrs.entries[0].data;
 }
 
-void Vcpu::SetupModelSpecificRegisters() {
+void Vcpu::SetupMsrIndices() {
+  msr_indices_.clear();
+
+  /* Setup common MSRS indices */
+  struct {
+    kvm_msr_list  list;
+    uint32_t      indices[1000];
+  } msr_list = { .list = { sizeof(msr_list.indices) / sizeof(uint32_t) } };
+  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, &msr_list) == 0);
+
+  for (uint i = 0; i < msr_list.list.nmsrs; i++) {
+    auto index = msr_list.indices[i];
+    // PMU is disabled
+    if(index >= 0x300 && index < 0x400) {
+      continue;
+    }
+    // MSR_IA32_PERFCTR0
+    if (index >= 0xC1 && index <= 0xC8) {
+      continue;
+    }
+    // P4/Xeon+ specific
+    if(index >= 0x180 && index < 0x200) {
+      continue;
+    }
+    if (!(cpuid_features_ & CPUID_EXT_VMX) && (index >= 0x480 && index < 0x500)) {
+      continue;
+    }
+    msr_indices_.insert(index);
+  }
+
   /* Add up some MSR indices that we cannot get from supported list */
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
     msr_indices_.insert(HV_X64_MSR_SCONTROL);
@@ -265,14 +331,16 @@ void Vcpu::SetupModelSpecificRegisters() {
       msr_indices_.insert(HV_X64_MSR_STIMER0_COUNT + i * 2);
     }
   }
-  
-  /* UCODE is needed for MCE / MCA */
+}
+
+void Vcpu::SetupModelSpecificRegisters() {
   struct {
     kvm_msrs      msrs;
     kvm_msr_entry entries[100];
   } msrs = { 0 };
   uint index = 0;
 
+  /* UCODE is needed for MCE / MCA */
   msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_TSC, 0);
   msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_UCODE_REV, GetSupportedMsrFeature(MSR_IA32_UCODE_REV));
 
@@ -382,27 +450,12 @@ void Vcpu::SetupSignalHandler() {
 }
 
 void Vcpu::PrepareX86Vcpu() {
-  /* Setup MCE for booting Linux */
-  SetupMachineCheckException();
-
   SetupCpuid();
+  SetupMsrIndices();
   SetupModelSpecificRegisters();
 
-
-  /* Setup common MSRS indices */
-  struct {
-    kvm_msr_list  list;
-    uint32_t      indices[1000];
-  } msr_list = { .list = { sizeof(msr_list.indices) / sizeof(uint32_t) } };
-  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, &msr_list) == 0);
-
-  for (uint i = 0; i < msr_list.list.nmsrs; i++) {
-    // MSR_CORE_PERF_FIXED_CTR3 is not supported now
-    if(msr_list.indices[i] == 0x30c) {
-      continue;
-    }
-    msr_indices_.insert(msr_list.indices[i]);
-  }
+  /* Setup MCE for booting Linux */
+  SetupMachineCheckException();
 
   /* Save default registers for system reset */
   SaveStateTo(default_state_);
@@ -511,7 +564,6 @@ void Vcpu::PrintRegisters() {
   ::PrintRegisters(regs, sregs);
 }
 
-
 void Vcpu::SaveStateTo(VcpuState& state) {
   /* KVM vcpu events */
   kvm_vcpu_events events;
@@ -556,7 +608,10 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   for (auto index : msr_indices_) {
     msrs.entries[msrs.msrs.nmsrs++].index = index;
   }
-  MV_ASSERT(ioctl(fd_, KVM_GET_MSRS, &msrs) == (int)msrs.msrs.nmsrs);
+  int nr = ioctl(fd_, KVM_GET_MSRS, &msrs);
+  if (nr != (int)msrs.msrs.nmsrs) {
+    MV_PANIC("failed to get MSR(%d) index=0x%x", nr, msrs.entries[nr].index);
+  }
   state.set_msrs(&msrs, sizeof(msrs));
 
   /* LAPIC */
@@ -584,7 +639,31 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   state.set_cpuid(&cpuid, sizeof(cpuid));
 }
 
-void Vcpu::LoadStateFrom(VcpuState& state) {
+void Vcpu::SynchronizeKVMClock() {
+  if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_KVMCLOCK_CTRL)) {
+    auto ret = ioctl(fd_, KVM_KVMCLOCK_CTRL, 0);
+    MV_ASSERT(ret == 0 || (ret == -1 && errno == EINVAL));
+  }
+}
+
+void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
+  if (load_cpuid) {
+    struct {
+      struct kvm_cpuid2 cpuid2;
+      struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
+    } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+    memcpy(&cpuid, state.cpuid().data(), sizeof(cpuid));
+    MV_ASSERT(ioctl(fd_, KVM_SET_CPUID2, &cpuid) == 0);
+    
+    /* Reset MSR indices */
+    SetupMsrIndices();
+  }
+
+  /* LAPIC */
+  kvm_lapic_state lapic;
+  memcpy(&lapic, state.lapic().data(), sizeof(lapic));
+  MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
+
   /* Special registers */
   kvm_sregs sregs;
   memcpy(&sregs, state.sregs().data(), sizeof(sregs));
@@ -621,7 +700,8 @@ void Vcpu::LoadStateFrom(VcpuState& state) {
     auto ret = ioctl(fd_, KVM_SET_MSRS, &msrs);
     MV_ASSERT(ret >= 0);
     if (ret < nmsrs) {
-      MV_LOG("Failed to set MSR 0x%x=0x%x. Maybe kernel version is too old?", msrs.entries[ret].index, msrs.entries[ret].data);
+      MV_LOG("Failed to set MSR 0x%x=0x%x. Maybe kernel version is too old?",
+        msrs.entries[ret].index, msrs.entries[ret].data);
       // Skip the failed one
       nmsrs -= ret + 1;
       memmove(msrs.entries, &msrs.entries[ret + 1], nmsrs * sizeof(kvm_msr_entry));
@@ -639,11 +719,6 @@ void Vcpu::LoadStateFrom(VcpuState& state) {
   kvm_mp_state mp_state;
   mp_state.mp_state = state.mp_state();
   MV_ASSERT(ioctl(fd_, KVM_SET_MP_STATE, &mp_state) == 0);
-
-  /* LAPIC */
-  kvm_lapic_state lapic;
-  memcpy(&lapic, state.lapic().data(), sizeof(lapic));
-  MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
 
   /* TSC kHz */
   if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_CONTROL)) {
@@ -683,6 +758,6 @@ bool Vcpu::LoadState(MigrationReader* reader) {
     return false;
   }
 
-  LoadStateFrom(state);
+  LoadStateFrom(state, true);
   return true;
 }
