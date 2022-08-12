@@ -21,7 +21,7 @@
 #include "logger.h"
 #include "disk_image.h"
 #include "ahci_port.h"
-#include "ata_interval.h"
+#include "ata_internal.h"
 
 static void padstr(char *str, const char *src, int len)
 {

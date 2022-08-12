@@ -23,8 +23,8 @@
 #include <getopt.h>
 
 #include "machine.h"
-#include "viewer.h"
-#include "sweet/server.h"
+#include "sdl/viewer.h"
+#include "sweet-server/server.h"
 #include "version.h"
 #include <filesystem>
 

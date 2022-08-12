@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "sweet/server.h"
+#include "server.h"
 
 #include <sys/socket.h>
 #include <sys/un.h>

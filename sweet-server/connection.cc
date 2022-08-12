@@ -16,8 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "sweet/server.h"
-
+#include "server.h"
 #include "connection.h"
 #include "display_encoder.h"
 #include "utilities.h"

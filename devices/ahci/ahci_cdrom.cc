@@ -22,7 +22,7 @@
 
 #include "logger.h"
 #include "ahci_port.h"
-#include "ata_interval.h"
+#include "ata_internal.h"
 #include "disk_image.h"
 #include "pb/ahci_cdrom.pb.h"
 
