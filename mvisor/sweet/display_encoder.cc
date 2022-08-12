@@ -511,7 +511,7 @@ void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint qu
   }
   jpeg_finish_compress(&cinfo);
   jpeg_destroy_compress(&cinfo);
-  delete bitmap;
+  delete[] bitmap;
   
   if (out_buffer) {
     output.resize(out_size);

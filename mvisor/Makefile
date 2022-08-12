@@ -8,7 +8,7 @@ VERSION = "1.6.3"
 VERSION_FILE = "./include/version.h"
 
 # FIXME: Add -g only if debug mode is on
-CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wall -Werror -g
+CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wno-address-of-packed-member -Wall -Werror -g
 CCFLAGS = $(CFLAGS) -std=c++17 -mavx2
 BUILD_DIR = ../build
 
