@@ -10,7 +10,7 @@ VERSION_FILE = "./include/version.h"
 # FIXME: Add -g only if debug mode is on
 CFLAGS = $(addprefix -I, $(INCLUDE_DIRS)) -Wno-address-of-packed-member -Wall -Werror -g
 CCFLAGS = $(CFLAGS) -std=c++17 -mavx2
-BUILD_DIR = ../build
+BUILD_DIR = ./build
 
 MV_PROTOBUF_SOURCE := $(wildcard */*.proto)
 MV_PROTOBUF_SOURCE += $(wildcard devices/*/*.proto)
@@ -29,7 +29,7 @@ $(shell mkdir -p $(dir $(MV_OBJECTS)))
 
 .PHONY: run all clean
 run: all
-	time $(EXECUTABLE)
+	time $(EXECUTABLE) -config config/default.yaml
 
 # Press F2 to save VM to /tmp/save and make load to restore the VM
 # Remember to use snapshot=Yes in disk configuration
@@ -46,7 +46,7 @@ debug_load: all
 	gdb -ex "handle SIG34 nostop pass" -ex "run -config /tmp/save/configuration.yaml -load /tmp/save" $(EXECUTABLE)
 
 debug: all
-	gdb -ex "handle SIG34 nostop pass" -ex "run" $(EXECUTABLE)
+	gdb -ex "handle SIG34 nostop pass" -ex "run -config config/default.yaml" $(EXECUTABLE)
 
 install: all
 	cp -f $(EXECUTABLE) /mnt/server/opt/mvisor/build/bin/
