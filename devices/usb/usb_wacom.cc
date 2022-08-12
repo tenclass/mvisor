@@ -184,7 +184,8 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
 
   void StartStatusReport() {
     auto timer_callback = [this]() {
-      WacomEvent event = {0};
+      WacomEvent event;
+      bzero(&event, sizeof(event));
       QueueWacomEvent(event);
     };
 

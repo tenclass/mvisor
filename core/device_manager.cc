@@ -43,7 +43,7 @@ class SystemRoot : public Device {
 };
 DECLARE_DEVICE(SystemRoot);
 
-inline IoThread* DeviceManager::io() {
+IoThread* DeviceManager::io() {
   return machine_->io_thread_;
 }
 
@@ -167,7 +167,11 @@ void DeviceManager::UnregisterDevice(Device* device) {
 
 void DeviceManager::RegisterVfioGroup(int group_fd) {
   if (vfio_kvm_device_fd_ == -1) {
-    kvm_create_device create = { .type = KVM_DEV_TYPE_VFIO };
+    kvm_create_device create = {
+      .type = KVM_DEV_TYPE_VFIO,
+      .fd = 0,
+      .flags = 0
+    };
     if (ioctl(machine_->vm_fd_, KVM_CREATE_DEVICE, &create) < 0) {
       MV_PANIC("failed to create KVM VFIO device");
     }
@@ -175,6 +179,7 @@ void DeviceManager::RegisterVfioGroup(int group_fd) {
   }
 
   kvm_device_attr attr = {
+    .flags = 0,
     .group = KVM_DEV_VFIO_GROUP,
     .attr = KVM_DEV_VFIO_GROUP_ADD,
     .addr = (uint64_t)&group_fd
@@ -188,6 +193,7 @@ void DeviceManager::UnregisterVfioGroup(int group_fd) {
   MV_ASSERT(vfio_kvm_device_fd_ != -1);
 
   kvm_device_attr attr = {
+    .flags = 0,
     .group = KVM_DEV_VFIO_GROUP,
     .attr = KVM_DEV_VFIO_GROUP_DEL,
     .addr = (uint64_t)&group_fd
@@ -203,7 +209,8 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource
   if (resource->type == kIoResourceTypePio) {
     pio_handlers_.push_back(new IoHandler {
       .resource = resource,
-      .device = device
+      .device = device,
+      .memory_region = nullptr
     });
   } else if (resource->type == kIoResourceTypeMmio) {
     // Map the memory to type Device. Accessing these regions will cause MMIO access fault
@@ -219,7 +226,8 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource
     if (resource->flags & kIoResourceFlagCoalescingMmio) {
       kvm_coalesced_mmio_zone zone = {
         .addr = resource->base,
-        .size =  (uint32_t)resource->length
+        .size =  (uint32_t)resource->length,
+        .pad = 0
       };
       if (ioctl(machine_->vm_fd_, KVM_REGISTER_COALESCED_MMIO, &zone) != 0) {
         MV_PANIC("failed to register coaleascing MMIO");
@@ -251,7 +259,8 @@ void DeviceManager::UnregisterIoHandler(Device* device, const IoResource* resour
     if (resource->flags & kIoResourceFlagCoalescingMmio) {
       kvm_coalesced_mmio_zone zone = {
         .addr = resource->base,
-        .size = (uint32_t)resource->length
+        .size = (uint32_t)resource->length,
+        .pad = 0
       };
       if (ioctl(machine_->vm_fd_, KVM_UNREGISTER_COALESCED_MMIO, &zone) != 0) {
         MV_PANIC("failed to unregister coaleascing MMIO");
@@ -281,7 +290,8 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
     .addr = event->address,
     .len = event->length,
     .fd = event->fd,
-    .flags = event->flags
+    .flags = event->flags,
+    .pad = {0}
   };
   int ret = ioctl(machine_->vm_fd_, KVM_IOEVENTFD, &kvm_ioevent);
   if (ret < 0) {
@@ -292,12 +302,14 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
   }
 
   io()->StartPolling(event->fd, EPOLLIN, [event, this](int events) {
-    uint64_t tmp;
-    read(event->fd, &tmp, sizeof(tmp));
-    if (event->type == kIoEventMmio) {
-      HandleMmio(event->address, (uint8_t*)&event->datamatch, event->length, true, true);
-    } else if (event->type == kIoEventPio) {
-      HandleIo(event->address, (uint8_t*)&event->datamatch, event->length, true, 1, true);
+    if (events & EPOLLIN) {
+      uint64_t tmp;
+      read(event->fd, &tmp, sizeof(tmp));
+      if (event->type == kIoEventMmio) {
+        HandleMmio(event->address, (uint8_t*)&event->datamatch, event->length, true, true);
+      } else if (event->type == kIoEventPio) {
+        HandleIo(event->address, (uint8_t*)&event->datamatch, event->length, true, 1, true);
+      }
     }
   });
 
@@ -321,7 +333,8 @@ void DeviceManager::UnregisterIoEvent(IoEvent* event) {
       .addr = event->address,
       .len = event->length,
       .fd = event->fd,
-      .flags = event->flags | KVM_IOEVENTFD_FLAG_DEASSIGN
+      .flags = event->flags | KVM_IOEVENTFD_FLAG_DEASSIGN,
+      .pad = {0}
     };
     int ret = ioctl(machine_->vm_fd_, KVM_IOEVENTFD, &kvm_ioevent);
     if (ret < 0) {
@@ -527,7 +540,10 @@ void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
   struct kvm_msi msi = {
     .address_lo = (uint32_t)(address),
     .address_hi = (uint32_t)(address >> 32),
-    .data = data
+    .data = data,
+    .flags = 0,
+    .devid = 0,
+    .pad = {0}
   };
   auto ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
   if (ret < 0) {
@@ -560,7 +576,7 @@ void DeviceManager::SetupIrqChip() {
   }
 
   // Use Kvm in-kernel PITClock
-  struct kvm_pit_config pit_config = { .flags = KVM_PIT_SPEAKER_DUMMY };
+  struct kvm_pit_config pit_config = { .flags = KVM_PIT_SPEAKER_DUMMY, .pad = {0} };
   if (ioctl(machine_->vm_fd_, KVM_CREATE_PIT2, &pit_config) < 0) {
     MV_PANIC("failed to create pit2");
   }
@@ -572,6 +588,8 @@ void DeviceManager::SetupGsiRoutingTable() {
     kvm_irq_routing_entry entry = {
       .gsi = gsi,
       .type = KVM_IRQ_ROUTING_IRQCHIP,
+      .flags = 0,
+      .pad = 0,
       .u = { .irqchip = { .irqchip = chip, .pin = pin } }
     };
     gsi_routing_table_.push_back(entry);
@@ -609,10 +627,13 @@ int DeviceManager::AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd) 
   kvm_irq_routing_entry entry = {
     .gsi = (uint)gsi,
     .type = KVM_IRQ_ROUTING_MSI,
+    .flags = 0,
+    .pad = 0,
     .u = { .msi = {
       .address_lo = (uint32_t)address,
       .address_hi = (uint32_t)(address >> 32),
-      .data = data
+      .data = data,
+      .pad = 0
     } }
   };
 
@@ -622,7 +643,10 @@ int DeviceManager::AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd) 
 
   UpdateGsiRoutingTable();
   if (trigger_fd != -1) {
-    kvm_irqfd irqfd = { .fd = (uint)trigger_fd, .gsi = (uint)gsi };
+    kvm_irqfd irqfd;
+    bzero(&irqfd, sizeof(irqfd));
+    irqfd.fd = (uint)trigger_fd;
+    irqfd.gsi = (uint)gsi;
     if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
       MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
     }
@@ -637,12 +661,17 @@ void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int
     return entry.gsi == (uint)gsi;
   });
 
+  kvm_irqfd irqfd;
+  bzero(&irqfd, sizeof(irqfd));
+  irqfd.fd = (uint)trigger_fd;
+  irqfd.gsi = (uint)gsi;
+
   if (it == gsi_routing_table_.end()) {
     MV_PANIC("not found gsi=%d", gsi);
   } else if (address == 0) {
     /* deassign the irqfd and remove from table */
     if (trigger_fd != -1) {
-      kvm_irqfd irqfd = { .fd = (uint)trigger_fd, .gsi = (uint)gsi, .flags = KVM_IRQFD_FLAG_DEASSIGN };
+      irqfd.flags = KVM_IRQFD_FLAG_DEASSIGN;
       if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
         MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
       }
@@ -650,13 +679,12 @@ void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int
     gsi_routing_table_.erase(it);
   } else {
     /* update entry and irqfd */
-    it->u.msi = (kvm_irq_routing_msi) {
-      .address_lo = (uint32_t)address,
-      .address_hi = (uint32_t)(address >> 32),
-      .data = data
-    };
+    auto& msi = it->u.msi;
+    msi.address_lo = (uint32_t)address;
+    msi.address_hi = (uint32_t)(address >> 32);
+    msi.data = data;
+
     if (trigger_fd != -1) {
-      kvm_irqfd irqfd = { .fd = (uint)trigger_fd, .gsi = (uint)gsi };
       if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
         MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
       }
@@ -689,7 +717,8 @@ bool DeviceManager::SaveState(MigrationWriter* writer) {
   writer->WriteRaw("PIT2", &pit2, sizeof(pit2));
   
   writer->SetPrefix("kvm-clock");
-  kvm_clock_data clock = { 0 };
+  kvm_clock_data clock;
+  bzero(&clock, sizeof(clock));
   MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_CLOCK, &clock) == 0);
   writer->WriteRaw("CLOCK", &clock, sizeof(clock));
 

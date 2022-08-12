@@ -32,7 +32,7 @@
 #include "hda_internal.h"
 #include "device_manager.h"
 #include "device_interface.h"
-#include "pb/hda_duplex.pb.h"
+#include "hda_duplex.pb.h"
 #include "logger.h"
 
 #define HDA_TIMER_INTERVAL_MS   (10)
@@ -46,29 +46,29 @@ struct HdaStream {
   bool      mute_left, mute_right;
 
   bool      output;
-  bool      running;
+  bool      running = false;
   size_t    position;
   uint32_t  nchannels;
   uint32_t  frequency;
   size_t    bytes_per_second;
   size_t    bytes_per_frame;
 
-  IoTimer*  timer;
+  IoTimer*  timer = nullptr;
   IoTimePoint start_time;
   TransferCallback transfer_callback;
   uint8_t   buffer[HDA_STREAM_BUFFER_SIZE];
-  size_t    buffer_pointer;
+  size_t    buffer_pointer = 0;
 };
 
 struct HdaNode {
   uint32_t    id;
   std::string name;
-  uint32_t    config;
-  uint32_t    pin_control;
-  uint32_t    stream_index;
+  uint32_t    config = 0;
+  uint32_t    pin_control = 0;
+  uint32_t    stream_index = 0;
   std::map<uint32_t, uint32_t> parameters;
   std::vector<uint32_t> connection;
-  HdaStream*  stream;
+  HdaStream*  stream = nullptr;
 };
 
 class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterface, public RecordInterface {
@@ -76,7 +76,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   uint32_t                  subsystem_id_;
   uint32_t                  pcm_formats_;
   std::vector<HdaNode>      nodes_;
-  std::array<HdaStream, 2>  streams_ = { 0 };
+  std::array<HdaStream, 2>  streams_;
   std::vector<PlaybackListener> playback_listeners_;
   std::vector<RecordListener>   record_listeners_;
   std::deque<std::string>        record_buffer_;
@@ -84,6 +84,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
  public:
   HdaDuplex() {
     set_parent_name("ich9-hda");
+  }
+
+  virtual ~HdaDuplex() {
   }
 
   void Connect() {
@@ -151,7 +154,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     pcm_formats_ = AC_SUPPCM_BITS_16 | (1 << 6); // 48000 Hz
     
     // root node
-    HdaNode root = { .id = AC_NODE_ROOT, .name = "root" };
+    HdaNode root;
+    root.id = AC_NODE_ROOT;
+    root.name = "root";
     root.parameters[AC_PAR_VENDOR_ID] = subsystem_id_;
     root.parameters[AC_PAR_SUBSYSTEM_ID] = subsystem_id_;
     root.parameters[AC_PAR_REV_ID] = 0x00100101;
@@ -159,7 +164,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     nodes_.push_back(root);
 
     // audio node
-    HdaNode audio = { .id = 1, .name = "func" };
+    HdaNode audio;
+    audio.id = 1;
+    audio.name = "func";
     audio.parameters[AC_PAR_SUBSYSTEM_ID] = subsystem_id_;
     audio.parameters[AC_PAR_FUNCTION_TYPE] = AC_GRP_AUDIO_FUNCTION;
     audio.parameters[AC_PAR_NODE_COUNT] = 0x00020004;
@@ -178,7 +185,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     nodes_.push_back(audio);
 
     // dac node
-    HdaNode dac = { .id = 2, .name = "dac" };
+    HdaNode dac;
+    dac.id = 2;
+    dac.name = "dac";
     dac.stream_index = 0;
     dac.stream = &streams_[0];
     dac.stream->output = true;
@@ -191,7 +200,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     nodes_.push_back(dac);
 
     // out node
-    HdaNode out = { .id = 3, .name = "out" };
+    HdaNode out;
+    out.id = 3;
+    out.name = "out";
     out.config = (AC_JACK_PORT_COMPLEX << AC_DEFCFG_PORT_CONN_SHIFT) |
       (AC_JACK_LINE_OUT << AC_DEFCFG_DEVICE_SHIFT) |
       (AC_JACK_CONN_UNKNOWN << AC_DEFCFG_CONN_TYPE_SHIFT) |
@@ -205,7 +216,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     nodes_.push_back(out);
 
     // adc node
-    HdaNode adc = { .id = 4, .name = "adc" };
+    HdaNode adc;
+    adc.id = 4;
+    adc.name = "adc";
     adc.stream_index = 1;
     adc.stream = &streams_[1];
     adc.stream->output = false;
@@ -220,7 +233,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     nodes_.push_back(adc);
 
     // in
-    HdaNode in = { .id = 5, .name = "in" };
+    HdaNode in;
+    in.id = 5;
+    in.name = "in";
     in.config = (AC_JACK_PORT_COMPLEX << AC_DEFCFG_PORT_CONN_SHIFT) |
       (AC_JACK_LINE_IN << AC_DEFCFG_DEVICE_SHIFT) |
       (AC_JACK_CONN_UNKNOWN << AC_DEFCFG_CONN_TYPE_SHIFT) |
@@ -352,6 +367,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   }
 
   void SetupStream(HdaStream* stream) {
+    stream->buffer_pointer = 0;
     stream->frequency = 0;
     stream->channel = 0;
     stream->bytes_per_second = stream->bytes_per_frame = 0;

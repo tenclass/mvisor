@@ -22,11 +22,23 @@
 #include <uuid/uuid.h>
 #include <getopt.h>
 
-#include "machine.h"
-#include "sdl/viewer.h"
-#include "sweet-server/server.h"
-#include "version.h"
 #include <filesystem>
+
+#include "version.h"
+#include "machine.h"
+
+
+static Machine*     machine = nullptr;
+
+#ifdef HAS_SWEET_SERVER
+#include "sweet-server/server.h"
+static SweetServer* sweet_server = nullptr;
+#endif
+
+#ifdef HAS_SDL
+#include "sdl/viewer.h"
+static Viewer*      viewer = nullptr;
+#endif
 
 
 /* For vfio mdev, -uuid xxx is necessary */
@@ -76,13 +88,6 @@ void PrintVersion() {
   printf("There is NO WARRANTY, to the extent permitted by law\n");
 }
 
-bool VerifyArg(const std::string& parent_path) {
-  if (!std::filesystem::is_directory(parent_path)) {
-    return false;
-  }
-  return true;
-}
-
 static struct option long_options[] = {
   {"help", no_argument, 0, 'h'},
   {"uuid", required_argument, 0, 'u'},
@@ -94,10 +99,6 @@ static struct option long_options[] = {
   {"version", no_argument, 0, 'v'},
   {NULL, 0, 0, 0}
 };
-
-static Machine*     machine = nullptr;
-static SweetServer* sweet_server = nullptr;
-static Viewer*      viewer = nullptr;
 
 int main(int argc, char* argv[]) {
   IntializeArguments(argc, argv);
@@ -115,72 +116,24 @@ int main(int argc, char* argv[]) {
     case 'h':
       PrintHelp();
       return 0;
-    case 'u': {
+    case 'u':
       vm_uuid = optarg;
-      if (vm_uuid.empty()) {
-        printf("must specified uuid! run terminated\n");  
-        return 0;
-      }
       break;
-    }
-    case 'n': {
+    case 'n':
       vm_name = optarg;
-      if (vm_name.empty()) {
-        printf("must specified name! run terminated\n");  
-        return 0;
-      }
       break;
-    }
-    case 'c': {
+    case 'c':
       config_path = optarg;
-      if (config_path.empty()) {
-        printf("must specified config! run terminated\n");
-        return 0;
-      }
-      if (!std::filesystem::exists(config_path)) {
-        printf("config:%s not exists! run terminated\n", config_path.c_str());
-        return 0;
-      }
       break;
-    }
-    case 's': {
+    case 's':
       sweet_path = optarg;
-      if (sweet_path.empty()) {
-        printf("must specified sweet socket path! run terminated\n");  
-        return 0;
-      }
-      std::filesystem::path path(sweet_path);
-      if (!VerifyArg(path.parent_path())) {
-        printf("sweet socket path:%s not exists! run terminated\n", path.parent_path().c_str());  
-        return 0;
-      }
       break;
-    }
-    case 'p': {
+    case 'p':
       pid_path = optarg;
-      if (pid_path.empty()) {
-        printf("must specified pid file path! run terminated\n");  
-        return 0;
-      }
-      std::filesystem::path path(pid_path);
-      if (!VerifyArg(path.parent_path())) {
-        printf("pid file path:%s not exists! run terminated\n", path.parent_path().c_str());  
-        return 0;
-      }
       break;
-    }
-    case 'l': {
+    case 'l':
       load_path = optarg;
-      if (load_path.empty()) {
-        printf("must specified snapshot path! run terminated\n");  
-        return 0;
-      }
-      if (!VerifyArg(load_path)) {
-        printf("snapshot path:%s not exists! run terminated\n", load_path.c_str());  
-        return 0;
-      }
       break;
-    }
     case 'v':
       PrintVersion();
       return 0;
@@ -197,18 +150,21 @@ int main(int argc, char* argv[]) {
     fclose(fp);
   }
 
-  int ret;
+  int ret = 0;
   machine = new Machine(config_path);
   machine->set_vm_uuid(vm_uuid);
   machine->set_vm_name(vm_name.empty() ? vm_uuid : vm_name);
 
+#ifdef HAS_SWEET_SERVER
   /* There are two modes to control the virtual machine,
    * the GUI mode is to start a SDL viewwer,
    * and the non-GUI mode is to start a sweet server
    */
   if (!sweet_path.empty()) {
     sweet_server = new SweetServer(machine, sweet_path);
-    auto quit_callback = [](int signo) {
+    auto quit_callback = [](int signum) {
+      MV_UNUSED(signum);
+
       machine->Quit();
       sweet_server->Close();
     };
@@ -223,7 +179,11 @@ int main(int argc, char* argv[]) {
 
     ret = sweet_server->MainLoop();
     delete sweet_server;
-  } else {
+  }
+#endif
+
+#ifdef HAS_SDL
+  if (sweet_path.empty()) {
     /* SDL handles default signals */
     viewer = new Viewer(machine);
 
@@ -234,6 +194,7 @@ int main(int argc, char* argv[]) {
     ret = viewer->MainLoop();
     delete viewer;
   }
+#endif
 
   delete machine;
 

@@ -84,7 +84,7 @@ class Viewer {
 
   uint width_, height_, bpp_, stride_;
 
-  PointerEvent pointer_state_ = { 0 };
+  PointerEvent pointer_state_;
   PendingResize pending_resize_;
 
   bool pcm_playback_error_ = false;

@@ -30,7 +30,7 @@
 #include "xhci_internal.h"
 #include "usb.h"
 #include "logger.h"
-#include "pb/xhci_host.pb.h"
+#include "xhci_host.pb.h"
 
 using namespace std::chrono;
 
@@ -74,12 +74,12 @@ struct XhciSlot {
 
 struct XhciEvent {
   TRBType   type;
-  TRBCCode  completion_code;
-  uint64_t  poniter;
-  uint32_t  length;
-  uint32_t  flags;
-  uint      slot_id;
-  uint      endpoint_id;
+  TRBCCode  completion_code = CC_INVALID;
+  uint64_t  poniter = 0;
+  uint32_t  length = 0;
+  uint32_t  flags = 0;
+  uint      slot_id = 0;
+  uint      endpoint_id = 0;
 };
 
 struct XhciTransfer {
@@ -102,10 +102,10 @@ class XhciHost : public PciDevice {
     uint max_slots_ = 64;
     uint max_pstreams_mask_ = 7;
   
-    std::array<UsbPortState, 128>           port_states_ = { 0 };
-    std::array<XhciPortRegisters, 128>      port_regs_ = { 0 };
-    std::array<XhciInterruptRegisters, 128> interrupt_regs_ = { 0 };
-    std::array<XhciSlot, 128>               slots_ = { 0 };
+    std::array<UsbPortState, 128>           port_states_;
+    std::array<XhciPortRegisters, 128>      port_regs_;
+    std::array<XhciInterruptRegisters, 128> interrupt_regs_;
+    std::array<XhciSlot, 128>               slots_;
     XhciRing                                command_ring_;
     IoTimePoint                             microframe_index_start_;
     XhciCapabilityRegisters                 capability_regs_;
@@ -133,6 +133,11 @@ class XhciHost : public PciDevice {
 
     AddPciBar(0, 0x4000, kIoResourceTypeMmio);
     AddMsiXCapability(0, 16, 0x3000, 0x1000);
+
+    bzero(port_states_.data(), sizeof(port_states_[0]) * port_states_.size());
+    bzero(port_regs_.data(), sizeof(port_regs_[0]) * port_regs_.size());
+    bzero(slots_.data(), sizeof(slots_[0]) * slots_.size());
+    bzero(interrupt_regs_.data(), sizeof(interrupt_regs_[0]) * interrupt_regs_.size());
   }
 
   virtual void Connect() {
@@ -988,6 +993,7 @@ class XhciHost : public PciDevice {
 
   /* FIXME: route_string is not supported yet */
   UsbDevice* LookupDevice(uint port_id, uint32_t route_string) {
+    MV_UNUSED(route_string);
     MV_ASSERT(port_id >= 1 && port_id <= max_ports_);
     for (auto &port_state : port_states_) {
       if (port_state.id == port_id) {
@@ -1000,7 +1006,7 @@ class XhciHost : public PciDevice {
   /* ======================== Endpoint Functions ======================= */
 
   XhciEndpoint* CreateEndpoint(uint slot_id, uint endpoint_id, uint32_t* context) {
-    auto endpoint = new XhciEndpoint { 0 };
+    auto endpoint = new XhciEndpoint;;
     endpoint->id = endpoint_id;
     endpoint->slot_id = slot_id;
 
@@ -1018,6 +1024,8 @@ class XhciHost : public PciDevice {
       endpoint->ring.consumer_cycle_bit = context[2] & 1;
     }
     endpoint->interval = 1 << ((context[0] >> 16) & 0xFF);
+    endpoint->kick_active = 0;
+    endpoint->state = 0;
     endpoint->mfindex_last = 0;
     endpoint->context_address = slots_[slot_id - 1].context_address + 0x20 * endpoint_id;
     return endpoint;
@@ -1110,6 +1118,7 @@ class XhciHost : public PciDevice {
   TRBCCode SetEndpointDequee(uint slot_id, uint endpoint_id, uint stream_id, uint64_t dequeue) {
     MV_ASSERT(slot_id >= 1 && slot_id <= max_slots_);
     MV_ASSERT(endpoint_id >= 1 && endpoint_id <= 31);
+    MV_UNUSED(stream_id);
     
     auto &slot = slots_[slot_id - 1];
     auto endpoint = slot.endpoints[endpoint_id - 1];
@@ -1226,6 +1235,7 @@ class XhciHost : public PciDevice {
         }
         left -= chunk;
         event_data_transfered += chunk;
+        break;
       case TR_STATUS:
         reported = false;
         short_packet = false;
@@ -1497,7 +1507,10 @@ class XhciHost : public PciDevice {
     while (PopRing(command_ring_, trb)) {
       uint slot_id = 0;
       TRBCCode code = CC_SUCCESS;
-      XhciEvent event = { ER_COMMAND_COMPLETE, .poniter = trb.address };
+      XhciEvent event;
+      event.type = ER_COMMAND_COMPLETE;
+      event.poniter = trb.address;
+  
       auto type = TRB_TYPE(trb);
       if (debug_) {
         MV_LOG("command=%d", type);
@@ -1569,6 +1582,7 @@ class XhciHost : public PciDevice {
   }
 
   void WriteDoorbellRegs(uint64_t address, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_UNUSED(address);
     MV_ASSERT(size == 4);
     uint64_t slot_id = offset >> 2;
     uint32_t value = *(uint32_t*)data;

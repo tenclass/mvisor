@@ -17,7 +17,7 @@
  */
 
 /*
- * Since we want to implement QXL, so don't waste time on VGA.
+ * Since we want to implement QXL, don't waste time on VGA.
  * It's not recommended to use VGA mode due to performance problems.
  * Reference:
  * https://wiki.osdev.org/Bochs_VBE_Extensions
@@ -31,7 +31,7 @@
 #include "logger.h"
 #include "vbe.h"
 #include "vga.font.inc"
-#include "pb/vga.pb.h"
+#include "vga.pb.h"
 
 #define VGA_PIO_BASE    0x3C0
 #define VGA_PIO_SIZE    0x20
@@ -623,15 +623,14 @@ bool Vga::AcquireUpdate(DisplayUpdate& update) {
     return false;
   }
 
-  auto partial = DisplayPartialBitmap {
-    .stride = stride_,
-    .bpp = bpp_,
-    .width = width_,
-    .height = height_,
-    .x = 0,
-    .y = 0,
-    .pallete = vga_.pallete
-  };
+  DisplayPartialBitmap partial;
+  partial.stride = stride_;
+  partial.bpp = bpp_;
+  partial.width = width_;
+  partial.height = height_;
+  partial.x = 0;
+  partial.y = 0;
+  partial.pallete = vga_.pallete;
 
   size_t data_size = stride_ * height_;
 

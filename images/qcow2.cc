@@ -197,6 +197,7 @@ void Qcow2Image::WriteRefcountBlock(RefcountBlock* rfb) {
 
 void Qcow2Image::InitializeLruCache() {
   rfb_cache_.Initialize(REFCOUNT_CACHE_ITEMS, [this](auto offset_in_file, auto rfb) {
+    MV_UNUSED(offset_in_file);
     if (rfb->dirty) {
       WriteRefcountBlock(rfb);
     }
@@ -204,6 +205,7 @@ void Qcow2Image::InitializeLruCache() {
     free(rfb);
   });
   l2_cache_.Initialize(L2_CACHE_ITEMS, [this](auto offset_in_file, auto l2_table) {
+    MV_UNUSED(offset_in_file);
     if (l2_table->dirty) {
       WriteL2Table(l2_table);
     }
@@ -211,6 +213,7 @@ void Qcow2Image::InitializeLruCache() {
     free(l2_table);
   });
   cluster_cache_.Initialize(CLUSTER_CACHE_ITEMS, [this](auto offset_in_file, auto data) {
+    MV_UNUSED(offset_in_file);
     delete data;
   });
 }
@@ -399,7 +402,7 @@ ssize_t Qcow2Image::ReadCluster(void* buffer, off_t pos, size_t length, bool no_
       decompressed = new uint8_t[cluster_size_];
       auto ret = zstd_decompress(compressed_.data(), compressed_length, decompressed, cluster_size_);
       if (ret < 0) {
-        delete decompressed;
+        delete[] decompressed;
         MV_ERROR("failed to decompressed length=0x%x ret=%d", compressed_length, ret);
         return ret;
       }
@@ -535,6 +538,7 @@ ssize_t Qcow2Image::BlockIo(void *buffer, off_t position, size_t length, ImageIo
       ret = DiscardCluster(position, length - offset);
       break;
     default:
+      ret = -EINVAL;
       MV_PANIC("invalid type=%d", type);
     }
     if (ret <= 0) {

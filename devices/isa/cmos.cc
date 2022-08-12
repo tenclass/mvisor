@@ -22,7 +22,7 @@
 #include <ctime>
 #include "logger.h"
 #include "device_manager.h"
-#include "pb/cmos.pb.h"
+#include "cmos.pb.h"
 
 #define RTC_BASE_ADDRESS 0x70
 
@@ -192,6 +192,9 @@ class Cmos : public Device {
   }
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_UNUSED(resource);
+    MV_UNUSED(size);
+
     if (offset == 0) {
       data[0] = 0xFF;
       return;
@@ -220,6 +223,9 @@ class Cmos : public Device {
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_UNUSED(resource);
+    MV_UNUSED(size);
+
     if (offset == 0) { /* index register */
       uint8_t value = data[0];
       cmos_index_  = value & ~(1UL << 7);

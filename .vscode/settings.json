@@ -67,5 +67,9 @@
         "iostream": "cpp",
         "shared_mutex": "cpp"
     },
-    "C_Cpp.default.cppStandard": "c++17"
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/include",
+        "${workspaceFolder}/build/mvisor.p"
+    ]
 }

@@ -23,7 +23,8 @@
 #define PIXEL_SIZE 0.2936875 // 1280x1024 is 14.8" x 11.9" 
 
 #define QXL_MODE(_x, _y, _b, _o)                  \
-    {   .x_res = _x,                              \
+    {   .id = 0,                                  \
+        .x_res = _x,                              \
         .y_res = _y,                              \
         .bits  = _b,                              \
         .stride = (_x) * (_b) / 8,                \

@@ -103,7 +103,7 @@ class VfioPci : public PciDevice {
   int           group_id_ = -1;
   int           group_fd_ = -1;
   int           device_fd_ = -1;
-  vfio_device_info                                device_info_ = { 0 };
+  vfio_device_info                                device_info_;
   std::array<VfioRegion, MAX_VFIO_REGIONS>        regions_;
   std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>  interrupts_;
   VfioMigration                                   migration_;

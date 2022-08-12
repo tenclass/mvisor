@@ -29,7 +29,7 @@
 #include <x264.h>
 
 #include "device_interface.h"
-#include "pb/sweet.pb.h"
+#include "sweet.pb.h"
 
 using namespace SweetProtocol;
 

@@ -146,7 +146,7 @@ class VirtioPci : public PciDevice {
 
   virtio_pci_common_cfg       common_config_;
   uint64_t                    device_features_;
-  uint32_t                    driver_features_[2];
+  uint64_t                    driver_features_;
   std::array<VirtQueue, 64>   queues_;
   uint8_t                     isr_status_;
   bool                        use_ioevent_ = false;

@@ -24,7 +24,7 @@
 #include "ahci_port.h"
 #include "ata_internal.h"
 #include "disk_image.h"
-#include "pb/ahci_cdrom.pb.h"
+#include "ahci_cdrom.pb.h"
 
 /*
  *  SENSE KEYS
@@ -224,6 +224,7 @@ void AhciCdrom::Atapi_ReadSectorsAsync() {
     
     io_async_ = true;
     image_->ReadAsync(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
+      MV_UNUSED(ret);
       io_.nbytes += length;
       if (io_.nbytes == (ssize_t)total_bytes) {
         CompleteCommand();

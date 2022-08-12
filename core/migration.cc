@@ -108,6 +108,7 @@ int MigrationWriter::BeginWrite(std::string tag) {
 }
 
 void MigrationWriter::EndWrite(std::string tag) {
+  MV_UNUSED(tag);
   safe_close(&fd_);
 }
 
@@ -186,5 +187,6 @@ int MigrationReader::BeginRead(std::string tag) {
 }
 
 void MigrationReader::EndRead(std::string tag) {
+  MV_UNUSED(tag);
   safe_close(&fd_);
 }

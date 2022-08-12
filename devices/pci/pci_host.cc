@@ -20,7 +20,7 @@
 #include "logger.h"
 #include "device_manager.h"
 #include "pci_device.h"
-#include "pb/pci_host.pb.h"
+#include "pci_host.pb.h"
 
 #define MCH_CONFIG_ADDR             0xCF8
 #define MCH_CONFIG_DATA             0xCFC

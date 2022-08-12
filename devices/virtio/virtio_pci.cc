@@ -23,7 +23,7 @@
 
 #include "logger.h"
 #include "device_manager.h"
-#include "pb/virtio_pci.pb.h"
+#include "virtio_pci.pb.h"
 
 VirtioPci::VirtioPci() {
     pci_header_.vendor_id = 0x1AF4;
@@ -63,10 +63,10 @@ VirtioPci::VirtioPci() {
     AddCapability(0x09, cap_pci_config_access, sizeof(cap_pci_config_access));
 
     bzero(&common_config_, sizeof(common_config_));
-    bzero(driver_features_, sizeof(driver_features_));
     /* Device common features */
     device_features_ = (1UL << VIRTIO_RING_F_INDIRECT_DESC) | (1UL << VIRTIO_RING_F_EVENT_IDX) | \
       (1UL << VIRTIO_F_VERSION_1);
+    driver_features_ = 0;
 
     common_config_.num_queues = queues_.size();
     use_ioevent_ = true;
@@ -101,7 +101,7 @@ void VirtioPci::Reset() {
 bool VirtioPci::SaveState(MigrationWriter* writer) {
   VirtioPciState state;
   auto common = state.mutable_common_config();
-  common->set_guest_feature(*(uint64_t*)driver_features_);
+  common->set_guest_feature(driver_features_);
   common->set_msix_config(common_config_.msix_config);
   common->set_device_status(common_config_.device_status);
   common->set_queue_select(common_config_.queue_select);
@@ -130,7 +130,7 @@ bool VirtioPci::LoadState(MigrationReader* reader) {
     return false;
   }
   auto& common = state.common_config();
-  *(uint64_t*)driver_features_ = common.guest_feature();
+  driver_features_ = common.guest_feature();
   common_config_.msix_config = common.msix_config();
   common_config_.device_status = common.device_status();
   common_config_.queue_select = common.queue_select();
@@ -200,8 +200,9 @@ VirtElement* VirtioPci::PopQueue(VirtQueue& vq) {
   element->Initialize();
 
   auto item = vq.available_ring->items[vq.last_available_index++ % vq.size];
-  if (driver_features_[0] & (1 << VIRTIO_RING_F_EVENT_IDX)) {
-    *(uint16_t*)&vq.used_ring->items[vq.size] = vq.last_available_index;
+  if (driver_features_ & (1 << VIRTIO_RING_F_EVENT_IDX)) {
+    void* end = &vq.used_ring->items[vq.size];
+    *(uint16_t*)end = vq.last_available_index;
   }
 
   VRingDescriptor* descriptor = &vq.descriptor_table[item];
@@ -253,7 +254,7 @@ void VirtioPci::PushQueueMultiple(VirtQueue& vq, std::vector<VirtElement*>& elem
 void VirtioPci::NotifyQueue(VirtQueue& vq) {
   asm volatile ("mfence": : :"memory");
 
-  if (driver_features_[0] & (1 << VIRTIO_RING_F_EVENT_IDX)) {
+  if (driver_features_ & (1 << VIRTIO_RING_F_EVENT_IDX)) {
     /* Carefully handle the overflow */
     uint16_t compare = vq.used_ring->index - vq.available_ring->items[vq.size];
     if (compare != 1) {
@@ -319,7 +320,13 @@ void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size)
     }
     break;
   case VIRTIO_PCI_COMMON_GF:
-    driver_features_[common_config_.guest_feature_select] = *(uint32_t*)data;
+    if (common_config_.guest_feature_select == 0) {
+      uint32_t value = *(uint32_t*)data;
+      driver_features_ = (driver_features_ & ~0xFFFFFFFFULL) | value;
+    } else {
+      uint32_t value = *(uint32_t*)data;
+      driver_features_ = (driver_features_ & 0xFFFFFFFFULL) | (uint64_t(value) << 32);
+    }
     break;
   }
 
@@ -382,17 +389,15 @@ void VirtioPci::ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) 
   case VIRTIO_PCI_COMMON_Q_NOFF:
     value = common_config_.queue_select;
     break;
-  case VIRTIO_PCI_COMMON_Q_SIZE: {
+  case VIRTIO_PCI_COMMON_Q_SIZE:
     value = queues_[common_config_.queue_select].size;
     break;
-  }
-  case VIRTIO_PCI_COMMON_Q_MSIX: {
+  case VIRTIO_PCI_COMMON_Q_MSIX:
     value = queues_[common_config_.queue_select].msix_vector;
     break;
   case VIRTIO_PCI_COMMON_Q_ENABLE:
     value = queues_[common_config_.queue_select].enabled;
     break;
-  }
   default:
     MV_PANIC("unhandled read offset=0x%lx size=%x", offset, size);
     break;
@@ -401,7 +406,9 @@ void VirtioPci::ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) 
 }
 
 void VirtioPci::ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("not implemented");
+  MV_UNUSED(data);
+  MV_PANIC("%s not implemented read device offset=0x%lx size=%d",
+    name_, offset, size);
 }
 
 void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
@@ -410,6 +417,9 @@ void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size)
 }
 
 void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size) {
+  MV_UNUSED(data);
+  MV_UNUSED(size);
+
   uint16_t queue = offset / 4;
   MV_ASSERT(queue < queues_.size());
   auto &vq = queues_[queue];

@@ -32,7 +32,7 @@
 
 #define MAX_KVM_MSR_ENTRIES           256
 #define MAX_KVM_CPUID_ENTRIES         100
-#define KVM_MSR_ENTRY(_index, _data)  (struct kvm_msr_entry) { .index = _index, .data = _data }
+#define KVM_MSR_ENTRY(_index, _data)  (struct kvm_msr_entry) { .index = _index, .reserved = 0, .data = _data }
 
 
 /* Use Vcpu::current_vcpu() */
@@ -94,7 +94,8 @@ void Vcpu::SetupCpuid() {
   struct {
     struct kvm_cpuid2 cpuid2;
     struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+  } cpuid;
+  cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
 
   if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, &cpuid) < 0) {
     MV_PANIC("failed to get supported CPUID");
@@ -195,7 +196,8 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
   struct {
     struct kvm_cpuid2 cpuid2;
     struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } hyperv_cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+  } hyperv_cpuid;
+  hyperv_cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
 
   if (ioctl(fd_, KVM_GET_SUPPORTED_HV_CPUID, &hyperv_cpuid) < 0) {
     MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV));
@@ -248,7 +250,9 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
   }
 
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
-    struct kvm_enable_cap enable_cap = { .cap = KVM_CAP_HYPERV_SYNIC };
+    struct kvm_enable_cap enable_cap;
+    bzero(&enable_cap, sizeof(enable_cap));
+    enable_cap.cap = KVM_CAP_HYPERV_SYNIC;
     MV_ASSERT(ioctl(fd_, KVM_ENABLE_CAP, &enable_cap) == 0);
   }
 }
@@ -273,7 +277,7 @@ uint64_t Vcpu::GetSupportedMsrFeature(uint index) {
   struct {
     kvm_msrs      msrs;
     kvm_msr_entry entries[1];
-  } msrs = { 0 };
+  } msrs;
 
   msrs.entries[0].index = index;
   msrs.msrs.nmsrs = 1;
@@ -290,7 +294,8 @@ void Vcpu::SetupMsrIndices() {
   struct {
     kvm_msr_list  list;
     uint32_t      indices[1000];
-  } msr_list = { .list = { sizeof(msr_list.indices) / sizeof(uint32_t) } };
+  } msr_list;
+  msr_list.list.nmsrs = sizeof(msr_list.indices) / sizeof(uint32_t);
   MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, &msr_list) == 0);
 
   for (uint i = 0; i < msr_list.list.nmsrs; i++) {
@@ -337,7 +342,7 @@ void Vcpu::SetupModelSpecificRegisters() {
   struct {
     kvm_msrs      msrs;
     kvm_msr_entry entries[100];
-  } msrs = { 0 };
+  } msrs;
   uint index = 0;
 
   /* UCODE is needed for MCE / MCA */
@@ -361,6 +366,10 @@ void Vcpu::SetupModelSpecificRegisters() {
 void Vcpu::EnableSingleStep() {
   struct kvm_guest_debug debug = {
     .control = KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP,
+    .pad = 0,
+    .arch = {
+      .debugreg = {0}
+    }
   };
 
   if (ioctl(fd_, KVM_SET_GUEST_DEBUG, &debug) < 0)
@@ -438,6 +447,7 @@ void Vcpu::ProcessHyperV() {
 /* To wake up a vcpu thread, the easist way is to send a signal */
 void Vcpu::SignalHandler(int signum) {
   // Do nothing now ...
+  MV_UNUSED(signum);
 }
 
 /* Vcpu thread only response to SIG_USER at the moment */
@@ -604,7 +614,8 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   struct {
     kvm_msrs      msrs;
     kvm_msr_entry entries[MAX_KVM_MSR_ENTRIES];
-  } msrs = { 0 };
+  } msrs;
+  bzero(&msrs, sizeof(msrs));
   for (auto index : msr_indices_) {
     msrs.entries[msrs.msrs.nmsrs++].index = index;
   }
@@ -634,7 +645,9 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   struct {
     struct kvm_cpuid2 cpuid2;
     struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+  } cpuid;
+  bzero(&cpuid, sizeof(cpuid));
+  cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
   MV_ASSERT(ioctl(fd_, KVM_GET_CPUID2, &cpuid) == 0);
   state.set_cpuid(&cpuid, sizeof(cpuid));
 }
@@ -651,7 +664,7 @@ void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
     struct {
       struct kvm_cpuid2 cpuid2;
       struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-    } cpuid = { .cpuid2 = { .nent = MAX_KVM_CPUID_ENTRIES } };
+    } cpuid;
     memcpy(&cpuid, state.cpuid().data(), sizeof(cpuid));
     MV_ASSERT(ioctl(fd_, KVM_SET_CPUID2, &cpuid) == 0);
     

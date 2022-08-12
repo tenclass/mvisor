@@ -24,7 +24,7 @@
 #include <cstdint>
 #include "ide_storage.h"
 #include "device.h"
-#include "pb/ahci_host.pb.h"
+#include "ahci_host.pb.h"
 
 struct AhciCommandHeader {
   uint8_t     command_fis_length : 5; // in DWORDS, 2 ~ 16

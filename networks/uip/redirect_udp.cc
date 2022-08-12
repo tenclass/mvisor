@@ -61,7 +61,8 @@ void RedirectUdpSocket::InitializeRedirect() {
     .sin_port = htons(dport_),
     .sin_addr = {
       .s_addr = htonl(dip_)
-    }
+    },
+    .sin_zero = {0}
   };
 
   for (auto& rule : backend_->redirect_rules()) {

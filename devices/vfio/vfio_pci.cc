@@ -187,10 +187,11 @@ void VfioPci::SetupPciConfiguration() {
 }
 
 void VfioPci::SetupGfxPlane() {
-  vfio_device_gfx_plane_info gfx_plane_info = {
-    .argsz = sizeof(gfx_plane_info),
-    .flags = VFIO_GFX_PLANE_TYPE_PROBE | VFIO_GFX_PLANE_TYPE_REGION
-  };
+  vfio_device_gfx_plane_info gfx_plane_info;
+  bzero(&gfx_plane_info, sizeof(gfx_plane_info));
+  gfx_plane_info.argsz = sizeof(gfx_plane_info);
+  gfx_plane_info.flags = VFIO_GFX_PLANE_TYPE_PROBE | VFIO_GFX_PLANE_TYPE_REGION;
+
   auto ret = ioctl(device_fd_, VFIO_DEVICE_QUERY_GFX_PLANE, &gfx_plane_info);
   if (ret == 0) {
     /* Register GFX plane */
@@ -213,6 +214,7 @@ void VfioPci::MapDmaPages(const MemorySlot* slot) {
 void VfioPci::UnmapDmaPages(const MemorySlot* slot) {
   vfio_iommu_type1_dma_unmap dma_ummap = {
     .argsz = sizeof(dma_ummap),
+    .flags = 0,
     .iova = slot->begin,
     .size = slot->end - slot->begin
   };
@@ -263,7 +265,7 @@ void VfioPci::SetupVfioGroup() {
   }
 
   /* Check if it is OK */
-  vfio_group_status status = { .argsz = sizeof(status) };
+  vfio_group_status status = { .argsz = sizeof(status), .flags = 0 };
   MV_ASSERT(ioctl(group_fd_, VFIO_GROUP_GET_STATUS, &status) == 0);
   if (!(status.flags & VFIO_GROUP_FLAGS_VIABLE)) {
     MV_PANIC("VFIO group %d is not viable", group_id_);
@@ -321,6 +323,7 @@ void VfioPci::SetupVfioDevice() {
   device_fd_ = ioctl(group_fd_, VFIO_GROUP_GET_DEVICE_FD, device_name_.c_str());
  
   /* get device info */
+  bzero(&device_info_, sizeof(device_info_));
   device_info_.argsz = sizeof(device_info_);
   MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_INFO, &device_info_) == 0);
   
@@ -367,7 +370,8 @@ void VfioPci::SetupVfioDevice() {
           for (uint j = 0; j < cap_mmap->nr_areas; j++) {
             region.mmap_areas.push_back({
               .offset = cap_mmap->areas[j].offset,
-              .size = cap_mmap->areas[j].size
+              .size = cap_mmap->areas[j].size,
+              .mmap = nullptr
             });
           }
         } else if (cap_header->id == VFIO_REGION_INFO_CAP_TYPE) {
@@ -394,13 +398,16 @@ void VfioPci::SetupVfioDevice() {
     interrupt.event_fd = -1;
   }
   for (uint index = 0; index < device_info_.num_irqs; index++) {
-    vfio_irq_info irq_info = { .argsz = sizeof(irq_info) };
+    vfio_irq_info irq_info;
+    bzero(&irq_info, sizeof(irq_info));
+    irq_info.argsz = sizeof(irq_info);
     irq_info.index = index;
     auto ret = ioctl(device_fd_, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
     if (debug_) {
       MV_LOG("irq index=%d size=%u flags=%x count=%d ret=%d", index,
         irq_info.argsz, irq_info.flags, irq_info.count, ret);
     }
+
     /* FIXME: currently my mdev only uses one IRQ */
     if (index == VFIO_PCI_MSI_IRQ_INDEX) {
       MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);

@@ -111,7 +111,8 @@ class SpiceAgent : public Device, public SerialPortInterface,
       if (VD_AGENT_HAS_CAPABILITY(caps, caps_size, VD_AGENT_CAP_DISPLAY_CONFIG)) {
         /* ui effects & color depth */
         VDAgentDisplayConfig display_config = {
-          .flags = 0
+          .flags = 0,
+          .depth = 0
         };
         SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_DISPLAY_CONFIG, &display_config, sizeof(display_config));
       }
@@ -137,7 +138,8 @@ class SpiceAgent : public Device, public SerialPortInterface,
       auto clipboard = (VDAgentClipboard*)message->data;
       auto clipboard_data = ClipboardData {
         .type = clipboard->type,
-        .data = std::string((const char*)clipboard->data, message->size - sizeof(VDAgentClipboard))
+        .data = std::string((const char*)clipboard->data, message->size - sizeof(VDAgentClipboard)),
+        .file_name = ""
       };
       NotifyClipboardEvent(clipboard_data);
       break;
@@ -149,7 +151,8 @@ class SpiceAgent : public Device, public SerialPortInterface,
       /* VM asks us to clear the clipboard */
       auto clipboard_data = ClipboardData {
         .type = VD_AGENT_CLIPBOARD_NONE,
-        .data = ""
+        .data = "",
+        .file_name = ""
       };
       NotifyClipboardEvent(clipboard_data);
       break;

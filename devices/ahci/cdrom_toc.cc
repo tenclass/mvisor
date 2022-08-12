@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include "logger.h"
+
 static void lba_to_msf(uint8_t *buf, int lba)
 {
     lba += 150;
@@ -75,6 +77,7 @@ int cdrom_read_toc(int nb_sectors, uint8_t *buf, int msf, int start_track)
 /* mostly same info as PearPc */
 int cdrom_read_toc_raw(int nb_sectors, uint8_t *buf, int msf, int session_num)
 {
+  MV_UNUSED(session_num);
   uint8_t *q;
   int len;
 

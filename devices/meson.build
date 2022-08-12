@@ -1,0 +1,12 @@
+mvisor_sources += files('dummy.cc')
+
+subdir('agents')
+subdir('ahci')
+subdir('audio')
+subdir('display')
+subdir('isa')
+subdir('nvram')
+subdir('pci')
+subdir('usb')
+subdir('vfio')
+subdir('virtio')

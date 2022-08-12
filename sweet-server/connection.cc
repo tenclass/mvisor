@@ -21,7 +21,7 @@
 #include "display_encoder.h"
 #include "utilities.h"
 #include "logger.h"
-#include "pb/sweet.pb.h"
+#include "sweet.pb.h"
 
 
 SweetConnection::SweetConnection(SweetServer* server, int fd) {
@@ -127,6 +127,7 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
     break;
   case kStopClipboardStream:
     OnStopClipboardStream();
+    break;
   case kStartVirtioFs:
     OnStartVirtioFs();
     break;
@@ -164,7 +165,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
 bool SweetConnection::Send(uint32_t type, void* data, size_t length) {
   SweetPacketHeader header = {
     .type = type,
-    .length = (uint32_t)length
+    .length = (uint32_t)length,
+    .flags = 0,
+    .reserved = 0
   };
   int ret = send(fd_, &header, sizeof(header), 0);
   if (ret != sizeof(header)) {
@@ -461,7 +464,7 @@ void SweetConnection::OnMidiInput() {
     MV_PANIC("failed to parse buffer");
   }
 
-  MidiEvent event = {0};
+  MidiEvent event;
   event.midi_0 = input.midi_0();
   event.midi_1 = input.midi_1();
   event.midi_2 = input.midi_2();
@@ -484,7 +487,7 @@ void SweetConnection::OnWacomInput() {
     MV_PANIC("failed to parse buffer");
   }
   
-  WacomEvent event = {0};
+  WacomEvent event;
   event.x = input.x();
   event.y = input.y();
   event.buttons = input.buttons();

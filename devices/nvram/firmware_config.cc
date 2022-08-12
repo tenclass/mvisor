@@ -23,7 +23,7 @@
 #include "memory_manager.h"
 #include "machine.h"
 #include "smbios.h"
-#include "pb/firmware_config.pb.h"
+#include "firmware_config.pb.h"
 
 #define FW_CFG_ACPI_DEVICE_ID "QEMU0002"
 

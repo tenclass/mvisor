@@ -23,7 +23,7 @@
 #include <sys/stat.h>
 #include "logger.h"
 #include "machine.h"
-#include "pb/pci_device.pb.h"
+#include "pci_device.pb.h"
 
 
 PciDevice::PciDevice() {
@@ -89,7 +89,10 @@ uint8_t* PciDevice::AddCapability(uint8_t cap, const uint8_t* data, uint8_t leng
 }
 
 void PciDevice::AddMsiCapability() {
-  MsiCapability64 cap64 = { .control = PCI_MSI_FLAGS_64BIT };
+  MsiCapability64 cap64;
+  bzero(&cap64, sizeof(cap64));
+  cap64.control = PCI_MSI_FLAGS_64BIT;
+
   msi_config_.is_64bit = true;
   msi_config_.offset = next_capability_offset_;
   msi_config_.length = sizeof(cap64);
@@ -100,7 +103,12 @@ void PciDevice::AddMsiCapability() {
 void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size) {
   MV_ASSERT(table_size > 0 && table_size * sizeof(MsiXTableEntry) <= space_size);
 
-  MsiXCapability cap = { 0 };
+  MsiXCapability cap;
+  bzero(&cap, sizeof(cap));
+  cap.control = table_size - 1;
+  cap.table_offset = bar | space_offset;
+  cap.pba_offset = bar | (space_offset + space_size / 2);
+
   msi_config_.is_msix = true;
   msi_config_.is_64bit = true;
   msi_config_.msix_bar = bar;
@@ -110,9 +118,6 @@ void PciDevice::AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t spa
   msi_config_.offset = next_capability_offset_;
   msi_config_.length = sizeof(cap);
 
-  cap.control = table_size - 1;
-  cap.table_offset = bar | space_offset;
-  cap.pba_offset = bar | (space_offset + space_size / 2);
   msi_config_.msix = (MsiXCapability*)AddCapability(PCI_CAP_ID_MSIX,
     (uint8_t*)&cap.control, msi_config_.length - 2);
 }
@@ -223,7 +228,7 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
   }
 
   uint8_t bar = (offset - PCI_BAR_OFFSET(0)) / sizeof(uint32_t);
-  if (bar >= 0 && bar < PCI_BAR_NUMS) {
+  if (bar < PCI_BAR_NUMS) {
     MV_ASSERT(length == 4);;
     WritePciBar(bar, *(uint32_t*)data);
     return;

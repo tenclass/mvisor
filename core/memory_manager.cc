@@ -345,7 +345,7 @@ void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
 
 /* Not used yet */
 uint64_t MemoryManager::HostToGuestAddress(void* host) {
-  MV_PANIC("not implemented");
+  MV_PANIC("not implemented, host=%p", host);
   return 0;
 }
 

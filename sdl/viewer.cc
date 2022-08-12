@@ -25,6 +25,8 @@
 #include "spice/vd_agent.h"
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
+  bzero(&pointer_state_, sizeof(pointer_state_));
+
   SDL_Init(SDL_INIT_VIDEO);
   LookupDevices();
 }
@@ -288,7 +290,8 @@ void Viewer::LookupDevices() {
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<SerialPortInterface*>(o); })) {
     auto port = dynamic_cast<SerialPortInterface*>(o);
-    if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
+    auto port_name = std::string(port->port_name());
+    if (port_name == "com.redhat.spice.0") {
       clipboard_ = dynamic_cast<ClipboardInterface*>(o);
     }
     port->set_callback([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
@@ -329,6 +332,8 @@ void Viewer::LookupDevices() {
 }
 
 void Viewer::OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data) {
+  MV_UNUSED(data);
+
   switch (event)
   {
   case kSerialPortStatusChanged:
@@ -463,6 +468,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         machine_->Shutdown();
       }
     }
+    // fall through
   case SDL_KEYUP:
     if (keyboard_ && TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
       auto mod = SDL_GetModState();
@@ -499,7 +505,6 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       pending_resize_.height = event.window.data2;
       pending_resize_.time = std::chrono::steady_clock::now();
       break;
-    }
     case SDL_WINDOWEVENT_FOCUS_GAINED:
       /* When viewer got focused, check clipboard if changed */
       if (SDL_HasClipboardText() && clipboard_data_ != SDL_GetClipboardText()) {
@@ -509,6 +514,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         }
       }
       break;
+    }
     break;
   case SDL_QUIT:
     machine_->Quit();

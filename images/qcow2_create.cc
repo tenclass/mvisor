@@ -54,7 +54,8 @@ void Qcow2Image::CreateEmptyImage(std::string path, size_t disk_size) {
   }
 
   /* Build header */
-  Qcow2Header header = { 0 };
+  Qcow2Header header;
+  bzero(&header, sizeof(header));
   header.magic = htobe32(0x514649FB);
   header.version = htobe32(3);
   header.cluster_bits = htobe32(cluster_bits);
@@ -70,10 +71,10 @@ void Qcow2Image::CreateEmptyImage(std::string path, size_t disk_size) {
   /* Seek to extensions */
   fseek(fp, 0x70, SEEK_SET);
 
-  HeaderExtension feature_extension = {
-    .type = htobe32(0x6803F857),
-    .length = htobe32(sizeof(default_features))
-  };
+  HeaderExtension feature_extension;
+  feature_extension.type = htobe32(0x6803F857);
+  feature_extension.length = htobe32(sizeof(default_features));
+
   fwrite(&feature_extension, sizeof(feature_extension), 1, fp);
   fwrite(default_features, sizeof(default_features), 1, fp);
 
@@ -141,12 +142,11 @@ void Qcow2Image::CreateImageWithBackingFile(std::string path, std::string backin
     struct {
       HeaderExtension extension;
       char data[8];
-    } ext = {
-      .extension = {
-        .type = htobe32(0xE2792ACA),
-        .length = htobe32(5),
-      }
-    };
+    } ext;
+    bzero(&ext, sizeof(ext));
+    ext.extension.type = htobe32(0xE2792ACA),
+    ext.extension.length = htobe32(5);
+
     strcpy(ext.data, "qcow2");
     fwrite(&ext, sizeof(ext), 1, fout);
   }

@@ -28,12 +28,12 @@ Fuse::Fuse(std::string& mount_path, uint64_t disk_size_limit, uint64_t inode_cou
   strcpy(user_config_.source, mount_path.c_str());
 
   // check mount path must be director
-  struct stat stat = {0};
+  struct stat stat;
   MV_ASSERT(lstat(user_config_.source, &stat) != -1);
   MV_ASSERT(S_ISDIR(stat.st_mode));
 
   // new root dir
-  user_config_.root = new Inode{ 0 };
+  user_config_.root = new Inode;
   MV_ASSERT(user_config_.root != nullptr);
 
   // in case vm start from snapshot
@@ -188,6 +188,7 @@ Inode* Fuse::CreateInodeFromFd(int fd, struct stat* stat, int refcount) {
 }
 
 bool Fuse::Lookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* entry_param) {
+  entry_param->generation = 0;
   entry_param->attr_timeout = user_config_.timeout;
   entry_param->entry_timeout = user_config_.timeout;
 
@@ -326,7 +327,9 @@ bool Fuse::ReadDirectory(fuse_read_in* read_in, uint64_t nodeid, char* result_bu
     }
 
     fuse_ino_t entry_ino = 0;
-    struct fuse_entry_param entry_param = {0};
+    struct fuse_entry_param entry_param;
+    bzero(&entry_param, sizeof(entry_param));
+
     auto name = dirp->entry->d_name;
     auto next_off = dirp->entry->d_off;
     if (!is_plus || IsDotOrDotdot(name)) {

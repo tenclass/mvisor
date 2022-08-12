@@ -178,7 +178,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     int fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(fd != -1);
 
-    struct statvfs new_stat_vfs = {0};
+    struct statvfs new_stat_vfs;
     MV_ASSERT(fstatvfs(fd, &new_stat_vfs) != -1);
 
     // modify disk information to vm
@@ -194,7 +194,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     auto response = (fuse_out_header*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_out_header)).address;
     auto out = (fuse_entry_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_entry_out)).address;
 
-    struct fuse_entry_param entry_param = {0};
+    struct fuse_entry_param entry_param;
     if (!fuse_->Lookup(request->nodeid, name, &entry_param)) {
       fuse_->MakeResponse(response, 0, -errno, request->unique);
       element->length = response->len;
@@ -347,7 +347,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     MV_ASSERT(parent_fd != -1);
 
     // get file information
-    struct stat stat = {0};
+    struct stat stat;
     MV_ASSERT(fstatat(parent_fd, name, &stat, 0) != -1);
 
     // release inode
@@ -468,7 +468,8 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   void FuseSetAttribute(VirtElement* element, fuse_in_header* request) {
     auto in = (fuse_setattr_in*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_setattr_in)).address;
 
-    struct stat stat = {0};
+    struct stat stat;
+    bzero(&stat, sizeof(stat));
     stat.st_mode = in->mode;
     stat.st_uid = in->uid;
     stat.st_gid = in->gid;
@@ -517,7 +518,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       MV_ASSERT(ret != -1);
     }
     if (in->valid & (FUSE_SET_ATTR_ATIME | FUSE_SET_ATTR_MTIME)) {
-      struct timespec tv[2] = {0};
+      struct timespec tv[2];
       tv[0].tv_sec = 0;
       tv[1].tv_sec = 0;
       tv[0].tv_nsec = UTIME_OMIT;
@@ -553,7 +554,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     int fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(fd != -1);
 
-    struct stat stat = {0};
+    struct stat stat;
     MV_ASSERT(fstatat(fd, "", &stat, AT_EMPTY_PATH | AT_SYMLINK_NOFOLLOW) != -1);
 
     auto user_config = fuse_->user_config();
@@ -600,7 +601,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     close(fd);
 
     // create new inode
-    struct fuse_entry_param entry_param = {0};
+    struct fuse_entry_param entry_param;
     if (!fuse_->Lookup(request->nodeid, name, &entry_param)) {
       fuse_->MakeResponse(response, 0, -errno, request->unique);
       element->length = response->len;
@@ -630,7 +631,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     auto parent_fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(parent_fd != -1);
 
-    struct stat stat = {0};
+    struct stat stat;
     MV_ASSERT(fstatat(parent_fd, name, &stat, 0) != -1);
 
     auto ret = unlinkat(parent_fd, name, AT_REMOVEDIR);
@@ -740,7 +741,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       return;
     }
 
-    struct fuse_entry_param entry_param = {0};
+    struct fuse_entry_param entry_param;
     auto parent_fd = fuse_->GetFdFromInode(request->nodeid);
     MV_ASSERT(parent_fd != -1);
 
@@ -823,7 +824,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
       case FUSE_SETATTR:
         FuseSetAttribute(element, request);
         NotifyVirtioFs();
-        /* [[fallthrough]] */
+        // fall through
       case FUSE_GETATTR:
         FuseGetAttribute(element, request);
         break;

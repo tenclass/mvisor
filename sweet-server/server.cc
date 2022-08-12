@@ -45,7 +45,8 @@ SweetServer::SweetServer(Machine* machine, std::string unix_path) :
   /* in case the unix path already exists */
   unlink(unix_path_.c_str());
 
-  struct sockaddr_un un = { .sun_family = AF_UNIX };
+  struct sockaddr_un un;
+  un.sun_family = AF_UNIX;
   strncpy(un.sun_path, unix_path_.c_str(), sizeof(un.sun_path) - 1);
   if (bind(server_fd_, (sockaddr*)&un, sizeof(un)) < 0) {
     MV_PANIC("failed to bind unix socket %s", unix_path_.c_str());
@@ -96,10 +97,12 @@ int SweetServer::MainLoop() {
     pollfd fds[POLL_FD_NUM] = {
       {
         .fd = event_fd_,
-        .events = POLLIN
+        .events = POLLIN,
+        .revents = 0
       }, {
         .fd = server_fd_,
-        .events = POLLIN
+        .events = POLLIN,
+        .revents = 0
       }
     };
 
@@ -178,9 +181,7 @@ void SweetServer::OnEvent() {
 }
 
 void SweetServer::OnAccept() {
-  struct sockaddr_un un;
-  socklen_t len;
-  int child_fd = accept(server_fd_, (struct sockaddr *)&un, &len);
+  int child_fd = accept(server_fd_, nullptr, nullptr);
   if (child_fd < 0) {
     MV_LOG("child_fd=%d errno=%d", child_fd, errno);
     return;
@@ -256,9 +257,10 @@ void SweetServer::LookupDevices() {
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<SerialPortInterface*>(o); })) {
     auto port = dynamic_cast<SerialPortInterface*>(o);
-    if (strcmp(port->port_name(), "org.qemu.guest_agent.0") == 0) {
+    auto port_name = std::string(port->port_name());
+    if (port_name == "org.qemu.guest_agent.0") {
       qemu_guest_agent_ = port;
-    } else if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
+    } else if (port_name == "com.redhat.spice.0") {
       clipboard_ = dynamic_cast<ClipboardInterface*>(o);
     }
     port->set_callback([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
@@ -445,6 +447,8 @@ void SweetServer::OnPlayback(PlaybackState state, const std::string& data) {
 }
 
 void SweetServer::StartPlaybackStreamOnConnection(SweetConnection* conn, PlaybackStreamConfig* config) {
+  MV_UNUSED(config);
+
   bool is_playing = playback_encoder_ != nullptr;
   /* Send stop to previous connection */
   if (playback_connection_ && is_playing) {

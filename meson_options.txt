@@ -1,0 +1,11 @@
+option('sweet-server',
+  type: 'boolean',
+  value: false,
+  description: 'Enable sweet protocol'
+)
+
+option('sdl',
+  type: 'boolean',
+  value: true,
+  description: 'Enable SDL GUI'
+)

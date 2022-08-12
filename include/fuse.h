@@ -155,7 +155,7 @@ class Fuse {
   }
 
   inline void MakeResponse(fuse_out_header* response, uint32_t len, int32_t error, uint64_t unique) {
-    MV_ASSERT(response != nullptr && len >= 0);
+    MV_ASSERT(response != nullptr);
     response->error = error;
     response->unique = unique;
     response->len = sizeof(fuse_out_header) + len;

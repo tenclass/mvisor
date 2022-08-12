@@ -27,7 +27,7 @@
 #include "device_manager.h"
 #include "hda_codec.h"
 #include "hda_internal.h"
-#include "pb/ich9_hda.pb.h"
+#include "ich9_hda.pb.h"
 
 using namespace std::chrono;
 
@@ -204,7 +204,7 @@ class Ich9Hda : public PciDevice {
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     MV_ASSERT(resource->base == pci_bars_[0].address);
-    MV_ASSERT(offset >= 0 && (offset + size) <= sizeof(regs_));
+    MV_ASSERT(offset + size <= sizeof(regs_));
     // MV_LOG("write %s at 0x%lx size=%x data=0x%x", name_, offset, size, *(uint32_t*)data);
 
     if (offset >= 0x80 && offset < 0x180) {

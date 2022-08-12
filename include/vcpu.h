@@ -27,7 +27,7 @@
 
 #include "hyperv/hyperv.h"
 #include "migration.h"
-#include "pb/vcpu.pb.h"
+#include "vcpu.pb.h"
 
 #define SIG_USER_INTERRUPT (SIGRTMIN + 0)
 
@@ -39,11 +39,11 @@ struct VcpuTask {
 };
 
 struct HyperVSynic {
-  bool                      enabled;
-  uint64_t                  message_address;
-  uint64_t                  event_address;
-  hyperv_message_page*      message_page;
-  hyperv_event_flags_page*  event_flags_page;
+  bool                      enabled = false;
+  uint64_t                  message_address = 0;
+  uint64_t                  event_address = 0;
+  hyperv_message_page*      message_page = nullptr;
+  hyperv_event_flags_page*  event_flags_page = nullptr;
 };
 
 class Vcpu {
@@ -111,7 +111,7 @@ class Vcpu {
   std::set<uint32_t>        msr_indices_;
   uint32_t                  hyperv_features_ = 0;
   uint64_t                  cpuid_features_ = 0;
-  HyperVSynic               hyperv_synic_ = { 0 };
+  HyperVSynic               hyperv_synic_;
 };
 
 #endif // _MVISOR_VCPU_H

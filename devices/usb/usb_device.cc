@@ -23,7 +23,7 @@
 #include "usb.h"
 #include "logger.h"
 #include "device_manager.h"
-#include "pb/usb_device.pb.h"
+#include "usb_device.pb.h"
 
 UsbDevice::UsbDevice() {
   set_parent_name("xhci-host");
@@ -75,14 +75,17 @@ bool UsbDevice::LoadState(MigrationReader* reader) {
 }
 
 UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete) {
-  auto packet = new UsbPacket {
-    .endpoint_address = endpoint_address,
-    .stream_id = stream_id,
-    .id = id,
-    .status = USB_RET_SUCCESS,
-    .size = 0,
-    .OnComplete = std::move(on_complete)
-  };
+  auto packet = new UsbPacket;
+  packet->endpoint = nullptr;
+  packet->endpoint_address = endpoint_address;
+  packet->stream_id = stream_id;
+  packet->id = id;
+  packet->status = USB_RET_SUCCESS;
+  packet->content_length = 0;
+  packet->control_parameter = 0;
+  packet->size = 0;
+  packet->OnComplete = std::move(on_complete);
+
   if (endpoint_address & 0xF) {
     packet->endpoint = FindEndpoint(endpoint_address);
     MV_ASSERT(packet->endpoint);
@@ -208,10 +211,16 @@ void UsbDevice::CopyPacketData(UsbPacket* packet, uint8_t* data, int length) {
 }
 
 int UsbDevice::OnInputData(uint endpoint_address, uint8_t* data, int length) {
+  MV_UNUSED(endpoint_address);
+  MV_UNUSED(data);
+  MV_UNUSED(length);
   return USB_RET_STALL;
 }
 
 int UsbDevice::OnOutputData(uint endpoint_address, uint8_t* data, int length) {
+  MV_UNUSED(endpoint_address);
+  MV_UNUSED(data);
+  MV_UNUSED(length);
   return USB_RET_STALL;
 }
 
@@ -382,7 +391,7 @@ int UsbDevice::GetDescriptor(uint value, uint8_t* data, int length) {
 }
 
 int UsbDevice::GetStatus(uint8_t* data, int length) {
-  MV_PANIC("not impl");
+  MV_PANIC("not implemented data=%d length=%d", data[0], length);
   return USB_RET_STALL;
 }
 
@@ -405,11 +414,10 @@ int UsbDevice::SetConfiguration(uint value) {
         for (uint k = 0; k < interface->bNumEndpoints; k++) {
           auto desc = &interface->endpoints[k];
           /* create endpoint */
-          auto endpoint = new UsbEndpoint {
-            .address = desc->bEndpointAddress,
-            .type = UsbEndpointType(desc->bmAttributes & 3),
-            .interface = j,
-          };
+          auto endpoint = new UsbEndpoint;
+          endpoint->address = desc->bEndpointAddress;
+          endpoint->type = UsbEndpointType(desc->bmAttributes & 3);
+          endpoint->interface = j;
           endpoint->interval = (1 << (desc->bInterval - 1)) * 125 / 1000;
           if (endpoint->interval < 1 || endpoint->interval > 1000) {
             MV_LOG("invalid interval=%u", endpoint->interval);
@@ -424,7 +432,7 @@ int UsbDevice::SetConfiguration(uint value) {
 }
 
 int UsbDevice::SetInterface(uint index, uint value) {
-  MV_PANIC("not implemented");
+  MV_PANIC("not implemented index=0x%x value=0x%x", index, value);
   return USB_RET_STALL;
 }
 
@@ -443,7 +451,7 @@ UsbEndpoint* UsbDevice::FindEndpoint(uint address) {
  */
 int UsbDevice::GetMicrosoftOsDescriptor(uint index, uint8_t* data, int length) {
   if (debug_) {
-    MV_LOG("unhandled MsOsd index=%d length=%d", index, length);
+    MV_LOG("unhandled MsOsd index=%d data=%d length=%d", index, data[0], length);
   }
   return USB_RET_STALL;
 }

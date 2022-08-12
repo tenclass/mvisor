@@ -35,6 +35,7 @@ struct HdaCodecBuffer {
 
 class HdaCodecInterface {
  public:
+  virtual ~HdaCodecInterface() = default;
   virtual void StartCommand(uint8_t node_id, uint32_t data, ResponseCallback callback) = 0;
   virtual void StartStream(uint32_t stream_id, bool output, TransferCallback callback) = 0;
   virtual void StopStream(uint32_t stream_id, bool output) = 0;

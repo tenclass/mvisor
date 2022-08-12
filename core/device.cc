@@ -94,9 +94,11 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
     .base = base,
     .length = length,
     .name = name,
-    .host_memory = host_memory
+    .enabled = false,
+    .host_memory = host_memory,
+    .mapped_region = nullptr,
+    .flags = flags
   };
-  resource->flags = flags;
   io_resources_.push_back(resource);
   if (connected_) {
     SetIoResourceEnabled(resource, true);
@@ -162,6 +164,7 @@ void Device::SetIoResourceEnabled(IoResource* resource, bool enabled) {
 void Device::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d",
     name_, resource->base, offset, size);
+  MV_UNUSED(data);
 }
 
 void Device::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -170,9 +173,11 @@ void Device::Write(const IoResource* resource, uint64_t offset, uint8_t* data, u
 }
 
 bool Device::SaveState(MigrationWriter* writer) {
+  MV_UNUSED(writer);
   return true;
 }
 
 bool Device::LoadState(MigrationReader* reader) {
+  MV_UNUSED(reader);
   return true;
 }

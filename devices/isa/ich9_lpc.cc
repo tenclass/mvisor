@@ -25,7 +25,7 @@
 #include "device_manager.h"
 #include "device_interface.h"
 #include "machine.h"
-#include "pb/ich9_lpc.pb.h"
+#include "ich9_lpc.pb.h"
 
 #define ICH9_LPC_PMBASE                         0x40
 #define ICH9_LPC_PMBASE_BASE_ADDRESS_MASK       Q35_MASK(32, 15, 7)
@@ -255,6 +255,7 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
       break;
     case 0x34:
       value = acpi.smi_status();
+      break;
     default:
       MV_PANIC("not supported reading at ACPI offset=0x%x", offset);
       break;

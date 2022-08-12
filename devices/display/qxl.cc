@@ -33,7 +33,7 @@
 #include "spice/qxl_dev.h"
 #include "qxl.modes.inc"
 #include "machine.h"
-#include "pb/qxl.pb.h"
+#include "qxl.pb.h"
 
 #define NUM_MEMSLOTS 8
 #define MEMSLOT_GENERATION_BITS 8
@@ -84,12 +84,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
     uint64_t      offset;
     bool          active;
     uint8_t*      hva; 
-  } guest_slots_[NUM_MEMSLOTS] = {0};
+  } guest_slots_[NUM_MEMSLOTS];
 
-  PrimarySurface                primary_surface_ = {0};
+  PrimarySurface                primary_surface_;
   std::map<uint, Surface>       surfaces_;
   std::vector<QXLReleaseInfo*>  free_resources_;
-  DisplayMouseCursor            current_cursor_ = {0};
+  DisplayMouseCursor            current_cursor_;
   std::list<Drawable*>          drawables_;
   std::list<DrawRect>           draw_rects_;
   const StateChangeListener*    state_change_listener_ = nullptr;
@@ -499,7 +499,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
         break;
       case QXL_IO_NOTIFY_OOM:
         MV_LOG("QXL_IO_NOTIFY_OOM drawables=%lu", drawables_.size());
-        FlushCommandsAndResources(false);
+        FlushCommandsAndResources();
         break;
       case QXL_IO_RESET:
         Reset();
@@ -514,7 +514,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
         CreatePrimarySurface(qxl_ram_->create_surface);
         break;
       case QXL_IO_DESTROY_PRIMARY:
-        FlushCommandsAndResources(true);
+        FlushCommandsAndResources();
         DestroyPrimarySurface();
         break;
       case QXL_IO_MONITORS_CONFIG_ASYNC:
@@ -533,7 +533,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
   }
 
-  void FlushCommandsAndResources(bool destroy_primary = false) {
+  void FlushCommandsAndResources() {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     /* Fetch any commands on ring */
@@ -879,7 +879,9 @@ class Qxl : public Vga, public DisplayResizeInterface {
     auto qxl_drawable = (QXLDrawable*)GetMemSlotAddress(slot_address);
     auto drawable = new Drawable {
       .slot_address = slot_address,
-      .qxl_drawable = qxl_drawable
+      .qxl_drawable = qxl_drawable,
+      .drawed = false,
+      .references = 0
     };
     drawables_.push_back(drawable);
 
@@ -943,12 +945,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
   void ParseDrawble(Drawable* drawable, std::vector<DisplayPartialBitmap>& partials) {
     auto qxl_drawable = drawable->qxl_drawable;
-    auto partial = DisplayPartialBitmap {
-      .width = uint(qxl_drawable->bbox.right - qxl_drawable->bbox.left),
-      .height = uint(qxl_drawable->bbox.bottom - qxl_drawable->bbox.top),
-      .x = uint(qxl_drawable->bbox.left),
-      .y = uint(qxl_drawable->bbox.top)
-    };
+    DisplayPartialBitmap partial;
+    partial.width = uint(qxl_drawable->bbox.right - qxl_drawable->bbox.left);
+    partial.height = uint(qxl_drawable->bbox.bottom - qxl_drawable->bbox.top);
+    partial.x = uint(qxl_drawable->bbox.left);
+    partial.y = uint(qxl_drawable->bbox.top);
+
     MV_ASSERT(qxl_drawable->bbox.left >= 0 && qxl_drawable->bbox.top >= 0);
     if (qxl_drawable->bbox.right > (int32_t)primary_surface_.create.width ||
       qxl_drawable->bbox.bottom > (int32_t)primary_surface_.create.height) {

@@ -79,7 +79,7 @@ class Uip : public Object, public NetworkBackendInterface {
   Uip() {
   }
 
-  ~Uip() {
+  virtual ~Uip() {
     if (timer_) {
       real_device_->manager()->io()->RemoveTimer(timer_);
     }
@@ -263,7 +263,8 @@ class Uip : public Object, public NetworkBackendInterface {
         .sin_port = htons(rule.listen_port),
         .sin_addr = {
           .s_addr = htonl(rule.listen_ip)
-        }
+        },
+        .sin_zero = {0}
       };
 
       int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -428,6 +429,7 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   void ParseArpPacket(ethhdr* eth, ArpMessage* arp) {
+    MV_UNUSED(eth);
     if (ntohs(arp->ar_op) == 1) { // ARP request
       uint32_t dip = ntohl(arp->ar_tip);
       if (dip == router_ip_) {
@@ -500,7 +502,7 @@ class Uip : public Object, public NetworkBackendInterface {
       if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
         return true;
       }
-      socket = new RedirectTcpSocket(this, ntohl(ip->saddr), ntohl(ip->daddr), ntohs(tcp->source), ntohs(tcp->dest));
+      socket = new RedirectTcpSocket(this, sip, dip, sport, dport);
       tcp_sockets_.push_back(socket);
     }
 
@@ -577,7 +579,6 @@ class Uip : public Object, public NetworkBackendInterface {
       udp_sockets_.push_back(socket);
     }
 
-    MV_ASSERT(socket);
     packet->data = &udp[1];
     packet->data_offset = 0;
     packet->data_length = ntohs(udp->len) - sizeof(*udp);

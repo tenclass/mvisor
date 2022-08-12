@@ -289,12 +289,11 @@ void SweetDisplayEncoder::CreateEncodeSlice(uint top, uint left, uint bottom, ui
     bottom = screen_height_;
   }
 
-  EncodeSlice* slice = new EncodeSlice {
-    .x = left,
-    .y = top,
-    .width = right - left,
-    .height = bottom - top
-  };
+  EncodeSlice* slice = new EncodeSlice;
+  slice->x = left;
+  slice->y = top;
+  slice->width = right - left;
+  slice->height = bottom - top;
   
   /* convert to YUV */
   if (x264_picture_alloc(&slice->yuv, input_yuv_.img.i_csp, slice->width, slice->height) < 0) {
@@ -385,7 +384,7 @@ void SweetDisplayEncoder::EncodeProcess() {
 
 void SweetDisplayEncoder::DrawSlices(std::vector<EncodeSlice*>& slices) {
   auto& dst = input_yuv_.img;
-  uint log2_chroma_w, log2_chroma_h;
+  uint log2_chroma_w = 0, log2_chroma_h = 0;
 
   switch (dst.i_csp)
   {

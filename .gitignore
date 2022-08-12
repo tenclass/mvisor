@@ -3,8 +3,6 @@ build/
 *.swp
 *.img
 *.iso
-*.qcow2
 tmp/
-.vscode/*
 config/default.yaml
 .clang-format

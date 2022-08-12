@@ -155,6 +155,8 @@ class VirtioBlock : public VirtioPci {
   }
 
   void HandleCommand(VirtQueue& vq, VirtElement* element, VoidCallback callback) {
+    MV_UNUSED(vq);
+
     auto &vector = element->vector;
     /* Read block header */
     virtio_blk_outhdr* request = (virtio_blk_outhdr*)vector.front().iov_base;

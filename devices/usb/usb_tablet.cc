@@ -166,6 +166,8 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
   }
 
   virtual int OnInputData(uint endpoint_address, uint8_t* data, int length) {
+    MV_UNUSED(endpoint_address);
+
     std::unique_lock<std::mutex> lock(mutex_);
     if (queue_.empty()) {
       return USB_RET_NAK;

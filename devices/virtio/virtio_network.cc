@@ -124,6 +124,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
   }
 
   void OnReceive(int queue_index) {
+    MV_UNUSED(queue_index);
     if (backend_) {
       backend_->OnReceiveAvailable();
     }
@@ -211,6 +212,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
   }
 
   void HandleTransmit(VirtQueue& vq, VirtElement* element) {
+    MV_UNUSED(vq);
+
     auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 1);
     auto &front = vector.front();
@@ -226,6 +229,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     backend_->OnFrameFromGuest(vector);
   }
   void HandleControl(VirtQueue& vq, VirtElement* element) {
+    MV_UNUSED(vq);
+
     auto &vector = element->vector;
     MV_ASSERT(vector.size() >= 3);
 

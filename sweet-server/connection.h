@@ -27,7 +27,7 @@
 #include "machine.h"
 #include "device_interface.h"
 #include "server.h"
-#include "pb/sweet.pb.h"
+#include "sweet.pb.h"
 
 using namespace SweetProtocol;
 

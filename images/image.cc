@@ -17,11 +17,14 @@
  */
 
 #include "disk_image.h"
+
 #include <cstdlib>
+
 #include "logger.h"
 #include "utilities.h"
 #include "device_manager.h"
 #include "qcow2.h"
+
 
 DiskImage::DiskImage() {
 }
@@ -70,6 +73,9 @@ void DiskImage::Connect() {
 }
 
 ssize_t DiskImage::Discard(off_t position, size_t length, bool write_zeros) {
+  MV_UNUSED(position);
+  MV_UNUSED(length);
+  MV_UNUSED(write_zeros);
   return 0;
 }
 

@@ -205,6 +205,7 @@ class Serial8250 : public Device {
       break;
     case UART_SCR:
       data[0] = console->scratch;
+      break;
     default:
       Device::Read(resource, offset, data, size);
     }

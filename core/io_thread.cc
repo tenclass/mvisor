@@ -67,6 +67,7 @@ void IoThread::Start() {
   thread_ = std::thread(&IoThread::RunLoop, this);
 
   StartPolling(event_fd_, EPOLLIN, [this](auto ret) {
+    MV_UNUSED(ret);
     uint64_t tmp;
     read(event_fd_, &tmp, sizeof(tmp));
   });
@@ -136,15 +137,16 @@ void IoThread::RunLoop() {
 }
 
 EpollEvent* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) {
-  EpollEvent* event = new EpollEvent {
-    .fd = fd, .callback = callback
-  };
+  EpollEvent* event = new EpollEvent;
+  event->fd = fd;
+  event->callback = callback;
   event->event = epoll_event {
     .events = poll_mask,
     .data = {
       .fd = fd
     }
   };
+
   int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &event->event);
   if (ret < 0) {
     MV_PANIC("failed to add epoll event, ret=%d", ret);
@@ -187,11 +189,11 @@ void IoThread::StopPolling(int fd) {
 }
 
 IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callback) {
-  IoTimer* timer = new IoTimer {
-    .permanent = permanent,
-    .interval_ms = interval_ms,
-    .callback = std::move(callback)
-  };
+  IoTimer* timer = new IoTimer;
+  timer->permanent = permanent;
+  timer->interval_ms = interval_ms;
+  timer->callback = std::move(callback);
+  timer->removed = false;
   timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -271,7 +273,9 @@ void IoThread::FlushDiskImages() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   for (auto image : disk_images_) {
-    image->FlushAsync([](auto ret) {});
+    image->FlushAsync([](auto ret) {
+      MV_UNUSED(ret);
+    });
   }
 }
 

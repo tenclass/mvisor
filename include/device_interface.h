@@ -28,21 +28,24 @@
 
 class KeyboardInputInterface {
  public:
+  virtual ~KeyboardInputInterface() = default;
   virtual bool QueueKeyboardEvent(uint8_t scancode[10], uint8_t modifiers) = 0;
   virtual bool QueueMouseEvent(uint buttons, int rel_x, int rel_y, int rel_z) = 0;
   virtual bool InputAcceptable() = 0;
 };
 
 struct PointerEvent {
-  uint  buttons; 
+  uint  buttons;
   int   x;
   int   y;
   int   z;
   uint  screen_width;
   uint  screen_height;
 };
+
 class PointerInputInterface {
  public:
+  virtual ~PointerInputInterface() = default;
   virtual bool QueuePointerEvent(PointerEvent event) = 0;
   virtual bool InputAcceptable() = 0;
 };
@@ -53,13 +56,16 @@ struct MidiEvent {
   uint8_t midi_1;
   uint8_t midi_2;
 };
+
 class MidiInputInterface {
  public:
+  virtual ~MidiInputInterface() = default;
   virtual bool QueueMidiEvent(MidiEvent event) = 0;
   virtual bool InputAcceptable() = 0;
   virtual void Start() = 0;
   virtual void Stop() = 0;
 };
+
 struct WacomEvent {
   double x;
   double y;
@@ -68,8 +74,10 @@ struct WacomEvent {
   uint32_t tilt_x;
   uint32_t tilt_y;
 };
+
 class WacomInputInterface {
  public:
+  virtual ~WacomInputInterface() = default;
   virtual bool QueueWacomEvent(WacomEvent event) = 0;
   virtual bool InputAcceptable() = 0;
   virtual void Start() = 0;
@@ -78,12 +86,14 @@ class WacomInputInterface {
 
 class DisplayResizeInterface {
  public:
+  virtual ~DisplayResizeInterface() = default;
   virtual bool Resize(uint width, uint height) = 0;
 };
 
 typedef std::function <void()> VirtioFsListener;
 class VirtioFsInterface {
  public:
+  virtual ~VirtioFsInterface() = default;
   virtual void RegisterVirtioFsListener(VirtioFsListener callback) = 0;
 };
 
@@ -95,9 +105,10 @@ struct ClipboardData {
 
 typedef std::function <void(const ClipboardData clipboard_data)> ClipboardListener;
 class ClipboardInterface {
-  public:
-    virtual void RegisterClipboardListener(ClipboardListener callback) = 0;
-    virtual bool ClipboardDataToGuest(uint type, const std::string& data) = 0;
+ public:
+  virtual ~ClipboardInterface() = default;
+  virtual void RegisterClipboardListener(ClipboardListener callback) = 0;
+  virtual bool ClipboardDataToGuest(uint type, const std::string& data) = 0;
 };
 
 
@@ -136,6 +147,7 @@ typedef std::function <void(void)> DisplayModeChangeListener;
 typedef std::function <void(void)> DisplayUpdateListener;
 class DisplayInterface {
  public:
+  virtual ~DisplayInterface() = default;
   virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) = 0;
   virtual const uint8_t* GetPallete() const = 0;
   virtual void Redraw() = 0;
@@ -162,6 +174,7 @@ enum PlaybackState {
 typedef std::function <void(PlaybackState state, struct iovec iov)> PlaybackListener;
 class PlaybackInterface {
  public:
+  virtual ~PlaybackInterface() = default;
   virtual void GetPlaybackFormat(uint* format, uint* channels, uint* frequency, uint* interval_ms) = 0;
   virtual void RegisterPlaybackListener(PlaybackListener callback) = 0;
 };
@@ -179,6 +192,7 @@ enum RecordState {
 typedef std::function <void(RecordState state)>   RecordListener;
 class RecordInterface {
   public:
+  virtual ~RecordInterface() = default;
   virtual void WriteRecordDataToDevice(const std::string& record_data) = 0;
   virtual void RegisterRecordListener(RecordListener callback) = 0;
 };
@@ -187,14 +201,18 @@ class RecordInterface {
 class SerialPortInterface;
 class SerialDeviceInterface {
  public:
+  virtual ~SerialDeviceInterface() = default;
   virtual void SendMessage(SerialPortInterface* port, uint8_t* data, size_t size) = 0;
 };
+
 enum SerialPortEvent {
   kSerialPortStatusChanged,
   kSerialPortData
 };
+
 class SerialPortInterface {
  public:
+  virtual ~SerialPortInterface() = default;
   virtual void OnMessage(uint8_t* data, size_t size) {
     if (callback_)
       callback_(kSerialPortData, data, size);
@@ -243,6 +261,7 @@ struct RedirectRule {
   uint32_t    target_ip;
   uint16_t    target_port;
 };
+
 struct MapRule {
   uint        protocol;
   uint32_t    listen_ip;
@@ -250,6 +269,7 @@ struct MapRule {
   uint32_t    target_ip;
   uint16_t    target_port;
 };
+
 struct MacAddress {
   union {
     uint8_t   data[6];
@@ -259,13 +279,17 @@ struct MacAddress {
     return memcmp(data, a.data, 6) < 0;
   }
 };
+
 class NetworkDeviceInterface {
  public:
+  virtual ~NetworkDeviceInterface() = default;
   virtual bool WriteBuffer(void* buffer, size_t size) = 0;
 };
+
 struct Ipv4Packet;
 class NetworkBackendInterface {
  public:
+  virtual ~NetworkBackendInterface() = default;
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac, int mtu) = 0;
   virtual void Reset() = 0;
   virtual void OnFrameFromGuest(std::deque<iovec>& vector) = 0;
@@ -295,6 +319,7 @@ class NetworkBackendInterface {
 
 class PowerDownInterface {
  public:
+  virtual ~PowerDownInterface() = default;
   virtual void PowerDown() = 0;
 };
 

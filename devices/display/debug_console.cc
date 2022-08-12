@@ -26,12 +26,18 @@ class DebugConsole : public Device {
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_UNUSED(resource);
+    MV_UNUSED(offset);
+    MV_UNUSED(size);
     if (manager_->machine()->debug()) {
       putchar(*data);
     }
   }
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    MV_UNUSED(resource);
+    MV_UNUSED(offset);
+    MV_UNUSED(size);
     *data = 0xe9;
   }
 

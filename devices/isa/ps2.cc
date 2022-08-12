@@ -22,7 +22,7 @@
 #include "device_manager.h"
 #include "machine.h"
 #include "device_interface.h"
-#include "pb/ps2.pb.h"
+#include "ps2.pb.h"
 
 #define STATUS_OFULL    0x01
 #define STATUS_SYSFLAG  0x04
@@ -330,6 +330,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
     case 0xF3: // set typematic rate
       last_command_ = data;
       PushKeyboard(RESPONSE_ACK);
+      break;
     case 0xF4: // enable keyboard scanning
       keyboard_.disable_scanning = false;
       PushKeyboard(RESPONSE_ACK);
@@ -466,6 +467,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
+    MV_UNUSED(offset);
 
     switch (resource->base)
     {
@@ -490,6 +492,8 @@ class Ps2 : public Device, public KeyboardInputInterface {
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     std::lock_guard<std::mutex> lock(mutex_);
     MV_ASSERT(size == 1);
+    MV_UNUSED(offset);
+
     if (debug_) {
       MV_LOG("write %x %x", resource->base, *data);
     }
