@@ -945,15 +945,19 @@ class Qxl : public Vga, public DisplayResizeInterface {
 
   void ParseDrawble(Drawable* drawable, std::vector<DisplayPartialBitmap>& partials) {
     auto qxl_drawable = drawable->qxl_drawable;
+    auto &bbox = qxl_drawable->bbox;
     DisplayPartialBitmap partial;
-    partial.width = uint(qxl_drawable->bbox.right - qxl_drawable->bbox.left);
-    partial.height = uint(qxl_drawable->bbox.bottom - qxl_drawable->bbox.top);
-    partial.x = uint(qxl_drawable->bbox.left);
-    partial.y = uint(qxl_drawable->bbox.top);
+    partial.width = uint(bbox.right - bbox.left);
+    partial.height = uint(bbox.bottom - bbox.top);
+    partial.x = uint(bbox.left);
+    partial.y = uint(bbox.top);
+    partial.flip = false;
+    partial.pallete = nullptr;
 
-    MV_ASSERT(qxl_drawable->bbox.left >= 0 && qxl_drawable->bbox.top >= 0);
-    if (qxl_drawable->bbox.right > (int32_t)primary_surface_.create.width ||
-      qxl_drawable->bbox.bottom > (int32_t)primary_surface_.create.height) {
+    MV_ASSERT(bbox.left >= 0 && bbox.top >= 0);
+    MV_ASSERT(bbox.bottom > bbox.top && bbox.right > bbox.left);
+    if (bbox.right > (int32_t)primary_surface_.create.width ||
+      bbox.bottom > (int32_t)primary_surface_.create.height) {
       if (debug_) {
         MV_LOG("Invalid draw box %d-%d %d-%d surface %ux%u",
           qxl_drawable->bbox.left, qxl_drawable->bbox.right, qxl_drawable->bbox.top, qxl_drawable->bbox.bottom,

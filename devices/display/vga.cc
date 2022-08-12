@@ -630,6 +630,7 @@ bool Vga::AcquireUpdate(DisplayUpdate& update) {
   partial.height = height_;
   partial.x = 0;
   partial.y = 0;
+  partial.flip = false;
   partial.pallete = vga_.pallete;
 
   size_t data_size = stride_ * height_;
