@@ -458,12 +458,12 @@ void SweetDisplayEncoder::ForceKeyframe() {
 
 void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint quality, std::string& output) {
   if (format != "jpeg") {
-    MV_LOG("not supported screendump format %s", format.c_str());
+    MV_ERROR("not supported screendump format %s", format.c_str());
     return;
   }
 
   if (screen_bpp_ != 32) {
-    MV_LOG("unsupported bpp=%d", screen_bpp_);
+    MV_ERROR("unsupported bpp=%d", screen_bpp_);
     return;
   }
 

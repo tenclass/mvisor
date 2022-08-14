@@ -66,6 +66,7 @@ Object* realize_class(const char* name) {
   auto it = classes->find(name);
   if (it == classes->end()) {
     MV_PANIC("object class not found %s", name);
+    return nullptr;
   }
   Object* o = it->second->create();
   o->set_id(++last_object_id);

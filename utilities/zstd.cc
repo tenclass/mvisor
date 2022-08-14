@@ -48,9 +48,8 @@ ssize_t zstd_decompress(const void* src,  size_t src_size, void* dest, size_t de
     zstd_ret = ZSTD_decompressStream(dctx, &output, &input);
 
     if (ZSTD_isError(zstd_ret)) {
-      MV_LOG("ZSTD decompress error inpos=%d outpos=%d: %s", last_in_pos, last_out_pos,
+      MV_ERROR("ZSTD decompress error inpos=%d outpos=%d: %s", last_in_pos, last_out_pos,
         ZSTD_getErrorString(ZSTD_getErrorCode(zstd_ret)));
-      DumpHex((uint8_t*)src + last_in_pos, 64);
       ret = -EIO;
       break;
     }

@@ -935,8 +935,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       break;
     }
     default:
-      DumpHex(cursor_cmd, sizeof(*cursor_cmd));
-      MV_PANIC("unhandled cursor type=%d", cursor_cmd->type);
+      MV_HEXDUMP("unhandled cursor", cursor_cmd, sizeof(*cursor_cmd));
       break;
     }
 
@@ -1022,8 +1021,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
       break;
     }
     default:
-      DumpHex(qxl_drawable, sizeof(*qxl_drawable));
-      MV_PANIC("unhandled drawable type=%d", qxl_drawable->type);
+      MV_HEXDUMP("unhandled drawable", qxl_drawable, sizeof(*qxl_drawable));
       break;
     }
   }

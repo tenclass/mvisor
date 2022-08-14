@@ -18,8 +18,6 @@
 
 #include "disk_image.h"
 
-#include <cstdlib>
-
 #include "logger.h"
 #include "utilities.h"
 #include "device_manager.h"
@@ -36,25 +34,17 @@ DiskImage::~DiskImage()
   }
 }
 
-DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly) {
+DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly, bool snapshot) {
   DiskImage* image;
   if (path.find(".qcow2") != std::string::npos) {
-    image = dynamic_cast<DiskImage*>(Object::Create("qcow2-image"));
-    /* If snapshot is on, create a new image and the original one is readonly */
-    bool image_snapshot = device->has_key("snapshot") && std::get<bool>((*device)["snapshot"]);
-    if (image_snapshot) {
-      image->snapshot_ = true;
-      std::string backing_filepath = path;
-      path = std::tmpnam(nullptr);
-      path += ".qcow2";
-      Qcow2Image::CreateImageWithBackingFile(path, backing_filepath);
-    }
+    image = dynamic_cast<Qcow2Image*>(Object::Create("qcow2-image"));
   } else {
     image = dynamic_cast<DiskImage*>(Object::Create("raw-image"));
   }
   MV_ASSERT(image);
   image->filepath_ = path;
   image->readonly_ = readonly;
+  image->snapshot_ = snapshot;
   image->device_ = device;
   image->Initialize();
   
@@ -85,10 +75,6 @@ void DiskImage::Finalize() {
   if (worker_thread_.joinable()) {
     worker_cv_.notify_all();
     worker_thread_.join();
-  }
-
-  if (snapshot_) {
-    remove(filepath_.c_str());
   }
 }
 

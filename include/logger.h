@@ -23,6 +23,7 @@
 
 enum LogType {
   kLogTypeDebug,
+  kLogTypeWarn,
   kLogTypeError,
   kLogTypePanic
 };
@@ -33,6 +34,9 @@ enum LogType {
 #define MV_PANIC(fmt, ...) Log(kLogTypePanic, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define MV_ASSERT(condition) \
   (__builtin_expect(!!(condition), 1) ? (void)0 : MV_PANIC("Assertion failed, "#condition))
+
+#define MV_HEXDUMP(description, data, size) Log(kLogTypeError, __FILE__, __LINE__, __func__, description); \
+  DumpHex(data, size);
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...);
 void SaveToFile(const char* path, void* data, size_t size);

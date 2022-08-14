@@ -42,6 +42,10 @@ Qcow2Image::~Qcow2Image() {
     safe_close(&fd_);
   }
 
+  if (snapshot_) {
+    remove(filepath_.c_str());
+  }
+
   if (copied_cluster_) {
     delete[] copied_cluster_;
   }
@@ -52,13 +56,18 @@ Qcow2Image::~Qcow2Image() {
 }
 
 void Qcow2Image::Initialize() {
-  if (readonly_) {
-    fd_ = open(filepath_.c_str(), O_RDONLY);
-  } else {
-    fd_ = open(filepath_.c_str(), O_RDWR);
+  int oflags = readonly_ ? O_RDONLY : O_RDWR;
+  if (snapshot_) {
+    auto backing_filepath = filepath_;
+    char temp[] = "/tmp/snapshot_XXXXXX";
+    close(mkstemp(temp));
+    filepath_ = temp;
+    Qcow2Image::CreateImageWithBackingFile(filepath_, backing_filepath);
   }
+
+  fd_ = open(filepath_.c_str(), oflags);
   if (fd_ < 0)
-    MV_PANIC("disk file not found: %s", filepath_.c_str());
+    MV_PANIC("failed to open disk file: %s", filepath_.c_str());
 
   struct stat st;
   fstat(fd_, &st);

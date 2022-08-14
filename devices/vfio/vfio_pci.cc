@@ -174,11 +174,10 @@ void VfioPci::SetupPciConfiguration() {
         break;
       case PCI_CAP_ID_EXP:
         is_pcie_ = true;
-        MV_LOG("unsupported PCI Express, dump config space");
-        DumpHex(pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
+        MV_HEXDUMP("unsupported PCI Express", pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
         break;
       default:
-        MV_LOG("unhandled capability=0x%x", cap->type);
+        MV_ERROR("unhandled capability=0x%x", cap->type);
         break;
       }
       pos = cap->next;

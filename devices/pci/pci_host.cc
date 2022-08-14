@@ -100,7 +100,7 @@ class PciHost : public PciDevice {
         config_.reg_offset = offset;
         pci->WritePciConfigSpace(config_.value & 0xFF, data, size);
       } else {
-        MV_LOG("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
+        MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
       }
     
     } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
@@ -120,7 +120,7 @@ class PciHost : public PciDevice {
       if (pci) {
         pci->WritePciConfigSpace(addr & 0xFFF, data, size);
       } else {
-        MV_LOG("failed to lookup pci %x:%x.%x offset=0x%lx", bus, slot, function, offset);
+        MV_ERROR("failed to lookup pci %x:%x.%x offset=0x%lx", bus, slot, function, offset);
       }
     
     } else {

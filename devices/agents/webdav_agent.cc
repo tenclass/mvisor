@@ -39,8 +39,7 @@ class WebdavAgent : public Device, public SerialPortInterface {
 
   virtual void OnMessage(uint8_t* data, size_t size) {
     if (debug_) {
-      MV_LOG("message");
-      DumpHex(data, size);
+      MV_HEXDUMP("message", data, size);
     }
   }
 };

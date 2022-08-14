@@ -168,7 +168,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       auto element = PopQueue(vq);
       if (!element) {
         if (debug_) {
-          MV_LOG("network queue is full, queue size=%d", vq.size);
+          MV_ERROR("network queue is full, queue size=%d", vq.size);
         }
         return false;
       }
@@ -249,7 +249,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     {
     default:
       *status = VIRTIO_NET_ERR;
-      DumpHex(iov.iov_base, iov.iov_len);
+      MV_HEXDUMP("control packet", iov.iov_base, iov.iov_len);
       MV_PANIC("unhandled control class=0x%x command=0x%x", control->cls, control->cmd);
       break;
     }

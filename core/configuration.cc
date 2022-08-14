@@ -99,8 +99,10 @@ Object* Configuration::CreateObject(std::string class_name, std::string name) {
   MV_ASSERT(objects.find(name) == objects.end());
 
   auto object = Object::Create(class_name.c_str());
-  object->set_name(name.c_str());
-  objects[name] = object;
+  if (object) {
+    object->set_name(name.c_str());
+    objects[name] = object;
+  }
   return object;
 }
 
@@ -220,6 +222,7 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
       name = GenerateObjectName(class_name);
     }
     auto object = GetOrCreateObject(class_name, name);
+    MV_ASSERT(object);
 
     /* Load object properties */
     for (auto it2 = node.begin(); it2 != node.end(); it2++) {

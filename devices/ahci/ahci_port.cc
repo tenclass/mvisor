@@ -126,7 +126,7 @@ bool AhciPort::HandleCommand(int slot) {
   AhciFisRegH2D* fis = (AhciFisRegH2D*)command_table->command_fis;
 
   if (fis->fis_type != kAhciFisTypeRegH2D) {
-    MV_LOG("unknown fis type 0x%x", fis->fis_type);
+    MV_ERROR("unknown fis type 0x%x", fis->fis_type);
     /* done handling the command */
     return true;
   }
@@ -139,6 +139,7 @@ bool AhciPort::HandleCommand(int slot) {
   if (is_native_command_queueing(fis->command)) {
     /* NCQ is not necessary, VirtIO is the best choice */
     MV_PANIC("not supported NCQ yet %x", fis->command);
+    return false;
   }
 
   /* Copy IDE command parameters */

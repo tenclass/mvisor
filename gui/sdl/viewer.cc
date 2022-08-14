@@ -360,7 +360,7 @@ void Viewer::OnClipboardFromGuest(const ClipboardData& clipboard_data) {
     SDL_SetClipboardText(clipboard_data_.c_str());
     break;
   default:
-    MV_LOG("Unhandled clipboard type=0x%x", clipboard_data.type);
+    MV_ERROR("Unhandled clipboard type=0x%x", clipboard_data.type);
     break;
   }
 }

@@ -52,7 +52,7 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
     buffer_.resize(header->length);
     int ret = recv(fd_, buffer_.data(), header->length, MSG_WAITALL);
     if (ret != (int)header->length) {
-      MV_LOG("failed to recv %u bytes, ret=%d", header->length, ret);
+      MV_ERROR("failed to recv %u bytes, ret=%d", header->length, ret);
       return;
     }
   }
@@ -154,7 +154,7 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
     break;
 
   default:
-    MV_LOG("unhandled sweet type=0x%x", header->type);
+    MV_ERROR("unhandled sweet type=0x%x", header->type);
     return;
   }
 
@@ -171,14 +171,14 @@ bool SweetConnection::Send(uint32_t type, void* data, size_t length) {
   };
   int ret = send(fd_, &header, sizeof(header), 0);
   if (ret != sizeof(header)) {
-    MV_LOG("failed to send message, type=0x%x ret=%d", type, ret);
+    MV_ERROR("failed to send message, type=0x%x ret=%d", type, ret);
     return false;
   }
 
   if (length > 0) {
     ret = send(fd_, data, length, 0);
     if (ret != (int)length) {
-      MV_LOG("failed to send message, type=0x%x ret=%d", type, ret);
+      MV_ERROR("failed to send message, type=0x%x ret=%d", type, ret);
       return false;
     }
   }
@@ -192,7 +192,7 @@ bool SweetConnection::Send(uint32_t type, const std::string& data) {
 bool SweetConnection::Send(uint32_t type, const Message& message) {
   /* Reuse the buffer */
   if (!message.SerializeToString(&buffer_)) {
-    MV_LOG("failed to serialize message type=0x%x", type);
+    MV_ERROR("failed to serialize message type=0x%x", type);
     return false;
   }
   return Send(type, buffer_.data(), buffer_.size());
@@ -228,7 +228,8 @@ void SweetConnection::OnQueryStatus() {
 void SweetConnection::OnSaveMachine() {
   SaveMachineOptions options;
   if (!options.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   machine_->Save(options.path());
 }
@@ -236,7 +237,8 @@ void SweetConnection::OnSaveMachine() {
 void SweetConnection::OnKeyboardInput() {
   SendKeyboardInput input;
   if (!input.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   if (machine_->IsPaused()) {
     return;
@@ -258,7 +260,8 @@ void SweetConnection::OnKeyboardInput() {
 void SweetConnection::OnSendPointerInput() {
   SendPointerInput input;
   if (!input.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   if (machine_->IsPaused()) {
     return;
@@ -286,7 +289,8 @@ void SweetConnection::OnSendPointerInput() {
 void SweetConnection::OnConfigMonitors() {
   MonitorsConfig config;
   if (!config.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   
   MV_ASSERT(config.count() > 0);
@@ -302,7 +306,8 @@ void SweetConnection::OnConfigMonitors() {
 void SweetConnection::OnStartDisplayStream() {
   DisplayStreamConfig config;
   if (!config.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   server_->StartDisplayStreamOnConnection(this, &config);
 }
@@ -310,7 +315,8 @@ void SweetConnection::OnStartDisplayStream() {
 void SweetConnection::OnStartPlaybackStream() {
   PlaybackStreamConfig config;
   if (!config.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   server_->StartPlaybackStreamOnConnection(this, &config);
 }
@@ -382,7 +388,8 @@ void SweetConnection::SendSerialPortStatusEvent(std::string name, bool ready) {
 void SweetConnection::OnQueryScreenshot() {
   QueryScreeenshot query;
   if (!query.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   std::string image_data;
 
@@ -402,32 +409,26 @@ void SweetConnection::OnQueryScreenshot() {
 void SweetConnection::OnClipboardDataToGuest() {
   ClipboardDataToGuest clipboard;
   if(!clipboard.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
 
+  auto clipboard_interface = server_->clipboard();
+  MV_ASSERT(clipboard_interface);
+
   switch(clipboard.type()) {
-    case kSweetClipboard_NONE: {
-      MV_LOG("sweet clipboard type none");
+    case kSweetClipboard_UTF8_TEXT:
+      clipboard_interface->ClipboardDataToGuest(clipboard.type(), clipboard.data());
       break;
-    }
-    case kSweetClipboard_UTF8_TEXT: {
-      auto clipboard_interface = server_->clipboard();
-      if(clipboard_interface)
-        clipboard_interface->ClipboardDataToGuest(clipboard.type(), clipboard.data());
-      break;
-    }
+    case kSweetClipboard_NONE:
     case kSweetClipboard_IMAGE_PNG:
-      break;
     case kSweetClipboard_IMAGE_BMP:
-      break;
     case kSweetClipboard_IMAGE_TIFF:
-      break;
     case kSweetClipboard_IMAGE_JPG:
-      break;
     case kSweetClipboard_FILE_LIST:
-      break;
     default:
-    break;
+      MV_ERROR("sweet clipboard data type 0x%x not implemented", clipboard.type());
+      break;
   }
 }
 
@@ -461,7 +462,8 @@ void SweetConnection::OnMidiInput() {
 
   SendMidiInput input;
   if (!input.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
 
   MidiEvent event;
@@ -484,7 +486,8 @@ void SweetConnection::OnWacomInput() {
 
   SendWacomInput input;
   if (!input.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
   
   WacomEvent event;
@@ -531,7 +534,8 @@ void SweetConnection::OnStopWacom() {
 void SweetConnection::OnStartRecordStream() {
   RecordStreamConfig record_config;
   if(!record_config.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
 
   server_->StartRecordStreamOnConnection(this, &record_config);
@@ -544,7 +548,8 @@ void SweetConnection::OnStopRecordStream() {
 void SweetConnection::OnSendRecordStreamData() {
   SendRecordStreamData record_data;
   if(!record_data.ParseFromString(buffer_)) {
-    MV_PANIC("failed to parse buffer");
+    MV_ERROR("failed to parse buffer");
+    return;
   }
 
   server_->SendRecordStreamData(record_data.data());

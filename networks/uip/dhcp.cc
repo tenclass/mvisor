@@ -116,7 +116,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
 
   if (debug_) {
     MV_LOG("DHCP option_type=%d requested=0x%x hostname=%s parameters:", option_type, requested_ip, hostname.c_str());
-    DumpHex(parameters.data(), parameters.size());
+    MV_HEXDUMP("packet", parameters.data(), parameters.size());
   }
   
   /* Handle message */
@@ -130,8 +130,8 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
       reply = CreateDhcpResponse(dhcp, 6);  // NAK
     }
   } else {
-    DumpHex(dhcp, packet->data_length);
     MV_LOG("unknown dhcp packet option_type=0x%x", option_type);
+    MV_HEXDUMP("packet", dhcp, packet->data_length);
     packet->Release();
     return;
   }

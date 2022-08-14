@@ -73,13 +73,14 @@ void IdeStorageDevice::Connect() {
   Device::Connect();
 
   /* Connect to backend image */
-  bool readonly = type_ == kIdeStorageTypeCdrom;
-  if (has_key("readonly")) {
-    readonly = std::get<bool>(key_values_["readonly"]);
+  bool readonly = has_key("readonly") && std::get<bool>(key_values_["readonly"]);
+  bool snapshot = has_key("snapshot") && std::get<bool>(key_values_["snapshot"]);
+  if (type_ == kIdeStorageTypeCdrom) {
+    readonly = true;
   }
   if (has_key("image")) {
     std::string path = std::get<std::string>(key_values_["image"]);
-    image_ = DiskImage::Create(this, path, readonly);
+    image_ = DiskImage::Create(this, path, readonly, snapshot);
   }
 }
 
@@ -198,7 +199,7 @@ void IdeStorageDevice::Ata_SetFeatures() {
   case 0x66: /* reverting to power-on defaults disable */
     break;
   default:
-    MV_LOG("unknown set features 0x%x", regs_.feature0);
+    MV_ERROR("unknown set features 0x%x", regs_.feature0);
     AbortCommand();
     break;
   }

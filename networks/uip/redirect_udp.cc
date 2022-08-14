@@ -78,7 +78,7 @@ void RedirectUdpSocket::InitializeRedirect() {
   auto ret = connect(fd_, (struct sockaddr*)&daddr, sizeof(daddr));
   if (ret < 0) {
     if (debug_)
-      perror("failed to initialize UDP socket");
+      MV_ERROR("failed to initialize UDP socket");
     safe_close(&fd_);
     return;
   }

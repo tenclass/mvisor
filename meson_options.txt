@@ -9,3 +9,9 @@ option('sdl',
   value: true,
   description: 'Enable SDL GUI'
 )
+
+option('gtk',
+  type: 'boolean',
+  value: true,
+  description: 'Enable GTK GUI'
+)

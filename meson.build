@@ -42,8 +42,12 @@ subdir('networks/uip')
 subdir('utilities')
 
 if get_option('sdl')
-  subdir('sdl')
+  subdir('gui' / 'sdl')
   mvisor_version_data.set('HAS_SDL', true)
+endif
+if get_option('gtk')
+  subdir('gui' / 'gtk')
+  mvisor_version_data.set('HAS_GTK', true)
 endif
 
 if get_option('sweet-server')

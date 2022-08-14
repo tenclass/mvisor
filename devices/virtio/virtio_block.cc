@@ -60,13 +60,11 @@ class VirtioBlock : public VirtioPci {
 
   virtual void Connect() {
     /* Connect to backend image */
-    bool readonly = false;
-    if (has_key("readonly")) {
-      readonly = std::get<bool>(key_values_["readonly"]);
-    }
+    bool readonly = has_key("readonly") && std::get<bool>(key_values_["readonly"]);
+    bool snapshot = has_key("snapshot") && std::get<bool>(key_values_["snapshot"]);
     if (has_key("image")) {
       std::string path = std::get<std::string>(key_values_["image"]);
-      image_ = DiskImage::Create(this, path, readonly);
+      image_ = DiskImage::Create(this, path, readonly, snapshot);
 
       /* Qcow2 supports disacard & write zeros */
       if (path.find(".qcow2") != std::string::npos) {

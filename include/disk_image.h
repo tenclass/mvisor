@@ -50,7 +50,7 @@ struct ImageInformation {
 class Device;
 class DiskImage : public Object {
  public:
-  static DiskImage* Create(Device* device, std::string path, bool readonly);
+  static DiskImage* Create(Device* device, std::string path, bool readonly, bool snapshot);
 
   DiskImage();
   virtual ~DiskImage();

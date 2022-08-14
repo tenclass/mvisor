@@ -207,8 +207,7 @@ void AhciCdrom::ParseCommandPacket() {
     handler();
     regs_.count0 |= ATA_CB_SC_P_IO | ATA_CB_SC_P_CD;
   } else {
-    DumpHex(io_.atapi_command, sizeof(io_.atapi_command));
-    MV_PANIC("unhandled ATAPI command=0x%x", command);
+    MV_HEXDUMP("unhandled ATAPI command", io_.atapi_command, sizeof(io_.atapi_command));
   }
 }
 
@@ -274,7 +273,7 @@ void AhciCdrom::Atapi_ModeSense() {
     memcpy(io_.buffer, buf, io_.nbytes);
     break;
   default:
-    MV_PANIC("not implemented mode sense command=0x%x", io_.atapi_command[2]);
+    MV_ERROR("not implemented mode sense command=0x%x", io_.atapi_command[2]);
     break;
   }
 }

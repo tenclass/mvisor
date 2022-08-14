@@ -119,7 +119,7 @@ int SweetServer::MainLoop() {
       if (errno == EINTR) {
         continue;
       } else {
-        MV_LOG("poll ret=%d errno=%d", ret, errno);
+        MV_ERROR("poll ret=%d errno=%d", ret, errno);
         break;
       }
     }
@@ -183,7 +183,7 @@ void SweetServer::OnEvent() {
 void SweetServer::OnAccept() {
   int child_fd = accept(server_fd_, nullptr, nullptr);
   if (child_fd < 0) {
-    MV_LOG("child_fd=%d errno=%d", child_fd, errno);
+    MV_ERROR("child_fd=%d errno=%d", child_fd, errno);
     return;
   }
 
@@ -572,7 +572,7 @@ void SweetServer::OnRecordStats(RecordState state) {
       audio_record_connection_->Send(kAudioRecoreStopEvent);
     }
   } else {
-    MV_LOG("unknown record event");
+    MV_ERROR("unknown record event");
   }
 }
 

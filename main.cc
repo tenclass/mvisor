@@ -36,13 +36,13 @@ static SweetServer* sweet_server = nullptr;
 #endif
 
 #ifdef HAS_SDL
-#include "sdl/viewer.h"
+#include "gui/sdl/viewer.h"
 static Viewer*      viewer = nullptr;
 #endif
 
 
 /* For vfio mdev, -uuid xxx is necessary */
-void IntializeArguments(int argc, char* argv[]) {
+static void IntializeArguments(int argc, char* argv[]) {
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-uuid") == 0) {
       /* Found uuid */
@@ -67,7 +67,7 @@ void IntializeArguments(int argc, char* argv[]) {
   exit(1);
 }
 
-void PrintHelp() {
+static void PrintHelp() {
   printf("Usage: mvisor [option]\n");
   printf("Options\n");
   printf("  -h, --help            Display this information.\n");
@@ -80,7 +80,7 @@ void PrintHelp() {
   printf("  -l, --load            Load mvisor snapshot information.\n");
 }
 
-void PrintVersion() {
+static void PrintVersion() {
   printf("MVisor: %s\n", VERSION);
   printf("Copyright (C) 2022 Terrence <terrence@tenclass.com>.\n");
   printf("License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n");

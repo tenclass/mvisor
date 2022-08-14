@@ -183,7 +183,7 @@ class Uip : public Object, public NetworkBackendInterface {
       } else if (parts[0] == "udp") {
         *protocol = 0x11;
       } else {
-        MV_LOG("unknown protocol %s", parts[0].c_str());
+        MV_ERROR("unknown protocol %s", parts[0].c_str());
       }
       parts.pop_front();
     }
@@ -275,7 +275,7 @@ class Uip : public Object, public NetworkBackendInterface {
       setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
   
       if (bind(fd, (sockaddr*)&addr, sizeof(addr)) != 0) {
-        MV_LOG("failed to bind address %s:%d", inet_ntoa(addr.sin_addr), rule.listen_port);
+        MV_ERROR("failed to bind address %s:%d", inet_ntoa(addr.sin_addr), rule.listen_port);
         safe_close(&fd);
         continue;
       }
@@ -470,9 +470,8 @@ class Uip : public Object, public NetworkBackendInterface {
     }
     default:
       if (real_device_->debug()) {
-        MV_LOG("==================Not UDP or TCP===================");
-        MV_LOG("ip packet protocol=%d", ip->protocol);
-        DumpHex(ip, ntohs(ip->tot_len));
+        MV_LOG("Not UDP or TCP, protocol=%d", ip->protocol);
+        MV_HEXDUMP("ip packet", ip, ntohs(ip->tot_len));
       }
       packet->Release();
       break;

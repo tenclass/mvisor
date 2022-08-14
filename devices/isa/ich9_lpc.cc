@@ -335,7 +335,7 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
       MV_PANIC("suspend is not supported");
       break;
     default:
-      MV_LOG("unknown acpi suspend type=%d", type);
+      MV_ERROR("unknown acpi suspend type=%d", type);
       break;
     }
   }

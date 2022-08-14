@@ -275,7 +275,7 @@ int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, in
   case VendorInterfaceRequest | 'Q':
     return GetMicrosoftOsDescriptor(index, data, length);
   }
-  MV_LOG("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
+  MV_ERROR("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
   return USB_RET_STALL;
 }
 
@@ -287,7 +287,7 @@ void UsbDevice::SetupDescriptor(const UsbDeviceDescriptor* device_desc,
 
 int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
   if (length < 2) {
-    MV_LOG("length too short, index=0x%x length=%d", index, length);
+    MV_ERROR("length too short, index=0x%x length=%d", index, length);
     return USB_RET_IOERROR;
   }
   
@@ -420,7 +420,7 @@ int UsbDevice::SetConfiguration(uint value) {
           endpoint->interface = j;
           endpoint->interval = (1 << (desc->bInterval - 1)) * 125 / 1000;
           if (endpoint->interval < 1 || endpoint->interval > 1000) {
-            MV_LOG("invalid interval=%u", endpoint->interval);
+            MV_ERROR("invalid interval=%u", endpoint->interval);
             endpoint->interval = 1;
           }
           endpoints_.push_back(endpoint);
