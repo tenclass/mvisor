@@ -79,9 +79,6 @@ void Vcpu::Start() {
 void Vcpu::Reset() {
   /* Reset CPU registers, MSRs */
   LoadStateFrom(default_state_, false);
-
-  /* Adapt the CPU features to current model */
-  PrepareX86Vcpu();
 }
 
 /* 
