@@ -106,20 +106,26 @@ void Vcpu::SetupCpuid() {
       entry->eax = 0xD; // Max input value for basic information
       break;
     case 0x1: { // ACPI ID & Features
-      entry->ebx = (vcpu_id_ << 24) | (entry->ebx & 0xFFFF);
+      entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
 
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_TSC_DEADLINE_TIMER, tsc_deadline);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_HYPERVISOR, machine_->hypervisor_);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_PDCM, false); // Disable PDU
-
+      ALTER_FEATURE(entry->edx, CPUID_HT, true);  // Max ACPI IDs reserved field is valid
       ALTER_FEATURE(entry->edx, CPUID_SS, false); // Self snoop
 
       cpuid_features_ = (uint64_t(entry->edx) << 32) | entry->ecx;
       break;
     }
     case 0x2: // Cache and TLB Information
+      break;
     case 0x4: // Deterministic Cache Parameters Leaf
+      entry->eax &= ~0xFC000000;
+      if ((entry->eax & 0x1F) && machine_->num_vcpus_ >= 4) {
+        int cores = machine_->num_vcpus_ / 2;
+        entry->eax |= (cores - 1) << 26;
+      }
       break;
     case 0x7: // Extended CPU features 7
       if (entry->index == 0) {

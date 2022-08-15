@@ -105,9 +105,6 @@ AhciDisk::AhciDisk() {
     Ata_ReadWriteSectorsAsync(true);
   };
 
-  ata_handlers_[0xE0] = [=] () { // STANDBYNOW1
-  };
-
   ata_handlers_[0xE7] =          // FLUSH_CACHE
   ata_handlers_[0xEA] = [=] () { // FLUSH_CACHE_EXT
     io_async_ = true;
