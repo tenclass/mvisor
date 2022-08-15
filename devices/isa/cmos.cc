@@ -62,6 +62,7 @@ class Cmos : public Device {
   uint8_t   cmos_index_;
   uint8_t   cmos_data_[128];
   IoTimer*  rtc_timer_ = nullptr;
+  bool      rtc_timer_warned_ = false;
 
  public:
 
@@ -155,6 +156,17 @@ class Cmos : public Device {
     cmos_data_[RTC_CENTURY] = bin2bcd(year / 100);
   }
 
+  void PrintTicksPerSecond() {
+    static time_t counter = 0, last_time =0;
+    if (time(NULL) > last_time) {
+      last_time = time(NULL);
+      MV_LOG("ticks=%ld", counter);
+      counter = 0;
+    } else {
+      counter++;
+    }
+  }
+
   void OnRtcTimer() {
     /* set RTC interrupt flag */
     cmos_data_[RTC_REG_C] |= 0x40;
@@ -165,10 +177,11 @@ class Cmos : public Device {
         cmos_data_[RTC_REG_C] |= 0x80;
         manager_->SetGsiLevel(RTC_IRQ, 1);
       }
+
+      // PrintTicksPerSecond();
     }
   }
 
-  /* RTC timer has performance problem, lots of IO causes lots of vmexits */
   void UpdateRtcTimer() {
     uint period_code = cmos_data_[RTC_REG_A] & 0xF;
     if (!period_code) {
@@ -178,13 +191,18 @@ class Cmos : public Device {
       period_code += 7;
     }
     uint period = 1 << (period_code - 1);
-    uint64_t period_ms = std::max(1u, period * 10000 / 32768); // use 32k Hz clock rate
+    int64_t period_ns = NS_PER_SECOND / 32768 * period; // use 32k Hz clock rate
 
     if (cmos_data_[RTC_REG_B] & 0x40) {
       if (rtc_timer_ == nullptr) {
-        rtc_timer_ = manager_->io()->AddTimer(period_ms, true, std::bind(&Cmos::OnRtcTimer, this));
+        rtc_timer_ = manager_->io()->AddTimer(period_ns, true, std::bind(&Cmos::OnRtcTimer, this));
+        // Try to warn user if OS switches to RTC timer
+        if (!rtc_timer_warned_) {
+          MV_LOG("The OS is using RTC timer which has performance problem!");
+          rtc_timer_warned_ = true;
+        }
       } else {
-        manager_->io()->ModifyTimer(rtc_timer_, period_ms);
+        manager_->io()->ModifyTimer(rtc_timer_, period_ns);
       }
     } else {
       DisableTimer(&rtc_timer_);

@@ -422,21 +422,21 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     auto started_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - stream->start_time).count();
     auto current_ms = stream->position * 1000 / stream->bytes_per_second;
-    long next_interval = current_ms - started_ms;
+    int64_t next_interval_ms = current_ms - started_ms;
     
-    if (next_interval < 1) {
+    if (next_interval_ms < 1) {
       /* If we cannot catch up, reset timer */
-      if (next_interval < -100) {
-        MV_LOG("stream[%d] reset timer, current_ms=%dms started_ms=%dms interval=%dms", stream->id, current_ms, started_ms, next_interval);
+      if (next_interval_ms < -100) {
+        MV_LOG("stream[%d] reset timer, current_ms=%dms started_ms=%dms", stream->id, current_ms, started_ms);
         stream->position = 0;
         stream->start_time = std::chrono::steady_clock::now();
       } 
-      next_interval = 1;
+      next_interval_ms = 1;
     }
 
-    // MV_LOG("stream[%d] current_ms=%lu started_ms=%lu next interval=%lu", stream->id, current_ms, started_ms, next_interval);
-    if (stream->timer->interval_ms != next_interval) {
-      manager_->io()->ModifyTimer(stream->timer, next_interval);
+    int64_t next_interval_ns = 1000000LL * next_interval_ms;
+    if (stream->timer->interval_ns != next_interval_ns) {
+      manager_->io()->ModifyTimer(stream->timer, next_interval_ns);
     }
   }
 
@@ -461,7 +461,8 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
       MV_ASSERT(stream->timer == nullptr);
-      stream->timer = manager_->io()->AddTimer(1, true, [this, stream]() {
+      // FIXME: When should the first timer event happen?
+      stream->timer = manager_->io()->AddTimer(NS_PER_SECOND / 1000LL, true, [this, stream]() {
         OnStreamTimer(stream);
       });
     } else {

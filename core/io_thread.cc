@@ -98,7 +98,9 @@ void IoThread::RunLoop() {
 
   while (true) {
     /* Execute timer events and calculate the next timeout */
-    int next_timeout_ms = CheckTimers();
+    int64_t next_timeout_ns = CheckTimers();
+    MV_ASSERT(next_timeout_ns > 0);
+
     /* Check paused state before sleep */
     while(machine_->IsPaused() && CanPauseNow()) {
       machine_->WaitToResume();
@@ -106,7 +108,9 @@ void IoThread::RunLoop() {
     if (!machine_->IsValid()) {
       break;
     }
-    int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, next_timeout_ms);
+
+    /* epoll_wait limits to 1ms at least. epoll_pwait2 is only available after kernel 5.11 */
+    int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, std::max(1LL, next_timeout_ns / 1000000LL));
     if (nfds < 0 && errno != EINTR) {
       MV_PANIC("nfds=%d", nfds);
       break;
@@ -188,13 +192,13 @@ void IoThread::StopPolling(int fd) {
   delete event;
 }
 
-IoTimer* IoThread::AddTimer(int interval_ms, bool permanent, VoidCallback callback) {
+IoTimer* IoThread::AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback) {
   IoTimer* timer = new IoTimer;
   timer->permanent = permanent;
-  timer->interval_ms = interval_ms;
+  timer->interval_ns = interval_ns;
   timer->callback = std::move(callback);
   timer->removed = false;
-  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
+  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::nanoseconds(interval_ns);
 
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   timers_.push_back(timer);
@@ -209,14 +213,14 @@ void IoThread::RemoveTimer(IoTimer* timer) {
   timer->removed = true;
 }
 
-void IoThread::ModifyTimer(IoTimer* timer, int interval_ms) {
-  timer->interval_ms = interval_ms;
-  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::milliseconds(interval_ms);
+void IoThread::ModifyTimer(IoTimer* timer, int64_t interval_ns) {
+  timer->interval_ns = interval_ns;
+  timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::nanoseconds(interval_ns);
 }
 
-int IoThread::CheckTimers() {
+int64_t IoThread::CheckTimers() {
   auto now = std::chrono::steady_clock::now();
-  int64_t min_timeout_ms = 100000;
+  int64_t min_timeout_ns = 100 * NS_PER_SECOND;
 
   std::vector<IoTimer*> triggered;
 
@@ -227,14 +231,14 @@ int IoThread::CheckTimers() {
       it = timers_.erase(it);
       delete timer;
     } else {
-      auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(timer->next_timepoint - now).count();
-      if (delta_ms <= 0) {
+      auto delta_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(timer->next_timepoint - now).count();
+      if (delta_ns <= 0) {
         triggered.push_back(timer);
-        timer->next_timepoint = now + std::chrono::milliseconds(timer->interval_ms);
-        delta_ms = timer->interval_ms;
+        timer->next_timepoint = now + std::chrono::nanoseconds(timer->interval_ns);
+        delta_ns = timer->interval_ns;
       }
-      if (delta_ms < min_timeout_ms) {
-        min_timeout_ms = delta_ms;
+      if (delta_ns > 0 && delta_ns < min_timeout_ns) {
+        min_timeout_ns = delta_ns;
       }
       ++it;
     }
@@ -252,7 +256,7 @@ int IoThread::CheckTimers() {
       continue;
     }
   }
-  return min_timeout_ms;
+  return min_timeout_ns;
 }
 
 void IoThread::Schedule(VoidCallback callback) {
@@ -293,7 +297,7 @@ bool IoThread::CanPauseNow() {
 
   /* Drain all IO schedule jobs */
   for (auto timer : timers_) {
-    if (timer->interval_ms == 0) {
+    if (timer->interval_ns == 0) {
       return false;
     }
   }

@@ -35,9 +35,11 @@ typedef std::function<void()> VoidCallback;
 typedef std::function<void(long)> IoCallback;
 typedef std::chrono::steady_clock::time_point IoTimePoint;
 
+#define NS_PER_SECOND (1000000000LL)
+
 struct IoTimer {
   bool          permanent;
-  int           interval_ms;
+  int64_t       interval_ns;
   IoTimePoint   next_timepoint;
   VoidCallback  callback;
   bool          removed;
@@ -67,9 +69,9 @@ class IoThread {
   void StopPolling(int fd);
 
   /* Timer events handled by IO thread */
-  IoTimer* AddTimer(int interval_ms, bool permanent, VoidCallback callback);
+  IoTimer* AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback);
   void RemoveTimer(IoTimer* timer);
-  void ModifyTimer(IoTimer* timer, int interval_ms);
+  void ModifyTimer(IoTimer* timer, int64_t interval_ns);
   void Schedule(VoidCallback callback);
 
   /* Disk images */
@@ -80,9 +82,9 @@ class IoThread {
   uint GetDiskImageCount() { return disk_images_.size(); }
 
  private:
-  void RunLoop();
-  int  CheckTimers();
-  bool CanPauseNow();
+  void    RunLoop();
+  int64_t CheckTimers();
+  bool    CanPauseNow();
 
   std::thread           thread_;
   Machine*              machine_;

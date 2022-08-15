@@ -94,8 +94,8 @@ void RedirectUdpSocket::StartReading() {
   while (fd_ != -1) {
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
-      /* FIXME: This code is not elegantly */
-      wait_timer_ = io_->AddTimer(10, false, [this]() {
+      /* FIXME: retry 10ms later, This code is not elegantly */
+      wait_timer_ = io_->AddTimer(NS_PER_SECOND / 100, false, [this]() {
         wait_timer_ = nullptr;
         StartReading();
       });

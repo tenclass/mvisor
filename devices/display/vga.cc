@@ -198,7 +198,7 @@ void Vga::Connect() {
 
   PciDevice::Connect();
 
-  refresh_timer_ = manager_->io()->AddTimer(1000 / 30, true, std::bind(&Vga::OnRefreshTimer, this));
+  refresh_timer_ = manager_->io()->AddTimer(NS_PER_SECOND / 30, true, std::bind(&Vga::OnRefreshTimer, this));
 }
 
 void Vga::Disconnect() {

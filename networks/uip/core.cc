@@ -106,7 +106,7 @@ class Uip : public Object, public NetworkBackendInterface {
     // This function could only be called once
     MV_ASSERT(real_device_ == nullptr);
     real_device_ = dynamic_cast<Device*>(device_);
-    timer_ = real_device_->manager()->io()->AddTimer(10 * 1000, true, [this](){
+    timer_ = real_device_->manager()->io()->AddTimer(NS_PER_SECOND * 10, true, [this](){
       OnTimer();
     });
 

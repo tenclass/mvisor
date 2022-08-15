@@ -190,7 +190,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
     };
 
     if (!status_report_timer_) {
-      status_report_timer_ = manager_->io()->AddTimer(5000, true, timer_callback);
+      status_report_timer_ = manager_->io()->AddTimer(NS_PER_SECOND * 5, true, timer_callback);
     }
   }
 
