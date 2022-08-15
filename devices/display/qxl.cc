@@ -505,19 +505,37 @@ class Qxl : public Vga, public DisplayResizeInterface {
         Reset();
         UpdateIrqLevel();
         break;
+      case QXL_IO_LOG:
+        if (!qxl_ram_->log_buf[0]) {
+          MV_LOG("QXL_IO_LOG", qxl_ram_->log_buf);
+        }
+        break;
       case QXL_IO_MEMSLOT_ADD:
         MV_ASSERT(data[0] < NUM_MEMSLOTS);
         MV_ASSERT(!guest_slots_[data[0]].active);
         AddMemSlot(data[0], qxl_ram_->mem_slot);
         break;
+      case QXL_IO_MEMSLOT_DEL:
+        DeleteMemSlot(data[0]);
+        break;
       case QXL_IO_CREATE_PRIMARY:
         CreatePrimarySurface(qxl_ram_->create_surface);
         break;
+      case QXL_IO_DESTROY_ALL_SURFACES:
+        DestroyAllSurfaces();
+        // fall through
       case QXL_IO_DESTROY_PRIMARY:
         FlushCommandsAndResources();
         DestroyPrimarySurface();
         break;
+      case QXL_IO_FLUSH_SURFACES_ASYNC:
+        MV_LOG("QXL_IO_FLUSH_SURFACES_ASYNC");
+        break;
       case QXL_IO_MONITORS_CONFIG_ASYNC:
+        MV_LOG("QXL_IO_MONITORS_CONFIG_ASYNC");
+        break;
+      case QXL_IO_FLUSH_RELEASE:
+        FreeGuestResources();
         break;
       default:
         MV_PANIC("unhandled QXL command=0x%lx", command);
@@ -578,6 +596,10 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
   }
 
+  void DeleteMemSlot(int slot_id) {
+    guest_slots_[slot_id].active = false;
+  }
+
   void CreatePrimarySurface(QXLSurfaceCreate& create) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
   
@@ -617,6 +639,13 @@ class Qxl : public Vga, public DisplayResizeInterface {
     mode_ = kDisplayUnknownMode;
     if (debug_)
       MV_LOG("destroy primary");
+  }
+
+  void DestroyAllSurfaces() {
+    for (auto it = surfaces_.begin(); it != surfaces_.end(); it++) {
+      ReleaseGuestResource(&it->second.qxl_surface_cmd->release_info);
+    }
+    surfaces_.clear();
   }
 
   void* GetMemSlotAddress(uint64_t data) {
@@ -971,7 +1000,11 @@ class Qxl : public Vga, public DisplayResizeInterface {
     case QXL_DRAW_COPY: {
       MV_ASSERT(qxl_drawable->effect == QXL_EFFECT_OPAQUE);
       QXLCopy* copy = &qxl_drawable->u.copy;
-      MV_ASSERT(copy->src_area.top == 0 && copy->src_area.left == 0);
+      if (copy->src_area.top != 0 || copy->src_area.left != 0) {
+        MV_ERROR("copy src_area %d,%d %dx%d", copy->src_area.left, copy->src_area.top,
+          copy->src_area.right - copy->src_area.left, copy->src_area.bottom - copy->src_area.top);
+        break;
+      }
       MV_ASSERT(copy->rop_descriptor == SPICE_ROPD_OP_PUT);
       QXLImage* image = (QXLImage*)GetMemSlotAddress(copy->src_bitmap);
       if (image->descriptor.type != SPICE_IMAGE_TYPE_BITMAP) {
@@ -990,7 +1023,12 @@ class Qxl : public Vga, public DisplayResizeInterface {
         break;
       }
       MV_ASSERT(bitmap->palette == 0);
-      MV_ASSERT(partial.width == bitmap->x && partial.height == bitmap->y);
+      if (partial.width != bitmap->x || partial.height != bitmap->y) {
+        MV_LOG("partial size %dx%d differs from bitmap size %dx%d",
+          partial.width, partial.height, bitmap->x, bitmap->y);
+        break;
+      }
+
       partial.bpp = primary_surface_.bits_pp;
       partial.stride = bitmap->stride;
       partial.flip = !(bitmap->flags & QXL_BITMAP_TOP_DOWN);
@@ -1004,6 +1042,10 @@ class Qxl : public Vga, public DisplayResizeInterface {
     }
     case QXL_DRAW_FILL: {
       QXLFill* fill = &qxl_drawable->u.fill;
+      if (fill->rop_descriptor == SPICE_ROPD_OP_XOR) {
+        MV_LOG("not implemented SPICE_ROPD_OP_XOR");
+        break;
+      }
       MV_ASSERT(fill->rop_descriptor == SPICE_ROPD_OP_PUT);
       QXLBrush* brush = &fill->brush;
       MV_ASSERT(brush->type == SPICE_BRUSH_TYPE_SOLID);
@@ -1020,8 +1062,21 @@ class Qxl : public Vga, public DisplayResizeInterface {
       partials.emplace_back(std::move(partial));
       break;
     }
+    case QXL_COPY_BITS:
+      MV_LOG("QXL_COPY_BITS");
+      break;
+    case QXL_DRAW_TEXT:
+      MV_LOG("QXL_DRAW_TEXT");
+      break;
+    case QXL_DRAW_TRANSPARENT:
+      MV_LOG("QXL_DRAW_TRANSPARENT");
+      break;
+    case QXL_DRAW_ALPHA_BLEND:
+      MV_LOG("QXL_DRAW_ALPHA_BLEND");
+      break;
     default:
-      MV_HEXDUMP("unhandled drawable", qxl_drawable, sizeof(*qxl_drawable));
+      MV_LOG("unhandled drawable type=%d", qxl_drawable->type);
+      MV_HEXDUMP("drawable", qxl_drawable, sizeof(*qxl_drawable));
       break;
     }
   }

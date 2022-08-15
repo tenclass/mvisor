@@ -140,6 +140,7 @@ AhciCdrom::AhciCdrom()
     CBD_RW_DATA10* p = (CBD_RW_DATA10*)io_.atapi_command;
     io_.lba_block = be32toh(p->lba);
     io_.lba_count = be16toh(p->count);
+    io_.dma_status = 1;
     if (debug_) {
       MV_LOG("ATAPI read block=0x%lx count=0x%lx", io_.lba_block, io_.lba_count);
     }
@@ -273,7 +274,7 @@ void AhciCdrom::Atapi_ModeSense() {
     memcpy(io_.buffer, buf, io_.nbytes);
     break;
   default:
-    MV_ERROR("not implemented mode sense command=0x%x", io_.atapi_command[2]);
+    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
     break;
   }
 }
@@ -314,6 +315,10 @@ void AhciCdrom::Atapi_TableOfContent() {
     MV_PANIC("invalid TOC command %x", format);
     break;
   }
+
+  // do not copy more than max_size
+  if (io_.nbytes > max_size)
+    io_.nbytes = max_size;
 }
 
 void AhciCdrom::Atapi_Inquiry() {
@@ -337,6 +342,7 @@ void AhciCdrom::Atapi_Inquiry() {
 
 void AhciCdrom::Atapi_IdentifyData() {
   uint16_t p[256] = { 0 };
+  bool dma_supported = true;
 
   /* Removable CDROM, 50us response, 12 byte packets */
   p[0] = (2 << 14) | (5 << 8) | (1 << 7) | (2 << 5) | (0 << 0);
@@ -349,10 +355,16 @@ void AhciCdrom::Atapi_IdentifyData() {
   padstr((char *)(p + 27), drive_info_.model, 40); /* model */
   p[48] = 1; /* dword I/O (XXX: should not be set on CDROM) */
 
-  p[49] = 1 << 9 | 1 << 8; /* LBA supported (DMA supported) */
-  p[53] = 7; /* words 64-70, 54-58, 88 valid */
-  p[62] = 7; /* 0 or 7: single word dma0-2 supported */
-  p[63] = 7; /* 0 or 7: mdma0-2 supported */
+  if (dma_supported) {
+    p[49] = 1 << 9 | 1 << 8; /* LBA supported (DMA supported) */
+    p[53] = 7; /* words 64-70, 54-58, 88 valid */
+    p[62] = 7; /* 0 or 7: single word dma0-2 supported */
+    p[63] = 7; /* 0 or 7: mdma0-2 supported */
+  } else {
+    p[49] = 1 << 9; /* LBA supported (no DMA) */
+    p[53] = 3; /* words 64-70, 54-58 valid */
+    p[63] = 0x103; /* ??? */
+  }
 
   p[64] = 3; /* pio3-4 supported */
   p[65] = 0xb4; /* minimum DMA multiword tx cycle time */
@@ -371,8 +383,10 @@ void AhciCdrom::Atapi_IdentifyData() {
       p[84] = (1 << 8); /* supports WWN for words 108-111 */
       p[87] = (1 << 8); /* WWN enabled */
   }
-
-  p[88] = 0x3f | (1 << 13); /* udma5 set and supported */
+  
+  if (dma_supported) {
+    p[88] = 0x3f | (1 << 13); /* udma5 set and supported */
+  }
 
   if (drive_info_.world_wide_name) {
       /* LE 16-bit words 111-108 contain 64-bit World Wide Name */

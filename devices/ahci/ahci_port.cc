@@ -173,12 +173,11 @@ bool AhciPort::HandleCommand(int slot) {
 
   bool should_wait = drive_->StartCommand([this, io, command_, slot, regs]() {
     std::unique_lock<std::recursive_mutex> lock(mutex_);
-    if (io->nbytes <= 0 || io->dma_status) {
-      UpdateRegisterD2H();
-    } else {
+    if (!io->dma_status && io->nbytes > 0) {
       UpdateSetupPio();
     }
     command_->bytes_transferred = io->nbytes;
+    UpdateRegisterD2H();
 
     if (busy_slot_ != -1) {
       port_control_.command_issue &= ~(1U << busy_slot_);
@@ -213,20 +212,19 @@ void AhciPort::CheckCommand() {
   }
 }
 
-void AhciPort::Read(uint64_t offset, uint32_t* data) {
+void AhciPort::Read(uint64_t offset, uint8_t* data, uint32_t size) {
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
   if (reg_index == kAhciPortRegSataStatus) {
     if (drive_ && drive_->IsAvailable()) {
-      *data = ATA_SCR_SSTATUS_DET_DEV_PRESENT_PHY_UP |  // Physical communication established
+      port_control_.sata_status = ATA_SCR_SSTATUS_DET_DEV_PRESENT_PHY_UP |  // Physical communication established
         ATA_SCR_SSTATUS_SPD_GEN1 |                      // Speed
         ATA_SCR_SSTATUS_IPM_ACTIVE;                     // Full power
     } else {
-      *data = ATA_SCR_SSTATUS_DET_NODEV;  // No device
+      port_control_.sata_status = ATA_SCR_SSTATUS_DET_NODEV;  // No device
     }
-  } else {
-    *data = *((uint32_t*)&port_control_ + reg_index);
   }
+  memcpy(data, (uint8_t*)&port_control_ + offset, size);
   if (host_->debug()) {
     MV_LOG("%d:%s read port index=%d ret=0x%x", port_index_, drive_->name(), reg_index, *data);
   }

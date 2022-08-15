@@ -89,7 +89,7 @@ class AhciPort {
 
   void AttachDevice(IdeStorageDevice* device);
   void Write(uint64_t offset, uint32_t value);
-  void Read(uint64_t offset, uint32_t* data);
+  void Read(uint64_t offset, uint8_t* data, uint32_t size);
   void Reset();
   void SoftReset();
 

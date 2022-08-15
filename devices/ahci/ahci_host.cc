@@ -134,12 +134,12 @@ void AhciHost::CheckIrq() {
 }
 
 void AhciHost::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_ASSERT(size == 4 && resource->type == kIoResourceTypeMmio);
+  MV_ASSERT(resource->type == kIoResourceTypeMmio);
 
   if (offset >= 0x100) {
     int port = (offset - 0x100) >> 7;
     if (ports_[port]) {
-      ports_[port]->Read(offset & 0x7f, (uint32_t*)data);
+      ports_[port]->Read(offset & 0x7F, data, size);
     }
   } else {
     memcpy(data, (uint8_t*)&host_control_ + offset, size);
@@ -153,7 +153,7 @@ void AhciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data,
   if (offset >= 0x100) {
     int port = (offset - 0x100) >> 7;
     if (ports_[port]) {
-      ports_[port]->Write(offset & 0x7f, value);
+      ports_[port]->Write(offset & 0x7F, value);
     }
   } else {
     switch (offset / 4)

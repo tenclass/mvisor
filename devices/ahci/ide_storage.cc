@@ -44,6 +44,9 @@ IdeStorageDevice::IdeStorageDevice() {
   ata_handlers_[0x2F] = [=] () { // READ_LOG
     AbortCommand();
   };
+
+  ata_handlers_[0xE0] = [=] () { // STANDBYNOW1
+  };
   
   ata_handlers_[0xEC] = [=] () { // ATA_CMD_IDENTIFY_DEVICE
     if (image_ && type_ != kIdeStorageTypeCdrom) {
@@ -114,7 +117,7 @@ bool IdeStorageDevice::StartCommand(VoidCallback iocp) {
 
   io_complete_ = std::move(iocp);
   io_async_ = false;
-  regs_.status = ATA_SR_DRDY | ATA_SR_BSY;
+  regs_.status = ATA_SR_DRDY | ATA_SR_DSC | ATA_SR_BSY;
 
   auto handler = ata_handlers_[regs_.command];
   if (handler) {

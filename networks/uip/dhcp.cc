@@ -119,7 +119,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
     MV_HEXDUMP("packet", parameters.data(), parameters.size());
   }
   
-  /* Handle message */
+  /* Handle message [RFC2131] */
   std::string reply;
   if (option_type == 0x01) { // Discover
     reply = CreateDhcpResponse(dhcp, 2);
@@ -130,8 +130,7 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
       reply = CreateDhcpResponse(dhcp, 6);  // NAK
     }
   } else {
-    MV_LOG("unknown dhcp packet option_type=0x%x", option_type);
-    MV_HEXDUMP("packet", dhcp, packet->data_length);
+    MV_LOG("unhandled dhcp packet option_type=0x%x", option_type);
     packet->Release();
     return;
   }
