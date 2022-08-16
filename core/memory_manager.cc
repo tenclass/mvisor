@@ -213,15 +213,19 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
         right->id = AllocateSlotId();
       }
       // Move the iterator before we change kvm_slots
-      ++it;
-      // Replace the hit slot with left and right
-      if (left) {
-        pending_add.insert(left);
-        kvm_slots_[left->begin] = left;
-      }
-      if (right) {
-        pending_add.insert(right);
-        kvm_slots_[right->begin] = right;
+      if (!left && !right) {
+        it = kvm_slots_.erase(it);
+      } else {
+        ++it;
+        // Replace the hit slot with left and right
+        if (left) {
+          pending_add.insert(left);
+          kvm_slots_[left->begin] = left;
+        }
+        if (right) {
+          pending_add.insert(right);
+          kvm_slots_[right->begin] = right;
+        }
       }
       
       if (pending_add.find(hit) != pending_add.end()) {
@@ -278,7 +282,7 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
     MV_LOG("map region %s gpa=0x%lx size=0x%lx type=0x%x", region->name,
       region->gpa, region->size, region->type);
   }
-  
+
   AddMemoryRegion(region);
   return region;
 }

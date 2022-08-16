@@ -320,15 +320,18 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
         MV_LOG("set vbe enable to %x %dx%d bpp=%d", value,
           vbe_.registers[1], vbe_.registers[2], vbe_.registers[3]);
       }
-      UpdateDisplayMode();
-      UpdateVRamMemoryMap();
       if (value & VBE_DISPI_ENABLED) {
+        vbe_.registers[VBE_DISPI_INDEX_VIRT_WIDTH] = 0;
+        vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] = 0;
+        vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] = 0;
+        UpdateDisplayMode();
         if (!(value & VBE_DISPI_NOCLEARMEM)) {
           bzero(vram_map_select_, vram_map_select_size_);
         }
       }
+      UpdateVRamMemoryMap();
       break;
-    default:
+    case VBE_DISPI_INDEX_BANK:
       UpdateVRamMemoryMap();
       break;
     }
@@ -494,6 +497,7 @@ void Vga::VgaWritePort(uint64_t port, uint8_t* data, uint32_t size) {
 }
 
 void Vga::UpdateVRamMemoryMap() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   const size_t map_types[][2] = {
     { 0xA0000, 0x20000 }, { 0xA0000, 0x10000 },
     { 0xB0000, 0x08000 }, { 0xB8000, 0x08000 }
@@ -533,6 +537,7 @@ void Vga::UpdateVRamMemoryMap() {
 }
 
 void Vga::UpdateDisplayMode() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   auto old_mode = mode_;
   auto old_w = width_, old_h = height_, old_bpp = bpp_;
 
@@ -589,7 +594,7 @@ void Vga::UpdateDisplayMode() {
     stride_ = width_ * bpp_ / 8;
   }
   if (debug_) {
-    MV_LOG("update mode=%d %dx%dx%d", mode_, width_, height_, bpp_);
+    MV_LOG("update mode=%d %dx%dx%d stride=%d", mode_, width_, height_, bpp_, stride_);
   }
 
   if (old_mode != mode_ || old_w != width_ || old_h != height_ || old_bpp != bpp_) {

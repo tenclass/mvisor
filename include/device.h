@@ -20,10 +20,12 @@
 #define _MVISOR_DEVICE_H
 
 
-#include "utilities.h"
-#include "object.h"
 #include <string>
 #include <list>
+#include <mutex>
+
+#include "utilities.h"
+#include "object.h"
 #include "vcpu.h"
 #include "migration.h"
 
@@ -78,8 +80,9 @@ class Device : public Object {
   friend class DeviceManager;
   DeviceManager* manager_;
 
-  std::list<IoResource*> io_resources_;
-  bool connected_ = false;
+  bool                    connected_ = false;
+  std::list<IoResource*>  io_resources_;
+  std::mutex              mutex_;
 };
 
 #endif // _MVISOR_DEVICE_H

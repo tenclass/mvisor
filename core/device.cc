@@ -89,6 +89,7 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
+  std::lock_guard<std::mutex> lock(mutex_);
   auto resource = new IoResource {
     .type = type,
     .base = base,
@@ -106,6 +107,7 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::RemoveIoResource(IoResourceType type, const char* name) {
+  std::lock_guard<std::mutex> lock(mutex_);
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
     auto resource = *it;
     if (resource->type == type &&
@@ -122,6 +124,7 @@ void Device::RemoveIoResource(IoResourceType type, const char* name) {
 }
 
 void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
+  std::lock_guard<std::mutex> lock(mutex_);
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
     auto resource = *it;
     if (resource->type == type && resource->base == base) {
