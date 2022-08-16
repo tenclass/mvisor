@@ -304,7 +304,7 @@ typedef struct SPICE_ATTR_PACKED VDAgentClipboardGrab {
 #if 0 /* VD_AGENT_CAP_CLIPBOARD_GRAB_SERIAL */
     uint32_t serial;
 #endif
-    uint32_t types[0];
+    uint32_t types[1];
 } VDAgentClipboardGrab;
 
 typedef struct SPICE_ATTR_PACKED VDAgentClipboardRequest {
@@ -386,7 +386,7 @@ enum {
 
 typedef struct SPICE_ATTR_PACKED VDAgentAnnounceCapabilities {
     uint32_t  request;
-    uint32_t caps[0];
+    uint32_t caps[1];
 } VDAgentAnnounceCapabilities;
 
 #define VD_AGENT_CAPS_SIZE_FROM_MSG_SIZE(msg_size) \

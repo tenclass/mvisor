@@ -94,7 +94,7 @@ class SpiceAgent : public Device, public SerialPortInterface,
     case VD_AGENT_ANNOUNCE_CAPABILITIES: {
       /* This is the first message from VDAgent */
       auto announce_caps = (VDAgentAnnounceCapabilities*)message->data;
-      auto caps_size = message->size - sizeof(VDAgentAnnounceCapabilities);
+      auto caps_size = message->size - sizeof(announce_caps->request);
       auto caps = announce_caps->caps;
       if (announce_caps->request) {
         SendAgentCapabilities();
@@ -258,7 +258,7 @@ class SpiceAgent : public Device, public SerialPortInterface,
   }
 
   void SendAgentCapabilities() {
-    auto buffer = std::string(sizeof(VDAgentAnnounceCapabilities) + VD_AGENT_CAPS_BYTES, '\0');
+    auto buffer = std::string(sizeof(uint32_t) + VD_AGENT_CAPS_BYTES, '\0');
     auto caps = (VDAgentAnnounceCapabilities*)buffer.data();
     caps->request = false;
     VD_AGENT_SET_CAPABILITY(caps->caps, VD_AGENT_CAP_MOUSE_STATE);
@@ -272,7 +272,7 @@ class SpiceAgent : public Device, public SerialPortInterface,
 
   void SendAgentClipboardGrab(uint type) {
     if (type == VD_AGENT_CLIPBOARD_UTF8_TEXT) {
-      auto buffer = std::string(sizeof(VDAgentClipboardGrab) + sizeof(uint32_t), '\0');
+      auto buffer = std::string(sizeof(VDAgentClipboardGrab), '\0');
       auto grab = (VDAgentClipboardGrab*)buffer.data();
       grab->types[0] = VD_AGENT_CLIPBOARD_UTF8_TEXT;
       SendAgentMessage(VDP_CLIENT_PORT, VD_AGENT_CLIPBOARD_GRAB, buffer.data(), buffer.size());

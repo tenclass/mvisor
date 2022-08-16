@@ -326,8 +326,10 @@ void Vga::VbeWritePort(uint64_t port, uint16_t value) {
         vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] = 0;
         UpdateDisplayMode();
         if (!(value & VBE_DISPI_NOCLEARMEM)) {
-          bzero(vram_map_select_, vram_map_select_size_);
+          bzero(vram_base_, height_ * stride_);
         }
+      } else {
+        vbe_.registers[VBE_DISPI_INDEX_BANK] = 0;
       }
       UpdateVRamMemoryMap();
       break;
