@@ -201,8 +201,6 @@ SweetConnection* SweetServer::GetConnectionByFd(int fd) {
 }
 
 void SweetServer::RemoveConnection(SweetConnection* conn) {
-  /* lock here to prevent io threads from using connection object */
-  std::lock_guard<std::mutex> lock(mutex_);
   /* connection is closed or error */
   if (display_connection_ == conn) {
     display_encoder_->Stop();
