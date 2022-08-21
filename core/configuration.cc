@@ -222,7 +222,10 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
       name = GenerateObjectName(class_name);
     }
     auto object = GetOrCreateObject(class_name, name);
-    MV_ASSERT(object);
+    if (object == nullptr) {
+      MV_ERROR("object class not found %s", name.c_str());
+      continue;
+    }
 
     /* Load object properties */
     for (auto it2 = node.begin(); it2 != node.end(); it2++) {
