@@ -87,6 +87,9 @@ void Vcpu::Reset() {
  * architecture-instruction-set-extensions-programming-reference.pdf
  * Model: Skylake-Server Compatible
  */
+#define CPU_VERSION(family, model, stepping) \
+  (((family & 0xF) << 8) | (((model >> 4) & 0xF) << 16) | ((model & 0xF) << 4) | (stepping & 0xF))
+
 void Vcpu::SetupCpuid() {
   struct {
     struct kvm_cpuid2 cpuid2;
@@ -106,6 +109,7 @@ void Vcpu::SetupCpuid() {
       entry->eax = 0xD; // Max input value for basic information
       break;
     case 0x1: { // ACPI ID & Features
+      entry->eax = CPU_VERSION(6, 85, 7);
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
 
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
