@@ -130,7 +130,9 @@ void DhcpServiceUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
       reply = CreateDhcpResponse(dhcp, 6);  // NAK
     }
   } else {
-    MV_LOG("unhandled dhcp packet option_type=0x%x", option_type);
+    if (debug_) { // Such as option_type=0x8 on windows 7
+      MV_LOG("unhandled dhcp packet option_type=0x%x", option_type);
+    }
     packet->Release();
     return;
   }

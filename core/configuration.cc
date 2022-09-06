@@ -223,7 +223,7 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
     }
     auto object = GetOrCreateObject(class_name, name);
     if (object == nullptr) {
-      MV_ERROR("object class not found %s", name.c_str());
+      MV_WARN("object class not found %s", name.c_str());
       continue;
     }
 

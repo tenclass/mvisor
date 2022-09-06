@@ -15,3 +15,9 @@ option('gtk',
   value: true,
   description: 'Enable GTK GUI'
 )
+
+option('qxl',
+  type: 'boolean',
+  value: true,
+  description: 'Enable QXL device'
+)

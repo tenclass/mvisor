@@ -74,6 +74,7 @@ class Uip : public Object, public NetworkBackendInterface {
   uint                  mtu_;
   bool                  restrict_ = false;
   std::vector<int>      map_fds_;
+  std::mutex            mutex_;
 
  public:
   Uip() {
@@ -153,6 +154,7 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   virtual void Reset() {
+    std::lock_guard<std::mutex> lock(mutex_);
     for (auto p : queued_packets_) {
       p->Release();
     }
@@ -306,6 +308,7 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   void OnTimer() {
+    std::lock_guard<std::mutex> lock(mutex_);
     for (auto it = tcp_sockets_.begin(); it != tcp_sockets_.end();) {
       if (!(*it)->active()) {
         delete *it;

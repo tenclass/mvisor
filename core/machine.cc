@@ -217,12 +217,7 @@ void Machine::Resume() {
   for (auto listener : state_change_listeners_) {
     listener->callback();
   }
-
-  /* Synchronize vcpu kvm-clock */
-  for (auto vcpu: vcpus_) {
-    vcpu->SynchronizeKVMClock();
-  }
-
+  
   /* Resume threads */
   wait_to_resume_.notify_all();
 }
@@ -256,6 +251,7 @@ void Machine::Pause() {
   wait_count_ = 1;
   pausing_ = false;
   io_thread_->Kick();
+
   wait_to_pause_condition_.wait(lock, [this]() {
     return wait_count_ == 0;
   });
@@ -377,4 +373,3 @@ const char* Machine::GetStatus() {
   /* otherwise return paused */
   return "paused";
 }
-

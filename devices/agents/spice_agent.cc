@@ -235,15 +235,10 @@ class SpiceAgent : public Device, public SerialPortInterface,
   }
 
   /* This interface function is called by UI thread */
-  virtual bool Resize(uint32_t width, uint32_t height) {
+  virtual bool Resize(int width, int height) {
     if (!ready_) {
       return false;
     }
-    /* For H264, resolution must be multiple of 2 */
-    if (width & 1)
-      width++;
-    if (height & 1)
-      height++;
 
     manager_->io()->Schedule([=]() {
       auto buffer = std::string(sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig), '\0');

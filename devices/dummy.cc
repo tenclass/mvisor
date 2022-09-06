@@ -54,6 +54,10 @@ class DummyDevice : public Device {
     AddIoResource(kIoResourceTypePio, 0x0170, 8, "IDE Secondary");
     AddIoResource(kIoResourceTypePio, 0x01E8, 8, "IDE Tertiary");
     AddIoResource(kIoResourceTypePio, 0x0168, 8, "IDE Quaternary");
+    
+    /* Game port (joystick) */
+    AddIoResource(kIoResourceTypePio, 0x0200, 8, "Joystick");
+
     AddIoResource(kIoResourceTypePio, 0x03F0, 8, "IDE Primary Control");
     AddIoResource(kIoResourceTypePio, 0x0370, 8, "IDE Secondary Control");
 
@@ -71,6 +75,9 @@ class DummyDevice : public Device {
     
     /* PORT A20-A24 IBM Token Ring */
     AddIoResource(kIoResourceTypePio, 0x0A20, 5, "IBM Token Ring");
+    
+    /* PORT A79 Microsoft PnP */
+    AddIoResource(kIoResourceTypePio, 0x0A79, 1, "Plug-N-Play");
 
     /* HPET MMIO */
     AddIoResource(kIoResourceTypeMmio, 0xFED00000, 0x400, "HPET");

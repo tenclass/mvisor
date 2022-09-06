@@ -23,6 +23,9 @@
 #include "logger.h"
 #include "sweet.pb.h"
 
+#include <libyuv.h>
+#include <jpeglib.h>
+
 
 SweetConnection::SweetConnection(SweetServer* server, int fd) {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -273,7 +276,7 @@ void SweetConnection::OnSendPointerInput() {
   event.y = input.y();
   event.z = input.z();
 
-  uint w, h;
+  int w, h;
   server_->display()->GetDisplayMode(&w, &h, nullptr, nullptr);
   event.screen_width = w;
   event.screen_height = h;
@@ -391,19 +394,98 @@ void SweetConnection::OnQueryScreenshot() {
     MV_ERROR("failed to parse buffer");
     return;
   }
-  std::string image_data;
-
-  auto encoder = server_->display_encoder();
-  if (encoder) {
-    encoder->Screendump(query.format(), query.width(), query.height(), 80, image_data);
+  if (query.format() != "jpeg") {
+    MV_ERROR("not supported screendump format %s", query.format().c_str());
+    return;
   }
 
-  QueryScreenshotResponse response;
-  response.set_format(query.format());
-  response.set_width(query.width());
-  response.set_height(query.height());
-  response.set_data(image_data);
-  Send(kQueryScreenshotResponse, response);
+  /* Get the full picture of the display output */
+  DisplayUpdate update;
+  auto display = server_->display();
+  if (!display->AcquireUpdate(update, true)) {
+    MV_ERROR("failed to acquire display update");
+    return;
+  }
+
+  if (update.partials.empty()) {
+    MV_ERROR("failed to get display update");
+    display->ReleaseUpdate();
+    return;
+  }
+
+  auto &partial = update.partials.front();
+  int w = query.width();
+  int h = query.height();
+
+  if (!w && !h) {
+    w = partial.width;
+    h = partial.height;
+  } else if (!w) {
+    w = h * partial.width / partial.height;
+  } else if (!h) {
+    h = w * partial.height / partial.width;
+  }
+
+  if (w < 16 || w > partial.width)
+    w = partial.width;
+  if (h < 16 || h > partial.height)
+    h = partial.height;
+
+
+  /* Scale screen bitmap to w x h */
+  size_t bitmap_stride = w * 4;
+  uint8_t* bitmap = new uint8_t[bitmap_stride * h];
+  if (partial.bpp == 32) {
+    libyuv::ARGBScale(partial.data, partial.stride, partial.width, partial.height,
+      bitmap, bitmap_stride, w, h, libyuv::kFilterBilinear);
+  } else if (partial.bpp == 24) {
+    int argb_stride = partial.width * 4;
+    uint8_t* argb = new uint8_t[argb_stride * partial.height];
+    libyuv::RGB24ToARGB(partial.data, partial.stride, argb, argb_stride, partial.width, partial.height);
+    libyuv::ARGBScale(argb, argb_stride, partial.width, partial.height,
+      bitmap, bitmap_stride, w, h, libyuv::kFilterBilinear);
+    delete[] argb;
+  } else {
+    /* other bpp not supported yet */
+    bzero(bitmap, bitmap_stride * h);
+  }
+  
+  display->ReleaseUpdate();
+
+  /* bitmap to jpeg */
+  jpeg_compress_struct cinfo;
+  jpeg_error_mgr jerr;
+  cinfo.err = jpeg_std_error(&jerr);
+  jpeg_create_compress(&cinfo);
+
+  uint8_t* out_buffer = nullptr;
+  size_t out_size = 0;
+  jpeg_mem_dest(&cinfo, &out_buffer, &out_size);
+
+  cinfo.image_width = w;
+  cinfo.image_height = h;
+  cinfo.input_components = 4;
+  cinfo.in_color_space = JCS_EXT_BGRA;
+  jpeg_set_defaults(&cinfo);
+  jpeg_set_quality(&cinfo, 80, true);
+  jpeg_start_compress(&cinfo, true);
+  while (cinfo.next_scanline < cinfo.image_height) {
+    JSAMPROW row_pointer = bitmap + cinfo.next_scanline * bitmap_stride;
+    jpeg_write_scanlines(&cinfo, &row_pointer, 1);
+  }
+  jpeg_finish_compress(&cinfo);
+  jpeg_destroy_compress(&cinfo);
+  delete[] bitmap;
+  
+  if (out_buffer) {
+    QueryScreenshotResponse response;
+    response.set_format(query.format());
+    response.set_width(query.width());
+    response.set_height(query.height());
+    response.set_data(out_buffer, out_size);
+    Send(kQueryScreenshotResponse, response);
+    free(out_buffer);
+  }
 }
 
 void SweetConnection::OnClipboardDataToGuest() {

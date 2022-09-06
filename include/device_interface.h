@@ -87,7 +87,7 @@ class WacomInputInterface {
 class DisplayResizeInterface {
  public:
   virtual ~DisplayResizeInterface() = default;
-  virtual bool Resize(uint width, uint height) = 0;
+  virtual bool Resize(int width, int height) = 0;
 };
 
 typedef std::function <void()> VirtioFsListener;
@@ -113,28 +113,27 @@ class ClipboardInterface {
 
 
 struct DisplayPartialBitmap {
-  std::vector<iovec>  vector;
-  uint                stride;
-  uint                bpp;
-  uint                width;
-  uint                height;
-  uint                x;
-  uint                y;
-  bool                flip;
-  const uint8_t*      pallete;
+  int           bpp;
+  int           width;
+  int           height;
+  int           stride;
+  int           x;
+  int           y;
+  uint8_t*      data;
+  uint8_t*      pallete;
 };
 struct DisplayMouseCursor {
   uint8_t       visible;
-  uint          x;
-  uint          y;
+  int           x;
+  int           y;
   uint64_t      update_timestamp;
   struct {
     uint64_t    id;
-    uint16_t    type;
-    uint16_t    width;
-    uint16_t    height;
-    uint16_t    hotspot_x;
-    uint16_t    hotspot_y;
+    int16_t     type;
+    int16_t     width;
+    int16_t     height;
+    int16_t     hotspot_x;
+    int16_t     hotspot_y;
     std::string data;
   } shape;
 };
@@ -148,10 +147,9 @@ typedef std::function <void(void)> DisplayUpdateListener;
 class DisplayInterface {
  public:
   virtual ~DisplayInterface() = default;
-  virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride) = 0;
+  virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride) = 0;
   virtual const uint8_t* GetPallete() const = 0;
-  virtual void Redraw() = 0;
-  virtual bool AcquireUpdate(DisplayUpdate& update) = 0;
+  virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw) = 0;
   virtual void ReleaseUpdate() = 0;
   virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
   virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback) = 0;

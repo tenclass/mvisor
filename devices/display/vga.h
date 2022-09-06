@@ -27,7 +27,6 @@
 
 enum DisplayMode {
   kDisplayUnknownMode,
-  kDisplayTextMode,
   kDisplayVgaMode,
   kDisplayVbeMode,
   kDisplayQxlMode
@@ -38,8 +37,8 @@ class Vga : public PciDevice, public DisplayInterface {
   struct {
   uint8_t   misc_output;
   uint8_t   status[2];
-  uint8_t   sequence_index;
-  uint8_t   sequence[256];
+  uint8_t   sequencer_index;
+  uint8_t   sequencer[256];
   uint8_t   gfx_index;
   uint8_t   gfx[256];
   uint8_t   attribute_index;
@@ -50,7 +49,8 @@ class Vga : public PciDevice, public DisplayInterface {
   uint16_t  pallete_write_index;
   uint8_t   pallete[256 * 3];
   uint8_t   dac_state;
-  uint8_t   feature_control_;
+  uint8_t   feature_control;
+  uint32_t  latch;
   } vga_;
 
   struct {
@@ -59,38 +59,55 @@ class Vga : public PciDevice, public DisplayInterface {
     uint16_t registers[16];
   } vbe_;
 
-  uint8_t* vram_map_select_;
-  uint32_t vram_map_select_size_;
-  uint8_t* vram_read_select_;
-  bool     has_mapped_vga_ = false;
+  uint32_t  vram_map_addr_;
+  uint32_t  vram_map_size_;
+  uint8_t*  vram_rw_mapped_ = nullptr;
 
   std::vector<DisplayModeChangeListener> display_mode_change_listeners_;
   std::vector<DisplayUpdateListener> display_update_listeners_;
 
   void VbeReadPort(uint64_t port, uint16_t* data);
   void VbeWritePort(uint64_t port, uint16_t value);
-  void VgaReadPort(uint64_t port, uint8_t* data, uint32_t size);
-  void VgaWritePort(uint64_t port, uint8_t* data, uint32_t size);
+  void VgaReadPort(uint64_t port, uint8_t* data);
+  void VgaWritePort(uint64_t port, uint32_t value);
+  void VgaWriteMemory(uint64_t offset, uint32_t value);
+  void VgaReadMemory(uint64_t offset, uint8_t* data);
   void UpdateVRamMemoryMap();
   void RenderTextMode();
   void RenderGraphicsMode();
-  void DrawCharacter(uint8_t* buffer, uint stride, uint x, uint y, int character, int attribute);
-  void DrawTextCursor(uint8_t* buffer, uint stride);
+  void GetTextResolution();
+  void DrawGraphic(uint8_t* buffer);
+  void DrawText(uint8_t* buffer);
+  void DrawCharacter(uint8_t* dest, uint8_t* font, int character, int attribute);
+  void DrawTextCursor(uint8_t* buffer);
   void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
 
  protected:
   uint32_t    vram_size_;
   uint8_t*    vram_base_ = nullptr;
   uint32_t    vga_mem_size_;
+
+  /* Render mode */
   DisplayMode mode_;
-  uint        width_;
-  uint        height_;
-  uint        bpp_;
-  uint        stride_;
+  int         width_;
+  int         height_;
+  int         bpp_;
+  int         stride_;
+
+  /* VGA mode */
+  int         rows_;
+  int         cols_;
+  int         font_width_;
+  int         font_height_;
+  IoTimePoint cursor_blink_time_;
+  bool        cursor_visible_;
+  bool        text_mode_;
+
   std::string vga_surface_;
   std::recursive_mutex      mutex_;
   std::string default_rom_path_;
   IoTimer*    refresh_timer_ = nullptr;
+  bool        debug_io_ = false;
 
   void NotifyDisplayModeChange();
   void NotifyDisplayUpdate();
@@ -110,14 +127,13 @@ class Vga : public PciDevice, public DisplayInterface {
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
 
-  virtual void GetDisplayMode(uint* w, uint* h, uint* bpp, uint* stride);
+  virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
 
   const uint8_t* GetPallete() const;
   virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback);
   virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback);
-  virtual bool AcquireUpdate(DisplayUpdate& update);
+  virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw);
   virtual void ReleaseUpdate();
-  virtual void Redraw();
 };
 
 #endif // _MVISOR_DEVICES_VGA_H

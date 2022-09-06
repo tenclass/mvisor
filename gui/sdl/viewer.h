@@ -32,8 +32,8 @@
 
 struct PendingResize {
   bool triggered = false;
-  int width = 0;
-  int height = 0;
+  int  width = 0;
+  int  height = 0;
   std::chrono::steady_clock::time_point time;
 };
 
@@ -49,7 +49,6 @@ class Viewer {
   void Render();
   void CreateWindow();
   void UpdateCaption();
-  void RenderPartial(const DisplayPartialBitmap* partial);
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   void HandleEvent(const SDL_Event& event);
@@ -72,7 +71,6 @@ class Viewer {
   PlaybackFormat playback_format_;
 
   SDL_Window* window_ = nullptr;
-  SDL_Renderer* renderer_ = nullptr;
   SDL_Surface* screen_surface_ = nullptr;
   SDL_Palette* palette_ = nullptr;
   SDL_Cursor* cursor_ = nullptr;
@@ -82,7 +80,7 @@ class Viewer {
   bool cursor_visible_ = false;
   uint64_t cursor_shape_id_ = 0;
 
-  uint width_, height_, bpp_, stride_;
+  int width_, height_, bpp_, stride_;
 
   PointerEvent pointer_state_;
   PendingResize pending_resize_;

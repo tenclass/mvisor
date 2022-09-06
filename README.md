@@ -27,8 +27,9 @@
 
 ## Roadmap And Current Status
 
-Milestone 1: Boot OS
-Nov 2021
+What's supported now:
+
+### Basic functions
 
 1. Multi vCPU ✅
 2. Load SeaBIOS ✅
@@ -49,38 +50,28 @@ Nov 2021
 17. Boot OS (Windows 8 or 10) ✅
 18. QCOW2 ✅
 
-Milestone 2: Multimedia & Networking
-Feb 2022
+### Multimedia & Networking
 
-1. Virtio (Console ✅ / Block ✅ / Net ✅ / Balloon)
+1. Virtio (Console ✅ / Block ✅ / Net ✅ / VirtioFS ✅ / Balloon)
 2. SpiceAgent ✅
 3. QemuGuestAgent ✅
 4. Qxl ✅
 5. Audio (ICH9-HDA) ✅
 6. Tap network
 7. User network ✅
-8. SfAgent
-9. VFIO ✅
-10. Samba
-11. XHCI ✅ / USB Tablet ✅
+8. VFIO ✅
+9. Samba
+10. XHCI ✅ / USB Tablet ✅ / USB Midi ✅ / USB Wacom ✅
 
-Milestone 3: Migration
-Mar 2022
+### Hyper-V & Migration
+
 1. CPU migration ✅
 2. VFIO migration ✅
-3. Migration to compressed file
+3. Migration to sparse files ✅
 4. Hyper-V enlightenments ✅
 
-Milestone 4: Virtualization Management
-Apr 2022
-1. Sweet server ✅
-2. Audio playback ✅
-3. Opus audio streaming ✅
-4. H264 display streaming ✅
-5. JPEG screendump ✅
 
-
-## Compile
+## Compile & Run
 
 For CentOS 8,
 

@@ -3,8 +3,8 @@ syntax ="proto3";
 message VgaState {
   uint32  misc_output             = 1;
   uint32  status                  = 2;
-  uint32  sequence_index          = 3;
-  bytes   sequence                = 4;
+  uint32  sequencer_index         = 3;
+  bytes   sequencer               = 4;
   uint32  gfx_index               = 5;
   bytes   gfx                     = 6;
   uint32  attribute_index         = 7;
@@ -16,6 +16,7 @@ message VgaState {
   bytes   pallete                 = 13;
   uint32  dac_state               = 14;
   uint32  feature_control         = 15;
+  uint32  latch                   = 16;
 }
 
 message VbeState {

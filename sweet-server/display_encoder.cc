@@ -19,34 +19,13 @@
 #include "display_encoder.h"
 
 #include <libyuv.h>
-#include <jpeglib.h>
 
 #include "logger.h"
 
 
-static bool version_checked = false;
-
-
-SweetDisplayEncoder::SweetDisplayEncoder(uint width, uint height, DisplayStreamConfig* config) :
+SweetDisplayEncoder::SweetDisplayEncoder(int width, int height, DisplayStreamConfig* config) :
   screen_width_(width), screen_height_(height), config_(config)
 {
-  if (!version_checked) {
-    /* make sure libyuv with BT.709. if failed, checkout https://github.com/tenclass/libyuv */
-    uint8_t test_argb[128] = { 0, 0, 255, 0 };
-    uint8_t test_y[128] = {0}, test_u[128] = {0}, test_v[128] = {0};
-    libyuv::ARGBToI420(test_argb, 128, test_y, 128, test_u, 128, test_v, 128, 32, 1);
-    if (test_y[0] == 0x3f && test_u[0] == 0x73 && test_v[0] == 0xb8) {
-      version_checked = true;
-    } else {
-      MV_PANIC("failed checking libyuv with BT.709, yuv=0x%x 0x%x 0x%x",
-        test_y[0], test_u[0], test_v[0]);
-    }
-  }
-
-  /* make sure screen size is multiple of 2 */
-  MV_ASSERT(screen_width_ % 2 == 0);
-  MV_ASSERT(screen_height_ % 2 == 0);
-
   /* set screen bpp to ARGB */
   screen_bpp_ = 32;
   /* aligned screen stride by 128 */
@@ -54,8 +33,8 @@ SweetDisplayEncoder::SweetDisplayEncoder(uint width, uint height, DisplayStreamC
   if (screen_stride_ % 128)
     screen_stride_ += 128 - (screen_stride_ % 128);
 
+  /* for VGA color convertion */
   screen_bitmap_ = new uint8_t[screen_stride_ * screen_height_];
-  bzero(screen_bitmap_, screen_stride_ * screen_height_);
   InitializeX264();
 
   /* start encode thread */
@@ -153,57 +132,12 @@ void SweetDisplayEncoder::InitializeX264() {
 
 void SweetDisplayEncoder::Start(OutputCallback callback) {
   std::lock_guard<std::mutex> lock(encode_mutex_);
-  started_ = true;
   force_keyframe_ = true;
   output_callback_ = callback;
-  CreateEncodeSlice(0, 0, screen_height_, screen_width_);
-}
-
-void SweetDisplayEncoder::Stop() {
-  std::lock_guard<std::mutex> lock(encode_mutex_);
-  started_ = false;
-  output_callback_ = nullptr;
-}
-
-/* Copy bits from partial to screen buffer */
-bool SweetDisplayEncoder::RenderPartial(DisplayPartialBitmap* partial) {
-  auto dst = (uint8_t*)screen_bitmap_;
-  int dst_stride = screen_stride_;
-  uint8_t* dst_end = dst + dst_stride * screen_height_;
-
-  if (partial->flip) {
-    dst += dst_stride * (partial->y + partial->height - 1) + partial->x * (screen_bpp_ >> 3);
-    dst_stride = -dst_stride;
-  } else {
-    dst += dst_stride * partial->y + partial->x * (screen_bpp_ >> 3);
-  }
-  int linesize = partial->width * (screen_bpp_ >> 3);
-  size_t lines = partial->height;
-  size_t src_index = 0;
-
-  /* Note: It seems the size of each iovec is never greater than 64KB */
-  while (lines > 0 && src_index < partial->vector.size()) {
-    auto src = (uint8_t*)partial->vector[src_index].iov_base;
-    auto copy_lines = partial->vector[src_index].iov_len / partial->stride;
-    while (copy_lines > 0 && lines > 0) {
-      if (dst + linesize > dst_end) {
-        break;
-      }
-      memcpy(dst, src, linesize);
-      src += partial->stride;
-      dst += dst_stride;
-      --copy_lines;
-      --lines;
-    }
-    ++src_index;
-  }
-  return true;
 }
 
 /* Supports 8 / 24 bit VGA mode */
 bool SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
-  MV_ASSERT(partial->vector.size() == 1);
-
   /* Only support converting the whole screen */
   if (partial->x || partial->y || partial->width != screen_width_ || partial->height != screen_height_) {
     MV_ERROR("failed to convert x=%u y=%u %ux%u to %ux%u", partial->x, partial->y,
@@ -211,16 +145,13 @@ bool SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
     return false;
   }
 
-  auto& iov = partial->vector.front();
-  auto src = (uint8_t*)iov.iov_base;
-
   switch(partial->bpp) {
     case 8:
       /* Convert from 8 bit to ARGB */
-      for (uint y = 0; y < partial->height; y++) {
-        uint8_t* from = src + partial->stride * y;
-        uint8_t* to = screen_bitmap_ + screen_stride_ * y;
-        for (uint x = 0; x < partial->width; x++) {
+      for (int y = 0; y < partial->height; y++) {
+        auto from = partial->data + partial->stride * y;
+        auto to = screen_bitmap_ + screen_stride_ * y;
+        for (int x = 0; x < partial->width; x++) {
           auto pallete = &partial->pallete[from[x] * 3];
           to[0] = pallete[0] << 2;
           to[1] = pallete[1] << 2;
@@ -231,10 +162,10 @@ bool SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
       }
       break;
     case 16:
-      libyuv::RGB565ToARGB(src, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
+      libyuv::RGB565ToARGB(partial->data, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
       break;
     case 24:
-      libyuv::RGB24ToARGB(src, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
+      libyuv::RGB24ToARGB(partial->data, partial->stride, screen_bitmap_, screen_stride_, partial->width, partial->height);
       break;
     default:
       MV_ERROR("cannot convert bpp=%u", partial->bpp);
@@ -246,16 +177,16 @@ bool SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
 void SweetDisplayEncoder::Render(std::vector<DisplayPartialBitmap>& partials) {
   std::lock_guard<std::mutex> lock(encode_mutex_);
   for (auto& partial : partials) {
-    if (partial.bpp == 32) {
-      if (!RenderPartial(&partial))
-        continue;
-    } else {
-      if (!ConvertPartial(&partial))
-        continue;
-    }
+    // MV_LOG("partial %d,%d %dx%dx%d stride=%d", partial.x, partial.y,
+    //   partial.width, partial.height, partial.bpp, partial.stride);
 
-    if (started_) {
-      CreateEncodeSlice(partial.y, partial.x, partial.y + partial.height, partial.x + partial.width);
+    if (partial.bpp == 32) {
+      CreateEncodeSlice(partial.data, partial.stride, partial.x, partial.y, partial.width, partial.height);
+    } else {
+      if (ConvertPartial(&partial)) {
+        uint8_t* src = screen_bitmap_ + screen_stride_ * partial.y + partial.x * 4;
+        CreateEncodeSlice(src, screen_stride_, partial.x, partial.y, partial.width, partial.height);
+      }
     }
   }
 
@@ -264,56 +195,44 @@ void SweetDisplayEncoder::Render(std::vector<DisplayPartialBitmap>& partials) {
   }
 }
 
-void SweetDisplayEncoder::CreateEncodeSlice(uint top, uint left, uint bottom, uint right) {
-  /* make sure position and size of the created slice is multiple of 2 */
-  uint width_alignment = 16;
-  if (left % width_alignment) {
-    left -= left % width_alignment;
+void SweetDisplayEncoder::CreateEncodeSlice(uint8_t* src, int stride, int x, int y, int w, int h) {
+  if (!w || !h) {
+    return;
   }
-  if (right % width_alignment) {
-    right += width_alignment - (right % width_alignment);
+  if ((x & 1) || (y & 1) || (w & 1) || (h & 1)) {
+    MV_ERROR("invalid slice (%d,%d) %dx%d", x, y, w, h);
+    return;
   }
-
-  uint height_alignment = 2;
-  if (top % height_alignment) {
-    top -= top % height_alignment;
-  }
-  if (bottom % height_alignment) {
-    bottom += height_alignment - (bottom % height_alignment);
-  }
-  /* avoid overflow */
-  if (right > screen_width_) {
-    right = screen_width_;
-  }
-  if (bottom > screen_height_) {
-    bottom = screen_height_;
+  if (x + w > screen_width_ || y + h > screen_height_) {
+    MV_ERROR("overflow (%d,%d) screen=%dx%d", x + w, y + h, screen_width_, screen_height_);
+    return;
   }
 
   EncodeSlice* slice = new EncodeSlice;
-  slice->x = left;
-  slice->y = top;
-  slice->width = right - left;
-  slice->height = bottom - top;
+  slice->x = x;
+  slice->y = y;
+  slice->width = w;
+  slice->height = h;
   
   /* convert to YUV */
-  if (x264_picture_alloc(&slice->yuv, input_yuv_.img.i_csp, slice->width, slice->height) < 0) {
-    MV_PANIC("failed to allocate yuv slice %dx%d", slice->width, slice->height);
+  if (x264_picture_alloc(&slice->yuv, input_yuv_.img.i_csp, w, h) < 0) {
+    MV_PANIC("failed to allocate yuv slice %dx%d", w, h);
+    return;
   }
 
-  uint8_t* src = screen_bitmap_ + screen_stride_ * slice->y + slice->x * (screen_bpp_ >> 3);
   auto dst = &slice->yuv.img;
   /* libyuv here must be modified to use BT.709 */
   switch (dst->i_csp)
   {
   case X264_CSP_I420:
-    libyuv::ARGBToI420(src, screen_stride_,
+    libyuv::ARGBToI420(src, stride,
       dst->plane[0], dst->i_stride[0],
       dst->plane[1], dst->i_stride[1],
       dst->plane[2], dst->i_stride[2],
       slice->width, slice->height);
     break;
   case X264_CSP_I444:
-    libyuv::ARGBToI444(src, screen_stride_,
+    libyuv::ARGBToI444(src, stride,
       dst->plane[0], dst->i_stride[0],
       dst->plane[1], dst->i_stride[1],
       dst->plane[2], dst->i_stride[2],
@@ -334,7 +253,7 @@ void SweetDisplayEncoder::EncodeProcess() {
   MV_ASSERT(x264_);
 
   uint average_packet_size = config_->bitrate() / config_->fps() / 8;
-  auto idle_interval = std::chrono::milliseconds(1000);
+  auto idle_interval = std::chrono::milliseconds(500);
   auto frame_interval = std::chrono::microseconds(1000000 / config_->fps());
   auto next_encode_time = std::chrono::steady_clock::now() + frame_interval * 0.0;
 
@@ -346,9 +265,6 @@ void SweetDisplayEncoder::EncodeProcess() {
 
     if (destroyed_)
       break;
-    
-    if (!started_)
-      continue;
 
     auto start_time = std::chrono::steady_clock::now();
 
@@ -454,67 +370,4 @@ void SweetDisplayEncoder::Encode() {
 void SweetDisplayEncoder::ForceKeyframe() {
   force_keyframe_ = true;
   encode_cv_.notify_all();
-}
-
-void SweetDisplayEncoder::Screendump(std::string format, uint w, uint h, uint quality, std::string& output) {
-  if (format != "jpeg") {
-    MV_ERROR("not supported screendump format %s", format.c_str());
-    return;
-  }
-
-  if (screen_bpp_ != 32) {
-    MV_ERROR("unsupported bpp=%d", screen_bpp_);
-    return;
-  }
-
-  if (!w && !h) {
-    w = screen_width_;
-    h = screen_height_;
-  } else if (!w) {
-    w = h * screen_width_ / screen_height_;
-  } else if (!h) {
-    h = w * screen_height_ / screen_width_;
-  }
-
-  if (w < 10 || w > screen_width_)
-    w = screen_width_;
-  if (h < 10 || h > screen_height_)
-    h = screen_height_;
-
-  /* Scale screen bitmap to w x h */
-  size_t bitmap_stride = w * 4;
-  uint8_t* bitmap = new uint8_t[bitmap_stride * h];
-  libyuv::ARGBScale(screen_bitmap_, screen_stride_, screen_width_, screen_height_,
-    bitmap, bitmap_stride, w, h, libyuv::kFilterBilinear);
-
-  /* bitmap to jpeg */
-  jpeg_compress_struct cinfo;
-  jpeg_error_mgr jerr;
-  cinfo.err = jpeg_std_error(&jerr);
-  jpeg_create_compress(&cinfo);
-
-  uint8_t* out_buffer = nullptr;
-  size_t out_size = 0;
-  jpeg_mem_dest(&cinfo, &out_buffer, &out_size);
-
-  cinfo.image_width = w;
-  cinfo.image_height = h;
-  cinfo.input_components = 4;
-  cinfo.in_color_space = JCS_EXT_BGRA;
-  jpeg_set_defaults(&cinfo);
-  jpeg_set_quality(&cinfo, quality, true);
-  jpeg_start_compress(&cinfo, true);
-  while (cinfo.next_scanline < cinfo.image_height) {
-    JSAMPROW row_pointer = bitmap + cinfo.next_scanline * bitmap_stride;
-    jpeg_write_scanlines(&cinfo, &row_pointer, 1);
-  }
-  jpeg_finish_compress(&cinfo);
-  jpeg_destroy_compress(&cinfo);
-  delete[] bitmap;
-  
-  if (out_buffer) {
-    output.resize(out_size);
-    memcpy(output.data(), out_buffer, out_size);
-    free(out_buffer);
-  }
 }

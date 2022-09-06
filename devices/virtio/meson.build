@@ -12,3 +12,5 @@ proto_sources += proto_gen.process(
   'virtio_console.proto',
   'virtio_pci.proto'
 )
+
+subdir('fuse')

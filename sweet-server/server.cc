@@ -203,7 +203,8 @@ SweetConnection* SweetServer::GetConnectionByFd(int fd) {
 void SweetServer::RemoveConnection(SweetConnection* conn) {
   /* connection is closed or error */
   if (display_connection_ == conn) {
-    display_encoder_->Stop();
+    delete display_encoder_;
+    display_encoder_ = nullptr;
     display_connection_ = nullptr;
   }
   if (playback_connection_ == conn) {
@@ -283,12 +284,14 @@ void SweetServer::LookupDevices() {
   display_->RegisterDisplayModeChangeListener([this]() {
     Schedule([this] () {
       /* Recreate renderer if resolution changed */
-      StartDisplayStreamOnConnection(display_connection_, nullptr);
+      if (display_connection_) {
+        StartDisplayStreamOnConnection(display_connection_, nullptr);
+      }
     });
   });
   display_->RegisterDisplayUpdateListener([this]() {
     Schedule([this] () {
-      UpdateDisplay();
+      UpdateDisplay(false);
     });
   });
   if (playback_) {
@@ -326,14 +329,17 @@ void SweetServer::LookupDevices() {
   }
 }
 
-void SweetServer::UpdateDisplay() {
+void SweetServer::UpdateDisplay(bool redraw) {
   DisplayUpdate update;
-  display_->AcquireUpdate(update);
-  if (display_connection_) {
-    display_connection_->UpdateCursor(&update.cursor);
+  if (display_->AcquireUpdate(update, redraw)) {
+    if (display_connection_) {
+      display_connection_->UpdateCursor(&update.cursor);
+    }
+    if (display_encoder_) {
+      display_encoder_->Render(update.partials);
+    }
+    display_->ReleaseUpdate();
   }
-  display_encoder_->Render(update.partials);
-  display_->ReleaseUpdate();
 }
 
 /* There maybe more than one connections at the same time,
@@ -348,17 +354,13 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
     display_config_ = *config;
   }
 
-  uint w, h, bpp, stride;
+  int w, h, bpp, stride;
   display_->GetDisplayMode(&w, &h, &bpp, &stride);
 
   if (display_encoder_) {
     delete display_encoder_;
   }
   display_encoder_ = new SweetDisplayEncoder(w, h, &display_config_);
-
-  /* Regenerate all partials after encoder recreated */
-  display_->Redraw();
-  UpdateDisplay();
 
   display_connection_ = conn;
   if (display_connection_) {
@@ -372,10 +374,14 @@ void SweetServer::StartDisplayStreamOnConnection(SweetConnection* conn, SweetPro
       });
     });
   }
+
+  /* Regenerate all partials after encoder recreated */
+  UpdateDisplay(true);
 }
 
 void SweetServer::StopDisplayStream() {
-  display_encoder_->Stop();
+  delete display_encoder_;
+  display_encoder_ = nullptr;
   if (display_connection_) {
     display_connection_->Send(kDisplayStreamStopEvent);
     display_connection_ = nullptr;
@@ -383,7 +389,9 @@ void SweetServer::StopDisplayStream() {
 }
 
 void SweetServer::RefreshDisplayStream() {
-  display_encoder_->ForceKeyframe();
+  if (display_encoder_) {
+    display_encoder_->ForceKeyframe();
+  }
 }
 
 void SweetServer::QemuGuestCommand(SweetConnection* conn, std::string& command) {

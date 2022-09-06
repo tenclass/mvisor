@@ -24,7 +24,7 @@
 #include <filesystem>
 
 #include "device_interface.h"
-#include "fuse.h"
+#include "fuse/fuse.h"
 #include "logger.h"
 #include "virtio_pci.h"
 
@@ -50,6 +50,12 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
 
     AddPciBar(1, 0x1000, kIoResourceTypeMmio);
     device_features_ |= 0;
+
+    // set fs config, num_request_queues > 1 cause windows vm crash
+    bzero(&fs_config_, sizeof(fs_config_));
+    fs_config_.num_request_queues = 1;
+
+    AddMsiXCapability(1, fs_config_.num_request_queues + 2, 0, 0x1000);
   }
 
   virtual void Disconnect() {
@@ -93,11 +99,6 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
 
       fuse_ = new Fuse(mount_path_, disk_size_limit, inode_count_limit);
       MV_ASSERT(fuse_ != nullptr);
-
-      // set fs config
-      // num_request_queues > 1 cause windows vm crash
-      bzero(&fs_config_, sizeof(fs_config_));
-      fs_config_.num_request_queues = 1;
 
       if (has_key("disk_name")) {
         std::string name = std::get<std::string>(key_values_["disk_name"]);

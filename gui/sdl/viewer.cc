@@ -47,10 +47,8 @@ void Viewer::DestroyWindow() {
       cursor_ = nullptr;
     }
     SDL_FreeSurface(screen_surface_);
-    SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);
     screen_surface_ = nullptr;
-    renderer_ = nullptr;
     window_ = nullptr;
   }
 }
@@ -62,28 +60,8 @@ void Viewer::CreateWindow() {
   pointer_state_.screen_height = height_;
   int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
   window_ = SDL_CreateWindow("MVisor", x, y, width_, height_, SDL_WINDOW_RESIZABLE);
-  renderer_ = SDL_CreateRenderer(window_, -1, 0);
-  MV_ASSERT(renderer_);
-  
-  switch (bpp_)
-  {
-  case 32:
-    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 32, SDL_PIXELFORMAT_BGRA32);
-    break;
-  case 24:
-    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 24, SDL_PIXELFORMAT_BGR24);
-    break;
-  case 16:
-    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 16, SDL_PIXELFORMAT_RGB565);
-    break;
-  case 8:
-    screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 32, SDL_PIXELFORMAT_BGRA32);
-    break;
-  default:
-    MV_PANIC("unsupported video bpp=%d", bpp_);
-  }
+  screen_surface_ = SDL_GetWindowSurface(window_);
   MV_ASSERT(screen_surface_);
-  SDL_SetSurfaceBlendMode(screen_surface_, SDL_BLENDMODE_NONE);
 
   if (bpp_ == 8) {
     palette_ = SDL_AllocPalette(256);
@@ -105,45 +83,40 @@ void Viewer::UpdateCaption() {
   SDL_SetWindowTitle(window_, title);
 }
 
-void Viewer::RenderPartial(const DisplayPartialBitmap* partial) {
-  auto dst = (uint8_t*)screen_surface_->pixels;
-  int dst_stride = screen_surface_->pitch;
-  uint8_t* dst_end = dst + dst_stride * height_;
-
-  if (partial->flip) {
-    dst += dst_stride * (partial->y + partial->height - 1) + partial->x * (bpp_ >> 3);
-    dst_stride = -dst_stride;
-  } else {
-    dst += dst_stride * partial->y + partial->x * (bpp_ >> 3);
-  }
-  int linesize = partial->width * (bpp_ >> 3);
-  size_t lines = partial->height;
-  size_t src_index = 0;
-  while (lines > 0 && src_index < partial->vector.size()) {
-    auto src = (uint8_t*)partial->vector[src_index].iov_base;
-    auto copy_lines = partial->vector[src_index].iov_len / partial->stride;
-    while (copy_lines > 0 && lines > 0) {
-      MV_ASSERT(dst + linesize <= dst_end);
-      memcpy(dst, src, linesize);
-      src += partial->stride;
-      dst += dst_stride;
-      --copy_lines;
-      --lines;
-    }
-    ++src_index;
-  }
-}
-
 void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
-  MV_ASSERT(partial->width == width_ && partial->height == height_);
-  MV_ASSERT(partial->vector.size() == 1 && partial->vector[0].iov_len == width_ * height_);
-  auto surface_8bit = SDL_CreateRGBSurfaceWithFormatFrom(partial->vector[0].iov_base,
-    partial->width, partial->height, bpp_, partial->stride, SDL_PIXELFORMAT_INDEX8);
-  SDL_SetSurfacePalette(surface_8bit, palette_);
-  if (screen_surface_)
-    SDL_FreeSurface(screen_surface_);
-  screen_surface_ = SDL_ConvertSurfaceFormat(surface_8bit, SDL_PIXELFORMAT_BGRA32, 0);
-  SDL_FreeSurface(surface_8bit);
+  uint format = SDL_PIXELFORMAT_UNKNOWN;
+  switch (partial->bpp)
+  {
+  case 32:
+    format = SDL_PIXELFORMAT_BGRA32;
+    break;
+  case 24:
+    format = SDL_PIXELFORMAT_BGR24;
+    break;
+  case 16:
+    format = SDL_PIXELFORMAT_RGB565;
+    break;
+  case 8:
+    format = SDL_PIXELFORMAT_INDEX8;
+    break;
+  default:
+    MV_PANIC("unsupported video bpp=%d", bpp_);
+  }
+
+  SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(partial->data,
+      partial->width, partial->height, bpp_, partial->stride, format);
+  if (partial->bpp == 8) {
+    SDL_SetSurfacePalette(surface, palette_);
+  }
+  SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE);
+  auto dest_rect = SDL_Rect {
+    .x = partial->x,
+    .y = partial->y,
+    .w = partial->width,
+    .h = partial->height
+  };
+  SDL_BlitSurface(surface, NULL, screen_surface_, &dest_rect);
+  SDL_FreeSurface(surface);
 }
 
 void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
@@ -184,26 +157,19 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
 /* Only use mutex with dequee, since we don't want to block the IoThread */
 void Viewer::Render() {
   DisplayUpdate update;
-  if (display_->AcquireUpdate(update)) {
+  if (display_->AcquireUpdate(update, false)) {
     RenderCursor(&update.cursor);
 
     for (auto& partial : update.partials) {
-      if (partial.x + partial.width <= width_ && partial.y + partial.height <= height_) {
-        if (bpp_ == 8) {
-          RenderSurface(&partial);
-        } else {
-          RenderPartial(&partial);
-        }
+      if (partial.bpp == bpp_ && partial.x + partial.width <= width_ && partial.y + partial.height <= height_) {
+        RenderSurface(&partial);
       }
     }
     display_->ReleaseUpdate();
   }
 
   if (!update.partials.empty()) {
-    auto screen_texture = SDL_CreateTextureFromSurface(renderer_, screen_surface_);
-    SDL_RenderCopy(renderer_, screen_texture, nullptr, nullptr);
-    SDL_RenderPresent(renderer_);
-    SDL_DestroyTexture(screen_texture);
+    SDL_UpdateWindowSurface(window_);
   }
 }
 

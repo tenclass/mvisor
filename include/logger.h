@@ -30,6 +30,7 @@ enum LogType {
 
 #define MV_UNUSED(x) (void)(x)
 #define MV_LOG(fmt, ...) Log(kLogTypeDebug, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define MV_WARN(fmt, ...) Log(kLogTypeWarn, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define MV_ERROR(fmt, ...) Log(kLogTypeError, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define MV_PANIC(fmt, ...) Log(kLogTypePanic, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define MV_ASSERT(condition) \

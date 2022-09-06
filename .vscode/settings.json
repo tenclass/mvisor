@@ -65,11 +65,23 @@
         "hash_map": "cpp",
         "hash_set": "cpp",
         "iostream": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "log.h": "c",
+        "glib.h": "c",
+        "macros.h": "c",
+        "pixman.h": "c",
+        "canvas_base.h": "c",
+        "canvas_utils.h": "c",
+        "types.h": "c",
+        "pixman_utils.h": "c",
+        "lines.h": "c",
+        "setjmp.h": "c",
+        "rop3.h": "c"
     },
     "C_Cpp.default.cppStandard": "c++17",
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/include",
-        "${workspaceFolder}/build/mvisor.p"
+        "${workspaceFolder}/build/mvisor.p",
+        "/usr/include/glib-2.0"
     ]
 }

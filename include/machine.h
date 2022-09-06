@@ -77,6 +77,9 @@ class Machine {
   inline void set_vm_name(std::string name) { vm_name_ = name; }
   inline void set_vm_uuid(std::string uuid) { vm_uuid_ = uuid; }
   inline Vcpu* first_vcpu() { return vcpus_.size() ? vcpus_[0] : nullptr; }
+  inline std::vector<Vcpu*> vcpus() { return vcpus_; }
+  inline int kvm_fd() { return kvm_fd_; }
+  inline int vm_fd() { return vm_fd_; }
 
  private:
   friend class IoThread;

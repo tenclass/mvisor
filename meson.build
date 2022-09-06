@@ -1,8 +1,8 @@
 project('mvisor', 'c', 'cpp',
-  version: '1.6.3',
+  version: '2.0.0',
   license: 'GPLv3',
   default_options: [
-    'buildtype=debugoptimized',
+    'buildtype=debug',
     'warning_level=2',
     'cpp_std=c++17',
     'werror=true'

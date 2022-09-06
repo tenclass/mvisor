@@ -59,8 +59,6 @@ class Vcpu {
   void Schedule(VoidCallback callback);
   /* Reset vCPU registers to default values */
   void Reset();
-  /* Synchronize kvm clock */
-  void SynchronizeKVMClock();
 
   /* Used for migration */
   bool SaveState(MigrationWriter* writer);
@@ -70,6 +68,7 @@ class Vcpu {
   void EnableSingleStep();
   void PrintRegisters();
 
+  int fd() { return fd_; }
   int vcpu_id() { return vcpu_id_; }
   std::thread& thread() { return thread_; }
   static Vcpu* current_vcpu() { return current_vcpu_; }

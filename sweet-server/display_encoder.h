@@ -45,22 +45,18 @@ struct EncodeSlice {
 
 class SweetDisplayEncoder {
  public:
-  SweetDisplayEncoder(uint width, uint height, DisplayStreamConfig* config);
+  SweetDisplayEncoder(int width, int height, DisplayStreamConfig* config);
   ~SweetDisplayEncoder();
 
   void Render(std::vector<DisplayPartialBitmap>& partials);
   void Start(OutputCallback output_cb);
-  void Stop();
   void ForceKeyframe();
-  void Screendump(std::string format, uint w, uint h, uint quality, std::string& output);
 
  private:
-  void SetDefaultConfig();
   void EncodeProcess();
   void InitializeX264();
-  bool RenderPartial(DisplayPartialBitmap* partial);
   bool ConvertPartial(DisplayPartialBitmap* partial);
-  void CreateEncodeSlice(uint top, uint left, uint bottom, uint right);
+  void CreateEncodeSlice(uint8_t* src, int stride, int x, int y, int w, int h);
   void ConvertSlices();
   void DrawSlices(std::vector<EncodeSlice*>& slices);
   void Encode();
@@ -68,7 +64,7 @@ class SweetDisplayEncoder {
   bool                        destroyed_ = false;
   bool                        started_ = false;
   bool                        force_keyframe_ = false;
-  uint                        screen_width_, screen_height_, screen_bpp_, screen_stride_;
+  int                         screen_width_, screen_height_, screen_bpp_, screen_stride_;
   uint8_t*                    screen_bitmap_ = nullptr;
   DisplayStreamConfig*        config_;
   OutputCallback              output_callback_;

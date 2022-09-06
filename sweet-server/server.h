@@ -82,7 +82,7 @@ class SweetServer {
   void OnPlayback(PlaybackState state, const std::string& data);
   void SetDefaultConfig();
   void OnRecordStats(RecordState state);
-  void UpdateDisplay();
+  void UpdateDisplay(bool redraw);
 
   Machine*                    machine_;
   std::list<SweetConnection*> connections_;

@@ -15,3 +15,4 @@ objects:
   - class: ps2
   - class: ich9-hda
   - class: hda-duplex
+  - class: kvm-clock

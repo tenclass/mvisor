@@ -44,9 +44,12 @@ void Log(LogType type, const char* file, int line, const char* function, const c
 
   switch (type) {
     case kLogTypeDebug:
-    case kLogTypeWarn:
       fprintf(stdout, "[%s] %s:%d %s() debug: %s\n", timestr, file, line, function, message);
       fflush(stdout);
+      break;
+    case kLogTypeWarn:
+      fprintf(stderr, "[%s] %s:%d %s() warn: %s\n", timestr, file, line, function, message);
+      fflush(stderr);
       break;
     case kLogTypeError:
     case kLogTypePanic:

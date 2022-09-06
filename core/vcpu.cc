@@ -115,7 +115,7 @@ void Vcpu::SetupCpuid() {
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_TSC_DEADLINE_TIMER, tsc_deadline);
       ALTER_FEATURE(entry->ecx, CPUID_EXT_HYPERVISOR, machine_->hypervisor_);
-      ALTER_FEATURE(entry->ecx, CPUID_EXT_PDCM, false); // Disable PDU
+      ALTER_FEATURE(entry->ecx, CPUID_EXT_PDCM, false); // Disable PMU
       ALTER_FEATURE(entry->edx, CPUID_HT, true);  // Max ACPI IDs reserved field is valid
       ALTER_FEATURE(entry->edx, CPUID_SS, false); // Self snoop
 
@@ -307,6 +307,10 @@ void Vcpu::SetupMsrIndices() {
 
   for (uint i = 0; i < msr_list.list.nmsrs; i++) {
     auto index = msr_list.indices[i];
+    // MSR_IA32_BNDCFGS
+    if (index == 0xD90) {
+      continue;
+    }
     // PMU is disabled
     if(index >= 0x300 && index < 0x400) {
       continue;
@@ -659,13 +663,6 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   state.set_cpuid(&cpuid, sizeof(cpuid));
 }
 
-void Vcpu::SynchronizeKVMClock() {
-  if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_KVMCLOCK_CTRL)) {
-    auto ret = ioctl(fd_, KVM_KVMCLOCK_CTRL, 0);
-    MV_ASSERT(ret == 0 || (ret == -1 && errno == EINVAL));
-  }
-}
-
 void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
   if (load_cpuid) {
     struct {
@@ -709,6 +706,14 @@ void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
   memcpy(&xcrs, state.xcrs().data(), sizeof(xcrs));
   MV_ASSERT(ioctl(fd_, KVM_SET_XCRS, &xcrs) == 0);
 
+  /* tsc must be set before KVM_SET_MSRS, otherwise it may cause the guest to get time in a mess */
+  // https://patchwork.kernel.org/project/kvm/patch/1443418711-24106-4-git-send-email-haozhong.zhang@intel.com/#15469651
+  if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_CONTROL)) {
+    MV_ASSERT(ioctl(fd_, KVM_SET_TSC_KHZ, state.tsc_khz()) == 0);
+  } else {
+    MV_WARN("KVM_CAP_TSC_CONTROL was not supported");
+  }
+
   /* MSRS */
   struct {
     kvm_msrs      msrs;
@@ -739,11 +744,6 @@ void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
   kvm_mp_state mp_state;
   mp_state.mp_state = state.mp_state();
   MV_ASSERT(ioctl(fd_, KVM_SET_MP_STATE, &mp_state) == 0);
-
-  /* TSC kHz */
-  if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_CONTROL)) {
-    MV_ASSERT(ioctl(fd_, KVM_SET_TSC_KHZ, state.tsc_khz()) == 0);
-  }
 
   /* Guest debugs */
   kvm_guest_debug debug;

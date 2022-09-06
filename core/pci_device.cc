@@ -247,14 +247,16 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
 
   memcpy(pci_header_.data + offset, data, length);
 
-  /* Toggle MSI/MSI-X control */
-  if (ranges_overlap(offset, length, msi_config_.offset + PCI_MSI_FLAGS, 1)) {
-    if (msi_config_.is_msix) {
-      msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
-    } else if (msi_config_.is_64bit) {
-      msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
-    } else {
-      msi_config_.enabled = msi_config_.msi32->control & PCI_MSI_FLAGS_ENABLE;
+  if (msi_config_.length) {
+    /* Toggle MSI/MSI-X control */
+    if (ranges_overlap(offset, length, msi_config_.offset + PCI_MSI_FLAGS, 1)) {
+      if (msi_config_.is_msix) {
+        msi_config_.enabled = msi_config_.msix->control & PCI_MSIX_FLAGS_ENABLE;
+      } else if (msi_config_.is_64bit) {
+        msi_config_.enabled = msi_config_.msi64->control & PCI_MSI_FLAGS_ENABLE;
+      } else {
+        msi_config_.enabled = msi_config_.msi32->control & PCI_MSI_FLAGS_ENABLE;
+      }
     }
   }
 }
@@ -470,7 +472,7 @@ bool PciDevice::LoadState(MigrationReader* reader) {
   }
 
   /* recover msix table */
-  for (int i = 0; i < msi_config_.msix_table_size; i++) {
+  for (int i = 0; i < state.msix_entries_size(); i++) {
     auto& msix = msi_config_.msix_table[i];
     auto& entry = state.msix_entries(i);
     msix.message.address_hi = entry.address() >> 32;

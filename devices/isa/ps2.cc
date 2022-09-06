@@ -125,6 +125,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
     status_ = STATUS_KEYLOCK | STATUS_COMMAND;
     mode_ = 5;
     raised_irq_ = -1;
+    last_command_ = 0;
     output_data_is_read_ = true;
     
     ResetKeyboard();
@@ -301,12 +302,12 @@ class Ps2 : public Device, public KeyboardInputInterface {
         PushMouse(0x00);
         break;
       default:
-        MV_PANIC("unhandled mouse command = 0x%x", data);
+        MV_ERROR("unhandled mouse command = 0x%x", data);
         break;
       }
       break;
     default:
-      MV_PANIC("unhandled mouse command = 0x%x", mouse_.command);
+      MV_ERROR("unhandled mouse command = 0x%x", mouse_.command);
       break;
     }
   }
@@ -349,7 +350,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
       PushKeyboard(0xAA);
       break;
     default:
-      MV_PANIC("unhandled ps2 command=0x%x", data);
+      MV_ERROR("unhandled ps2 command=0x%x", data);
       break;
     }
   }
@@ -405,7 +406,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
       }
       break;
     default:
-      MV_PANIC("unhandled command=0x%x", command);
+      MV_ERROR("unhandled command=0x%x", command);
       break;
     }
     status_ |= STATUS_COMMAND;
@@ -449,7 +450,7 @@ class Ps2 : public Device, public KeyboardInputInterface {
       PushKeyboard(RESPONSE_ACK);
       break;
     default:
-      MV_PANIC("unhandled command=0x%x data=0x%x", command, data);
+      MV_ERROR("unhandled command=0x%x data=0x%x", command, data);
       break;
     }
   }
