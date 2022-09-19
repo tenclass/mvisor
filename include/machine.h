@@ -101,6 +101,7 @@ class Machine {
   
   uint64_t ram_size_ = 0;
   int num_vcpus_ = 0;
+  int vcpu_priority_ = 1;
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;

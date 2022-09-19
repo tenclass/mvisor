@@ -46,7 +46,6 @@ class SpiceAgent : public Device, public SerialPortInterface,
   std::string                     outgoing_clipboard_;
   std::vector<ClipboardListener>  clipboard_listeners_;
   /* Buffer to build incoming message */
-  uint                            incoming_message_written_ = 0;
   std::string                     incoming_message_;
   /* Max clipboard size, default is 1MB */
   uint32_t                        max_clipboard_ = 1024 * 1024;
@@ -60,31 +59,21 @@ class SpiceAgent : public Device, public SerialPortInterface,
 
   /* The message may consists of more than one chunk */
   virtual void OnMessage(uint8_t* data, size_t size) {
-    if (size < sizeof(VDIChunkHeader) + sizeof(VDAgentMessage)) {
-      MV_PANIC("Chunk too small, size=0x%lx", size);
-      return;
-    }
-    VDIChunkHeader* chunk_header = (VDIChunkHeader*)data;
-    if (chunk_header->size + sizeof(VDIChunkHeader) != size) {
-      MV_PANIC("Invalid chunk size=0x%lx", size);
-      return;
-    }
-    auto chunk_data = data + sizeof(VDIChunkHeader);
+    auto chunk = (VDIChunkHeader*)data;
+    MV_ASSERT(size >= sizeof(VDIChunkHeader));
+    MV_ASSERT(size == sizeof(VDIChunkHeader) + chunk->size);
 
-    if (incoming_message_written_ == 0) {
-      VDAgentMessage* message = (VDAgentMessage*)chunk_data;
-      incoming_message_.resize(sizeof(VDAgentMessage) + message->size);
-    }
-    if (incoming_message_written_ + chunk_header->size > incoming_message_.size()) {
-      MV_PANIC("incoming message buffer overflow message=%lu chunk=%u written=%u",
-        incoming_message_.size(), chunk_header->size, incoming_message_written_);
-    }
+    incoming_message_.append((char*)data + sizeof(VDIChunkHeader), chunk->size);
 
-    memcpy(incoming_message_.data() + incoming_message_written_, chunk_data, chunk_header->size);
-    incoming_message_written_ += chunk_header->size;
-    if (incoming_message_written_ == incoming_message_.size()) {
-      HandleAgentMessage((VDAgentMessage*)incoming_message_.data());
-      incoming_message_written_ = 0;
+    while (incoming_message_.size() >= sizeof(VDAgentMessage)) {
+      auto message = (VDAgentMessage*)incoming_message_.data();
+      auto message_length = sizeof(VDAgentMessage) + message->size;
+      if (incoming_message_.size() < message_length) {
+        return;
+      }
+
+      HandleAgentMessage(message);
+      incoming_message_.erase(0, message_length);
     }
   }
 

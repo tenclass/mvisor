@@ -195,6 +195,9 @@ void Configuration::LoadMachine(const YAML::Node& node) {
   if (node["vcpu"]) {
     machine_->num_vcpus_ = node["vcpu"].as<uint64_t>();
   }
+  if (node["priority"]) {
+    machine_->vcpu_priority_ = node["priority"].as<uint64_t>();
+  } 
   if (node["bios"]) {
     bios_path_ = FindPath(node["bios"].as<std::string>());
   } else {

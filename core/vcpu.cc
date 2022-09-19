@@ -482,6 +482,17 @@ void Vcpu::PrepareX86Vcpu() {
   SaveStateTo(default_state_);
 }
 
+/* Set the lowest priority to vcpu thread */
+void Vcpu::SetupSchedPriority(int priority) {
+  // https://man7.org/linux/man-pages/man7/sched.7.html
+  if (priority == 0) {
+    // linux set priority 0 to thread as default
+    return;
+  }
+  MV_ASSERT(priority >= MIN_NICE && priority <= MAX_NICE);
+  MV_ASSERT(nice(priority));
+}
+
 /* Initialize and executing a vCPU thread */
 void Vcpu::Process() {
   current_vcpu_ = this;
@@ -489,6 +500,7 @@ void Vcpu::Process() {
   SetThreadName(name_);
   
   SetupSignalHandler();
+  SetupSchedPriority(machine_->vcpu_priority_);
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 
@@ -676,15 +688,15 @@ void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
     SetupMsrIndices();
   }
 
-  /* LAPIC */
-  kvm_lapic_state lapic;
-  memcpy(&lapic, state.lapic().data(), sizeof(lapic));
-  MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
-
   /* Special registers */
   kvm_sregs sregs;
   memcpy(&sregs, state.sregs().data(), sizeof(sregs));
   MV_ASSERT(ioctl(fd_, KVM_SET_SREGS, &sregs) == 0);
+
+  /* LAPIC */
+  kvm_lapic_state lapic;
+  memcpy(&lapic, state.lapic().data(), sizeof(lapic));
+  MV_ASSERT(ioctl(fd_, KVM_SET_LAPIC, &lapic) == 0);
 
   /* Common regsiters */
   kvm_regs regs;

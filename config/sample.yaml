@@ -4,6 +4,9 @@ base: q35.yaml
 machine:
   memory: 4G
   vcpu: 8
+  # Set vcpu thread priority value [-20, 19]
+  # A higher value means a lower priority
+  priority: 1
   # Turn on BIOS output and performance measurement
   debug: No
   # Turn on hypervisor to lower CPU usage (Hyper-V is used for Windows)

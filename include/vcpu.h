@@ -31,6 +31,10 @@
 
 #define SIG_USER_INTERRUPT (SIGRTMIN + 0)
 
+/* https://github.com/torvalds/linux/blob/master/include/linux/sched/prio.h */
+#define MAX_NICE	19
+#define MIN_NICE	-20
+
 class Machine;
 
 typedef std::function<void(void)> VoidCallback;
@@ -81,6 +85,7 @@ class Vcpu {
   void SetupSignalHandler();
   void SetupCpuid();
   void SetupMsrIndices();
+  void SetupSchedPriority(int priority);
   void SetupHyperV(kvm_cpuid2* cpuid);
   void SetupMachineCheckException();
   void SetupModelSpecificRegisters();

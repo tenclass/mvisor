@@ -155,10 +155,7 @@ void Machine::Reset() {
     MV_LOG("Resettings vCPUs");
   }
 
-  // FIXME: Failed to reboot Ubuntu if reset all vCPUs
-  //        Trouble loading x86 sregs for vcpuid >= 1
-  auto vcpu = first_vcpu();
-  if (vcpu) {
+  for (auto vcpu : vcpus_) {
     vcpu->Schedule([vcpu]() {
       vcpu->Reset();
     });
