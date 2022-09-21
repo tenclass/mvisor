@@ -424,6 +424,11 @@ class Uip : public Object, public NetworkBackendInterface {
       MV_LOG("ignore LLDP");
       packet->Release();
       break;
+    case ETH_P_PPP_DISC:
+      // ignore PPP_DISC
+      MV_LOG("ignore PPP_DISC");
+      packet->Release();
+      break;
     default:
       MV_PANIC("Unknown ethernet packet protocol=%x", protocol);
       packet->Release();

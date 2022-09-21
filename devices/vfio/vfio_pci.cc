@@ -759,26 +759,32 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
   int fd = reader->BeginRead("DATA");
 
+  bool success = false;
   while (true) {
     uint64_t data_offset = 0;
     pread(device_fd_, &data_offset, sizeof(data_offset),
       migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
-    MV_ASSERT(data_offset == area.offset);
+    if (data_offset != area.offset) {
+      MV_ERROR("read vfio migration info failed, data_offset=0x%lx area.offset=0x%lx", data_offset, area.offset);
+      break;
+    }
     
     auto ret = read(fd, buffer, area.size);
     if (ret > 0) {
       pwrite(device_fd_, &ret, sizeof(ret),
         migration_.region->offset + offsetof(vfio_device_migration_info, data_size));
     }
-    if (ret < (ssize_t)area.size)
+    if (ret < (ssize_t)area.size) {
+      success = true;
       break;
+    }
   }
 
   reader->EndRead("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
   
   munmap(buffer, area.size);
-  return true;
+  return success;
 }
 
 DECLARE_DEVICE(VfioPci);

@@ -226,7 +226,9 @@ class Ich9Lpc : public PciDevice, public PowerDownInterface {
     }
 
     /* PM IO */
-    MV_ASSERT(resource->length == ICH9_PMIO_SIZE);
+    if (resource->length != ICH9_PMIO_SIZE) {
+      MV_PANIC("resource->base=0x%lx resource->length=0x%lx size=%d", resource->base, resource->length, size);
+    }
     auto &acpi = state_.acpi();
     uint64_t value;
 
