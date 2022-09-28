@@ -65,6 +65,7 @@ class SweetConnection {
   void OnQueryStatus();
   void OnKeyboardInput();
   void OnSendPointerInput();
+  void OnSendMotionInput();
   void OnConfigMonitors();
   void OnStartDisplayStream();
   void OnStartPlaybackStream();

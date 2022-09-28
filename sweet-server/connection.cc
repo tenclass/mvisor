@@ -101,6 +101,9 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kSendPointerInput:
     OnSendPointerInput();
     break;
+  case kSendMotionInput:
+    OnSendMotionInput();
+    break;
   case kConfigMonitors:
     OnConfigMonitors();
     break;
@@ -286,6 +289,22 @@ void SweetConnection::OnSendPointerInput() {
       pointer->QueuePointerEvent(event);
       break;
     }
+  }
+}
+
+void SweetConnection::OnSendMotionInput() {
+  SendMotionInput input;
+  if (!input.ParseFromString(buffer_)) {
+    MV_ERROR("failed to parse buffer");
+    return;
+  }
+  if (machine_->IsPaused()) {
+    return;
+  }
+
+  auto keyboard = server_->keyboard();
+  if (keyboard->InputAcceptable()) {
+    keyboard->QueueMouseEvent(input.button_state(), input.rel_x(), input.rel_y(), input.rel_z());
   }
 }
 

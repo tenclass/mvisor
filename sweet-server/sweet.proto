@@ -17,6 +17,7 @@ enum SweetCommand {
   /* Input */
   kSendKeyboardInput      = 0x40;
   kSendPointerInput       = 0x41;
+  kSendMotionInput        = 0x42;
   /* Display */
   kConfigMonitors         = 0x50;
   kQueryScreenshot        = 0x51;
@@ -150,6 +151,13 @@ message SendPointerInput {
   int32     x           = 2;
   int32     y           = 3;
   int32     z           = 4;
+}
+
+message SendMotionInput {
+  uint32    button_state    = 1;
+  int32     rel_x           = 2;
+  int32     rel_y           = 3;
+  int32     rel_z           = 4;
 }
 
 message QueryScreeenshot {

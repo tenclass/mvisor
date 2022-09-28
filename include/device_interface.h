@@ -30,7 +30,7 @@ class KeyboardInputInterface {
  public:
   virtual ~KeyboardInputInterface() = default;
   virtual bool QueueKeyboardEvent(uint8_t scancode[10], uint8_t modifiers) = 0;
-  virtual bool QueueMouseEvent(uint buttons, int rel_x, int rel_y, int rel_z) = 0;
+  virtual bool QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) = 0;
   virtual bool InputAcceptable() = 0;
 };
 
