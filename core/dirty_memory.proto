@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message DirtyMemoryDescriptor {
+  uint64  gpa   = 1;
+  uint64  size  = 2;
+}

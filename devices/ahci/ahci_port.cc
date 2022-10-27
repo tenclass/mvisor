@@ -98,13 +98,16 @@ void AhciPort::UpdateInitD2H() {
  * io->buffer is always set to the first region of the vector for fast access.
  * If prdt_length is zero, the function only clears the vector.
  */
-void AhciPort::PrepareIoVector(AhciPrdtEntry* entries, uint16_t prdt_length) {
+void AhciPort::PrepareIoVector(AhciPrdtEntry* entries, uint16_t prdt_length, bool is_read) {
   auto io = drive_->io();
   io->vector.clear();
   for (int prdt_index = 0; prdt_index < prdt_length; prdt_index++) {
+    size_t length = entries[prdt_index].size + 1;
     void* host = manager_->TranslateGuestMemory(entries[prdt_index].address);
     MV_ASSERT(host);
-    size_t length = entries[prdt_index].size + 1;
+    if (is_read) {
+      manager_->AddDirtyMemory(entries[prdt_index].address, length);
+    }
     io->vector.emplace_back(iovec { .iov_base = host, .iov_len = length });
     if (prdt_index == 0) {
       io->buffer = (uint8_t*)host;
@@ -164,7 +167,8 @@ bool AhciPort::HandleCommand(int slot) {
     memcpy(io->atapi_command, command_table->atapi_command, sizeof(io->atapi_command));
   }
 
-  PrepareIoVector(command_table->prdt_entries, command_->prdt_length);
+  bool is_read = regs->command == 0xC8 || io->atapi_command[0] == 0x28;
+  PrepareIoVector(command_table->prdt_entries, command_->prdt_length, is_read);
 
   /* We have only one DMA engine each drive.
    * when async IO is running by IO thread, we should wait for the slot */

@@ -19,10 +19,15 @@
 #ifndef _MVISOR_MIGRATION_H
 #define _MVISOR_MIGRATION_H
 
-#include <string>
 #include <google/protobuf/message.h>
 
+#include <list>
+#include <string>
+#include <unordered_map>
+#include <queue>
+
 using google::protobuf::Message;
+
 
 enum MigrationDataType {
   kMigrationDataTypeRaw,
@@ -30,45 +35,145 @@ enum MigrationDataType {
   kMigrationDataTypeProtobuf
 };
 
-class MigrationWriter {
- public:
-  MigrationWriter(std::string base_path);
-  ~MigrationWriter();
+enum MigrationSignalType {
+  kMigrateBackingImageComplete,
+  kMigrateRamComplete,
+  kMigrateImageComplete,
+  kMigrateDirtyMemoryFromKvmComplete,
+  kMigrateDirtyMemoryFromListenerComplete,
+  kMigrateDeviceComplete,
+  kMigrateDirtyMemoryFromDmaComplete,
+  kMigrateVcpuComplete,
+  kMigrateComplete
+};
 
-  void SetPrefix(std::string prefix);
-  void WriteRaw(std::string tag, void* data, size_t size);
-  void WriteString(std::string tag, const std::string& data);
-  void WriteProtobuf(std::string tag, const Message& message);
-  void WriteMemoryPages(std::string tag, void* pages, size_t size);
-  int  BeginWrite(std::string tag);
-  void EndWrite(std::string tag);
+struct MigrationNetworkDataHeader {
+  char tag[24];
+  size_t size;
+};
+
+struct MigrationNetworkData {
+  MigrationNetworkDataHeader header;
+  uint8_t* body;
+};
+
+struct MigrationSignal {
+  MigrationSignalType type;
+};
+
+class MigrationWriter { 
+  public:
+    MigrationWriter() = default;
+    virtual ~MigrationWriter() = default;
+    virtual int  BeginWrite(std::string tag) = 0;
+    virtual void SetPrefix(std::string prefix) = 0;
+    virtual void EndWrite(std::string tag) = 0;
+    virtual bool WriteRaw(std::string tag, void* data, size_t size) = 0;
+    virtual bool WriteProtobuf(std::string tag, const Message& message) = 0;
+    virtual bool WriteMemoryPages(std::string tag, void* pages, size_t size) = 0;
+};
+
+class MigrationFileWriter : public MigrationWriter {
+ public:
+  MigrationFileWriter(std::string base_path);
+  virtual ~MigrationFileWriter();
+
+  virtual int  BeginWrite(std::string tag);
+  virtual void SetPrefix(std::string prefix);
+  virtual void EndWrite(std::string tag);
+  virtual bool WriteRaw(std::string tag, void* data, size_t size);
+  virtual bool WriteProtobuf(std::string tag, const Message& message);
+  virtual bool WriteMemoryPages(std::string tag, void* pages, size_t size);
 
   inline std::string base_path() { return base_path_; }
- private:
 
+ private:
   int         fd_ = -1;
   std::string prefix_;
   std::string base_path_;
 };
 
-class MigrationReader {
+class MigrationNetworkWriter : public MigrationWriter {
  public:
-  MigrationReader(std::string base_path);
-  ~MigrationReader();
+  MigrationNetworkWriter();
+  virtual ~MigrationNetworkWriter();
 
-  void SetPrefix(std::string prefix);
-  bool ReadRaw(std::string tag, void* data, size_t size);
-  std::string ReadString(std::string tag);
-  bool ReadProtobuf(std::string tag, Message& message);
-  bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size);
-  int  BeginRead(std::string tag);
-  void EndRead(std::string tag);
+  virtual int  BeginWrite(std::string tag);
+  virtual void SetPrefix(std::string prefix);
+  virtual void EndWrite(std::string tag);
+  virtual bool WriteRaw(std::string tag, void* data, size_t size);
+  virtual bool WriteProtobuf(std::string tag, const Message& message);
+  virtual bool WriteMemoryPages(std::string tag, void* pages, size_t size);
+
+  bool Connect(std::string ip, uint16_t port);
+  bool WaitForSignal(MigrationSignalType type);
+  bool WriteFromFile(std::string tag, std::string path, size_t offset);
+
  private:
+  int         socket_fd_ = -1;
 
+  bool Write(void* data, size_t size);
+};
+
+class MigrationReader {
+  public: 
+    MigrationReader() = default;
+    virtual ~MigrationReader() = default;
+
+    virtual int  BeginRead(std::string tag) = 0;
+    virtual void SetPrefix(std::string prefix) = 0;
+    virtual void EndRead(std::string tag) = 0;
+    virtual bool ReadRaw(std::string tag, void* data, size_t size) = 0;
+    virtual bool ReadProtobuf(std::string tag, Message& message) = 0;
+    virtual bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size) = 0;
+    virtual size_t ReadRawWithLimit(std::string tag, void* data, size_t limit) = 0;
+};
+
+class MigrationFileReader : public MigrationReader {
+ public:
+  MigrationFileReader(std::string base_path);
+  virtual ~MigrationFileReader();
+
+  virtual int  BeginRead(std::string tag);
+  virtual void SetPrefix(std::string prefix);
+  virtual void EndRead(std::string tag);
+  virtual bool ReadRaw(std::string tag, void* data, size_t size);
+  virtual bool ReadProtobuf(std::string tag, Message& message);
+  virtual bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size);
+  virtual size_t ReadRawWithLimit(std::string tag, void* data, size_t limit);
+
+ private:
   int         fd_ = -1;
   size_t      file_size_ = 0;
   std::string prefix_;
   std::string base_path_;
+};
+
+class MigrationNetworkReader : public MigrationReader {
+ public:
+  MigrationNetworkReader();
+  virtual ~MigrationNetworkReader();
+
+  virtual int  BeginRead(std::string tag);
+  virtual void SetPrefix(std::string prefix);
+  virtual void EndRead(std::string tag);
+  virtual bool ReadRaw(std::string tag, void* data, size_t size);
+  virtual bool ReadProtobuf(std::string tag, Message& message);
+  virtual bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size);
+  virtual size_t ReadRawWithLimit(std::string tag, void* data, size_t limit);
+
+  bool WaitForConnection(uint16_t port);
+  void SendSignal(MigrationSignalType type);
+  void ReadToFile(std::string tag, std::string path, size_t offset);
+
+ private:
+  int socket_fd_ = -1;
+  std::unordered_map<std::string, std::queue<MigrationNetworkData*>> cache_map_;
+
+  void Read(void* data, size_t size);
+  void FreeCacheData(MigrationNetworkData* data);
+  MigrationNetworkDataHeader WaitForDataHeader(std::string tag);
+  MigrationNetworkData* ReadFromCache(std::string tag);
 };
 
 #endif // _MVISOR_MIGRATION_H

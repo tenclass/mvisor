@@ -1,0 +1,5 @@
+syntax = "proto3";
+
+message ImageDescriptor {
+  sint64  offset  = 1;
+}

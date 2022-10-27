@@ -101,7 +101,7 @@ class Fuse {
 
   int GetFdFromInode(fuse_ino_t ino);
 
-  void ClearInodeList(bool is_clear_root);
+  void ClearInodeList(bool clear_root);
   void UnrefInode(struct Inode* inode, uint64_t refcount);
   void CopyStatFs(const struct statvfs* stbuf, struct fuse_kstatfs* kstatfs);
   void ConvertStatToFuseAttr(const struct stat* stbuf, struct fuse_attr* attr);

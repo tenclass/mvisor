@@ -23,12 +23,15 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/eventfd.h>
+#include <sys/mman.h>
 
 #include <filesystem>
 
 #include "logger.h"
 #include "machine.h"
+#include "qcow2.h"
 #include "disk_image.h"
+
 
 #define MAX_ENTRIES 256
 
@@ -55,17 +58,24 @@ IoThread::~IoThread() {
   }
   for (auto timer : timers_) {
     if (!timer->removed) {
-      MV_LOG("warning: timer %s is not removed when disconnected", timer->callback.target_type().name());
+      MV_WARN("timer %s is not removed when disconnected", timer->callback.target_type().name());
     }
     delete timer;
   }
+
+  for (auto it = qcow2_image_backing_files_.begin(); it != qcow2_image_backing_files_.end(); it++) {
+    auto& files = it->second;
+    while (!files.empty()) {
+      auto file = files.front();
+      files.pop();
+      remove(file.c_str());
+    }
+  }
+  qcow2_image_backing_files_.clear();
 }
 
-
 void IoThread::Start() {
-
   thread_ = std::thread(&IoThread::RunLoop, this);
-
   StartPolling(event_fd_, EPOLLIN, [this](auto ret) {
     MV_UNUSED(ret);
     uint64_t tmp;
@@ -265,12 +275,12 @@ void IoThread::Schedule(VoidCallback callback) {
 
 void IoThread::RegisterDiskImage(DiskImage* image) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  disk_images_.insert(image);
+  disk_images_.push_back(image);
 }
 
 void IoThread::UnregisterDiskImage(DiskImage* image) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-  disk_images_.erase(image);
+  disk_images_.remove(image);
 }
 
 void IoThread::FlushDiskImages() {
@@ -313,18 +323,127 @@ bool IoThread::SaveDiskImage(MigrationWriter* writer) {
       continue;
     if (!image->snapshot())
       continue;
+
     /* Only copy snapshot image */
-    writer->SetPrefix(device.name());
-    auto new_path = writer->base_path() + "/" + device.name();
-    if (!std::filesystem::exists(new_path)) {
-      std::filesystem::create_directories(new_path);
+    auto network_writer = dynamic_cast<MigrationNetworkWriter*>(writer);
+    if (network_writer) {
+      if (!dynamic_cast<Qcow2Image*>(image)) {
+        return false;
+      }
+      if (!network_writer->WriteFromFile("IMAGE", image->filepath(), QCOW2_MIGRATE_DATA_OFFSET)) {
+        return false;
+      }
+    } else {
+      auto file_writer = dynamic_cast<MigrationFileWriter*>(writer);
+      MV_ASSERT(file_writer);
+
+      file_writer->SetPrefix(device.name());
+      auto new_path = file_writer->base_path() + "/" + device.name();
+      if (!std::filesystem::exists(new_path)) {
+        std::filesystem::create_directories(new_path);
+      }
+      new_path += "/disk.qcow2";
+      if (std::filesystem::exists(new_path)) {
+        std::filesystem::remove(new_path);
+      }
+      std::filesystem::copy_file(image->filepath(), new_path);
+      device["image"] = new_path;
     }
-    new_path += "/disk.qcow2";
-    if (std::filesystem::exists(new_path)) {
-      std::filesystem::remove(new_path);
+  }
+  return true;
+}
+
+// only could be called when vm was paused
+bool IoThread::CreateQcow2ImageSnapshot() {
+  for (auto image : disk_images_) {
+    auto qcow2_image = dynamic_cast<Qcow2Image*>(image);
+     if (!qcow2_image) {
+      MV_ERROR("snapshot was only supported by qcow2");
+      return false;
     }
-    std::filesystem::copy_file(image->filepath(), new_path);
-    device["image"] = new_path;
+
+    auto image_path = qcow2_image->filepath();
+    if (!qcow2_image->CreateSnapshot()) {
+      MV_ERROR("failed to create snapshot for qcow2 image=%s", image_path);
+      return false;
+    }
+    qcow2_image_backing_files_[qcow2_image].push(image_path);
+  }
+  return true;
+}
+
+bool IoThread::SaveBackingDiskImage(MigrationNetworkWriter* writer) {
+  bool ret = true;
+  ImageDescriptor image_descriptor;
+  image_descriptor.set_offset(QCOW2_MIGRATE_DATA_OFFSET);
+
+  for (auto image : disk_images_) {
+    auto qcow2_image = dynamic_cast<Qcow2Image*>(image);
+    auto files(qcow2_image_backing_files_[qcow2_image]);
+
+    while (!files.empty()) {
+      ret = writer->WriteProtobuf("IMAGE_DESCRIPTOR", image_descriptor);
+      if (ret) {
+        ret = writer->WriteFromFile("BACKING_IMAGE", files.front(), image_descriptor.offset());
+        files.pop();
+      }
+      
+      if (!ret) {
+        MV_ERROR("failed to send backing image=%s", qcow2_image->filepath().c_str());
+        break;
+      }
+    }
+
+    if (ret) {
+      // offset=-1 means we transfer backing images data completely for this image
+      image_descriptor.set_offset(-1);
+      ret = writer->WriteProtobuf("IMAGE_DESCRIPTOR", image_descriptor);
+    }
+
+    if (!ret) {
+      break;
+    }
+  }
+  return ret;
+}
+
+bool IoThread::LoadBackingDiskImage(MigrationNetworkReader* reader) {
+  for (auto image : disk_images_) { 
+    auto qcow2_image = dynamic_cast<Qcow2Image*>(image);
+    if (!qcow2_image) {
+      MV_ERROR("snapshot was only supported by qcow2");
+      return false;
+    }
+
+    ImageDescriptor image_descriptor;
+    while (true) {
+      if (!reader->ReadProtobuf("IMAGE_DESCRIPTOR", image_descriptor)) {
+        MV_ERROR("failed to read disk image descriptor");
+        return false;
+      }
+
+      if (image_descriptor.offset() == -1) {
+        break;
+      }
+      
+      reader->ReadToFile("BACKING_IMAGE", qcow2_image->filepath(), image_descriptor.offset());
+      qcow2_image_backing_files_[qcow2_image].push(qcow2_image->filepath());
+      if (!qcow2_image->CreateSnapshot()) {
+        MV_ERROR("failed to create disk image snapshot, image=%s", qcow2_image->filepath().c_str());
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool IoThread::LoadDiskImage(MigrationNetworkReader* reader) {
+  for (auto image : disk_images_) {
+    if (!dynamic_cast<Qcow2Image*>(image)) {
+      MV_ERROR("migration was only supported by qcow2");
+      return false;
+    }
+    reader->ReadToFile("IMAGE", image->filepath(), QCOW2_MIGRATE_DATA_OFFSET);
   }
   return true;
 }

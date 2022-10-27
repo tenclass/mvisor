@@ -54,7 +54,6 @@ class DiskImage : public Object {
 
   DiskImage();
   virtual ~DiskImage();
-  virtual void Connect();
 
   bool busy();
   inline bool readonly() { return readonly_; }
@@ -79,7 +78,6 @@ class DiskImage : public Object {
   virtual void FlushAsync(IoCallback callback);
 
  protected:
-  bool        initialized_ = false;
   bool        readonly_ = false;
   bool        snapshot_ = false;
   Device*     device_ = nullptr;

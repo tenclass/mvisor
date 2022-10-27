@@ -103,12 +103,14 @@ class VfioPci : public PciDevice {
   int           group_id_ = -1;
   int           group_fd_ = -1;
   int           device_fd_ = -1;
-  vfio_device_info                                device_info_;
-  std::array<VfioRegion, MAX_VFIO_REGIONS>        regions_;
-  std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>  interrupts_;
-  VfioMigration                                   migration_;
-  const MemoryListener*                           memory_listener_ = nullptr;
-  const StateChangeListener*                      state_change_listener_ = nullptr;
+  vfio_device_info                                      device_info_;
+  std::array<VfioRegion, MAX_VFIO_REGIONS>              regions_;
+  std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>        interrupts_;
+  VfioMigration                                         migration_;
+  const MemoryListener*                                 memory_listener_ = nullptr;
+  const DirtyMemoryListener*                            dirty_memory_listener_ = nullptr;
+  const StateChangeListener*                            state_change_listener_ = nullptr;
+  std::map<const MemorySlot*, vfio_iommu_type1_dma_map> iommu_dma_maps_;
 };
 
 #endif // _MVISOR_DEVICES_VFIO_VFIO_PCI_H

@@ -614,7 +614,9 @@ bool Qxl::AcquireUpdate(DisplayUpdate& update, bool redraw) {
     return Vga::AcquireUpdate(update, redraw);
   }
 
-  FetchCommands();
+  if (!manager_->machine()->IsPaused()) {
+    FetchCommands();
+  }
 
   if (redraw) {
     render_->Redraw();

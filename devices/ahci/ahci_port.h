@@ -105,7 +105,7 @@ class AhciPort {
   bool HandleCommand(int slot);
   void CheckEngines();
   void CheckCommand();
-  void PrepareIoVector(AhciPrdtEntry* entries, uint16_t length);
+  void PrepareIoVector(AhciPrdtEntry* entries, uint16_t length, bool is_read);
 
   friend class AhciHost;
   DeviceManager*        manager_;

@@ -47,7 +47,7 @@ class KvmClock : public Device {
   }
 
   void LoadClock() {
-    /* Reset kvm clock, only when SaveClock() was called before */
+    /* Reset kvm clock, only when kvm_clock_ was set before */
     if (!kvm_clock_.clock) {
       return;
     }
@@ -85,7 +85,7 @@ class KvmClock : public Device {
   }
 
   bool SaveState(MigrationWriter* writer) {
-    writer->WriteRaw("CLOCK", &kvm_clock_, sizeof(struct kvm_clock_data));
+    writer->WriteRaw("CLOCK", &kvm_clock_, sizeof(kvm_clock_));
     return Device::SaveState(writer);
   }
 

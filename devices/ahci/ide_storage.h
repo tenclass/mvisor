@@ -20,6 +20,7 @@
 #define _MVISOR_DEVICES_IDE_STORAGE_H
 
 #include "device.h"
+#include "device_manager.h"
 #include "disk_image.h"
 #include <sys/uio.h>
 #include <vector>
@@ -125,7 +126,6 @@ class IdeStorageDevice : public Device {
   VoidCallback    io_complete_;
   bool            io_async_ = false;
 };
-
 
 class AhciCdrom : public IdeStorageDevice {
  public:

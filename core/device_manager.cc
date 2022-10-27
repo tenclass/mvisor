@@ -517,11 +517,22 @@ void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int 
   }
 }
 
-/* Get the host memory address of a guest physical address */
+/* 
+  Get the host memory address of a guest physical address
+  Param 'size' means the length of guest memory you may need to modify, it's important for migration
+*/
 void* DeviceManager::TranslateGuestMemory(uint64_t gpa) {
   auto memory_manger = machine_->memory_manager();
-  void* host = memory_manger->GuestToHostAddress(gpa);
-  return host;
+  return memory_manger->GuestToHostAddress(gpa);
+}
+
+void DeviceManager::AddDirtyMemory(uint64_t gpa, size_t size) {
+  auto memory_manger = machine_->memory_manager();
+  if (size == 0) {
+    memory_manger->SetDirtyMemoryRegion(gpa, PAGE_SIZE);
+  } else {
+    memory_manger->SetDirtyMemoryRegion(gpa, size);
+  }
 }
 
 /* Sets the level of a GSI input to the interrupt controller model */
@@ -720,7 +731,7 @@ bool DeviceManager::SaveState(MigrationWriter* writer) {
   for (auto device : registered_devices_) {
     writer->SetPrefix(device->name());
     if (!device->SaveState(writer)) {
-      MV_LOG("failed to save state of device %s", device->name());
+      MV_ERROR("failed to save state of device %s", device->name());
       return false;
     }
   }

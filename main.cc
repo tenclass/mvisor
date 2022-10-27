@@ -78,6 +78,7 @@ static void PrintHelp() {
   printf("  -s, --sweet           Specified mvisor socket file path.\n");
   printf("  -p, --pidfile         Specified mvisor pid file path.\n");
   printf("  -l, --load            Load mvisor snapshot information.\n");
+  printf("  -m, --migration       Start mvisor witn port from migration.\n");
 }
 
 static void PrintVersion() {
@@ -96,6 +97,7 @@ static struct option long_options[] = {
   {"sweet", required_argument, 0, 's'},
   {"pidfile", required_argument, 0, 'p'},
   {"load", required_argument, 0, 'l'},
+  {"migration", required_argument, 0, 'm'},
   {"version", no_argument, 0, 'v'},
   {NULL, 0, 0, 0}
 };
@@ -108,6 +110,7 @@ int main(int argc, char* argv[]) {
   std::string sweet_path;
   std::string pid_path;
   std::string load_path;
+  std::string migration_port;
 
   int c, option_index = 0;
   while ((c = getopt_long_only(argc, argv, "hvc:u:n:s:p:l:", long_options, &option_index)) != -1) {
@@ -133,6 +136,9 @@ int main(int argc, char* argv[]) {
       break;
     case 'l':
       load_path = optarg;
+      break;
+    case 'm':
+      migration_port = optarg;
       break;
     case 'v':
       PrintVersion();
@@ -171,13 +177,18 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, quit_callback);
     signal(SIGTERM, quit_callback);
 
-    if (!load_path.empty()) {
+    if (!migration_port.empty()) {
+      std::thread([&migration_port]() {
+        machine->Load(atoi(migration_port.c_str()));
+      }).detach();
+    } else if (!load_path.empty()) {
       std::thread([&load_path]() {
         machine->Load(load_path);
       }).detach();
     }
 
     ret = sweet_server->MainLoop();
+    delete machine;
     delete sweet_server;
   }
 #endif
@@ -187,16 +198,18 @@ int main(int argc, char* argv[]) {
     /* SDL handles default signals */
     viewer = new Viewer(machine);
 
-    if (!load_path.empty())
+    if (!migration_port.empty()) {
+      machine->Load(atoi(migration_port.c_str()));
+    } else if (!load_path.empty()) {
       machine->Load(load_path);
+    }
     machine->Resume();
 
     ret = viewer->MainLoop();
+    delete machine;
     delete viewer;
   }
 #endif
-
-  delete machine;
 
   if (!pid_path.empty()) {
     unlink(pid_path.c_str());

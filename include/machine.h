@@ -20,6 +20,7 @@
 #define MVISOR_MACHINE_H
 
 #define PAGE_SIZE 4096
+#define ALIGN(x, y)  (((x)+(y)-1) & ~((y)-1))
 
 #include <string>
 #include <thread>
@@ -57,6 +58,10 @@ class Machine {
   void Load(const std::string path);
   const char* GetStatus();
 
+  bool Save(const std::string ip, const uint16_t port);
+  bool PostSave();
+  void Load(uint16_t port);
+
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
   std::vector<Object*> LookupObjects(std::function<bool (Object*)> compare);
@@ -89,12 +94,14 @@ class Machine {
   friend class Configuration;
 
   void InitializeKvm();
+  bool PrepareForSaving();
 
   bool valid_ = true;
   bool paused_ = true;
   bool pausing_ = false;
   bool loading_ = false;
   bool saving_ = false;
+
   int kvm_fd_ = -1;
   int kvm_vcpu_mmap_size_ = 0;
   int vm_fd_ = -1;
@@ -107,6 +114,7 @@ class Machine {
   DeviceManager* device_manager_;
   Configuration* config_;
   IoThread* io_thread_;
+  MigrationNetworkWriter* network_writer_ = nullptr;
 
   std::map<std::string, Object*> objects_;
   bool debug_ = false;

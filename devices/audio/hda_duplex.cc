@@ -548,7 +548,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     }
 
     manager_->io()->Schedule([this, stream, record_data]() {
-        WriteStreamToSharedBuffer(stream, record_data);
+      WriteStreamToSharedBuffer(stream, record_data);
     });
   }
 

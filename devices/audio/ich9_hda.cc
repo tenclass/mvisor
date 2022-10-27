@@ -26,6 +26,7 @@
 #include "pci_device.h"
 #include "device_manager.h"
 #include "hda_codec.h"
+#include "machine.h"
 #include "hda_internal.h"
 #include "ich9_hda.pb.h"
 
@@ -38,6 +39,7 @@ class Ich9Hda : public PciDevice {
   uint32_t          rirb_counter_;
   IoTimePoint       wall_clock_base_;
 
+  const StateChangeListener*      state_change_listener_ = nullptr;
   std::vector<HdaCodecInterface*> codecs_;
 
   struct Ich9HdaStreamState {
@@ -79,11 +81,21 @@ class Ich9Hda : public PciDevice {
         codecs_.push_back(codec);
       }
     }
+
+    auto machine = manager_->machine();
+    state_change_listener_ = machine->RegisterStateChangeListener([=]() {
+      for (uint i = 0; i < 8; i++) {
+        StartStopStream(i);
+      }
+    });
   }
 
   virtual void Disconnect() {
     codecs_.clear();
     PciDevice::Disconnect();
+    if (state_change_listener_) {
+      manager_->machine()->UnregisterStateChangeListener(&state_change_listener_);
+    }
   }
 
   virtual void Reset() {
@@ -285,6 +297,9 @@ class Ich9Hda : public PciDevice {
 
     Ich9HdaBdlEntry* entries = (Ich9HdaBdlEntry*)manager_->TranslateGuestMemory(addr);
     for (int i = 0; i <= stream.last_valid_index; i++) {
+      if (index < 4) { // IN
+        manager_->AddDirtyMemory(entries[i].address, entries[i].length);
+      }
       auto buffer = HdaCodecBuffer {
         .data = (uint8_t*)manager_->TranslateGuestMemory(entries[i].address),
         .length = entries[i].length,
@@ -464,7 +479,10 @@ class Ich9Hda : public PciDevice {
     uint32_t extended = (solicited ? 0 : (1 << 4)) | codec_index;
     uint32_t write_pointer = (regs_.rirb_write_pointer + 1) & 0xFF;
     uint64_t addr = ((uint64_t)regs_.rirb_base1 << 32) + regs_.rirb_base0;
-    uint32_t* ptr = (uint32_t*)manager_->TranslateGuestMemory(addr + 8 * write_pointer);
+
+    auto gpa = addr + 8 * write_pointer;
+    uint32_t* ptr = (uint32_t*)manager_->TranslateGuestMemory(gpa);
+    manager_->AddDirtyMemory(gpa, sizeof(uint32_t) * 2);
     ptr[0] = response;
     ptr[1] = extended;
     regs_.rirb_write_pointer = write_pointer;

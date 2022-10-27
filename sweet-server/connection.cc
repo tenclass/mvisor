@@ -83,6 +83,12 @@ void SweetConnection::ParsePacket(SweetPacketHeader* header) {
   case kSaveMachine:
     OnSaveMachine();
     break;
+  case kMigrateMachine:
+    OnMigrateMachine();
+    break;
+  case kPostMigrateMachine:
+    OnPostMigrateMachine();
+    break;
   case kQemuGuestCommand:
     server_->QemuGuestCommand(this, buffer_);
     break;
@@ -238,6 +244,30 @@ void SweetConnection::OnSaveMachine() {
     return;
   }
   machine_->Save(options.path());
+}
+
+void SweetConnection::OnMigrateMachine() {
+  MigrateMachineOptions options;
+  if (!options.ParseFromString(buffer_)) {
+    MV_ERROR("failed to parse buffer");
+    return;
+  }
+
+  std::thread([=]() {
+    MigrateResponse response;
+    auto ret = machine_->Save(options.ip(), options.port());
+    response.set_status(ret ? "migrating" : "error");
+    Send(kMigrateMachineEvent, response);
+  }).detach();
+}
+
+void SweetConnection::OnPostMigrateMachine() {
+  std::thread([=]() {
+    MigrateResponse response;
+    auto ret = machine_->PostSave();
+    response.set_status(ret ? "done" : "error");
+    Send(kPostMigrateMachineEvent, response);
+  }).detach();
 }
 
 void SweetConnection::OnKeyboardInput() {

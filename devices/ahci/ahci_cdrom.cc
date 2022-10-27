@@ -219,9 +219,8 @@ void AhciCdrom::Atapi_ReadSectorsAsync() {
   size_t remain_bytes = total_bytes;
   while (remain_bytes > 0 && vec_index < io_.vector.size()) {
     auto &iov = io_.vector[vec_index];
-  
     auto length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
-    
+
     io_async_ = true;
     image_->ReadAsync(iov.iov_base, position, length, [this, length, total_bytes](ssize_t ret) {
       MV_UNUSED(ret);

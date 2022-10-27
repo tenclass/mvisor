@@ -60,6 +60,17 @@ struct IoAccounting {
   uint            total_mmio = 0;
 };
 
+struct DirtyMemoryRegion {
+  uint64_t hva;
+  uint64_t begin;
+  uint64_t end;
+};
+
+struct DirtyMemoryBitmap {
+  struct DirtyMemoryRegion region;
+  std::string data;
+};
+
 class Machine;
 class DeviceManager {
  public:
@@ -90,6 +101,7 @@ class DeviceManager {
   void HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int is_write, bool ioeventfd = false);
 
   void* TranslateGuestMemory(uint64_t gpa);
+  void AddDirtyMemory(uint64_t gpa, size_t size = 0);
   bool SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);
   

@@ -61,6 +61,9 @@ void VfioPci::Disconnect() {
   if (memory_listener_) {
     machine->memory_manager()->UnregisterMemoryListener(&memory_listener_);
   }
+  if (dirty_memory_listener_) {
+    machine->memory_manager()->UnregisterDirtyMemoryListener(&dirty_memory_listener_);
+  }
   if (state_change_listener_) {
     machine->UnregisterStateChangeListener(&state_change_listener_);
   }
@@ -208,6 +211,9 @@ void VfioPci::MapDmaPages(const MemorySlot* slot) {
   if (ioctl(container_fd_, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
     MV_PANIC("failed to map vaddr=0x%lx size=0x%lx", dma_map.iova, dma_map.size);
   }
+
+  // record dma map for network migration
+  iommu_dma_maps_[slot] = dma_map;
 }
 
 void VfioPci::UnmapDmaPages(const MemorySlot* slot) {
@@ -220,6 +226,7 @@ void VfioPci::UnmapDmaPages(const MemorySlot* slot) {
   if (ioctl(container_fd_, VFIO_IOMMU_UNMAP_DMA, &dma_ummap) < 0) {
     MV_PANIC("failed to unmap vaddr=0x%lx size=0x%lx", dma_ummap.iova, dma_ummap.size);
   }
+  iommu_dma_maps_.erase(slot);
 }
 
 void VfioPci::SetupDmaMaps() {
@@ -227,20 +234,77 @@ void VfioPci::SetupDmaMaps() {
 
   /* Map all current slots */
   for (auto slot : mm->GetMemoryFlatView()) {
-    if (slot->type == kMemoryTypeRam) {
+    if (slot->type == kMemoryTypeRam && 0 == strcmp("System", slot->region->name)) {
       MapDmaPages(slot);
     }
   }
 
   /* Add memory listener to keep DMA maps synchronized */
   memory_listener_ = mm->RegisterMemoryListener([this](auto slot, bool unmap) {
-    if (slot->type == kMemoryTypeRam) {
+    if (slot->type == kMemoryTypeRam && 0 == strcmp("System", slot->region->name)) {
       if (unmap) {
         UnmapDmaPages(slot);
       } else {
         MapDmaPages(slot);
       }
     }
+  });
+
+  /* Add dirty memory listener to track memory in DMA */
+  dirty_memory_listener_ = mm->RegisterDirtyMemoryListener([this](const DirtyMemoryCommand command) {
+    std::vector<struct DirtyMemoryBitmap> bitmaps;
+    switch (command) {
+      case kGetDirtyMemoryBitmap: {
+        auto dirty_buffer_size = sizeof(vfio_iommu_type1_dirty_bitmap) + sizeof(vfio_iommu_type1_dirty_bitmap_get);
+        uint8_t dirty_buffer[dirty_buffer_size];
+
+        auto dirty_bitmap = (struct vfio_iommu_type1_dirty_bitmap*)dirty_buffer;
+        auto dirty_bitmap_get = (struct vfio_iommu_type1_dirty_bitmap_get*)dirty_bitmap->data;
+
+        dirty_bitmap->argsz = dirty_buffer_size;
+        dirty_bitmap->flags = VFIO_IOMMU_DIRTY_PAGES_FLAG_GET_BITMAP;
+
+        for (auto it = iommu_dma_maps_.begin(); it != iommu_dma_maps_.end(); ++it) {
+          size_t bitmap_size = ALIGN(it->second.size / PAGE_SIZE, 64) / 8;
+          std::string bitmap(bitmap_size, '\0');
+
+          // get dirty memory bitmap for this iommu region from vfio
+          dirty_bitmap_get->iova = it->second.iova;
+          dirty_bitmap_get->size = it->second.size;
+          dirty_bitmap_get->bitmap = {
+            .pgsize = PAGE_SIZE,
+            .size = bitmap_size,
+            .data = (__u64*)bitmap.data()
+          };
+          MV_ASSERT(ioctl(container_fd_, VFIO_IOMMU_DIRTY_PAGES, dirty_bitmap) == 0);
+
+          // save it to return for network migration
+          bitmaps.push_back({
+            .region = {
+              .hva = it->second.vaddr,
+              .begin = it->second.iova,
+              .end = it->second.iova + it->second.size
+            },
+            .data = std::move(bitmap)
+          });
+        }
+        break;
+      }
+      case kStopTrackingDirtyMemory:
+      case kStartTrackingDirtyMemory: {
+        struct vfio_iommu_type1_dirty_bitmap dirty_bitmap = {
+          .argsz = sizeof(dirty_bitmap),
+          .flags = (uint32_t)(command == kStartTrackingDirtyMemory ? 
+            VFIO_IOMMU_DIRTY_PAGES_FLAG_START : VFIO_IOMMU_DIRTY_PAGES_FLAG_STOP)
+        };
+        MV_ASSERT(ioctl(container_fd_, VFIO_IOMMU_DIRTY_PAGES, &dirty_bitmap) == 0);
+        break;
+      }
+      default:
+        MV_PANIC("unknown command");
+        break;
+    }
+    return bitmaps;
   });
 }
 
@@ -722,21 +786,30 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
     if (data_size == 0)
       data_size = pending_bytes;
     
-    ret = write(fd, buffer, data_size);
+    if (dynamic_cast<MigrationNetworkWriter*>(writer)) {
+      if (writer->WriteRaw("VFIO_DATA", buffer, data_size)) {
+        ret = data_size;
+      } else {
+        MV_ERROR("send vfio data error");
+        break;
+      }
+    } else {
+      ret = write(fd, buffer, data_size);
+    }
     MV_ASSERT(ret == (ssize_t)data_size);
   }
 
   writer->EndWrite("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
-
+  
   munmap(buffer, area.size);
-
   return success && PciDevice::SaveState(writer);
 }
 
 bool VfioPci::LoadState(MigrationReader* reader) {
+  bool success = false;
   if (!PciDevice::LoadState(reader)) {
-    return false;
+    return success;
   }
 
   /* Restore the PCI config space to VFIO device */
@@ -759,7 +832,6 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
   int fd = reader->BeginRead("DATA");
 
-  bool success = false;
   while (true) {
     uint64_t data_offset = 0;
     pread(device_fd_, &data_offset, sizeof(data_offset),
@@ -769,7 +841,13 @@ bool VfioPci::LoadState(MigrationReader* reader) {
       break;
     }
     
-    auto ret = read(fd, buffer, area.size);
+    ssize_t ret;
+    if (dynamic_cast<MigrationNetworkReader*>(reader)) {
+      ret = reader->ReadRawWithLimit("VFIO_DATA", buffer, area.size);
+    } else {
+      ret = read(fd, buffer, area.size);
+    }
+
     if (ret > 0) {
       pwrite(device_fd_, &ret, sizeof(ret),
         migration_.region->offset + offsetof(vfio_device_migration_info, data_size));

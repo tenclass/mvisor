@@ -30,7 +30,7 @@
 #define QCOW2_STANDARD_OFFSET_MASK    (((1LL << 47) - 1LL) << 9)
 #define QCOW2_COMPRESSED_SECTOR_SIZE  512
 #define QCOW2_COMPRESSED_SECTOR_MASK  (~(QCOW2_COMPRESSED_SECTOR_SIZE - 1LL))
-
+#define QCOW2_MIGRATE_DATA_OFFSET     0x10000
 
 static inline void be32_to_cpus(uint32_t* x) {
   *x = be32toh(*x);
@@ -171,6 +171,8 @@ class Qcow2Image : public DiskImage {
   ssize_t BlockIo(void *buffer, off_t position, size_t length, ImageIoType type);
   void FlushL2Tables ();
   void FlushRefcountBlocks();
+  void ReleaseImage(bool remove_file);
+
 
  public:
   virtual ~Qcow2Image();
@@ -179,6 +181,7 @@ class Qcow2Image : public DiskImage {
   virtual ssize_t Write(void *buffer, off_t position, size_t length);
   virtual ssize_t Discard(off_t position, size_t length, bool write_zeros);
   virtual ssize_t Flush();
+  
 
   virtual ImageInformation information() {
     return ImageInformation {
@@ -186,7 +189,10 @@ class Qcow2Image : public DiskImage {
       .total_blocks = total_blocks_
     };
   }
-
+  
+  void Reset();
+  bool CreateSnapshot();
+  
   static void CreateEmptyImage(std::string path, size_t disk_size);
   static void CreateImageWithBackingFile(std::string path, std::string backing_path);
 };

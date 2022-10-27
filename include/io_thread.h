@@ -30,6 +30,10 @@
 #include <functional>
 #include <chrono>
 #include <mutex>
+#include <queue>
+
+#include "migration.h"
+#include "image.pb.h"
 
 typedef std::function<void()> VoidCallback;
 typedef std::function<void(long)> IoCallback;
@@ -53,6 +57,7 @@ struct EpollEvent {
 
 class Machine;
 class DiskImage;
+class Qcow2Image;
 class MigrationWriter;
 class IoThread {
  public:
@@ -79,6 +84,10 @@ class IoThread {
   void UnregisterDiskImage(DiskImage* image);
   void FlushDiskImages();
   bool SaveDiskImage(MigrationWriter* writer);
+  bool LoadDiskImage(MigrationNetworkReader* reader);
+  bool SaveBackingDiskImage(MigrationNetworkWriter* writer);
+  bool LoadBackingDiskImage(MigrationNetworkReader* reader);
+  bool CreateQcow2ImageSnapshot();
   uint GetDiskImageCount() { return disk_images_.size(); }
 
  private:
@@ -92,7 +101,8 @@ class IoThread {
   int                   event_fd_;
   int                   epoll_fd_;
   std::list<IoTimer*>   timers_;
-  std::set<DiskImage*>  disk_images_;
+  std::list<DiskImage*>  disk_images_;
+  std::unordered_map<Qcow2Image*, std::queue<std::string>> qcow2_image_backing_files_;
   std::unordered_map<int, EpollEvent*>  epoll_events_;
 };
 

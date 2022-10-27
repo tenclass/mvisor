@@ -24,8 +24,10 @@
 #include <vector>
 #include <functional>
 #include <shared_mutex>
+#include <unordered_set>
 
 #include "migration.h"
+
 
 enum MemoryType {
   kMemoryTypeReserved = 0,
@@ -58,6 +60,25 @@ struct MemoryListener {
   MemoryListenerCallback callback;
 };
 
+enum DirtyMemoryCommand {
+  kGetDirtyMemoryBitmap = 0,
+  kStopTrackingDirtyMemory = 1,
+  kStartTrackingDirtyMemory = 2
+};
+
+enum DirtyMemoryType {
+  kDirtyMemoryTypeKvm = 0,
+  kDirtyMemoryTypeListener = 1,
+  kDirtyMemoryTypeDma = 2
+};
+
+typedef std::function<std::vector<struct DirtyMemoryBitmap> (const DirtyMemoryCommand command)> DirtyMemoryListenerCallback;
+struct DirtyMemoryListener {
+  DirtyMemoryListenerCallback callback;
+};
+
+typedef std::function<bool (size_t offset)> DirtyBitmapCallback;
+
 class Machine;
 class MemoryManager {
  public:
@@ -71,6 +92,16 @@ class MemoryManager {
   /* Used for migration */
   bool SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);
+
+  void SetDirtyMemoryRegion(uint64_t gpa, size_t size);
+  void StartTrackingDirtyMemory();
+  void StopTrackingDirtyMemory();
+
+  bool SaveDirtyMemory(MigrationNetworkWriter* writer, DirtyMemoryType type);
+  bool LoadDirtyMemory(MigrationNetworkReader* reader, DirtyMemoryType type);
+
+  const DirtyMemoryListener* RegisterDirtyMemoryListener(DirtyMemoryListenerCallback callback);
+  void UnregisterDirtyMemoryListener(const DirtyMemoryListener** plistener);
 
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
@@ -88,19 +119,28 @@ class MemoryManager {
   void AddMemoryRegion(MemoryRegion* region);
   void UpdateKvmSlot(MemorySlot* slot, bool remove);
   uint AllocateSlotId();
+  bool GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap);
+  std::vector<MemorySlot> GetSlotsByNames(std::unordered_set<std::string> names);
+  bool HandleBitmap(const char* bitmap, size_t size, DirtyBitmapCallback callback);
 
   const Machine*                  machine_;
   void*                           ram_host_;
   std::set<MemoryRegion*>         regions_;
   std::map<uint64_t, MemorySlot*> kvm_slots_;
-  std::set<const MemoryListener*> listeners_;
+  std::set<const MemoryListener*> memory_listeners_;
   std::set<uint>                  free_slots_;
+  std::unordered_set<std::string> trace_slot_names_;
   mutable std::shared_mutex       mutex_;
   
   /* BIOS data */
   size_t                          bios_size_;
   void*                           bios_data_ = nullptr;
   void*                           bios_backup_ = nullptr;
+
+  bool                                 track_dirty_memory_ = false;
+  std::mutex                           dirty_memory_region_mutex_;
+  std::map<uint64_t, size_t>           dirty_memory_regions_;
+  std::set<const DirtyMemoryListener*> dirty_memory_listeners_;
 };
 
 #endif // _MVISOR_MM_H

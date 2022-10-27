@@ -115,6 +115,10 @@ bool VirtioPci::SaveState(MigrationWriter* writer) {
     q->set_descriptor_table_address(queues_[index].descriptor_table_address);
     q->set_available_ring_address(queues_[index].available_ring_address);
     q->set_used_ring_address(queues_[index].used_ring_address);
+
+    if (dynamic_cast<MigrationNetworkWriter*>(writer)) {
+      manager_->AddDirtyMemory(queues_[index].used_ring_address, sizeof(VRingUsed) + queues_[index].size * sizeof(VRingUsedElement));
+    }
   }
   state.set_isr_status(isr_status_);
   writer->WriteProtobuf("VIRTIO_PCI", state);
@@ -177,6 +181,10 @@ void VirtioPci::AddDescriptorToElement(VirtElement& element,  VRingDescriptor* d
     .iov_len = descriptor->length
   });
   element.size += descriptor->length;
+
+  if (descriptor->flags & VRING_DESC_F_WRITE) {
+    manager_->AddDirtyMemory(descriptor->address, descriptor->length);
+  }
 }
 
 void VirtioPci::ReadIndirectDescriptorTable(VirtElement& element, VRingDescriptor* table) {

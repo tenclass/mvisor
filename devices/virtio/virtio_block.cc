@@ -22,6 +22,7 @@
 #include "linuz/virtio_blk.h"
 #include "logger.h"
 #include "disk_image.h"
+#include "qcow2.h"
 #include "machine.h"
 
 #define DEFAULT_QUEUE_SIZE 256
@@ -79,6 +80,21 @@ class VirtioBlock : public VirtioPci {
         device_features_ |= VIRTIO_BLK_F_RO;
       }
     }
+  }
+
+  virtual bool LoadState(MigrationReader* reader) {
+    if (!VirtioPci::LoadState(reader)) {
+      return false;
+    }
+
+    // Reset image file for network migration
+    if (dynamic_cast<MigrationNetworkReader*>(reader)) {
+      auto image = dynamic_cast<Qcow2Image*>(image_);
+      if (image) {
+        image->Reset();
+      }
+    }
+    return true;
   }
 
   void InitializeGeometry() {

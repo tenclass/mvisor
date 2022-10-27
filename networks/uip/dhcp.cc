@@ -65,7 +65,7 @@ DhcpServiceUdpSocket::DhcpServiceUdpSocket(NetworkBackendInterface* backend, uin
     }
     fclose(fp);
   } else {
-    MV_LOG("warning: /etc/resolv.conf not found");
+    MV_WARN("/etc/resolv.conf not found");
   }
   if (nameservers_.empty()) {
     MV_PANIC("DNS nameservers not found");

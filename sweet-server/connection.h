@@ -79,14 +79,14 @@ class SweetConnection {
   void OnMidiInput();
   void OnStartMidi();
   void OnStopMidi();
-
   void OnStartWacom();
   void OnStopWacom();
   void OnWacomInput();
   void OnStartRecordStream();
   void OnStopRecordStream();
   void OnSendRecordStreamData();
-
+  void OnMigrateMachine();
+  void OnPostMigrateMachine();
 
   Machine*      machine_;
   SweetServer*  server_;

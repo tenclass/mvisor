@@ -1,5 +1,5 @@
 project('mvisor', 'c', 'cpp',
-  version: '2.1.1',
+  version: '2.2.1',
   license: 'GPLv3',
   default_options: [
     'buildtype=debug',
@@ -36,6 +36,7 @@ mvisor_deps = [
 ]
 
 subdir('core')
+subdir('migration')
 subdir('devices')
 subdir('images')
 subdir('networks/uip')

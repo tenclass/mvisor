@@ -366,6 +366,7 @@ class XhciHost : public PciDevice {
     auto &interrupt = interrupt_regs_[vector];
     auto addr = interrupt.event_ring_segment.start + interrupt.event_ring_enqueue_index * TRB_SIZE;
     auto trb = (XhciTransferRequestBlock*)manager_->TranslateGuestMemory(addr);
+    manager_->AddDirtyMemory(addr, sizeof(trb));
     trb->parameter = event.poniter;
     trb->status = event.length | (event.completion_code << 24);
     trb->control = (event.slot_id << 24) | (event.endpoint_id << 16) |
@@ -389,6 +390,7 @@ class XhciHost : public PciDevice {
   bool PopRing(XhciRing &ring, XhciTransferRequestBlock &trb) {
     while (true) {
       void* hva = manager_->TranslateGuestMemory(ring.dequeue);
+      manager_->AddDirtyMemory(ring.dequeue, sizeof(trb));
       memcpy(&trb, hva, TRB_SIZE);
       trb.address = ring.dequeue;
       trb.cycle_bit = ring.consumer_cycle_bit;
@@ -416,6 +418,7 @@ class XhciHost : public PciDevice {
 
     if (interrupt.event_ring_table_size == 0 || interrupt.event_ring_table_base == 0) {
       /* disabled */
+      manager_->AddDirtyMemory(interrupt.event_ring_table_base, sizeof(interrupt.event_ring_segment));
       bzero(&interrupt.event_ring_segment, sizeof(interrupt.event_ring_segment));
       return;
     }
@@ -690,6 +693,7 @@ class XhciHost : public PciDevice {
     }
 
     auto slot_context = (uint32_t*)manager_->TranslateGuestMemory(slot.context_address);
+    manager_->AddDirtyMemory(slot.context_address);
     slot_context[3] &= ~(SLOT_STATE_MASK << SLOT_STATE_SHIFT);
     slot_context[3] |= SLOT_DEFAULT << SLOT_STATE_SHIFT;
     return CC_SUCCESS;
@@ -714,6 +718,7 @@ class XhciHost : public PciDevice {
 
     auto input = (uint32_t*)manager_->TranslateGuestMemory(input_addr);
     auto output = (uint32_t*)manager_->TranslateGuestMemory(output_addr);
+    manager_->AddDirtyMemory(output_addr);
 
     MV_ASSERT(input[0] == 0 && !(input[1] & ~0x3));
 
@@ -742,6 +747,7 @@ class XhciHost : public PciDevice {
     auto output_addr = slot.context_address;
 
     auto output = (uint32_t*)manager_->TranslateGuestMemory(output_addr);
+    manager_->AddDirtyMemory(output_addr);
 
     if (deconfigure) {
       for (int i = 2; i <= 31; i++) {
@@ -821,7 +827,9 @@ class XhciHost : public PciDevice {
     auto output_addr = context_base_array[slot_id];
     
     auto input = (uint32_t*)manager_->TranslateGuestMemory(input_addr);
+    manager_->AddDirtyMemory(input_addr);
     auto output = (uint32_t*)manager_->TranslateGuestMemory(output_addr);
+    manager_->AddDirtyMemory(output_addr);
     MV_ASSERT(input[0] == 0x0 && input[1] == 0x3);
 
     auto input_slot = input + 8;
@@ -1006,7 +1014,7 @@ class XhciHost : public PciDevice {
   /* ======================== Endpoint Functions ======================= */
 
   XhciEndpoint* CreateEndpoint(uint slot_id, uint endpoint_id, uint32_t* context) {
-    auto endpoint = new XhciEndpoint;;
+    auto endpoint = new XhciEndpoint;
     endpoint->id = endpoint_id;
     endpoint->slot_id = slot_id;
 
@@ -1153,8 +1161,9 @@ class XhciHost : public PciDevice {
   }
 
   void SetEndpointState(XhciEndpoint* endpoint, uint32_t state) {
-    uint32_t* context = (uint32_t*)manager_->TranslateGuestMemory(
-      endpoint->context_address);
+    uint32_t* context = (uint32_t*)manager_->TranslateGuestMemory(endpoint->context_address);
+    manager_->AddDirtyMemory(endpoint->context_address);
+
     context[0] &= ~EP_STATE_MASK;
     context[0] |= state;
 
@@ -1346,6 +1355,9 @@ class XhciHost : public PciDevice {
         if (trb.control & TRB_TR_IDT) {
           MV_ASSERT(chunk <= 8 && !transfer->in_direction);
           address = trb.address;
+        }
+        if (packet->endpoint_address & 0x80) {
+          manager_->AddDirtyMemory(address, chunk);
         }
         packet->iov.push_back(iovec {
           .iov_base = manager_->TranslateGuestMemory(address),

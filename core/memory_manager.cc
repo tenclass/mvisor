@@ -27,8 +27,7 @@
 #include <sys/stat.h>
 #include <linux/kvm.h>
 
-#include <unordered_set>
-
+#include "dirty_memory.pb.h"
 #include "machine.h"
 #include "logger.h"
 
@@ -45,6 +44,17 @@ MemoryManager::MemoryManager(const Machine* machine)
     free_slots_.insert(i);
   }
 
+  /* Enable KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2 for migration */
+  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2));
+  struct kvm_enable_cap enable_cap = {0};
+  enable_cap.cap = KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2;
+  enable_cap.args[0] = KVM_DIRTY_LOG_MANUAL_PROTECT_ENABLE | KVM_DIRTY_LOG_INITIALLY_SET;
+  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_ENABLE_CAP, &enable_cap) == 0);
+
+  /* Setup the memory slot to be traced */
+  trace_slot_names_.insert("System");
+  trace_slot_names_.insert("SeaBIOS");
+
   /* Setup the system memory map for BIOS to run */
   InitializeSystemRam();
   InitializeReservedMemory();
@@ -52,7 +62,10 @@ MemoryManager::MemoryManager(const Machine* machine)
 }
 
 MemoryManager::~MemoryManager() {
-  for (auto listener: listeners_) {
+  for (auto listener: memory_listeners_) {
+    delete listener;
+  }
+  for (auto listener: dirty_memory_listeners_) {
     delete listener;
   }
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
@@ -62,6 +75,7 @@ MemoryManager::~MemoryManager() {
     delete region;
   }
   munmap(ram_host_, machine_->ram_size_);
+  dirty_memory_regions_.clear();
   if (bios_data_)
     free(bios_data_);
   if (bios_backup_)
@@ -252,7 +266,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
       free_slots_.insert(slot->id);
     }
     // tell listeners we removed a slot
-    for (auto listener : listeners_) {
+    for (auto listener : memory_listeners_) {
       listener->callback(slot, true);
     }
     delete slot;
@@ -262,7 +276,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
       UpdateKvmSlot(slot, false);
     }
     // tell listeners we have new slots
-    for (auto listener : listeners_) {
+    for (auto listener : memory_listeners_) {
       listener->callback(slot, false);
     }
   }
@@ -276,6 +290,9 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   region->size = size;
   region->type = type;
   region->flags = type == kMemoryTypeRom ? KVM_MEM_READONLY : 0;
+  if (type == kMemoryTypeRam && trace_slot_names_.find(name) != trace_slot_names_.end()) {
+    region->flags |= KVM_MEM_LOG_DIRTY_PAGES;
+  }
   strncpy(region->name, name, 20 - 1);
 
   if (machine_->debug_) {
@@ -305,7 +322,7 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
         free_slots_.insert(slot->id);
       }
       // tell listeners we removed a slot
-      for (auto listener : listeners_) {
+      for (auto listener : memory_listeners_) {
         listener->callback(slot, true);
       }
       delete slot;
@@ -319,6 +336,63 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
   if (regions_.erase(region)) {
     delete region;
     *pregion = nullptr;
+  }
+}
+
+/* StartTrackingDirtyMemory must be called in paused state to 
+ * make sure that all dirty memory was updated completely */
+void MemoryManager::StartTrackingDirtyMemory() {
+  // flush dirty memory from kvm
+  for (auto& slot : GetSlotsByNames(trace_slot_names_)) {
+    size_t slot_size = slot.end - slot.begin;
+    size_t bitmap_size = ALIGN(slot_size / PAGE_SIZE, 64) / 8;
+    auto dirty_bitmap = new uint8_t[bitmap_size];
+    if (GetDirtyBitmapFromKvm(slot.id, dirty_bitmap)) {
+      kvm_clear_dirty_log clear_dirty = {
+        .slot = slot.id,
+        .num_pages = (uint32_t)(slot_size / PAGE_SIZE),
+        .first_page = 0,
+        .dirty_bitmap = dirty_bitmap
+      };
+      MV_ASSERT(ioctl(machine_->vm_fd_, KVM_CLEAR_DIRTY_LOG, &clear_dirty) == 0);
+    }
+    delete dirty_bitmap;
+  }
+
+  // tell listeners start tracking dirty memory
+  for (auto listener : dirty_memory_listeners_) {
+    listener->callback(kStartTrackingDirtyMemory);
+  }
+
+  // flush dirty memory from dirty_memory_regions_
+  dirty_memory_regions_.clear();
+
+  // open track memory switch
+  track_dirty_memory_ = true;
+}
+
+void MemoryManager::StopTrackingDirtyMemory() {
+  // tell listeners stop tracking dirty memory
+  for (auto listener : dirty_memory_listeners_) {
+    listener->callback(kStopTrackingDirtyMemory);
+  }
+
+  // close track memory switch
+  track_dirty_memory_ = false;
+}
+
+// Update dirty memory map for migration
+void MemoryManager::SetDirtyMemoryRegion(uint64_t gpa, size_t size) {
+  if (!track_dirty_memory_) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(dirty_memory_region_mutex_);
+  auto item = dirty_memory_regions_.find(gpa);
+  if (item != dirty_memory_regions_.end()) {
+    item->second = std::max(item->second, size);
+  } else {
+    dirty_memory_regions_.insert(std::pair<uint64_t, size_t>(gpa, size));
   }
 }
 
@@ -347,10 +421,177 @@ void* MemoryManager::GuestToHostAddress(uint64_t gpa) {
   return nullptr;
 }
 
-/* Not used yet */
+// WARN: low performance
 uint64_t MemoryManager::HostToGuestAddress(void* host) {
-  MV_PANIC("not implemented, host=%p", host);
+  std::shared_lock lock(mutex_);
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) { 
+    auto slot = it->second;
+    if (slot->type != kMemoryTypeRam) {
+      continue;
+    }
+
+    auto hva = reinterpret_cast<uint64_t>(host);
+    auto slot_size = slot->end - slot->begin;
+    if (hva >= slot->hva && hva < slot->hva + slot_size) {
+      return slot->begin + (hva - slot->hva);
+    }
+  }
+
+  // should never reach here
+  PrintMemoryScope();
+  MV_PANIC("failed to translate host address to guest 0x%016lx", host);
   return 0;
+}
+
+bool MemoryManager::GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap) {
+  kvm_dirty_log dirty = {0};
+  dirty.slot = slot;
+  dirty.dirty_bitmap = bitmap;
+
+  // dirty_bitmap containing any pages dirtied since the last call to this ioctl
+  auto ret = ioctl(machine_->vm_fd_, KVM_GET_DIRTY_LOG, &dirty);
+  if (ret != 0) {
+    if (errno != ENOENT) {
+      MV_PANIC("KVM_GET_DIRTY_LOG failed");
+    }
+    return false;
+  }
+  return true;
+}
+
+bool MemoryManager::HandleBitmap(const char* bitmap, size_t size, DirtyBitmapCallback callback) {
+  for (size_t i = 0; i < size; i++) {
+    if (bitmap[i] == 0) {
+      continue;
+    }
+
+    for (size_t j = 0; j < 8; j++) {
+      if ((bitmap[i] & (1 << j)) == 0) {
+        continue;
+      }
+
+      if (!callback(i * 8 + j)) {
+        MV_ERROR("failed to handle bitmap");
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool MemoryManager::SaveDirtyMemory(MigrationNetworkWriter* writer, DirtyMemoryType type) {
+  MV_ASSERT(track_dirty_memory_);
+  size_t dirty_memory_size = 0;
+  DirtyMemoryDescriptor memory_descriptor;
+
+  switch (type) {
+    case kDirtyMemoryTypeKvm: {
+      memory_descriptor.set_size(PAGE_SIZE);
+      for (auto& slot : GetSlotsByNames(trace_slot_names_)) {
+        // kvm memory dirty bitmap is 64-page aligned
+        size_t bitmap_size = ALIGN((slot.end - slot.begin) / PAGE_SIZE, 64) / 8;
+        std::string dirty_bitmap(bitmap_size, '\0');
+        if (!GetDirtyBitmapFromKvm(slot.id, dirty_bitmap.data())) {
+          continue;
+        }
+
+        auto ret = HandleBitmap(dirty_bitmap.data(), bitmap_size, [&](auto offset) {
+          memory_descriptor.set_gpa(slot.begin + offset * PAGE_SIZE);
+          if (memory_descriptor.gpa() + memory_descriptor.size() > slot.end) {
+            MV_PANIC("Guest phyical address is out of current slot, gpa=0x%lx slot=%s", memory_descriptor.gpa(), slot.region->name);
+          }
+          if (!writer->WriteProtobuf("DIRTY_MEMORY_DESCRIPTOR", memory_descriptor)) {
+            return false;
+          }
+          uint64_t hva = slot.hva + offset * PAGE_SIZE;
+          if (!writer->WriteRaw("DIRTY_MEMORY", reinterpret_cast<void*>(hva), memory_descriptor.size())) {
+            return false;
+          }
+          dirty_memory_size += memory_descriptor.size();
+          return true;
+        });
+
+        if (!ret) {
+          return false;
+        }
+      }
+      break;
+    }
+    case kDirtyMemoryTypeListener: {
+      memory_descriptor.set_size(PAGE_SIZE);
+      for (auto listener : dirty_memory_listeners_) {
+        auto dirty_bitmaps = listener->callback(kGetDirtyMemoryBitmap);
+        for (auto& bitmap : dirty_bitmaps) {
+          auto ret = HandleBitmap(bitmap.data.data(), bitmap.data.size(), [&](auto offset) {
+            memory_descriptor.set_gpa(bitmap.region.begin + offset * PAGE_SIZE);
+            if (memory_descriptor.gpa() + memory_descriptor.size() > bitmap.region.end) {
+              MV_PANIC("Guest phyical address is out of current bitmap region, gpa=0x%lx", memory_descriptor.gpa());
+            }
+            if (!writer->WriteProtobuf("DIRTY_MEMORY_DESCRIPTOR", memory_descriptor)) {
+              return false;
+            }
+            uint64_t hva = bitmap.region.hva + offset * PAGE_SIZE;
+            if (!writer->WriteRaw("DIRTY_MEMORY", reinterpret_cast<void*>(hva), memory_descriptor.size())) {
+              return false;
+            }
+            dirty_memory_size += memory_descriptor.size();
+            return true;
+          });
+
+          if (!ret) {
+            return false;
+          }
+        }
+      }
+      break;
+    }
+    case kDirtyMemoryTypeDma: {
+      for (auto it = dirty_memory_regions_.begin(); it != dirty_memory_regions_.end(); ++it) {
+        memory_descriptor.set_gpa(it->first);
+        memory_descriptor.set_size(it->second);
+        if (!writer->WriteProtobuf("DIRTY_MEMORY_DESCRIPTOR", memory_descriptor)) {
+          return false;
+        }
+        auto hva = GuestToHostAddress(memory_descriptor.gpa());
+        if (!writer->WriteRaw("DIRTY_MEMORY", hva, memory_descriptor.size())) {
+          return false;
+        }
+        dirty_memory_size += memory_descriptor.size();
+      }
+      break;
+    }
+    default:
+      MV_PANIC("not implemented");
+      break;
+  }
+
+  // send finish header
+  memory_descriptor.set_size(0);
+  if (!writer->WriteProtobuf("DIRTY_MEMORY_DESCRIPTOR", memory_descriptor)) {
+    return false;
+  }
+
+  MV_LOG("Save dirty memory type=%d size=%ldMB", type, dirty_memory_size >> 20);
+  return true;
+}
+
+bool MemoryManager::LoadDirtyMemory(MigrationNetworkReader* reader, DirtyMemoryType type) {
+  size_t dirty_memory_size = 0;
+  DirtyMemoryDescriptor memory_descriptor;
+
+  while (true) {
+    reader->ReadProtobuf("DIRTY_MEMORY_DESCRIPTOR", memory_descriptor);
+    if (memory_descriptor.size() == 0) {
+      break;
+    }
+
+    auto hva = GuestToHostAddress(memory_descriptor.gpa());
+    reader->ReadRaw("DIRTY_MEMORY", hva, memory_descriptor.size());
+    dirty_memory_size += memory_descriptor.size();
+  }
+
+  MV_LOG("Load dirty memory type=%d size=%ldMB", type, dirty_memory_size >> 20);
+  return true;
 }
 
 /* Used for debugging */
@@ -382,29 +623,56 @@ const MemoryListener* MemoryManager::RegisterMemoryListener(MemoryListenerCallba
     .callback = callback
   };
   std::unique_lock lock(mutex_);
-  listeners_.insert(listener);
+  memory_listeners_.insert(listener);
   return listener;
 }
 
 void MemoryManager::UnregisterMemoryListener(const MemoryListener** plistener) {
   std::unique_lock lock(mutex_);
-  if (listeners_.erase(*plistener)) {
+  if (memory_listeners_.erase(*plistener)) {
     delete *plistener;
     *plistener = nullptr;
   }
 }
 
-/* Save memory to file */
+/* Vfio device tracks dirty memory */
+const DirtyMemoryListener* MemoryManager::RegisterDirtyMemoryListener(DirtyMemoryListenerCallback callback) {
+  auto listener = new DirtyMemoryListener {
+    .callback = callback
+  };
+  std::unique_lock lock(mutex_);
+  dirty_memory_listeners_.insert(listener);
+  return listener;
+}
+
+void MemoryManager::UnregisterDirtyMemoryListener(const DirtyMemoryListener** plistener) {
+  std::unique_lock lock(mutex_);
+  if (dirty_memory_listeners_.erase(*plistener)) {
+    delete *plistener;
+    *plistener = nullptr;
+  }
+}
+
+std::vector<MemorySlot> MemoryManager::GetSlotsByNames(std::unordered_set<std::string> names) {
+  std::vector<MemorySlot> slots;
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ++it) {
+    auto slot = it->second;
+    if (names.find(slot->region->name) != names.end()) {
+      slots.push_back(*slot);
+    }
+  }
+  return slots;
+}
+
+/* Save memory to migration */
 bool MemoryManager::SaveState(MigrationWriter* writer) {
   writer->SetPrefix("memory");
   writer->WriteRaw("BIOS", bios_data_, bios_size_);
-
-  /* Write RAM to sparse file */
   writer->WriteMemoryPages("RAM", ram_host_, machine_->ram_size_);
   return true;
 }
 
-/* Reading memory data from file */
+/* Reading memory data from migration */
 bool MemoryManager::LoadState(MigrationReader* reader) {
   reader->SetPrefix("memory");
   if (!reader->ReadRaw("BIOS", bios_data_, bios_size_)) {
@@ -412,14 +680,7 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
   }
 
   // get all system memory region from kvm_slots_
-  std::vector<MemorySlot> system_slots;
-  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ++it) {
-    auto slot = it->second;
-    if (strcmp(slot->region->name, "System") == 0) {
-      system_slots.push_back(*slot);
-      // we can't Unmap memory region here, because the different System slot may has same memory region
-    } 
-  }
+  auto system_slots = GetSlotsByNames({"System"});
 
   // unmap all system memory region
   for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
@@ -447,15 +708,7 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
 
   // reset system memory region
   for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
-    MemoryRegion* region = new MemoryRegion;
-    region->gpa = it->begin;
-    region->host = (void*)(it->hva + offset);
-    region->size = it->end - region->gpa;
-    region->type = it->type;
-    region->flags = it->flags;
-    strncpy(region->name, "System", 20 - 1);
-    AddMemoryRegion(region);
+    Map(it->begin, it->end - it->begin, (void*)(it->hva + offset), kMemoryTypeRam, "System");
   }
-
   return true;
 }

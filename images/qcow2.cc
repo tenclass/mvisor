@@ -25,6 +25,7 @@
 #include <ctime>
 #include <cstring>
 #include <vector>
+#include <filesystem>
 #include "logger.h"
 
 #define REFCOUNT_CACHE_ITEMS        128
@@ -32,6 +33,10 @@
 #define CLUSTER_CACHE_ITEMS         128
 
 Qcow2Image::~Qcow2Image() {
+  ReleaseImage(true);
+}
+
+void Qcow2Image::ReleaseImage(bool remove_file) {
   /* Flush caches if dirty */
   l2_cache_.Clear();
   rfb_cache_.Clear();
@@ -42,7 +47,7 @@ Qcow2Image::~Qcow2Image() {
     safe_close(&fd_);
   }
 
-  if (snapshot_) {
+  if (remove_file && snapshot_) {
     remove(filepath_.c_str());
   }
 
@@ -55,12 +60,44 @@ Qcow2Image::~Qcow2Image() {
   }
 }
 
+// only could be called when vm was paused
+void Qcow2Image::Reset() {
+  // release current image object, but don't remove the image file
+  ReleaseImage(false);
+
+  // re-initialize current image object, but don't create another snapshot again
+  auto snapshot = snapshot_;
+  snapshot_ = false;
+  Initialize();
+  snapshot_ = snapshot;
+}
+
+// only could be called when vm was paused
+bool Qcow2Image::CreateSnapshot() {
+  /* Migrate data from qcow2 file starts at QCOW2_MIGRATE_DATA_OFFSET */
+  if (image_header_.refcount_table_offset != QCOW2_MIGRATE_DATA_OFFSET) {
+    return false;
+  }
+
+  // release current image object, but don't remove the image file
+  ReleaseImage(false);
+
+  // make current image as a snapshot image
+  snapshot_ = true;
+  Initialize();
+  return true;
+}
+
 void Qcow2Image::Initialize() {
   int oflags = readonly_ ? O_RDONLY : O_RDWR;
   if (snapshot_) {
     auto backing_filepath = filepath_;
-    char temp[] = "/tmp/snapshot_XXXXXX";
-    close(mkstemp(temp));
+
+    // make new temp qcow2 file at current image path
+    auto path = std::filesystem::path(filepath_);
+    std::string temp = path.parent_path() / "snapshot_XXXXXX.qcow2";
+    close(mkstemps(temp.data(), 6));
+
     filepath_ = temp;
     Qcow2Image::CreateImageWithBackingFile(filepath_, backing_filepath);
   }

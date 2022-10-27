@@ -82,6 +82,7 @@
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/include",
         "${workspaceFolder}/build/mvisor.p",
+        "/usr/lib/gcc/x86_64-redhat-linux/8/include/",
         "/usr/include/glib-2.0"
     ]
 }

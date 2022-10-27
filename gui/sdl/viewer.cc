@@ -419,10 +419,21 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         MV_LOG("Pause");
         machine_->Pause();
       }
+      return;
     } else if (event.key.keysym.sym == SDLK_F2) {
       MV_LOG("Save");
       machine_->Pause();
       machine_->Save("/tmp/save");
+      return;
+    } else if (event.key.keysym.sym == SDLK_F3) {
+      MV_LOG("Migration");
+      std::thread([this]() {
+        MV_ASSERT(machine_->Save("127.0.0.1", 9979));
+      }).detach();
+      return;
+    } else if (event.key.keysym.sym == SDLK_F4) {
+      MV_LOG("Migration Post");
+      MV_ASSERT(machine_->PostSave());
       return;
     } else if (event.key.keysym.sym == SDLK_F12) {
       if (machine_->IsPaused()) {
@@ -433,6 +444,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         MV_LOG("Shutdown");
         machine_->Shutdown();
       }
+      return;
     }
     // fall through
   case SDL_KEYUP:

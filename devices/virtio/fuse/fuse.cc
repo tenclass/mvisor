@@ -132,9 +132,9 @@ void Fuse::ModifyDiskInformationToVm(struct statvfs* new_stat_vfs) {
   new_stat_vfs->f_ffree = new_stat_vfs->f_favail = disk_info_.inode_limit - inode_list_.size();
 }
 
-void Fuse::ClearInodeList(bool is_clear_root) {
+void Fuse::ClearInodeList(bool clear_root) {
   for (auto it = inode_list_.begin(); it != inode_list_.end();) {
-    if(!is_clear_root && (*it)->fd == user_config_.root->fd) {
+    if(!clear_root && (*it)->fd == user_config_.root->fd) {
       it++;
     } else {
       close((*it)->fd);

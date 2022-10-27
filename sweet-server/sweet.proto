@@ -12,6 +12,8 @@ enum SweetCommand {
   kResumeMachine          = 0x24;
   kSaveMachine            = 0x25;
   kQuitMachine            = 0x26;
+  kMigrateMachine         = 0x27;
+  kPostMigrateMachine     = 0x28;
   /* Guest operations */
   kQemuGuestCommand       = 0x30;
   /* Input */
@@ -62,6 +64,9 @@ enum SweetResponseAndEvent {
   kCommandAcknowledge         = 0x1000;
   kQueryStatusResponse        = 0x1010;
 
+  kMigrateMachineEvent        = 0x1027;
+  kPostMigrateMachineEvent    = 0x1028;
+  
   kQemuGuestCommandResponse   = 0x1030;
   kSerialPortStatusEvent      = 0x1031;
 
@@ -274,3 +279,11 @@ message SendWacomInput {
   uint32 tilt_y = 6;
 }
 
+message MigrateMachineOptions {
+  string    ip        = 1;
+  uint32    port      = 2;
+}
+
+message MigrateResponse {
+  string status = 1;
+}

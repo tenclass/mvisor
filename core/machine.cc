@@ -102,6 +102,10 @@ Machine::~Machine() {
   safe_close(&vm_fd_);
   safe_close(&kvm_fd_);
   delete config_;
+  
+  if (network_writer_) {
+    delete network_writer_;
+  }
 }
 
 /* Create KVM instance */
@@ -283,6 +287,258 @@ void Machine::UnregisterStateChangeListener(const StateChangeListener** plistene
   }
 }
 
+bool Machine::PrepareForSaving() {
+  bool ret = true;
+  bool paused = IsPaused();
+  if (!paused) {
+    Pause();
+  }
+
+  // create snapshot for current disk images
+  ret = io_thread_->CreateQcow2ImageSnapshot();
+  if (!ret) {
+    goto end;
+  }
+
+  // start tracking dirty memory before sending memory
+  memory_manager_->StartTrackingDirtyMemory();
+
+end:
+  if (!paused) {
+    Resume();
+  }
+  return ret;
+}
+
+/* Save through network */
+bool Machine::Save(const std::string ip, const uint16_t port) {
+  if (saving_) {
+    MV_ERROR("machine is busy migrating");
+    return false;
+  }
+
+  MV_LOG("start saving");
+  saving_ = true;
+
+  bool ret = false;
+  if (network_writer_) {
+    MV_LOG("retry save machine, close last connection");
+    delete network_writer_;
+  }
+
+  /* Make connection to target machine */
+  network_writer_ = new MigrationNetworkWriter();
+  if (!network_writer_->Connect(ip, port)) {
+    MV_ERROR("failed to connect target machine");
+    goto end;
+  }
+
+  if (!PrepareForSaving()) {
+    MV_ERROR("failed to prepare for saving");
+    goto end;
+  }
+
+  /* Save backing disk images */
+  if(!io_thread_->SaveBackingDiskImage(network_writer_)) {
+    MV_ERROR("failed to save backing disk images");
+    goto end;
+  }
+  
+  if (!network_writer_->WaitForSignal(kMigrateBackingImageComplete)) {
+    goto end;
+  }
+
+  /* Save system RAM */
+  if (!memory_manager_->SaveState(network_writer_)) {
+    MV_ERROR("failed to save memory");
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateRamComplete)) {
+    goto end;
+  }
+  ret = true;
+
+end:
+  if (!ret) {
+    delete network_writer_;
+    network_writer_ = nullptr;
+    memory_manager_->StopTrackingDirtyMemory();
+  }
+
+  saving_ = false;
+  MV_LOG("done saving");
+  return ret;
+}
+
+/* Save through network */
+bool Machine::PostSave() {
+  if (saving_) {
+    MV_ERROR("machine is busy migrating");
+    return false;
+  }
+
+  if (!network_writer_) {
+    MV_ERROR("Save must be called successfully before PostSave");
+    return false;
+  }
+
+  if (!IsPaused()) {
+    Pause();
+  }
+
+  MV_LOG("start post-saving");
+  saving_ = true;
+  bool ret = false;
+
+  if(!io_thread_->SaveDiskImage(network_writer_)) {
+    MV_ERROR("failed to save disk images");
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateImageComplete)) {
+    goto end;
+  }
+
+  if (!memory_manager_->SaveDirtyMemory(network_writer_, kDirtyMemoryTypeKvm)) {
+    MV_ERROR("failed to save dirty memory from kvm");
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateDirtyMemoryFromKvmComplete)) {
+    goto end;
+  }
+
+  if (!memory_manager_->SaveDirtyMemory(network_writer_, kDirtyMemoryTypeListener)) {
+    MV_ERROR("failed to save dirty memory from listener");
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateDirtyMemoryFromListenerComplete)) {
+    goto end;
+  }
+
+  /* Save device state */
+  if (!device_manager_->SaveState(network_writer_)) {
+    MV_ERROR("failed to save device states");
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateDeviceComplete)) {
+    goto end;
+  }
+
+  /* Save dirty memory from dma */
+  if (!memory_manager_->SaveDirtyMemory(network_writer_, kDirtyMemoryTypeDma)) {
+    MV_ERROR("failed to save dirty memory from dma");
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateDirtyMemoryFromDmaComplete)) {
+    goto end;
+  }
+
+  /* Save vcpu states */
+  for (auto vcpu : vcpus_) {
+    if (!vcpu->SaveState(network_writer_)) {
+      MV_ERROR("failed to save vcpu=%d states", vcpu->vcpu_id());
+      goto end;
+    }
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateVcpuComplete)) {
+    goto end;
+  }
+
+  /* Wait for a finish signal */
+  if (!network_writer_->WaitForSignal(kMigrateComplete)) {
+    goto end;
+  }
+  ret = true;
+
+end:
+  delete network_writer_;
+  network_writer_ = nullptr;
+
+  saving_ = false;
+  memory_manager_->StopTrackingDirtyMemory();
+  MV_LOG("done post-saving");
+  return ret;
+}
+
+/* Load through network */
+void Machine::Load(uint16_t port) {
+  MV_ASSERT(!loading_);
+  if (!IsPaused()) {
+    Pause();
+  }
+
+  MV_LOG("start loading");
+  loading_ = true;
+  
+  // Bind port to wait connection
+  MigrationNetworkReader reader;
+  if (!reader.WaitForConnection(port)) {
+    MV_PANIC("failed to setup connection");
+  }
+  
+  /* Load backing disk image */
+  if (!io_thread_->LoadBackingDiskImage(&reader)) {
+    MV_PANIC("failed to load backing disk image");
+  }
+  reader.SendSignal(kMigrateBackingImageComplete);
+
+  /* Load system RAM */
+  if (!memory_manager_->LoadState(&reader)) {
+    MV_PANIC("failed to load system ram");
+  }
+  reader.SendSignal(kMigrateRamComplete);
+
+  /* Load disk image, LoadDiskImage must be called before virtio-block loadstate */
+  if (!io_thread_->LoadDiskImage(&reader)) {
+    MV_PANIC("failed to load disk image");
+  }
+  reader.SendSignal(kMigrateImageComplete);
+
+  /* Load dirty memory from kvm */
+  if (!memory_manager_->LoadDirtyMemory(&reader, kDirtyMemoryTypeKvm)) {
+    MV_PANIC("failed to load dirty memory from kvm");
+  }
+  reader.SendSignal(kMigrateDirtyMemoryFromKvmComplete);
+
+  /* Load dirty memory from listener */
+  if (!memory_manager_->LoadDirtyMemory(&reader, kDirtyMemoryTypeListener)) {
+    MV_PANIC("failed to load dirty memory from listener");
+  }
+  reader.SendSignal(kMigrateDirtyMemoryFromListenerComplete);
+
+  /* Load device states */
+  if (!device_manager_->LoadState(&reader)) {
+    MV_PANIC("failed to load device states");
+  }
+  reader.SendSignal(kMigrateDeviceComplete);
+
+  /* Load dirty memory from Dma */
+  if (!memory_manager_->LoadDirtyMemory(&reader, kDirtyMemoryTypeDma)) {
+    MV_PANIC("failed to load dirty memory from dma");
+  }
+  reader.SendSignal(kMigrateDirtyMemoryFromDmaComplete);
+
+  /* Load vcpu states */
+  for (auto vcpu : vcpus_) {
+    if (!vcpu->LoadState(&reader)) {
+      MV_PANIC("failed to load %s", vcpu->name());
+    }
+  }
+  reader.SendSignal(kMigrateVcpuComplete);
+
+  /* Make a finish signal to notice the source vm */
+  reader.SendSignal(kMigrateComplete);
+
+  loading_ = false;
+  MV_LOG("done loading");
+}
+
 /* Should call by UI thread */
 void Machine::Save(const std::string path) {
   MV_ASSERT(!saving_);
@@ -293,11 +549,11 @@ void Machine::Save(const std::string path) {
   saving_ = true;
   MV_LOG("start saving");
 
-  MigrationWriter writer(path);
+  MigrationFileWriter writer(path);
   /* Save device states */
   if (!device_manager_->SaveState(&writer)) {
     MV_ERROR("failed to save device states");
-    return;
+    goto end;
   }
   /* Save vcpu states */
   for (auto vcpu : vcpus_) {
@@ -306,19 +562,20 @@ void Machine::Save(const std::string path) {
   /* Save system RAM */
   if (!memory_manager_->SaveState(&writer)) {
     MV_ERROR("failed to save RAM");
-    return;
+    goto end;
   }
   /* Save disk images */
   if (!io_thread_->SaveDiskImage(&writer)) {
     MV_ERROR("failed to sync disk images");
-    return;
+    goto end;
   }
   /* Save configuration after saving disk images (paths might changed) */
   if (!config_->Save(path + "/configuration.yaml")) {
     MV_ERROR("failed to save configuration yaml");
-    return;
+    goto end;
   }
 
+end:
   saving_ = false;
   MV_LOG("done saving");
 }
@@ -333,7 +590,7 @@ void Machine::Load(const std::string path) {
   loading_ = true;
   MV_LOG("start loading");
 
-  MigrationReader reader(path);
+  MigrationFileReader reader(path);
   /* Load system RAM */
   if (!memory_manager_->LoadState(&reader)) {
     MV_PANIC("failed to load RAM");
@@ -357,14 +614,15 @@ const char* Machine::GetStatus() {
   if (!valid_) {
     return "invalid";
   }
-  if (!paused_) {
-    return "running";
-  }
+
   if (saving_) {
     return "saving";
   }
   if (loading_) {
     return "loading";
+  }
+  if (!paused_) {
+    return "running";
   }
 
   /* otherwise return paused */

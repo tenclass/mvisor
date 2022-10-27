@@ -53,15 +53,6 @@ DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly, bo
   return image;
 }
 
-void DiskImage::Connect() {
-  if (!initialized_) {
-    initialized_ = true;
-    std::string path = std::get<std::string>(key_values_["path"]);
-    readonly_ = std::get<bool>(key_values_["readonly"]);
-    Initialize();
-  }
-}
-
 ssize_t DiskImage::Discard(off_t position, size_t length, bool write_zeros) {
   MV_UNUSED(position);
   MV_UNUSED(length);
@@ -78,7 +69,6 @@ void DiskImage::Finalize() {
   }
 }
 
-
 void DiskImage::WorkerProcess() {
   SetThreadName("mvisor-disk");
   
@@ -90,9 +80,10 @@ void DiskImage::WorkerProcess() {
       return !worker_queue_.empty() || finalized_;
     });
 
-    if (worker_queue_.empty()) {
+    if (finalized_) {
       break;
     }
+
     auto& callback = worker_queue_.front();
     lock.unlock();
   
