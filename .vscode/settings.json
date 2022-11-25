@@ -76,7 +76,14 @@
         "pixman_utils.h": "c",
         "lines.h": "c",
         "setjmp.h": "c",
-        "rop3.h": "c"
+        "rop3.h": "c",
+        "bit": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "iomanip": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp"
     },
     "C_Cpp.default.cppStandard": "c++17",
     "C_Cpp.default.includePath": [

@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+message IdeHostState {
+  message BusMaster {
+    uint32  command           = 1;
+    uint32  status            = 2;
+    uint32  prdt_address      = 3;
+  }
+
+  message TaskFile {
+    uint32 feature0   = 1;
+    uint32 feature1   = 2;
+    
+    uint32 count0     = 3;
+    uint32 count1     = 4;
+    uint32 lba0       = 5;
+    uint32 lba1       = 6;
+    uint32 lba2       = 7;
+    uint32 lba3       = 8;
+    uint32 lba4       = 9;
+    uint32 lba5       = 10;
+  
+    uint32 device     = 11;
+    uint32 command    = 12;
+  
+    uint32 error      = 13;
+    uint32 status     = 14;
+  
+    uint32 control    = 15;
+  }
+
+  message PortState {
+    BusMaster           bus_master      = 1;
+    repeated  TaskFile  task_files      = 2;
+    bytes               buffer          = 3;
+    uint32              buffer_position = 4;
+    uint32              control         = 5;
+    uint32              active_tf_index = 6;
+  }
+
+  repeated PortState    ports   = 1;
+}

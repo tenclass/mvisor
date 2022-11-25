@@ -34,8 +34,6 @@
 #include "migration.h"
 
 
-/* The Machine class handles all the VM initialization and common operations
- * such as startup, quit, pause, resume */
 Machine::Machine(std::string config_path) {
   /* Load the configuration and set values of num_vcpus & ram_size */
   config_ = new Configuration(this);
@@ -48,8 +46,8 @@ Machine::Machine(std::string config_path) {
   /* Initialize system RAM and BIOS ROM */
   memory_manager_ = new MemoryManager(this);
 
-  /* Currently, a Q35 chipset mother board is implemented */
-  Device* root = dynamic_cast<Device*>(LookupObjectByName("system-root"));
+  /* Currently, an i440fx / q35 chipset motherboard is implemented */
+  Device* root = dynamic_cast<Device*>(LookupObjectByClass("SystemRoot"));
   if (!root) {
     MV_PANIC("failed to find system-root device");
   }
@@ -118,8 +116,7 @@ void Machine::InitializeKvm() {
     MV_PANIC("kvm api verison %d, expected: %d", api_version, KVM_API_VERSION);
   }
 
-  // Get the vcpu information block size that share with kernel
-  // Vcpu uses this value
+  // Get the vcpu information block size. Vcpu uses this value
   kvm_vcpu_mmap_size_ = ioctl(kvm_fd_, KVM_GET_VCPU_MMAP_SIZE, 0);
   MV_ASSERT(kvm_vcpu_mmap_size_ > 0);
 
@@ -418,23 +415,25 @@ bool Machine::PostSave() {
     goto end;
   }
 
-  /* Save device state */
+  /* Target machine need to get all memory before load device state,
+   * so we send device state and dirty memory from dma together. */
   if (!device_manager_->SaveState(network_writer_)) {
     MV_ERROR("failed to save device states");
     goto end;
   }
 
-  if (!network_writer_->WaitForSignal(kMigrateDeviceComplete)) {
-    goto end;
-  }
-
-  /* Save dirty memory from dma */
+  /* Save dirty memory from dma,
+   * this step must be put after saving device state completely. */
   if (!memory_manager_->SaveDirtyMemory(network_writer_, kDirtyMemoryTypeDma)) {
     MV_ERROR("failed to save dirty memory from dma");
     goto end;
   }
 
   if (!network_writer_->WaitForSignal(kMigrateDirtyMemoryFromDmaComplete)) {
+    goto end;
+  }
+
+  if (!network_writer_->WaitForSignal(kMigrateDeviceComplete)) {
     goto end;
   }
 
@@ -512,17 +511,17 @@ void Machine::Load(uint16_t port) {
   }
   reader.SendSignal(kMigrateDirtyMemoryFromListenerComplete);
 
-  /* Load device states */
-  if (!device_manager_->LoadState(&reader)) {
-    MV_PANIC("failed to load device states");
-  }
-  reader.SendSignal(kMigrateDeviceComplete);
-
   /* Load dirty memory from Dma */
   if (!memory_manager_->LoadDirtyMemory(&reader, kDirtyMemoryTypeDma)) {
     MV_PANIC("failed to load dirty memory from dma");
   }
   reader.SendSignal(kMigrateDirtyMemoryFromDmaComplete);
+
+  /* Load device states */
+  if (!device_manager_->LoadState(&reader)) {
+    MV_PANIC("failed to load device states");
+  }
+  reader.SendSignal(kMigrateDeviceComplete);
 
   /* Load vcpu states */
   for (auto vcpu : vcpus_) {
@@ -539,7 +538,7 @@ void Machine::Load(uint16_t port) {
   MV_LOG("done loading");
 }
 
-/* Should call by UI thread */
+/* Should be called by UI thread */
 void Machine::Save(const std::string path) {
   MV_ASSERT(!saving_);
   /* Make sure the machine is paused */
@@ -580,7 +579,7 @@ end:
   MV_LOG("done saving");
 }
 
-/* Should call by UI thread */
+/* Should be called by UI thread */
 void Machine::Load(const std::string path) {
   MV_ASSERT(!loading_);
   /* Make sure the machine is paused */

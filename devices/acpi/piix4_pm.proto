@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+message Piix4PmState {
+  message Apm {
+    uint32  control         = 1;
+    uint32  status          = 2;
+  }
+
+  Apm       apm             = 1;
+}

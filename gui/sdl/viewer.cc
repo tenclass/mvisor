@@ -47,8 +47,10 @@ void Viewer::DestroyWindow() {
       cursor_ = nullptr;
     }
     SDL_FreeSurface(screen_surface_);
+    SDL_DestroyRenderer(renderer_);
     SDL_DestroyWindow(window_);
     screen_surface_ = nullptr;
+    renderer_ = nullptr;
     window_ = nullptr;
   }
 }
@@ -58,21 +60,18 @@ void Viewer::CreateWindow() {
   MV_ASSERT(width_ && height_ && bpp_ && stride_);
   pointer_state_.screen_width = width_;
   pointer_state_.screen_height = height_;
+
   int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
   window_ = SDL_CreateWindow("MVisor", x, y, width_, height_, SDL_WINDOW_RESIZABLE);
-  screen_surface_ = SDL_GetWindowSurface(window_);
+  renderer_ = SDL_CreateRenderer(window_, -1, 0);
+  MV_ASSERT(renderer_);
+
+  screen_surface_ = SDL_CreateRGBSurfaceWithFormat(0, width_, height_, 32, SDL_PIXELFORMAT_BGRA32);
   MV_ASSERT(screen_surface_);
+  SDL_SetSurfaceBlendMode(screen_surface_, SDL_BLENDMODE_NONE);
 
   if (bpp_ == 8) {
     palette_ = SDL_AllocPalette(256);
-    SDL_Color colors[256];
-    const uint8_t* pallete = display_->GetPallete();
-    for (int i = 0; i < 256; i++) {
-      colors[i].r = *pallete++ << 2;
-      colors[i].g = *pallete++ << 2;
-      colors[i].b = *pallete++ << 2;
-    }
-    SDL_SetPaletteColors(palette_, colors, 0, 256);
   }
   UpdateCaption();
 }
@@ -104,10 +103,22 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
   }
 
   SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(partial->data,
-      partial->width, partial->height, bpp_, partial->stride, format);
+      partial->width, partial->height, partial->bpp, partial->stride, format);
+
   if (partial->bpp == 8) {
+    SDL_Color colors[256];
+    const uint8_t* p;
+    int count;
+    display_->GetPalette(&p, &count);
+    for (int i = 0; i < count; i++) {
+      colors[i].r = *p++ << 2;
+      colors[i].g = *p++ << 2;
+      colors[i].b = *p++ << 2;
+    }
+    SDL_SetPaletteColors(palette_, colors, 0, 256);
     SDL_SetSurfacePalette(surface, palette_);
   }
+
   SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE);
   auto dest_rect = SDL_Rect {
     .x = partial->x,
@@ -115,6 +126,7 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
     .w = partial->width,
     .h = partial->height
   };
+
   SDL_BlitSurface(surface, NULL, screen_surface_, &dest_rect);
   SDL_FreeSurface(surface);
 }
@@ -169,7 +181,10 @@ void Viewer::Render() {
   }
 
   if (!update.partials.empty()) {
-    SDL_UpdateWindowSurface(window_);
+    auto screen_texture = SDL_CreateTextureFromSurface(renderer_, screen_surface_);
+    SDL_RenderCopy(renderer_, screen_texture, nullptr, nullptr);
+    SDL_RenderPresent(renderer_);
+    SDL_DestroyTexture(screen_texture);
   }
 }
 
@@ -199,6 +214,7 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
   case kPlaybackStop: {
     if (!pcm_playback_)
       break;
+    snd_pcm_drain(pcm_playback_);
     snd_pcm_close(pcm_playback_);
     pcm_playback_ = nullptr;
     break;
@@ -411,7 +427,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     break;
   }
   case SDL_KEYDOWN:
-    if (event.key.keysym.sym == SDLK_PAUSE) {
+    if (event.key.keysym.sym == SDLK_F11) {
       if (machine_->IsPaused()) {
         MV_LOG("Resume");
         machine_->Resume();

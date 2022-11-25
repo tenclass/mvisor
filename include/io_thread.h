@@ -16,6 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+/* 
+ * MVisor Threading Model
+ * Every device object is event-driven, so locks are not necessary, except
+ * you are coding an interface method which should be called by a UI thread.
+ */
+
 #ifndef _MVISOR_IO_THREAD_H
 #define _MVISOR_IO_THREAD_H
 
@@ -41,18 +47,21 @@ typedef std::chrono::steady_clock::time_point IoTimePoint;
 
 #define NS_PER_SECOND (1000000000LL)
 
+class Device;
 struct IoTimer {
   bool          permanent;
   int64_t       interval_ns;
   IoTimePoint   next_timepoint;
   VoidCallback  callback;
   bool          removed;
+  Device*       device;
 };
 
 struct EpollEvent {
   int           fd;
   IoCallback    callback;
   epoll_event   event;
+  Device*       device;
 };
 
 class Machine;
@@ -69,15 +78,14 @@ class IoThread {
   bool IsCurrentThread();
 
   /* Async event polling */
-  EpollEvent* StartPolling(int fd, uint poll_mask, IoCallback callback);
-  void ModifyPolling(int fd, uint poll_mask);
+  EpollEvent* StartPolling(Device* device, int fd, uint poll_mask, IoCallback callback);
   void StopPolling(int fd);
 
   /* Timer events handled by IO thread */
-  IoTimer* AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback);
+  IoTimer* AddTimer(Device* device, int64_t interval_ns, bool permanent, VoidCallback callback);
   void RemoveTimer(IoTimer* timer);
   void ModifyTimer(IoTimer* timer, int64_t interval_ns);
-  void Schedule(VoidCallback callback);
+  void Schedule(Device* device, VoidCallback callback);
 
   /* Disk images */
   void RegisterDiskImage(DiskImage* image);

@@ -19,33 +19,6 @@
 #ifndef _MVISOR_DEVICE_ATA_INTERNAL_H
 #define _MVISOR_DEVICE_ATA_INTERNAL_H
 
-// The Command/Status Port returns a bit mask referring to the status of a channel when read.
-#define ATA_SR_BSY     0x80    // Busy
-#define ATA_SR_DRDY    0x40    // Drive ready
-#define ATA_SR_DF      0x20    // Drive write fault
-#define ATA_SR_DSC     0x10    // Drive seek complete
-#define ATA_SR_DRQ     0x08    // Data request ready
-#define ATA_SR_CORR    0x04    // Corrected data
-#define ATA_SR_IDX     0x02    // Index
-#define ATA_SR_ERR     0x01    // Error
-
-
-#define ATA_CB_ER_ICRC 0x80    // ATA Ultra DMA bad CRC
-#define ATA_CB_ER_BBK  0x80    // ATA bad block
-#define ATA_CB_ER_UNC  0x40    // ATA uncorrected error
-#define ATA_CB_ER_MC   0x20    // ATA media change
-#define ATA_CB_ER_IDNF 0x10    // ATA id not found
-#define ATA_CB_ER_MCR  0x08    // ATA media change request
-#define ATA_CB_ER_ABRT 0x04    // ATA command aborted
-#define ATA_CB_ER_NTK0 0x02    // ATA track 0 not found
-#define ATA_CB_ER_NDAM 0x01    // ATA address mark not found
-
-#define ATA_CB_ER_P_SNSKEY 0xf0   // ATAPI sense key (mask)
-#define ATA_CB_ER_P_MCR    0x08   // ATAPI Media Change Request
-#define ATA_CB_ER_P_ABRT   0x04   // ATAPI command abort
-#define ATA_CB_ER_P_EOM    0x02   // ATAPI End of Media
-#define ATA_CB_ER_P_ILI    0x01   // ATAPI Illegal Length Indication
-
 // ATA_CMD_IDENTIFY_PACKET and ATA_CMD_IDENTIFY return a buffer of 512 bytes called the identification space;
 // the following definitions are used to read information from the identification space.
 
@@ -117,6 +90,22 @@
 #define ATA_CB_ASTAT 2   // alternate status in     pio_base_addr2+2
 #define ATA_CB_DC    2   // device control      out pio_base_addr2+2
 #define ATA_CB_DA    3   // device address   in     pio_base_addr2+3
+
+#define ATA_CB_ER_ICRC 0x80    // ATA Ultra DMA bad CRC
+#define ATA_CB_ER_BBK  0x80    // ATA bad block
+#define ATA_CB_ER_UNC  0x40    // ATA uncorrected error
+#define ATA_CB_ER_MC   0x20    // ATA media change
+#define ATA_CB_ER_IDNF 0x10    // ATA id not found
+#define ATA_CB_ER_MCR  0x08    // ATA media change request
+#define ATA_CB_ER_ABRT 0x04    // ATA command aborted
+#define ATA_CB_ER_NTK0 0x02    // ATA track 0 not found
+#define ATA_CB_ER_NDAM 0x01    // ATA address mark not found
+
+#define ATA_CB_ER_P_SNSKEY 0xf0   // ATAPI sense key (mask)
+#define ATA_CB_ER_P_MCR    0x08   // ATAPI Media Change Request
+#define ATA_CB_ER_P_ABRT   0x04   // ATAPI command abort
+#define ATA_CB_ER_P_EOM    0x02   // ATAPI End of Media
+#define ATA_CB_ER_P_ILI    0x01   // ATAPI Illegal Length Indication
 
 // ATAPI Interrupt Reason bits in the Sector Count reg (CB_SC)
 #define ATA_CB_SC_P_TAG    0xf8   // ATAPI tag (mask)

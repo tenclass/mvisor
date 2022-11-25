@@ -6,13 +6,21 @@ machine:
   bios: ../share/bios-256k.bin
 
 objects:
-  - class: system-root
-  - class: dummy-device
-  - class: debug-console
-  - class: firmware-config
-  - class: pci-host
-  - class: ich9-lpc
-  - class: ps2
+# Use the old name pci-host instead of q35-host for compatibility
+  - class: q35-host
+
+# PCI devices connected to PCI Host
   - class: ich9-hda
-  - class: hda-duplex
+  - class: ich9-lpc
+  - class: ich9-ahci
+
+# I/O devices connected to ICH9 LPC
+  - class: cmos
+  - class: debug-console
+  - class: dummy-device
+  - class: firmware-config
   - class: kvm-clock
+  - class: ps2
+
+# codec device connected to ICH9 HDA
+  - class: hda-duplex

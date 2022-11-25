@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+message I8257DmaState {
+  message I8257DmaChannel {
+    uint32  base    = 1;
+    uint32  count   = 2;
+    uint32  page    = 3;
+    uint32  mode    = 4;
+  }
+
+  message I8257DmaController {
+    repeated  I8257DmaChannel channels    = 1;
+    uint32                    mask        = 2;
+    uint32                    flip_flop   = 3;
+  }
+
+  repeated I8257DmaController controllers = 1;
+}

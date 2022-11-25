@@ -17,28 +17,15 @@
  */
 
 #include "ahci_port.h"
+
 #include <cstring>
+
 #include "logger.h"
 #include "device_manager.h"
 #include "ahci_host.h"
-#include "ide_storage.h"
 #include "ahci_internal.h"
+#include "ata_storage.h"
 
-
-static inline int is_native_command_queueing(uint8_t ata_cmd)
-{
-    /* Based on SATA 3.2 section 13.6.3.2 */
-    switch (ata_cmd) {
-    case 0x60: // READ_FPDMA_QUEUED
-    case 0x61: // WRITE_FPDMA_QUEUED
-    case 0x63: // NCQ_NON_DATA
-    case 0x64: // SEND_FPDMA_QUEUED
-    case 0x65: // RECEIVE_FPDMA_QUEUED
-        return 1;
-    default:
-        return 0;
-    }
-}
 
 AhciPort::AhciPort(DeviceManager* manager, AhciHost* host, int index)
   : manager_(manager), host_(host), port_index_(index)
@@ -49,8 +36,9 @@ AhciPort::AhciPort(DeviceManager* manager, AhciHost* host, int index)
 AhciPort::~AhciPort() {
 }
 
-void AhciPort::AttachDevice(IdeStorageDevice* device) {
+void AhciPort::AttachDevice(AtaStorageDevice* device) {
   drive_ = device;
+  drive_->set_port(this);
 }
 
 void AhciPort::Reset() {
@@ -63,8 +51,6 @@ void AhciPort::Reset() {
 }
 
 void AhciPort::SoftReset() {
-  if (host_->debug())
-    MV_LOG("%s port reseted", drive_->name());
   port_control_.sata_status = 0;
   port_control_.sata_error = 0;
   port_control_.sata_active = 0;
@@ -73,11 +59,16 @@ void AhciPort::SoftReset() {
   init_d2h_sent_ = false;
   busy_slot_ = -1;
 
+  bzero(&task_file_, sizeof(task_file_));
+
   if (!drive_) {
     return;
   }
+  if (host_->debug())
+    MV_LOG("%s port reseted", drive_->name());
 
   drive_->Reset();
+  drive_->SetSignature(&task_file_);
 }
 
 void AhciPort::UpdateInitD2H() {
@@ -86,116 +77,203 @@ void AhciPort::UpdateInitD2H() {
   }
   init_d2h_sent_ = true;
 
-  UpdateRegisterD2H();
-  if (drive_->type() == kIdeStorageTypeCdrom) {
+  UpdateFisRegisterD2H();
+
+  if (!drive_) {
+    return;
+  }
+
+  switch (drive_->type())
+  {
+  case kAtaStorageTypeCdrom:
     port_control_.signature = ATA_SIGNATURE_CDROM;
-  } else {
+    break;
+  case kAtaStorageTypeDisk:
     port_control_.signature = ATA_SIGNATURE_DISK;
+    break;
   }
 }
 
-/* io->vector contains a shadow copy to the PRDT (physical region descriptor table)
- * io->buffer is always set to the first region of the vector for fast access.
- * If prdt_length is zero, the function only clears the vector.
- */
-void AhciPort::PrepareIoVector(AhciPrdtEntry* entries, uint16_t prdt_length, bool is_read) {
-  auto io = drive_->io();
-  io->vector.clear();
-  for (int prdt_index = 0; prdt_index < prdt_length; prdt_index++) {
-    size_t length = entries[prdt_index].size + 1;
-    void* host = manager_->TranslateGuestMemory(entries[prdt_index].address);
-    MV_ASSERT(host);
-    if (is_read) {
-      manager_->AddDirtyMemory(entries[prdt_index].address, length);
-    }
-    io->vector.emplace_back(iovec { .iov_base = host, .iov_len = length });
-    if (prdt_index == 0) {
-      io->buffer = (uint8_t*)host;
-      io->buffer_size = length;
-    }
-  }
+void AhciPort::SetNcqError(int slot) {
+  task_file_.error = ATA_CB_ER_ABRT;
+  task_file_.status = ATA_CB_STAT_RDY | ATA_CB_STAT_ERR;
+  port_control_.sata_error |= (1 << slot);
 }
 
+void AhciPort::HandleNcqCommand(int slot, void* fis) {
+  auto frame = (AhciNcqFrame*)fis;
+  MV_ASSERT((frame->tag >> 3) == slot);
+
+  size_t lba =  ((size_t)frame->lba5 << 40) |
+                ((size_t)frame->lba4 << 32) |
+                ((size_t)frame->lba3 << 24) |
+                ((size_t)frame->lba2 << 16) |
+                ((size_t)frame->lba1 << 8)  |
+                ((size_t)frame->lba0);
+  size_t sector_count = (size_t(frame->count1) << 8) | frame->count0;
+  if (!sector_count) {
+    sector_count = 0x10000;
+  }
+
+  auto image = drive_->image();
+  auto sector_size = drive_->geometry().sector_size;
+
+  ImageIoRequest request = {
+    .position = sector_size * lba,
+    .length = sector_size * sector_count,
+    .vector = std::move(current_dma_vector_)
+  };
+
+  switch (frame->command) {
+    case 0x60: // READ_FPDMA_QUEUED
+      request.type = kImageIoRead;
+      break;
+    case 0x61: // WRITE_FPDMA_QUEUED
+      request.type = kImageIoWrite;
+      break;
+    default:
+      SetNcqError(slot);
+      return;
+  }
+
+  if (host_->debug()) {
+    MV_LOG("NCQ slot %d %s lba=%lu count=%lu", slot, 
+      request.type == kImageIoRead ? "read" : "write", lba, sector_count);
+  }
+
+  image->QueueIoRequest(request, [this, slot](auto ret) {
+    if (ret < 0) {
+      SetNcqError(slot);
+    } else {
+      task_file_.status = ATA_CB_STAT_RDY | ATA_CB_STAT_SKC;
+      task_file_.error = 0;
+    }
+    UpdateFisSetDeviceBits(slot);
+  });
+}
+
+/* return true if we have done handling the command */
 bool AhciPort::HandleCommand(int slot) {
   MV_ASSERT(command_list_);
-  AhciCommandHeader* command_ = &((AhciCommandHeader*)command_list_)[slot];
-  if (drive_ == nullptr) {
-    MV_PANIC("bad port %d", port_index_);
-    return false;
-  }
+  MV_ASSERT(drive_);
 
-  AhciCommandTable* command_table = (AhciCommandTable*)manager_->TranslateGuestMemory(command_->command_table_base);
-  MV_ASSERT(command_table);
-  AhciFisRegH2D* fis = (AhciFisRegH2D*)command_table->command_fis;
+  current_command_ = &((AhciCommandHeader*)command_list_)[slot];
+  auto command_table = (AhciCommandTable*)manager_->TranslateGuestMemory(current_command_->command_table_base);
 
+  auto fis = (AhciFisRegH2D*)command_table->command_fis;
   if (fis->fis_type != kAhciFisTypeRegH2D) {
     MV_ERROR("unknown fis type 0x%x", fis->fis_type);
-    /* done handling the command */
     return true;
   }
 
   if (!fis->is_command) {
-    MV_PANIC("not a command fis");
-    return false;
+    MV_ERROR("not a command fis, control=%x", fis->control);
+    return true;
   }
 
-  if (is_native_command_queueing(fis->command)) {
-    /* NCQ is not necessary, VirtIO is the best choice */
-    MV_PANIC("not supported NCQ yet %x", fis->command);
-    return false;
+  if (fis->command >= 0x60 && fis->command <= 0x65) {
+    ParseDmaVector(command_table->prdt_entries, current_command_->prdt_length, fis->command == 0x60);
+    HandleNcqCommand(slot, fis);
+    return true;
   }
 
   /* Copy IDE command parameters */
-  auto regs = drive_->regs();
   auto io = drive_->io();
-  regs->command = fis->command;
-  regs->feature0 = fis->feature0;
-  regs->lba0 = fis->lba0;
-  regs->lba1 = fis->lba1;
-  regs->lba2 = fis->lba2;
-  regs->device = fis->device;
-  regs->lba3 = fis->lba3;
-  regs->lba4 = fis->lba4;
-  regs->lba5 = fis->lba5;
-  regs->control = fis->feature1;
-  regs->count0 = fis->count0;
-  regs->count1 = fis->count1;
+  task_file_.command = fis->command;
+  task_file_.feature0 = fis->feature0;
+  task_file_.lba0 = fis->lba0;
+  task_file_.lba1 = fis->lba1;
+  task_file_.lba2 = fis->lba2;
+  task_file_.device = fis->device;
+  task_file_.lba3 = fis->lba3;
+  task_file_.lba4 = fis->lba4;
+  task_file_.lba5 = fis->lba5;
+  task_file_.control = fis->feature1;
+  task_file_.count0 = fis->count0;
+  task_file_.count1 = fis->count1;
 
   /* Copy the ACMD field (ATAPI packet, if any) from the AHCI command
    * table to ide_state->io_buffer */
-  if (command_->is_atapi) {
+  if (current_command_->is_atapi) {
     memcpy(io->atapi_command, command_table->atapi_command, sizeof(io->atapi_command));
+    io->atapi_set = true;
   }
 
-  bool is_read = regs->command == 0xC8 || io->atapi_command[0] == 0x28;
-  PrepareIoVector(command_table->prdt_entries, command_->prdt_length, is_read);
+  bool is_write = fis->command == 0xC8 || io->atapi_command[0] == 0x28;
+  ParseDmaVector(command_table->prdt_entries, current_command_->prdt_length, is_write);
 
   /* We have only one DMA engine each drive.
    * when async IO is running by IO thread, we should wait for the slot */
   MV_ASSERT(busy_slot_ == -1);
-  MV_ASSERT(drive_->io_async() == false);
 
-  bool should_wait = drive_->StartCommand([this, io, command_, slot, regs]() {
-    std::unique_lock<std::recursive_mutex> lock(mutex_);
-    if (!io->dma_status && io->nbytes > 0) {
-      UpdateSetupPio();
-    }
-    command_->bytes_transferred = io->nbytes;
-    UpdateRegisterD2H();
+  io->vector = std::move(current_dma_vector_);
+  if (io->vector.empty()) {
+    io->buffer = nullptr;
+    io->buffer_size = 0;
+  } else {
+    io->buffer = (uint8_t*)io->vector.front().iov_base;
+    io->buffer_size = io->vector.front().iov_len;
+  }
 
-    if (busy_slot_ != -1) {
-      port_control_.command_issue &= ~(1U << busy_slot_);
-      busy_slot_ = -1;
-      /* Check next command */
-      CheckCommand();
-    }
-  });
-
+  bool should_wait = drive_->StartCommand(&task_file_);
   if (should_wait) { // BUSY
     busy_slot_ = slot;
     return false;
   }
   return true;
+}
+
+/* current_dma_vector_ contains a shadow copy to the PRDT (physical region descriptor table)
+ * If prdt_length is zero, the function only clears the vector.
+ * is_write=true means this dma vector is used for writing into.
+ */
+void AhciPort::ParseDmaVector(AhciPrdtEntry* entries, uint16_t prdt_length, bool is_write) {
+  current_dma_vector_.clear();
+
+  for (int prdt_index = 0; prdt_index < prdt_length; prdt_index++) {
+    void* host = manager_->TranslateGuestMemory(entries[prdt_index].address);
+    size_t length = entries[prdt_index].size + 1;
+    if (is_write) {
+      manager_->AddDirtyMemory(entries[prdt_index].address, length);
+    }
+    current_dma_vector_.emplace_back(iovec { .iov_base = host, .iov_len = length });
+  }
+}
+
+void AhciPort::OnDmaPrepare() {
+  auto io = drive_->io();
+  /* We have already built io->dma_vector before StartCommand() */
+  auto cb = std::move(io->dma_callback);
+  cb();
+}
+
+void AhciPort::OnDmaTransfer() {
+  auto io = drive_->io();
+
+  current_command_->bytes_transferred += io->transfer_bytes;
+  drive_->StopTransfer();
+}
+
+void AhciPort::OnPioTransfer() {
+  auto io = drive_->io();
+
+  if (io->transfer_bytes > 0) {
+    UpdateFisSetupPio();
+  }
+  current_command_->bytes_transferred += io->transfer_bytes;
+  drive_->StopTransfer();
+}
+
+void AhciPort::OnCommandDone() {
+  UpdateFisRegisterD2H();
+
+  if (busy_slot_ != -1) {
+    port_control_.command_issue &= ~(1U << busy_slot_);
+    busy_slot_ = -1;
+    current_command_ = nullptr;
+    /* Check next command */
+    CheckCommand();
+  }
 }
 
 void AhciPort::CheckCommand() {
@@ -230,7 +308,7 @@ void AhciPort::Read(uint64_t offset, uint8_t* data, uint32_t size) {
   }
   memcpy(data, (uint8_t*)&port_control_ + offset, size);
   if (host_->debug()) {
-    MV_LOG("%d:%s read port index=%d ret=0x%x", port_index_, drive_->name(), reg_index, *data);
+    MV_LOG("%d:%s read port index=%d ret=0x%x", port_index_, drive_ ? drive_->name() : "", reg_index, *data);
   }
 }
 
@@ -246,8 +324,6 @@ void AhciPort::CheckEngines() {
       ((uint64_t)port_control_.command_list_base1 << 32) | port_control_.command_list_base0);
     if (command_list_ != nullptr) {
       port_control_.command |= PORT_CMD_LIST_ON;
-      if (host_->debug())
-        MV_LOG("%s port command dma started", drive_->name());
     } else {
       port_control_.command &= ~(PORT_CMD_START | PORT_CMD_LIST_ON);
       return;
@@ -262,8 +338,6 @@ void AhciPort::CheckEngines() {
       (((uint64_t)port_control_.fis_base1 << 32) | port_control_.fis_base0);
     if (rx_fis_ != nullptr) {
       port_control_.command |= PORT_CMD_FIS_ON;
-      if (host_->debug())
-        MV_LOG("%s port fis dma started", drive_->name());
     } else {
       port_control_.command &= ~(PORT_CMD_FIS_RX | PORT_CMD_FIS_ON);
       return;
@@ -275,12 +349,10 @@ void AhciPort::CheckEngines() {
 }
 
 void AhciPort::Write(uint64_t offset, uint32_t value) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
   AhciPortReg reg_index = (AhciPortReg)(offset / sizeof(uint32_t));
   MV_ASSERT(reg_index < 32);
   if (host_->debug()) {
-    MV_LOG("%d:%s write port index=%d value=0x%x", port_index_, drive_->name(), reg_index, value);
+    MV_LOG("%d:%s write port index=%d value=0x%x", port_index_, drive_ ? drive_->name() : "", reg_index, value);
   }
 
   switch (reg_index)
@@ -302,16 +374,16 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     host_->CheckIrq();
     break;
   case kAhciPortRegIrqMask:
-    port_control_.irq_mask = value & 0xfdc000ff;
+    port_control_.irq_mask = value & 0xFDC000FF;
     host_->CheckIrq();
     break;
   case kAhciPortRegCommand:
     /* Block any Read-only fields from being set;
-    * including LIST_ON and FIS_ON.
-    * The spec requires to set ICC bits to zero after the ICC change
-    * is done. We don't support ICC state changes, therefore always
-    * force the ICC bits to zero.
-    */
+     * including LIST_ON and FIS_ON.
+     * The spec requires to set ICC bits to zero after the ICC change
+     * is done. We don't support ICC state changes, therefore always
+     * force the ICC bits to zero.
+     */
     port_control_.command = (port_control_.command & PORT_CMD_RO_MASK) |
       (value & ~(PORT_CMD_RO_MASK | PORT_CMD_ICC_MASK));
 
@@ -319,9 +391,9 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     CheckEngines();
 
     /* XXX usually the FIS would be pending on the bus here and
-      issuing deferred until the OS enables FIS receival.
-      Instead, we only submit it once - which works in most
-      cases, but is a hack. */
+     * issuing deferred until the OS enables FIS receival.
+     * Instead, we only submit it once - which works in most
+     * cases, but is a hack. */
     if (port_control_.command & PORT_CMD_FIS_ON) {
       UpdateInitD2H();
     }
@@ -351,70 +423,88 @@ void AhciPort::Write(uint64_t offset, uint32_t value) {
     CheckCommand();
     break;
   default:
-    MV_PANIC("not implemented reg index = %x", reg_index);
+    MV_ERROR("not implemented reg index = %x", reg_index);
   }
 }
 
-void AhciPort::UpdateRegisterD2H() {
+void AhciPort::UpdateFisRegisterD2H() {
   MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
   auto d2h_fis = &rx_fis_->d2h_fis;
   bzero(d2h_fis, sizeof(*d2h_fis));
 
-  auto regs = drive_->regs();
-
   d2h_fis->fis_type = kAhciFisTypeRegD2H;
   d2h_fis->interrupt = 1;
-  d2h_fis->status = regs->status;
-  d2h_fis->error = regs->error;
+  d2h_fis->status = task_file_.status;
+  d2h_fis->error = task_file_.error;
 
-  d2h_fis->lba0 = regs->lba0;
-  d2h_fis->lba1 = regs->lba1;
-  d2h_fis->lba2 = regs->lba2;
-  d2h_fis->device = regs->device;
-  d2h_fis->lba3 = regs->lba3;
-  d2h_fis->lba4 = regs->lba4;
-  d2h_fis->lba5 = regs->lba5;
-  d2h_fis->count0 = regs->count0;
-  d2h_fis->count1 = regs->count1;
+  d2h_fis->lba0 = task_file_.lba0;
+  d2h_fis->lba1 = task_file_.lba1;
+  d2h_fis->lba2 = task_file_.lba2;
+  d2h_fis->device = task_file_.device;
+  d2h_fis->lba3 = task_file_.lba3;
+  d2h_fis->lba4 = task_file_.lba4;
+  d2h_fis->lba5 = task_file_.lba5;
+  d2h_fis->count0 = task_file_.count0;
+  d2h_fis->count1 = task_file_.count1;
 
-  port_control_.task_flie_data = (regs->error << 8) | (regs->status);
-  if (regs->status & 1) {
+  port_control_.task_flie_data = (task_file_.error << 8) | (task_file_.status);
+  if (task_file_.status & ATA_CB_STAT_ERR) {
     TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
   TrigerIrq(kAhciPortIrqBitDeviceToHostFis);
 }
 
-void AhciPort::UpdateSetupPio() {
+void AhciPort::UpdateFisSetupPio() {
   MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
   auto pio_fis = &rx_fis_->pio_fis;
   bzero(pio_fis, sizeof(*pio_fis));
 
-  auto regs = drive_->regs();
   auto io = drive_->io();
 
   pio_fis->fis_type = kAhciFisTypePioSetup;
   pio_fis->interrupt = 1;
-  pio_fis->status = regs->status;
-  pio_fis->error = regs->error;
+  pio_fis->status = task_file_.status;
+  pio_fis->error = task_file_.error;
 
-  pio_fis->lba0 = regs->lba0;
-  pio_fis->lba1 = regs->lba1;
-  pio_fis->lba2 = regs->lba2;
-  pio_fis->device = regs->device;
-  pio_fis->lba3 = regs->lba3;
-  pio_fis->lba4 = regs->lba4;
-  pio_fis->lba5 = regs->lba5;
-  pio_fis->count0 = regs->count0;
-  pio_fis->count1 = regs->count1;
-  pio_fis->e_status = regs->status;
-  pio_fis->transfer_count = io->nbytes;
+  pio_fis->lba0 = task_file_.lba0;
+  pio_fis->lba1 = task_file_.lba1;
+  pio_fis->lba2 = task_file_.lba2;
+  pio_fis->device = task_file_.device;
+  pio_fis->lba3 = task_file_.lba3;
+  pio_fis->lba4 = task_file_.lba4;
+  pio_fis->lba5 = task_file_.lba5;
+  pio_fis->count0 = task_file_.count0;
+  pio_fis->count1 = task_file_.count1;
+  pio_fis->e_status = task_file_.status;
+  pio_fis->transfer_count = io->transfer_bytes;
 
-  port_control_.task_flie_data = (regs->error << 8) | (regs->status);
+  port_control_.task_flie_data = (task_file_.error << 8) | (task_file_.status);
 
-  if (regs->status & 0x1) { /* Check error bit */
+  if (task_file_.status & ATA_CB_STAT_ERR) {
     TrigerIrq(kAhciPortIrqBitTaskFileError);
   }
   TrigerIrq(kAhciPortIrqBitPioSetupFis);
+}
+
+void AhciPort::UpdateFisSetDeviceBits(int slot) {
+  MV_ASSERT(rx_fis_ && port_control_.command & PORT_CMD_FIS_RX);
+  auto sdb_fis = &rx_fis_->sdb_fis;
+
+  sdb_fis->type = kAhciFisTypeDeviceBits;
+  sdb_fis->flags = 0x40; // interrupt
+  sdb_fis->status = task_file_.status;
+  sdb_fis->error = task_file_.error;
+
+  if (!(port_control_.sata_error & (1 << slot))) {
+    sdb_fis->payload = 1 << slot;
+  } else {
+    sdb_fis->payload = 0;
+  }
+
+  port_control_.sata_active &= ~sdb_fis->payload;
+  port_control_.task_flie_data = (task_file_.error << 8) | (task_file_.status);
+
+  TrigerIrq(kAhciPortIrqBitSetDeviceBitsFis);
 }
 
 void AhciPort::TrigerIrq(int irqbit) {
@@ -426,6 +516,9 @@ void AhciPort::TrigerIrq(int irqbit) {
 }
 
 void AhciPort::SaveState(AhciHostState_PortState* port_state) {
+  /* Make sure no commands are running */
+  MV_ASSERT(port_control_.command_issue == 0);
+
   port_state->set_index(port_index_);
   port_state->set_busy_slot(busy_slot_);
   port_state->set_init_d2h_sent(init_d2h_sent_);

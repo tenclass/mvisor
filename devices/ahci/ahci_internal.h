@@ -214,15 +214,6 @@ struct AhciCommandTable {
 } __attribute__((packed));
 
 
-struct AhciSetDeviceBitsFis {
-  uint8_t type;
-  uint8_t flags;
-  uint8_t status;
-  uint8_t error;
-  uint32_t payload;
-} __attribute__((packed));
-
-
 enum AhciFisType
 {
   kAhciFisTypeRegH2D = 0x27, // Register FIS - host to device
@@ -389,6 +380,60 @@ struct AhciFisDmaSetup
   uint32_t reserved3;            // Reserved
 } __attribute__((packed));
 
+struct AhciFisSetDeviceBits {
+  uint8_t type;
+  uint8_t flags;
+  uint8_t status;
+  uint8_t error;
+  uint32_t payload;
+} __attribute__((packed));
+
+/**
+ * NCQFrame is the same as a Register H2D FIS (described in SATA 3.2),
+ * but some fields have been re-mapped and re-purposed, as seen in
+ * SATA 3.2 section 13.6.4.1 ("READ FPDMA QUEUED")
+ *
+ * cmd_fis[3], feature 7:0, becomes sector count 7:0.
+ * cmd_fis[7], device 7:0, uses bit 7 as the Force Unit Access bit.
+ * cmd_fis[11], feature 15:8, becomes sector count 15:8.
+ * cmd_fis[12], count 7:0, becomes the NCQ TAG (7:3) and RARC bit (0)
+ * cmd_fis[13], count 15:8, becomes the priority value (7:6)
+ * bytes 16-19 become an le32 "auxiliary" field.
+ */
+struct AhciNcqFrame
+{
+  // DWORD 0
+  uint8_t  fis_type;             // kAhciFisTypeRegH2D
+ 
+  uint8_t  port_multiplier : 4;  // Port multiplier
+  uint8_t  reserved0 : 3;        // Reserved
+  uint8_t  is_command : 1;       // 1: Command, 0: Control
+ 
+  uint8_t  command;              // Command register
+  uint8_t  count0;               // Count register, 7:0
+ 
+  // DWORD 1
+  uint8_t  lba0;                 // LBA low register, 7:0
+  uint8_t  lba1;                 // LBA mid register, 15:8
+  uint8_t  lba2;                 // LBA high register, 23:16
+  uint8_t  device;               // Device 7:0, uses bit 7 as the Force Unit Access bit.
+ 
+  // DWORD 2
+  uint8_t  lba3;                 // LBA register, 31:24
+  uint8_t  lba4;                 // LBA register, 39:32
+  uint8_t  lba5;                 // LBA register, 47:40
+  uint8_t  count1;               // Count register, 15:8
+ 
+  // DWORD 3
+  uint8_t  tag;                  // NCQ tag
+  uint8_t  priority;             // NCQ priority 7:6
+  uint8_t  icc;                  // Isochronous command completion
+  uint8_t  control;              // Control register
+ 
+  // DWORD 4
+  uint32_t auxiliary;            //
+} __attribute__((packed));
+
 struct AhciRxFis
 {
   // 0x00
@@ -401,7 +446,7 @@ struct AhciRxFis
   AhciFisRegD2H         d2h_fis;
   uint8_t               pad2[4];
   // 0x58
-  AhciSetDeviceBitsFis  sdb_fis;
+  AhciFisSetDeviceBits  sdb_fis;
   // 0x60
   uint8_t               unknown_fis[64];
   // 0xA0

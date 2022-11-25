@@ -8,6 +8,7 @@ message AhciHostState {
     uint32  ports_implemented     = 4;
     uint32  version               = 5;
   }
+
   message PortRegisters {
     uint32  command_list_base0= 1;
     uint32  command_list_base1= 2;

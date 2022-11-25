@@ -35,29 +35,28 @@
 #include "hda_duplex.pb.h"
 #include "logger.h"
 
-#define HDA_TIMER_INTERVAL_MS   (10)
-#define HDA_STREAM_BUFFER_SIZE  (480 * 20)
+#define STREAM_FRAME_INTERVAL_MS   (10)
 
 struct HdaStream {
-  uint32_t  id;
-  uint32_t  channel;
-  uint32_t  format;
-  uint32_t  gain_left, gain_right;
-  bool      mute_left, mute_right;
+  uint32_t          id;
+  uint32_t          channel;
+  uint32_t          format;
+  uint32_t          gain_left, gain_right;
+  bool              mute_left, mute_right;
 
-  bool      output;
-  bool      running = false;
-  size_t    position;
-  uint32_t  nchannels;
-  uint32_t  frequency;
-  size_t    bytes_per_second;
-  size_t    bytes_per_frame;
+  bool              output;
+  bool              running = false;
+  size_t            position = 0;
+  uint32_t          nchannels = 0;
+  uint32_t          frequency = 0;
+  size_t            bytes_per_second = 0;
+  size_t            bytes_per_frame = 0;
 
-  IoTimer*  timer = nullptr;
-  IoTimePoint start_time;
-  TransferCallback transfer_callback;
-  uint8_t   buffer[HDA_STREAM_BUFFER_SIZE];
-  size_t    buffer_pointer = 0;
+  IoTimer*          timer = nullptr;
+  IoTimePoint       start_time;
+  TransferCallback  transfer_callback;
+  std::string       buffer;
+  size_t            buffer_pointer = 0;
 };
 
 struct HdaNode {
@@ -73,27 +72,28 @@ struct HdaNode {
 
 class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterface, public RecordInterface {
  private:
-  uint32_t                  subsystem_id_;
-  uint32_t                  pcm_formats_;
-  std::vector<HdaNode>      nodes_;
-  std::array<HdaStream, 2>  streams_;
+  uint32_t                      subsystem_id_;
+  uint32_t                      pcm_formats_;
+  std::vector<HdaNode>          nodes_;
+  std::array<HdaStream, 2>      streams_;
   std::vector<PlaybackListener> playback_listeners_;
   std::vector<RecordListener>   record_listeners_;
-  std::deque<std::string>        record_buffer_;
+  std::deque<std::string>       record_buffer_;
+  PciDevice*                    hda_host_;
 
  public:
   HdaDuplex() {
-    set_parent_name("ich9-hda");
-  }
-
-  virtual ~HdaDuplex() {
+    set_default_parent_class("Ich9Hda");
   }
 
   void Connect() {
     Device::Connect();
+
+    hda_host_ = dynamic_cast<PciDevice*>(parent_);
+    MV_ASSERT(hda_host_);
   }
 
-  virtual void Disconnect() {
+  void Disconnect() {
     for (auto& stream : streams_) {
       if (stream.running) {
         SetStreamRunning(&stream, false);
@@ -130,6 +130,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   bool LoadState(MigrationReader* reader) {
     if (!Device::LoadState(reader))
       return false;
+
     HdaDuplexState state;
     if (!reader->ReadProtobuf("HDA_DUPLEX_CODEC", state)) {
       return false;
@@ -388,21 +389,21 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     stream->frequency = stream->frequency * (mul + 1) / (div + 1);
     stream->nchannels = ((stream->format & AC_FMT_CHAN_MASK) >> AC_FMT_CHAN_SHIFT) + 1;
     stream->bytes_per_second = 2LL * stream->nchannels * stream->frequency;
-    stream->bytes_per_frame = stream->bytes_per_second / (1000 / HDA_TIMER_INTERVAL_MS);
+    stream->bytes_per_frame = stream->bytes_per_second / (1000 / STREAM_FRAME_INTERVAL_MS);
+    stream->buffer.resize(stream->bytes_per_frame);
+    bzero(stream->buffer.data(), stream->buffer.size());
   }
 
   void OnStreamTimer(HdaStream* stream) {
     if (stream->output) {
-      auto buffer_size = stream->bytes_per_frame;
-      if (buffer_size > HDA_STREAM_BUFFER_SIZE)
-        buffer_size = HDA_STREAM_BUFFER_SIZE;
-      auto to_transfer = buffer_size - stream->buffer_pointer;
-      size_t bytes = stream->transfer_callback(&stream->buffer[stream->buffer_pointer], to_transfer);
+      auto to_transfer = stream->buffer.size() - stream->buffer_pointer;
+      auto ptr = (uint8_t*)&stream->buffer.data()[stream->buffer_pointer];
+      size_t bytes = stream->transfer_callback(ptr, to_transfer);
       stream->position += bytes;
       stream->buffer_pointer += bytes;
 
-      if (stream->buffer_pointer >= buffer_size) {
-        NotifyPlayback(kPlaybackData, stream->buffer, stream->buffer_pointer);
+      if (stream->buffer_pointer >= stream->buffer.size()) {
+        NotifyPlayback(kPlaybackData, stream->buffer.data(), stream->buffer_pointer);
         stream->buffer_pointer = 0;
       }
     } else {
@@ -412,10 +413,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
         stream->transfer_callback((uint8_t*)buffer.data(), buffer.size());
         stream->position += buffer.size();
       } else {
-        auto buffer_size = stream->bytes_per_frame;
-        uint8_t zero[buffer_size] = { 0 };
-        stream->transfer_callback(zero, buffer_size);
-        stream->position += buffer_size;
+        /* input silence if record buffer is unavailable */
+        stream->transfer_callback((uint8_t*)stream->buffer.data(), stream->buffer.size());
+        stream->position += stream->buffer.size();
       }
     }
 
@@ -436,7 +436,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
 
     int64_t next_interval_ns = 1000000LL * next_interval_ms;
     if (stream->timer->interval_ns != next_interval_ns) {
-      manager_->io()->ModifyTimer(stream->timer, next_interval_ns);
+      hda_host_->ModifyTimer(stream->timer, next_interval_ns);
     }
   }
 
@@ -446,7 +446,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     }
     stream->running = running;
     if (debug_) {
-      MV_LOG("set stream[%d] running=%d", stream->id, running ? 1 : 0);
+      MV_LOG("set stream[%d] running=%d", stream->id, running);
     }
 
     if (running) {
@@ -454,20 +454,18 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
         NotifyPlayback(kPlaybackStart, nullptr, 0);
       } else {
         NotifyRecordEvent(kRecordStart);
-        if(!record_buffer_.empty()) {
-          record_buffer_.clear();
-        }
+        record_buffer_.clear();
       }
       stream->position = 0;
       stream->start_time = std::chrono::steady_clock::now();
       MV_ASSERT(stream->timer == nullptr);
       // FIXME: When should the first timer event happen?
-      stream->timer = manager_->io()->AddTimer(NS_PER_SECOND / 1000LL, true, [this, stream]() {
+      stream->timer = hda_host_->AddTimer(1, true, [this, stream]() {
         OnStreamTimer(stream);
       });
     } else {
       MV_ASSERT(stream->timer);
-      manager_->io()->RemoveTimer(stream->timer);
+      hda_host_->RemoveTimer(stream->timer);
       stream->timer = nullptr;
       stream->transfer_callback = nullptr;
       if (stream->output) {
@@ -519,7 +517,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     *format = 2;
     *channels = stream.nchannels;
     *frequency = stream.frequency;
-    *interval_ms = HDA_TIMER_INTERVAL_MS;
+    *interval_ms = STREAM_FRAME_INTERVAL_MS;
   }
 
   void RegisterPlaybackListener(PlaybackListener callback) {
@@ -547,7 +545,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       return;
     }
 
-    manager_->io()->Schedule([this, stream, record_data]() {
+    hda_host_->Schedule([this, stream, record_data]() {
       WriteStreamToSharedBuffer(stream, record_data);
     });
   }

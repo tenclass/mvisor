@@ -127,6 +127,7 @@ class MigrationReader {
     virtual bool ReadProtobuf(std::string tag, Message& message) = 0;
     virtual bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size) = 0;
     virtual size_t ReadRawWithLimit(std::string tag, void* data, size_t limit) = 0;
+    virtual bool Exists(std::string tag) = 0;
 };
 
 class MigrationFileReader : public MigrationReader {
@@ -141,6 +142,7 @@ class MigrationFileReader : public MigrationReader {
   virtual bool ReadProtobuf(std::string tag, Message& message);
   virtual bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size);
   virtual size_t ReadRawWithLimit(std::string tag, void* data, size_t limit);
+  virtual bool Exists(std::string tag);
 
  private:
   int         fd_ = -1;
@@ -161,6 +163,7 @@ class MigrationNetworkReader : public MigrationReader {
   virtual bool ReadProtobuf(std::string tag, Message& message);
   virtual bool ReadMemoryPages(std::string tag, void** pages_ptr, size_t size);
   virtual size_t ReadRawWithLimit(std::string tag, void* data, size_t limit);
+  virtual bool Exists(std::string tag);
 
   bool WaitForConnection(uint16_t port);
   void SendSignal(MigrationSignalType type);

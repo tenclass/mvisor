@@ -25,6 +25,8 @@
 #include "device_interface.h"
 #include "device_manager.h"
 
+#define _MB(x) (x * (1 << 20))
+
 enum DisplayMode {
   kDisplayUnknownMode,
   kDisplayVgaMode,
@@ -45,9 +47,9 @@ class Vga : public PciDevice, public DisplayInterface {
   uint8_t   attribute[0x15];
   uint8_t   crtc_index;
   uint8_t   crtc[0x19];
-  uint16_t  pallete_read_index;
-  uint16_t  pallete_write_index;
-  uint8_t   pallete[256 * 3];
+  uint16_t  palette_read_index;
+  uint16_t  palette_write_index;
+  uint8_t   palette[256 * 3];
   uint8_t   dac_state;
   uint8_t   feature_control;
   uint32_t  latch;
@@ -128,8 +130,8 @@ class Vga : public PciDevice, public DisplayInterface {
   virtual bool LoadState(MigrationReader* reader);
 
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
+  virtual void GetPalette(const uint8_t** palette, int* count);
 
-  const uint8_t* GetPallete() const;
   virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback);
   virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback);
   virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw);

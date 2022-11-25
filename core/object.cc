@@ -39,8 +39,18 @@ void Object::set_parent_name(const char* parent_name) {
   strncpy(parent_name_, parent_name, OBJECT_MAX_NAME_LENGTH - 1);
 }
 
-Object::Object() {
+void Object::set_default_parent_class(const char* primary, const char* secondary) {
+  default_parent_classes_.clear();
+  default_parent_classes_.push_back(primary);
+  if (secondary) {
+    default_parent_classes_.push_back(secondary);
+  }
+}
 
+Object::Object() {
+  name_[0] = 0;
+  classname_[0] = 0;
+  parent_name_[0] = 0;
 }
 
 Object::~Object() {

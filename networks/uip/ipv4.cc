@@ -29,14 +29,16 @@ Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, uint32_t sip, uint32_t 
   debug_ = false;
   active_time_ = time(nullptr);
 
-  auto device = dynamic_cast<Device*>(backend_->device());
-  io_ = device->manager()->io();
+  auto device = dynamic_cast<PciDevice*>(backend_->device());
+  device_ = device;
   debug_ = device->debug();
-  MV_ASSERT(io_);
 }
 
 Ipv4Packet* Ipv4Socket::AllocatePacket(bool urgent) {
   return backend_->AllocatePacket(urgent);
+}
+
+void Ipv4Socket::OnGuestBufferAvaialble() {
 }
 
 uint16_t Ipv4Socket::CalculateChecksum(uint8_t* addr, uint16_t count) {

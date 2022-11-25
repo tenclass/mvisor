@@ -31,6 +31,11 @@
 #include "logger.h"
 
 
+#define MAX_OPEN_TCP_SOCKETS    1024
+#define MAX_OPEN_UDP_SOCKETS    1024
+#define MAX_OPEN_ICMP_SOCKETS   128
+
+
 struct ArpMessage {
   uint16_t    ar_hrd;    /* format of hardware address  */
   uint16_t    ar_pro;    /* format of protocol address  */
@@ -66,15 +71,15 @@ static std::deque<std::string> Split(std::string input, std::string token) {
 
 class Uip : public Object, public NetworkBackendInterface {
  private:
-  std::list<TcpSocket*> tcp_sockets_;
-  std::list<UdpSocket*> udp_sockets_;
-  IoTimer*              timer_ = nullptr;
-  Device*               real_device_ = nullptr;
-  std::vector<Ipv4Packet*> queued_packets_;
-  uint                  mtu_;
-  bool                  restrict_ = false;
-  std::vector<int>      map_fds_;
-  std::mutex            mutex_;
+  std::list<TcpSocket*>     tcp_sockets_;
+  std::list<UdpSocket*>     udp_sockets_;
+  std::list<IcmpSocket*>    icmp_sockets_;
+  IoTimer*                  timer_ = nullptr;
+  PciDevice*                real_device_ = nullptr;
+  std::vector<Ipv4Packet*>  queued_packets_;
+  uint                      mtu_;
+  bool                      restrict_ = false;
+  std::vector<int>          map_fds_;
 
  public:
   Uip() {
@@ -82,10 +87,10 @@ class Uip : public Object, public NetworkBackendInterface {
 
   virtual ~Uip() {
     if (timer_) {
-      real_device_->manager()->io()->RemoveTimer(timer_);
+      real_device_->RemoveTimer(timer_);
     }
     for (auto fd : map_fds_) {
-      real_device_->manager()->io()->StopPolling(fd);
+      real_device_->StopPolling(fd);
       safe_close(&fd);
     }
     /* Release all resources */
@@ -93,12 +98,11 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   /* UIP Router Configuration / Router MAC: 5255C0A80001 */
-  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac, int mtu) {
+  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
     device_ = device;
     guest_mac_ = mac;
     memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", ETH_ALEN);
-    mtu_ = mtu;
-    MV_ASSERT(mtu_ + 16 <= 4096);
+    mtu_ = 4096 - 16;
 
     // Default configuration 192.168.128.1/24
     router_subnet_mask_ = 0xFFFFFF00;
@@ -106,8 +110,8 @@ class Uip : public Object, public NetworkBackendInterface {
 
     // This function could only be called once
     MV_ASSERT(real_device_ == nullptr);
-    real_device_ = dynamic_cast<Device*>(device_);
-    timer_ = real_device_->manager()->io()->AddTimer(NS_PER_SECOND * 10, true, [this](){
+    real_device_ = dynamic_cast<PciDevice*>(device_);
+    timer_ = real_device_->AddTimer(NS_PER_SECOND * 10, true, [this](){
       OnTimer();
     });
 
@@ -153,8 +157,12 @@ class Uip : public Object, public NetworkBackendInterface {
     }
   }
 
+  virtual void SetMtu(int mtu) {
+    mtu_ = mtu;
+    MV_ASSERT(mtu_ + 16 <= 4096);
+  }
+
   virtual void Reset() {
-    std::lock_guard<std::mutex> lock(mutex_);
     for (auto p : queued_packets_) {
       p->Release();
     }
@@ -168,6 +176,10 @@ class Uip : public Object, public NetworkBackendInterface {
       delete *it;
     }
     tcp_sockets_.clear();
+    for (auto it = icmp_sockets_.begin(); it != icmp_sockets_.end(); it++) {
+      delete *it;
+    }
+    icmp_sockets_.clear();
   }
 
   // Parse tcp:192.168.2.2:7070
@@ -287,7 +299,7 @@ class Uip : public Object, public NetworkBackendInterface {
         MV_LOG("listen ip=0x%x port=%d fd=%d", rule.listen_ip, rule.listen_port, fd);
       }
 
-      real_device_->manager()->io()->StartPolling(fd, EPOLLIN, [this, fd, rule](auto events) {
+      real_device_->StartPolling(fd, EPOLLIN, [this, fd, rule](auto events) {
         if (events & EPOLLIN) {
           sockaddr_in addr;
           socklen_t addr_len = sizeof(addr);
@@ -308,7 +320,6 @@ class Uip : public Object, public NetworkBackendInterface {
   }
 
   void OnTimer() {
-    std::lock_guard<std::mutex> lock(mutex_);
     for (auto it = tcp_sockets_.begin(); it != tcp_sockets_.end();) {
       if (!(*it)->active()) {
         delete *it;
@@ -325,8 +336,16 @@ class Uip : public Object, public NetworkBackendInterface {
         it++;
       }
     }
+    for (auto it = icmp_sockets_.begin(); it != icmp_sockets_.end();) {
+      if (!(*it)->active()) {
+        delete *it;
+        it = icmp_sockets_.erase(it);
+      } else {
+        it++;
+      }
+    }
     if (real_device_->debug()) {
-      MV_LOG("tcp_sockets.size=%lu udp_sockets.size=%lu", tcp_sockets_.size(), udp_sockets_.size());
+      MV_LOG("sockets tcp=%lu udp=%lu icmp=%lu", tcp_sockets_.size(), udp_sockets_.size(), icmp_sockets_.size());
     }
   }
 
@@ -334,8 +353,21 @@ class Uip : public Object, public NetworkBackendInterface {
     while (!queued_packets_.empty()) {
       auto packet = queued_packets_.back();
       queued_packets_.pop_back();
-      if (!OnPacketFromHost(packet))
-        break;
+      if (!OnPacketFromHost(packet)) {
+        return;
+      }
+    }
+
+    for (auto it = tcp_sockets_.begin(); it != tcp_sockets_.end() && queued_packets_.empty(); it++) {
+      if ((*it)->active()) {
+        (*it)->OnGuestBufferAvaialble();
+      }
+    }
+
+    for (auto it = udp_sockets_.begin(); it != udp_sockets_.end() && queued_packets_.empty(); it++) {
+      if ((*it)->active()) {
+        (*it)->OnGuestBufferAvaialble();
+      }
     }
   }
 
@@ -388,6 +420,7 @@ class Uip : public Object, public NetworkBackendInterface {
     packet->data = (void*)&packet->ip[1];
     packet->tcp = nullptr;
     packet->udp = nullptr;
+    packet->icmp = nullptr;
     packet->data_length = 0;
     packet->Release = [packet]() {
       delete packet;
@@ -415,22 +448,25 @@ class Uip : public Object, public NetworkBackendInterface {
       packet->Release();
       break;
     case ETH_P_IPV6:
-      // ignore IPv6
-      MV_LOG("ignore IPv6");
+      if (real_device_->debug()) {
+        MV_WARN("ignore IPv6");
+      }
       packet->Release();
       break;
     case ETH_P_LLDP:
-      // ignore LLDP
-      MV_LOG("ignore LLDP");
+      if (real_device_->debug()) {
+        MV_WARN("ignore LLDP");
+      }
       packet->Release();
       break;
     case ETH_P_PPP_DISC:
-      // ignore PPP_DISC
-      MV_LOG("ignore PPP_DISC");
+      if (real_device_->debug()) {
+        MV_LOG("ignore PPP_DISC");
+      }
       packet->Release();
       break;
     default:
-      MV_PANIC("Unknown ethernet packet protocol=%x", protocol);
+      MV_WARN("Unknown ethernet packet protocol=%x", protocol);
       packet->Release();
       break;
     }
@@ -456,7 +492,7 @@ class Uip : public Object, public NetworkBackendInterface {
         OnFrameFromHost(ETH_P_ARP, buffer, sizeof(buffer));
       }
     } else {
-      MV_PANIC("Invalid Arp op=0x%x", arp->ar_op);
+      MV_ERROR("Invalid Arp op=0x%x", arp->ar_op);
     }
   }
 
@@ -464,18 +500,24 @@ class Uip : public Object, public NetworkBackendInterface {
     auto ip = packet->ip;
     switch (ip->protocol)
     {
-    case 0x06: { // TCP
+    case 0x01:  // ICMP
+      packet->icmp = (struct icmphdr*)((uint8_t*)ip + ip->ihl * 4);
+      if (ParseIcmpPacket(packet)) {
+        packet->Release();
+      }
+      break;
+    case 0x06:  // TCP
       packet->tcp = (struct tcphdr*)((uint8_t*)ip + ip->ihl * 4);
-      if (ParseTcpPacket(packet))
+      if (ParseTcpPacket(packet)) {
         packet->Release();
+      }
       break;
-    }
-    case 0x11: { // UDP
+    case 0x11:  // UDP
       packet->udp = (struct udphdr*)((uint8_t*)ip + ip->ihl * 4);
-      if (ParseUdpPacket(packet))
+      if (ParseUdpPacket(packet)) {
         packet->Release();
+      }
       break;
-    }
     default:
       if (real_device_->debug()) {
         MV_LOG("Not UDP or TCP, protocol=%d", ip->protocol);
@@ -484,6 +526,50 @@ class Uip : public Object, public NetworkBackendInterface {
       packet->Release();
       break;
     }
+  }
+
+  IcmpSocket* LookupIcmpSocket(uint32_t sip, uint32_t dip, uint16_t echo_id) {
+    for (auto socket : icmp_sockets_) {
+      if (socket->Equals(sip, dip, echo_id)) {
+        return socket;
+      }
+    }
+    return nullptr;
+  }
+
+  bool ParseIcmpPacket(Ipv4Packet* packet) {
+    auto ip = packet->ip;
+    auto icmp = packet->icmp;
+    auto sip = ntohl(ip->saddr);
+    auto dip = ntohl(ip->daddr);
+
+    /* For network security, only PING is supported */
+    if (icmp->type != ICMP_ECHO) {
+      return true;
+    }
+
+    auto echo_id = ntohs(icmp->un.echo.id);
+    auto socket = dynamic_cast<RedirectIcmpSocket*>(LookupIcmpSocket(sip, dip, echo_id));
+    if (socket == nullptr) {
+      /* If restricted and not local network, don't redirect packets */
+      if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
+        return true;
+      }
+      if (icmp_sockets_.size() >= MAX_OPEN_ICMP_SOCKETS) {
+        return true;
+      }
+
+      auto icmp_socket = new RedirectIcmpSocket(this, sip, dip, echo_id);
+      icmp_socket->InitializeRedirect();
+      socket = icmp_socket;
+      icmp_sockets_.push_back(socket);
+    }
+
+    packet->data = icmp;
+    packet->data_offset = 0;
+    packet->data_length = ntohs(ip->tot_len) - ip->ihl * 4;
+    socket->OnPacketFromGuest(packet);
+    return false;
   }
 
   TcpSocket* LookupTcpSocket(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
@@ -498,10 +584,10 @@ class Uip : public Object, public NetworkBackendInterface {
   bool ParseTcpPacket(Ipv4Packet* packet) {
     auto ip = packet->ip;
     auto tcp = packet->tcp;
-    uint32_t sip = ntohl(ip->saddr);
-    uint32_t dip = ntohl(ip->daddr);
-    uint16_t sport = ntohs(tcp->source);
-    uint16_t dport = ntohs(tcp->dest);
+    auto sip = ntohl(ip->saddr);
+    auto dip = ntohl(ip->daddr);
+    auto sport = ntohs(tcp->source);
+    auto dport = ntohs(tcp->dest);
     
     auto socket = dynamic_cast<RedirectTcpSocket*>(LookupTcpSocket(sip, dip, sport, dport));
     if (socket == nullptr) {
@@ -509,6 +595,10 @@ class Uip : public Object, public NetworkBackendInterface {
       if ((dip & router_subnet_mask_) != (router_ip_ & router_subnet_mask_) && restrict_) {
         return true;
       }
+      if (tcp_sockets_.size() >= MAX_OPEN_TCP_SOCKETS) {
+        return true;
+      }
+
       socket = new RedirectTcpSocket(this, sip, dip, sport, dport);
       tcp_sockets_.push_back(socket);
     }
@@ -564,13 +654,17 @@ class Uip : public Object, public NetworkBackendInterface {
   bool ParseUdpPacket(Ipv4Packet* packet) {
     auto ip = packet->ip;
     auto udp = packet->udp;
-    uint32_t sip = ntohl(ip->saddr);
-    uint32_t dip = ntohl(ip->daddr);
-    uint16_t sport = ntohs(udp->source);
-    uint16_t dport = ntohs(udp->dest);
+    auto sip = ntohl(ip->saddr);
+    auto dip = ntohl(ip->daddr);
+    auto sport = ntohs(udp->source);
+    auto dport = ntohs(udp->dest);
 
     auto socket = LookupUdpSocket(sip, dip, sport, dport);
     if (socket == nullptr) {
+      if (udp_sockets_.size() >= MAX_OPEN_UDP_SOCKETS) {
+        return true;
+      }
+
       // Check if it's UDP broadcast
       if (dport == 67) {
         socket = new DhcpServiceUdpSocket(this, sip, dip, sport, dport);

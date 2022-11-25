@@ -132,7 +132,13 @@ class Ich9Hda : public PciDevice {
     state.set_hda_registers(&regs_, sizeof(regs_));
     state.set_rirb_counter(rirb_counter_);
     state.set_wall_clock_counter(GetWallClockCounter());
+
     writer->WriteProtobuf("HDA", state);
+
+    if(regs_.dp_base & 1) {
+      auto gpa = regs_.dp_base & ~1;
+      manager_->AddDirtyMemory(gpa, sizeof(uint64_t) * 8);
+    }
     return PciDevice::SaveState(writer);
   }
 
@@ -140,6 +146,7 @@ class Ich9Hda : public PciDevice {
     if (!PciDevice::LoadState(reader)) {
       return false;
     }
+
     Ich9HdaState state;
     if (!reader->ReadProtobuf("HDA", state)) {
       return false;
@@ -150,7 +157,7 @@ class Ich9Hda : public PciDevice {
     wall_clock_base_ = steady_clock::now() - nanoseconds(state.wall_clock_counter() * 1000 / 24);
 
     /* When finished loading states, restart stream if started before */
-    manager_->io()->Schedule([this]() {
+    Schedule([this]() {
       for (uint i = 0; i < 8; i++) {
         StartStopStream(i);
       }
@@ -300,6 +307,7 @@ class Ich9Hda : public PciDevice {
       if (index < 4) { // IN
         manager_->AddDirtyMemory(entries[i].address, entries[i].length);
       }
+
       auto buffer = HdaCodecBuffer {
         .data = (uint8_t*)manager_->TranslateGuestMemory(entries[i].address),
         .length = entries[i].length,
@@ -323,7 +331,7 @@ class Ich9Hda : public PciDevice {
 
     bool interrupt = false;
     size_t copied = 0;
-    while (copied < length) {
+    while (copied < length && !interrupt) {
       auto &entry = stream_state.buffers[stream_state.buffers_index];
       size_t to_copy = length - copied;
       if (to_copy > entry.length - entry.read_counter) {
@@ -351,10 +359,10 @@ class Ich9Hda : public PciDevice {
         }
         if (entry.interrupt_on_completion) {
           interrupt = true;
-          break;
         }
       }
     }
+
     /* Linux uses this */
     if(regs_.dp_base & 1) {
       auto ptr = (uint64_t*)manager_->TranslateGuestMemory(regs_.dp_base & ~1);
@@ -406,10 +414,7 @@ class Ich9Hda : public PciDevice {
     }
 
     if ((stream.control & 0x02) != (old_control & 0x02)) {
-      /* Calling codecs is async */
-      manager_->io()->Schedule([this, index]() {
-        StartStopStream(index);
-      });
+      StartStopStream(index);
     }
     CheckIrqLevel();
   }
@@ -443,7 +448,7 @@ class Ich9Hda : public PciDevice {
         return;
       }
       if (rirb_counter_ == regs_.rirb_interrupt_count) {
-        MV_PANIC("rirb count reached");
+        MV_WARN("rirb count reached");
         return;
       }
 
@@ -452,10 +457,7 @@ class Ich9Hda : public PciDevice {
       uint32_t* ptr = (uint32_t*)manager_->TranslateGuestMemory(addr + 4 * read_pointer);
       regs_.corb_read_pointer = read_pointer;
       uint32_t entry = *ptr;
-      /* Calling codecs asynchronously */
-      manager_->io()->Schedule([this, entry]() {
-        ParseCorbEntry(entry);
-      });
+      ParseCorbEntry(entry);
     }
   }
 
@@ -472,7 +474,7 @@ class Ich9Hda : public PciDevice {
 
   void PushRirbEntry(uint8_t codec_index, uint32_t response) {
     if (!(regs_.rirb_control & (1 << 1))) {
-      MV_PANIC("RIRB DMA is disabled");
+      MV_ERROR("RIRB DMA is not supported");
       return;
     }
     bool solicited = true;

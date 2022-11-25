@@ -64,6 +64,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
   const StateChangeListener*    state_change_listener_ = nullptr;
 
   QxlRender*                    render_ = nullptr;
+  std::recursive_mutex          render_mutex_;
   bool                          flushing_commands_ = false;
 
  public:
@@ -75,6 +76,7 @@ class Qxl : public Vga, public DisplayResizeInterface {
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
 
   // Interfaces
   virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw);

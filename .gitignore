@@ -6,3 +6,4 @@ build/
 tmp/
 config/default.yaml
 .clang-format
+.vscode/

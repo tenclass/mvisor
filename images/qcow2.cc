@@ -43,7 +43,7 @@ void Qcow2Image::ReleaseImage(bool remove_file) {
   cluster_cache_.Clear();
 
   if (fd_ != -1) {
-    Flush();
+    FlushAll();
     safe_close(&fd_);
   }
 
@@ -622,19 +622,39 @@ void Qcow2Image::FlushRefcountBlocks() {
   }
 }
 
-ssize_t Qcow2Image::Read(void *buffer, off_t position, size_t length) {
-  return BlockIo(buffer, position, length, kImageIoRead);
+long Qcow2Image::HandleIoRequest(ImageIoRequest request) {
+  long ret = -1;
+  switch (request.type)
+  {
+  case kImageIoRead:
+  case kImageIoWrite: {
+    size_t rw_total = 0, pos = request.position;
+    for (auto &iov : request.vector) {
+      ret = BlockIo(iov.iov_base, pos, iov.iov_len, request.type);
+      if (ret <= 0) {
+        return ret;
+      }
+      rw_total += ret;
+      pos += ret;
+    }
+    ret = rw_total;
+    break;
+  }
+  case kImageIoDiscard:
+  case kImageIoWriteZeros:
+    ret = BlockIo(nullptr, request.position, request.length, request.type);
+    break;
+  case kImageIoFlush:
+    ret = FlushAll();
+    break;
+  default:
+    MV_ERROR("unhandled io request %d", request.type);
+    break;
+  }
+  return ret;
 }
 
-ssize_t Qcow2Image::Write(void *buffer, off_t position, size_t length) {
-  return BlockIo(buffer, position, length, kImageIoWrite);
-}
-
-ssize_t Qcow2Image::Discard(off_t position, size_t length, bool write_zeros) {
-  return BlockIo(nullptr, position, length, write_zeros ? kImageIoWriteZeros : kImageIoDiscard);
-}
-
-ssize_t Qcow2Image::Flush() {
+ssize_t Qcow2Image::FlushAll() {
   if (readonly_) {
     return 0;
   }

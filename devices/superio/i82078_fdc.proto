@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+message I82078FdcState {
+  message FloppyDrive {   
+    uint32  cylinder            = 1;
+    uint32  head                = 2;
+    uint32  sector              = 3;
+    uint32  perpendicular       = 4;
+  }   
+
+  uint32    digital_output      = 1;
+  uint32    main_status         = 2;
+  uint32    datarate_select     = 3;
+  uint32    error_status_0      = 4;
+
+  uint32    step_rate           = 8;
+  uint32    head_load_time      = 9;
+  uint32    lock                = 10;
+  uint32    config              = 11;
+  bytes     fifo                = 12;
+
+  repeated  FloppyDrive drives  = 13;
+  uint32    drive_index         = 14;
+}

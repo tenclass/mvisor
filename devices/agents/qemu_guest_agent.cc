@@ -31,7 +31,8 @@
 class QemuGuestAgent : public Device, public SerialPortInterface {
  public:
   QemuGuestAgent() {
-    set_parent_name("virtio-console");
+    set_default_parent_class("VirtioConsole");
+
     strcpy(port_name_, "org.qemu.guest_agent.0");
   }
 
@@ -45,7 +46,7 @@ class QemuGuestAgent : public Device, public SerialPortInterface {
 
   /* This interface function is called by UI thread */
   virtual void SendMessage(uint8_t* data, size_t size) {
-    manager_->io()->Schedule([this, copied = std::string((char*)data, size)]() {
+    Schedule([this, copied = std::string((char*)data, size)]() {
       device_->SendMessage(this, (uint8_t*)copied.data(), copied.size());
     });
   }

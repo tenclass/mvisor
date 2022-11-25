@@ -74,7 +74,7 @@ void VfioPci::Disconnect() {
     }
     if (interrupt.event_fd > 0) {
       // If we use IRQFD, we don't use polling to handle interrupts
-      // manager_->io()->StopPolling(interrupt.event_fd);
+      // StopPolling(interrupt.event_fd);
       safe_close(&interrupt.event_fd);
     }
   }
@@ -837,7 +837,7 @@ bool VfioPci::LoadState(MigrationReader* reader) {
     pread(device_fd_, &data_offset, sizeof(data_offset),
       migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
     if (data_offset != area.offset) {
-      MV_ERROR("read vfio migration info failed, data_offset=0x%lx area.offset=0x%lx", data_offset, area.offset);
+      MV_ERROR("failed to read vfio, data_offset=0x%lx area.offset=0x%lx", data_offset, area.offset);
       break;
     }
     

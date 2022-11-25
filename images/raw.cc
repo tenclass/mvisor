@@ -17,10 +17,13 @@
  */
 
 #include "disk_image.h"
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <filesystem>
+
 #include "logger.h"
 #include "device_manager.h"
 
@@ -39,17 +42,25 @@ class RawImage : public DiskImage {
 
   virtual ~RawImage() {
     if (fd_ != -1) {
-      Flush();
+      FlushAll();
       safe_close(&fd_);
+    }
+
+    if (snapshot_) {
+      remove(filepath_.c_str());
     }
   }
 
   void Initialize() {
-    if (readonly_) {
-      fd_ = open(filepath_.c_str(), O_RDONLY);
-    } else {
-      fd_ = open(filepath_.c_str(), O_RDWR);
+    int oflags = readonly_ ? O_RDONLY : O_RDWR;
+    if (snapshot_) {
+      char temp[] = "/tmp/snapshot_XXXXXX.img";
+      close(mkstemps(temp, 4));
+      std::filesystem::copy_file(filepath_, temp, std::filesystem::copy_options::overwrite_existing);
+      filepath_ = temp;
     }
+    
+    fd_ = open(filepath_.c_str(), oflags);
     if (fd_ < 0)
       MV_PANIC("disk file not found: %s", filepath_.c_str());
 
@@ -59,19 +70,40 @@ class RawImage : public DiskImage {
     total_blocks_ = st.st_size / block_size_;
   }
 
-  ssize_t Read(void *buffer, off_t position, size_t length) {
-    return pread(fd_, buffer, length, position);
-  }
+  long HandleIoRequest(ImageIoRequest request) {
+    long ret = -1;
 
-  ssize_t Write(void *buffer, off_t position, size_t length) {
-    if (readonly_) {
-      return 0;
-    } else {
-      return pwrite(fd_, buffer, length, position);
+    switch (request.type)
+    {
+    case kImageIoRead:
+    case kImageIoWrite: {
+      size_t rw_total = 0, pos = request.position;
+      for (auto &iov : request.vector) {
+        if (request.type == kImageIoRead) {
+          ret = pread(fd_, iov.iov_base, iov.iov_len, pos);
+        } else {
+          ret = pwrite(fd_, iov.iov_base, iov.iov_len, pos);
+        }
+        if (ret <= 0) {
+          return ret;
+        }
+        rw_total += ret;
+        pos += ret;
+      }
+      ret = rw_total;
+      break;
     }
+    case kImageIoFlush:
+      ret = FlushAll();
+      break;
+    default:
+      MV_ERROR("unhandled io request %d", request.type);
+      break;
+    }
+    return ret;
   }
 
-  ssize_t Flush() {
+  ssize_t FlushAll() {
     if (readonly_) {
       return 0;
     } else {

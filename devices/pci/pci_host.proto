@@ -1,5 +1,5 @@
 syntax = "proto3";
 
-message MchState {
-  uint32  config            = 1;
+message PciHostState {
+  uint32  config_address  = 1;
 }

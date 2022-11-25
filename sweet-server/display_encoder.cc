@@ -152,10 +152,10 @@ bool SweetDisplayEncoder::ConvertPartial(DisplayPartialBitmap* partial) {
         auto from = partial->data + partial->stride * y;
         auto to = screen_bitmap_ + screen_stride_ * y;
         for (int x = 0; x < partial->width; x++) {
-          auto pallete = &partial->pallete[from[x] * 3];
-          to[0] = pallete[0] << 2;
-          to[1] = pallete[1] << 2;
-          to[2] = pallete[2] << 2;
+          auto palette = &partial->palette[from[x] * 3];
+          to[0] = palette[2] << 2;
+          to[1] = palette[1] << 2;
+          to[2] = palette[0] << 2;
           to[3] = 0;
           to += 4;
         }

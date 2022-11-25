@@ -34,27 +34,27 @@ RedirectTcpSocket::~RedirectTcpSocket() {
     packet->Release();
   }
 
-  if (fd_ != -1) {
-    io_->StopPolling(fd_);
+  if (fd_ >= 0) {
+    device_->StopPolling(fd_);
     safe_close(&fd_);
   }
 }
 
 bool RedirectTcpSocket::active() {
+  if (fd_ < 0) {
+    return false;
+  }
   // Kill half closed
   if (read_done_ || write_done_ || !connected_) {
     if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
       return false;
     }
   }
-  if (fd_ == -1) {
-    return false;
-  }
   return true;
 }
 
 void RedirectTcpSocket::Shutdown(int how) {
-  if (fd_ == -1)
+  if (fd_ < 0)
     return;
 
   if (how == SHUT_WR) { // Guest sent FIN
@@ -89,7 +89,7 @@ void RedirectTcpSocket::Shutdown(int how) {
     if (debug_) {
       MV_LOG("TCP fd=%d closed", fd_);
     }
-    io_->StopPolling(fd_);
+    device_->StopPolling(fd_);
     safe_close(&fd_);
   }
 }
@@ -107,7 +107,7 @@ void RedirectTcpSocket::ReplyReset(Ipv4Packet* packet) {
 
 void RedirectTcpSocket::Reset() {
   if (fd_ > 0) {
-    io_->StopPolling(fd_);
+    device_->StopPolling(fd_);
     shutdown(fd_, SHUT_RDWR);
     safe_close(&fd_);
   }
@@ -122,7 +122,7 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
 
   // Initialize redirect states
   connected_ = false;
-  fd_ = socket(AF_INET, SOCK_STREAM, 0);
+  fd_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   MV_ASSERT(fd_ > 0);
 
   if (debug_) {
@@ -153,13 +153,14 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
   
   auto ret = connect(fd_, (sockaddr*)&daddr, sizeof(daddr));
   if (ret < 0 && errno != EINPROGRESS) {
-    if (debug_)
-      perror("failed to initialize TCP socket");
+    if (debug_) {
+      MV_ERROR("TCP fd=%d failed to connect socket", fd_);
+    }
     safe_close(&fd_);
     return;
   }
 
-  io_->StartPolling(fd_, EPOLLOUT | EPOLLIN | EPOLLET, [this](auto events) {
+  device_->StartPolling(fd_, EPOLLOUT | EPOLLIN | EPOLLET, [this](auto events) {
     can_read_ = events & EPOLLIN;
     can_write_ = events & EPOLLOUT;
   
@@ -195,6 +196,12 @@ bool RedirectTcpSocket::UpdateGuestAck(tcphdr* tcp) {
   return false;
 }
 
+void RedirectTcpSocket::OnGuestBufferAvaialble() {
+  if (can_read()) {
+    StartReading();
+  }
+}
+
 /* If receive operation is controlled, retry when a guest ACK comes */
 void RedirectTcpSocket::StartReading() {
   while (can_read()) {
@@ -208,7 +215,7 @@ void RedirectTcpSocket::StartReading() {
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
       if (debug_) {
-        MV_LOG("TCP fd=%d failed to allocate packet", fd_);
+        MV_ERROR("TCP fd=%d failed to allocate packet", fd_);
       }
       return;
     }
@@ -270,16 +277,20 @@ void RedirectTcpSocket::StartWriting() {
 }
 
 void RedirectTcpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
-  if (fd_ == -1 || write_done_) {
+  if (fd_ < 0 || write_done_) {
     packet->Release();
     return;
   }
   send_queue_.push_back(packet);
 
   ack_host_ += packet->data_length;
-  auto ack_packet = AllocatePacket(true);
-  if (ack_packet) {
-    OnDataFromHost(ack_packet, TCP_FLAG_ACK);
+
+  // If no data length, this ack packet is not necessary, right?
+  if (packet->data_length > 0) {
+    auto ack_packet = AllocatePacket(true);
+    if (ack_packet) {
+      OnDataFromHost(ack_packet, TCP_FLAG_ACK);
+    }
   }
 
   if (can_write()) {

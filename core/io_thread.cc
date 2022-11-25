@@ -76,7 +76,8 @@ IoThread::~IoThread() {
 
 void IoThread::Start() {
   thread_ = std::thread(&IoThread::RunLoop, this);
-  StartPolling(event_fd_, EPOLLIN, [this](auto ret) {
+
+  StartPolling(nullptr, event_fd_, EPOLLIN, [this](auto ret) {
     MV_UNUSED(ret);
     uint64_t tmp;
     read(event_fd_, &tmp, sizeof(tmp));
@@ -108,8 +109,10 @@ void IoThread::RunLoop() {
 
   while (true) {
     /* Execute timer events and calculate the next timeout */
-    int64_t next_timeout_ns = CheckTimers();
-    MV_ASSERT(next_timeout_ns > 0);
+    int64_t next_timeout_ns;
+    do {
+      next_timeout_ns = CheckTimers();
+    } while (next_timeout_ns <= 0);
 
     /* Check paused state before sleep */
     while(machine_->IsPaused() && CanPauseNow()) {
@@ -134,7 +137,12 @@ void IoThread::RunLoop() {
       }
       auto event = event_it->second;
       auto start_time = std::chrono::steady_clock::now();
-      event->callback(events[i].events);
+      if (event->device) {
+        std::lock_guard<std::recursive_mutex> device_lock(event->device->mutex_);
+        event->callback(events[i].events);
+      } else {
+        event->callback(events[i].events);
+      }
 
       if (machine_->debug()) {
         auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -150,10 +158,11 @@ void IoThread::RunLoop() {
   if (machine_->debug()) MV_LOG("mvisor-iothread ended");
 }
 
-EpollEvent* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) {
+EpollEvent* IoThread::StartPolling(Device* device, int fd, uint poll_mask, IoCallback callback) {
   EpollEvent* event = new EpollEvent;
   event->fd = fd;
   event->callback = callback;
+  event->device = device;
   event->event = epoll_event {
     .events = poll_mask,
     .data = {
@@ -175,19 +184,6 @@ EpollEvent* IoThread::StartPolling(int fd, uint poll_mask, IoCallback callback) 
   return event;
 }
 
-void IoThread::ModifyPolling(int fd, uint poll_mask) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  auto it = epoll_events_.find(fd);
-  MV_ASSERT(it != epoll_events_.end());
-
-  auto event = it->second;
-  event->event.events = poll_mask;
-  int ret = epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, event->fd, &event->event);
-  if (ret < 0) {
-    MV_PANIC("failed to modify epoll event, ret=%d", ret);
-  }
-}
-
 void IoThread::StopPolling(int fd) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   auto it = epoll_events_.find(fd);
@@ -202,8 +198,9 @@ void IoThread::StopPolling(int fd) {
   delete event;
 }
 
-IoTimer* IoThread::AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback) {
+IoTimer* IoThread::AddTimer(Device* device, int64_t interval_ns, bool permanent, VoidCallback callback) {
   IoTimer* timer = new IoTimer;
+  timer->device = device;
   timer->permanent = permanent;
   timer->interval_ns = interval_ns;
   timer->callback = std::move(callback);
@@ -247,7 +244,7 @@ int64_t IoThread::CheckTimers() {
         timer->next_timepoint = now + std::chrono::nanoseconds(timer->interval_ns);
         delta_ns = timer->interval_ns;
       }
-      if (delta_ns > 0 && delta_ns < min_timeout_ns) {
+      if (delta_ns < min_timeout_ns) {
         min_timeout_ns = delta_ns;
       }
       ++it;
@@ -256,11 +253,13 @@ int64_t IoThread::CheckTimers() {
   mutex_.unlock();
   
   for (auto timer : triggered) {
-    /* better check again, in case of removing a timer in during a timer event */
+    std::lock_guard<std::recursive_mutex> device_lock(timer->device->mutex_);
+    /* better check again, in case of removing a timer in during a timer event or device IO */
     if (timer->removed) {
       continue;
     }
     timer->callback();
+
     if (!timer->permanent) {
       timer->removed = true;
       continue;
@@ -269,8 +268,8 @@ int64_t IoThread::CheckTimers() {
   return min_timeout_ns;
 }
 
-void IoThread::Schedule(VoidCallback callback) {
-  AddTimer(0, false, std::move(callback));
+void IoThread::Schedule(Device* device, VoidCallback callback) {
+  AddTimer(device, 0, false, std::move(callback));
 }
 
 void IoThread::RegisterDiskImage(DiskImage* image) {
@@ -287,7 +286,10 @@ void IoThread::FlushDiskImages() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
 
   for (auto image : disk_images_) {
-    image->FlushAsync([](auto ret) {
+    ImageIoRequest r = {
+      .type = kImageIoFlush
+    };
+    image->QueueIoRequest(r, [](auto ret) {
       MV_UNUSED(ret);
     });
   }
@@ -373,38 +375,29 @@ bool IoThread::CreateQcow2ImageSnapshot() {
 }
 
 bool IoThread::SaveBackingDiskImage(MigrationNetworkWriter* writer) {
-  bool ret = true;
-  ImageDescriptor image_descriptor;
-  image_descriptor.set_offset(QCOW2_MIGRATE_DATA_OFFSET);
-
   for (auto image : disk_images_) {
     auto qcow2_image = dynamic_cast<Qcow2Image*>(image);
     auto files(qcow2_image_backing_files_[qcow2_image]);
 
+    ImageDescriptor image_descriptor;
+    image_descriptor.set_offset(QCOW2_MIGRATE_DATA_OFFSET);
     while (!files.empty()) {
-      ret = writer->WriteProtobuf("IMAGE_DESCRIPTOR", image_descriptor);
-      if (ret) {
-        ret = writer->WriteFromFile("BACKING_IMAGE", files.front(), image_descriptor.offset());
-        files.pop();
+      if (!writer->WriteProtobuf("IMAGE_DESCRIPTOR", image_descriptor)) {
+        return false;
       }
-      
-      if (!ret) {
-        MV_ERROR("failed to send backing image=%s", qcow2_image->filepath().c_str());
-        break;
+      if (!writer->WriteFromFile("BACKING_IMAGE", files.front(), image_descriptor.offset())) {
+        return false;
       }
+      files.pop();
     }
 
-    if (ret) {
-      // offset=-1 means we transfer backing images data completely for this image
-      image_descriptor.set_offset(-1);
-      ret = writer->WriteProtobuf("IMAGE_DESCRIPTOR", image_descriptor);
-    }
-
-    if (!ret) {
-      break;
+    // offset=-1 means we transfer backing images data completely for current image
+    image_descriptor.set_offset(-1);
+    if (!writer->WriteProtobuf("IMAGE_DESCRIPTOR", image_descriptor)) {
+      return false;
     }
   }
-  return ret;
+  return true;
 }
 
 bool IoThread::LoadBackingDiskImage(MigrationNetworkReader* reader) {

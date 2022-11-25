@@ -20,9 +20,10 @@
 #define __MVISOR_DEVICES_AHCI_PORT_H
 
 #include <mutex>
+#include <deque>
 
 #include <cstdint>
-#include "ide_storage.h"
+#include "ata_storage.h"
 #include "device.h"
 #include "ahci_host.pb.h"
 
@@ -43,17 +44,6 @@ struct AhciCommandHeader {
   uint64_t    command_table_base;
   uint32_t    reserved[4];
 } __attribute__((packed));
-
-struct NativeCommandTransferState {
-  AhciCommandHeader*  command_header;
-  uint32_t            sector_count;
-  uint64_t            lba;
-  uint8_t             tag;
-  uint8_t             command;
-  uint8_t             slot;
-  bool                used;
-  bool                halt;
-};
 
 struct AhciPortRegs {
   uint32_t    command_list_base0;
@@ -82,42 +72,54 @@ class AhciHost;
 struct AhciRxFis;
 struct AhciPrdtEntry;
 
-class AhciPort {
+class AhciPort: public AtaPort {
  public:
   AhciPort(DeviceManager* manager, AhciHost* host, int index);
   virtual ~AhciPort();
 
-  void AttachDevice(IdeStorageDevice* device);
+  void AttachDevice(AtaStorageDevice* device);
   void Write(uint64_t offset, uint32_t value);
   void Read(uint64_t offset, uint8_t* data, uint32_t size);
   void Reset();
-  void SoftReset();
 
   /* Called by AhciHost */
   void SaveState(AhciHostState_PortState* port_state);
   void LoadState(const AhciHostState_PortState* port_state);
 
+  /* Called by AtaStorage */
+  virtual void OnDmaPrepare();
+  virtual void OnDmaTransfer();
+  virtual void OnPioTransfer();
+  virtual void OnCommandDone();
+
+  const AhciPortRegs& port_control() const { return port_control_; }
+
  private:
+  void SoftReset();
   void TrigerIrq(int irqbit);
   void UpdateInitD2H();
-  void UpdateRegisterD2H();
-  void UpdateSetupPio();
+  void UpdateFisRegisterD2H();
+  void UpdateFisSetupPio();
+  void UpdateFisSetDeviceBits(int slot);
+  void SetNcqError(int slot);
+  void HandleNcqCommand(int slot, void* fis);
   bool HandleCommand(int slot);
   void CheckEngines();
   void CheckCommand();
-  void PrepareIoVector(AhciPrdtEntry* entries, uint16_t length, bool is_read);
+  void ParseDmaVector(AhciPrdtEntry* entries, uint16_t length, bool is_write);
 
-  friend class AhciHost;
   DeviceManager*        manager_;
-  AhciHost*             host_ = nullptr;
+  AhciHost*             host_;
   int                   port_index_;
   AhciPortRegs          port_control_;
-  IdeStorageDevice*     drive_ = nullptr;
+  AtaStorageDevice*     drive_ = nullptr;
+  TaskFile              task_file_;
   bool                  init_d2h_sent_ = false;
   uint8_t*              command_list_ = nullptr;
   AhciRxFis*            rx_fis_ = nullptr;
   int                   busy_slot_ = -1;
-  std::recursive_mutex  mutex_;
+  AhciCommandHeader*    current_command_ = nullptr;
+  std::vector<iovec>    current_dma_vector_;
 };
 
 #endif // __MVISOR_DEVICES_AHCI_PORT_H

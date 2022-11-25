@@ -1,4 +1,8 @@
+
 mvisor_sources += files(
+  'piix3_uhci.cc',
+  'uhci_host.cc',
+  'uhci_host.h',
   'usb_descriptor.h',
   'usb_device.cc',
   'usb_device.h',
@@ -13,6 +17,7 @@ mvisor_sources += files(
 )
 
 proto_sources += proto_gen.process(
+  'uhci_host.proto',
   'usb_device.proto',
   'xhci_host.proto'
 )

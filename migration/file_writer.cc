@@ -28,9 +28,11 @@
 
 
 MigrationFileWriter::MigrationFileWriter(std::string base_path) {
-  if (!std::filesystem::exists(base_path)) {
-    std::filesystem::create_directory(base_path);
+if (std::filesystem::exists(base_path)) {
+    std::filesystem::remove_all(base_path);
   }
+  std::filesystem::create_directory(base_path);
+
   base_path_ = base_path;
 }
 

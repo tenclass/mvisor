@@ -1,5 +1,4 @@
 mvisor_sources += files(
-  'debug_console.cc',
   'vbe.h',
   'vga.cc',
   'vga.h'

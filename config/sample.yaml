@@ -1,9 +1,9 @@
 name: Default configuration
-base: q35.yaml
+base: i440fx.yaml
 
 machine:
   memory: 4G
-  vcpu: 8
+  vcpu: 4
   # Set vcpu thread priority value [-20, 19]
   # A higher value means a lower priority
   priority: 1
@@ -13,34 +13,35 @@ machine:
   hypervisor: Yes
 
 objects:
-  - class: cmos
+  - name: cmos
     # gmtime for linux, localtime for windows
-    rtc: gmtime
-    
+    rtc: localtime
+
   - class: qxl
   - class: spice-agent
   - class: qemu-guest-agent
   - class: usb-tablet
-  # - class: usb-midi
-  # - class: usb-wacom
 
   - class: virtio-network
     backend: uip
     mac: 00:50:00:11:22:33
     map: tcp:0.0.0.0:8022-:22
 
-  - class: ahci-cdrom 
+  - class: ata-cdrom 
     image: /data/ubuntu-21.10-desktop-amd64.iso
   
-  - class: ahci-cdrom
+  - class: ata-cdrom
     image: /data/virtio.iso
 
-  - class: virtio-block
+  - class: ata-disk
     image: /data/empty.qcow2
     snapshot: No
+  
+  # - class: floppy
+  #   image: /data/images/floppy.img
 
   # - class: virtio-block
-  #   image: /data/win11.qcow2
+  #   image: /data/empty.qcow2
   #   snapshot: No
 
   # - class: virtio-fs

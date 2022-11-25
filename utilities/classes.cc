@@ -30,7 +30,7 @@ static uint last_object_id = 0;
 static std::map<std::string, ClassItem*>* classes = nullptr;
 
 /* Alias PciHost to pci-host */
-std::string get_alias(const char* name) {
+std::string get_class_alias(const char* name) {
   std::string ret;
   for (size_t i = 0; i < strlen(name); i++) {
     if (isupper(name[i])) {
@@ -57,7 +57,12 @@ void register_class(int type, const char* name, const char* source_path, ClassCr
   }
   MV_ASSERT(classes->find(name) == classes->end());
   (*classes)[name] = item;
-  (*classes)[get_alias(name)] = item;
+  (*classes)[get_class_alias(name)] = item;
+
+  /* Add alias pci-host to q35-host */
+  if (strcmp(name, "Q35Host") == 0) {
+    (*classes)["pci-host"] = item;
+  }
   // MV_LOG("register class %s", name);
 }
 

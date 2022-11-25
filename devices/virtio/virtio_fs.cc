@@ -582,6 +582,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     auto open_out_arg = (fuse_open_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_open_out)).address;
 
     if (fuse_->IsInodeListFull()) {
+      MV_ERROR("inode list is full");
       fuse_->MakeResponse(response, 0, -24, request->unique);
       element->length = response->len;
       return;
@@ -737,6 +738,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     auto out = (fuse_entry_out*)fuse_->GetDataBufferFromIovec(element->vector, sizeof(fuse_entry_out)).address;
 
     if (fuse_->IsInodeListFull()) {
+      MV_ERROR("inode list is full");
       fuse_->MakeResponse(response, 0, -24, request->unique);
       element->length = response->len;
       return;

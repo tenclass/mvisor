@@ -135,7 +135,6 @@ static const uint8_t hid_report_desc[] = {
 
 class UsbTablet : public UsbHid, public PointerInputInterface {
  private:
-  std::mutex mutex_;
   std::deque<PointerEvent> queue_;
   uint idle_ = 0;
   uint max_queue_size_ = 16;
@@ -168,14 +167,13 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
   virtual int OnInputData(uint endpoint_address, uint8_t* data, int length) {
     MV_UNUSED(endpoint_address);
 
-    std::unique_lock<std::mutex> lock(mutex_);
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
     if (queue_.empty()) {
       return USB_RET_NAK;
     }
 
     auto event = queue_.front();
     queue_.pop_front();
-    lock.unlock();
     
     MV_ASSERT(length >= 6);
     data[0] = event.buttons;
@@ -189,7 +187,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
 
   /* This interface function is called by the UI thread, so use a mutex */
   virtual bool QueuePointerEvent(PointerEvent event) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     /* SPICE buttons to PS/2 buttons */
     event.buttons = ((event.buttons & 2) ? 1 : 0) | ((event.buttons & 4) ? 4 : 0) | ((event.buttons & 8) ? 2 : 0);
@@ -200,9 +198,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
       queue_.pop_front();
     }
 
-    manager_->io()->Schedule([this]() {
-      NotifyEndpoint(0x81);
-    });
+    NotifyEndpoint(0x81);
     return true;
   }
 

@@ -24,7 +24,6 @@
 #include "device_interface.h"
 #include "logger.h"
 
-#define DEFAULT_QUEUE_SIZE 256
 
 class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
  private:
@@ -44,8 +43,9 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     device_features_ |=
       (1UL << VIRTIO_NET_F_MTU) |
       (1UL << VIRTIO_NET_F_MAC) |
-      (1UL << VIRTIO_NET_F_CTRL_VQ) |
       (1UL << VIRTIO_NET_F_STATUS) |
+      (1UL << VIRTIO_NET_F_CTRL_VQ) |
+      // (1UL << VIRTIO_F_ANY_LAYOUT) |
       (1UL << VIRTIO_NET_F_SPEED_DUPLEX) |
       (1UL << VIRTIO_NET_F_GUEST_ANNOUNCE);
 
@@ -95,7 +95,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       MV_ASSERT(backend_);
       MacAddress mac;
       memcpy(mac.data, net_config_.mac, sizeof(mac.data));
-      backend_->Initialize(this, mac, net_config_.mtu);
+      backend_->Initialize(this, mac);
+      backend_->SetMtu(net_config_.mtu);
     } else {
       MV_PANIC("network backend is not set");
     }
@@ -106,9 +107,9 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     VirtioPci::Reset();
   
     /* MQ is not supported yet */
-    AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioNetwork::OnReceive, this, 0));
-    AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioNetwork::OnTransmit, this, 1));
-    AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioNetwork::OnControl, this, 2));
+    AddQueue(512, std::bind(&VirtioNetwork::OnReceive, this, 0));
+    AddQueue(256, std::bind(&VirtioNetwork::OnTransmit, this, 1));
+    AddQueue(64, std::bind(&VirtioNetwork::OnControl, this, 2));
 
     backend_->Reset();
   }
@@ -121,6 +122,16 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
   void WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
     MV_ASSERT(offset + size <= sizeof(net_config_));
     memcpy((uint8_t*)&net_config_ + offset, data, size);
+  }
+
+  void EnableQueue(uint16_t queue_index) {
+    VirtioPci::EnableQueue(queue_index);
+
+    /* Some low verison driver doesn't support MTU configuration, set it to normal value */
+    if (!(driver_features_ & (1UL << VIRTIO_NET_F_MTU))) {
+      net_config_.mtu = 1518;
+      backend_->SetMtu(net_config_.mtu);
+    }
   }
 
   void OnReceive(int queue_index) {
@@ -201,7 +212,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
       elements.push_back(element);
       if (offset < size) {
-        MV_PANIC("mergeable rxbuf mode is not supported yet. offset=%lu size=%lu", offset, size);
+        MV_ERROR("mergeable rxbuf mode is not supported yet. offset=%lu size=%lu mtu=%u",
+          offset, size, net_config_.mtu);
       }
     }
 
@@ -228,6 +240,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
     backend_->OnFrameFromGuest(vector);
   }
+
   void HandleControl(VirtQueue& vq, VirtElement* element) {
     MV_UNUSED(vq);
 
@@ -236,7 +249,10 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
     virtio_net_ctrl_hdr* control = (virtio_net_ctrl_hdr*)vector.front().iov_base;
     vector.pop_front();
-    // MV_LOG("control cls=0x%x cmd=0x%x vector size=%d", control->cls, control->cmd, vector.size());
+
+    if (debug_) {
+      MV_LOG("control cls=0x%x cmd=0x%x vector size=%d", control->cls, control->cmd, vector.size());
+    }
 
     uint8_t* status = (uint8_t*)vector.back().iov_base;
     MV_ASSERT(vector.back().iov_len == 1);
@@ -247,6 +263,12 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
     switch (control->cls)
     {
+    case VIRTIO_NET_CTRL_RX_NOBCAST:
+      if (debug_) {
+        MV_LOG("no broadcast");
+      }
+      *status = VIRTIO_NET_OK;
+      break;
     default:
       *status = VIRTIO_NET_ERR;
       MV_HEXDUMP("control packet", iov.iov_base, iov.iov_len);

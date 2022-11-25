@@ -244,7 +244,6 @@ static const UsbDeviceDescriptor device_desc = {
 
 class UsbMidi : public UsbHid, public MidiInputInterface {
  private:
-  std::mutex mutex_;
   std::deque<MidiEvent> queue_;
   uint max_queue_size_ = 16;
   bool started_ = false;
@@ -257,14 +256,13 @@ class UsbMidi : public UsbHid, public MidiInputInterface {
       MV_LOG("request=%x data=%p length=%d", endpoint_address, data, length);
     }
 
-    std::unique_lock<std::mutex> lock(mutex_);
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
     if (queue_.empty()) {
       return USB_RET_NAK;
     }
 
     auto event = queue_.front();
     queue_.pop_front();
-    lock.unlock();
 
     auto data_size = sizeof(MidiEvent);
     MV_ASSERT(length >= (int)data_size);
@@ -274,7 +272,7 @@ class UsbMidi : public UsbHid, public MidiInputInterface {
 
   /* This interface function is called by the UI thread, so use a mutex */
   virtual bool QueueMidiEvent(MidiEvent event) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (!started_) {
       return false;
@@ -285,7 +283,7 @@ class UsbMidi : public UsbHid, public MidiInputInterface {
       queue_.pop_front();
     }
 
-    manager_->io()->Schedule([this]() { NotifyEndpoint(0x82); });
+    NotifyEndpoint(0x82);
     return true;
   }
 

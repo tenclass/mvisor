@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+
+message Ac97State {
+  message BusMaster {
+    uint32  bdl_address           = 1;
+    uint32  bdl_current_index     = 2;
+    uint32  bdl_last_valid_index  = 3;
+    uint32  status                = 4;
+    uint32  bdl_prefetched_index  = 5;
+    uint32  control               = 6;
+  }
+
+  bytes               mixer       = 1;
+  repeated  BusMaster bus_masters = 2;
+}

@@ -19,7 +19,7 @@
 #ifndef _MVISOR_DEVICES_USB_USB_DEVICE_H
 #define _MVISOR_DEVICES_USB_USB_DEVICE_H
 
-#include "device.h"
+#include "pci_device.h"
 #include "usb_descriptor.h"
 #include <sys/uio.h>
 #include <list>
@@ -41,47 +41,50 @@ enum UsbEndpointType {
   kUsbEndpointInterrupt
 };
 
+class UsbDevice;
 struct UsbPacket;
 struct UsbEndpoint {
-  uint                    address;
-  UsbEndpointType         type;
-  std::list<UsbPacket*>   tokens;
-  uint                    interface;
-  uint                    interval;
+  UsbDevice*                device;
+  uint                      address;
+  UsbEndpointType           type;
+  uint                      interface;
+  uint                      interval;
 };
 
 struct UsbPacket {
-  UsbEndpoint*  endpoint;
-  uint          endpoint_address;
-  uint          stream_id;
-  uint64_t      id;
-  int           status;
-  size_t        content_length;
-  size_t        size;
-  std::vector<struct iovec>  iov;
-  /* control transfer */
-  uint64_t      control_parameter;
-  /* destructor */
-  VoidCallback  Release;
-  VoidCallback  OnComplete;
+  uint                      endpoint_address;
+  uint                      stream_id;
+  uint64_t                  id;
+  int                       status;
+  size_t                    content_length;
+  uint64_t                  control_parameter;
+  size_t                    size;
+  std::vector<struct iovec> iov;
+};
+
+class UsbHost : public PciDevice {
+ public:
+  virtual ~UsbHost() {}
+  virtual void NotifyEndpoint(UsbDevice* device, uint endpoint_address) = 0;
 };
 
 class UsbDevice : public Device {
  public:
   UsbDevice();
+  virtual void Connect();
   virtual void Disconnect();
   virtual void Reset();
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
 
-  UsbPacket* CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete);
   bool HandlePacket(UsbPacket* packet);
-  void CancelPacket(UsbPacket* packet);
 
   int speed() { return speed_; }
+  int device_address() { return device_address_; }
   bool configured() { return configuration_value_ > 0; }
 
  protected:
+  int                               device_address_ = 0;
   int                               speed_;
   std::vector<UsbEndpoint*>         endpoints_;
   const UsbDeviceDescriptor*        device_descriptor_ = nullptr;
@@ -90,6 +93,7 @@ class UsbDevice : public Device {
   uint8_t                           configuration_value_ = 0;
   bool                              remote_wakeup_ = false;
   int                               alternate_settings_[16] = { 0 };
+  UsbHost*                          host_ = nullptr;
 
   void SetupDescriptor(const UsbDeviceDescriptor*, const UsbStringsDescriptor*);
 
@@ -105,9 +109,11 @@ class UsbDevice : public Device {
   virtual void NotifyEndpoint(uint endpoint_address);
 
  private:
+  void RemoveEndpoints();
   void CopyPacketData(UsbPacket* packet, uint8_t* data, int length);
   int CopyConfigurationDescriptor(uint index, uint8_t* data, int length);
   int CopyStringsDescriptor(uint index, uint8_t* data, int length);
+  int CopyDeviceQualifier(uint8_t* data, int length);
   int GetDescriptor(uint value, uint8_t* data, int length);
   int GetStatus(uint8_t* data, int length);
   int SetConfiguration(uint value);

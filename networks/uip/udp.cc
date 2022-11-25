@@ -77,7 +77,7 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
   ip->tot_len = htons(sizeof(udphdr) + sizeof(iphdr) + packet->data_length);
   ip->id = 0;
   ip->frag_off = htons(0x4000);
-  ip->ttl = 128;
+  ip->ttl = 64;
   ip->protocol = 0x11;
   ip->check = 0;
   ip->saddr = htonl(dip_);

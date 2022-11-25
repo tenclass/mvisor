@@ -200,7 +200,7 @@ void QxlRender::GetUpdatePartials(std::vector<DisplayPartialBitmap>& partials) {
     partial.height = rect.bottom - rect.top;
     partial.x = rect.left;
     partial.y = rect.top;
-    partial.pallete = nullptr;
+    partial.palette = nullptr;
     partial.data = surface.data + partial.stride * partial.y + partial.x * (partial.bpp / 8);
     partials.emplace_back(std::move(partial));
   }

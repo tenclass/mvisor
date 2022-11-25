@@ -26,35 +26,42 @@
 #include "usb_device.pb.h"
 
 UsbDevice::UsbDevice() {
-  set_parent_name("xhci-host");
-  speed_ = kUsbSpeedHigh;
+  set_default_parent_class("XhciHost", "Piix3Uhci");
+
+  speed_ = kUsbSpeedFull;
+}
+
+void UsbDevice::Connect() {
+  Device::Connect();
+  host_ = dynamic_cast<UsbHost*>(parent_);
+  MV_ASSERT(host_);
 }
 
 void UsbDevice::Disconnect() {
-  /* Free resources */
-  Reset();
-
+  RemoveEndpoints();
   Device::Disconnect();
 }
 
 void UsbDevice::Reset() {
+  Device::Reset();
+
   configuration_value_ = 0;
   config_ = nullptr;
+  device_address_ = 0;
 
-  /* remove all endpoints */
+  RemoveEndpoints();
+}
+
+void UsbDevice::RemoveEndpoints() {
   for (auto endpoint : endpoints_) {
-    while (!endpoint->tokens.empty()) {
-      auto packet = *endpoint->tokens.begin();
-      packet->Release();
-    }
     delete endpoint;
   }
   endpoints_.clear();
 }
 
-
 bool UsbDevice::SaveState(MigrationWriter* writer) {
   UsbDeviceState state;
+  state.set_device_address(device_address_);
   state.set_configuration_value(configuration_value_);
   state.set_remote_wakeup(remote_wakeup_);
   writer->WriteProtobuf("USB_DEVICE", state);
@@ -69,54 +76,18 @@ bool UsbDevice::LoadState(MigrationReader* reader) {
   if (!reader->ReadProtobuf("USB_DEVICE", state)) {
     return false;
   }
+  device_address_ = state.device_address();
   remote_wakeup_ = state.remote_wakeup();
   SetConfiguration(state.configuration_value());
   return true;
 }
 
-UsbPacket* UsbDevice::CreatePacket(uint endpoint_address, uint stream_id, uint64_t id, VoidCallback on_complete) {
-  auto packet = new UsbPacket;
-  packet->endpoint = nullptr;
-  packet->endpoint_address = endpoint_address;
-  packet->stream_id = stream_id;
-  packet->id = id;
-  packet->status = USB_RET_SUCCESS;
-  packet->content_length = 0;
-  packet->control_parameter = 0;
-  packet->size = 0;
-  packet->OnComplete = std::move(on_complete);
-
-  if (endpoint_address & 0xF) {
-    packet->endpoint = FindEndpoint(endpoint_address);
-    MV_ASSERT(packet->endpoint);
-  }
-  /* called by XHCI controller */
-  packet->Release = [packet]() {
-    auto endpoint = packet->endpoint;
-    if (endpoint) {
-      endpoint->tokens.remove(packet);
-    }
-    delete packet;
-  };
-  return packet;
-}
-
 bool UsbDevice::HandlePacket(UsbPacket* packet) {
-  if (packet->endpoint_address & 0xF) { // data endpoints
-    auto endpoint = packet->endpoint;
-    if (endpoint->type == kUsbEndpointIsochronous || endpoint->type == kUsbEndpointInterrupt || endpoint->type == kUsbEndpointBulk) {
-      packet->status = USB_RET_NAK;
-      endpoint->tokens.push_back(packet);
-      NotifyEndpoint(endpoint->address);
-      return false;
-    } else {
-      MV_PANIC("not impemented endpoint type=%d", endpoint->type);
-    }
-  } else { // control
+  if (packet->endpoint_address & 0xF) {
+    OnDataPacket(packet);
+  } else {
     OnControlPacket(packet);
   }
-
-  packet->OnComplete();
   return true;
 }
 
@@ -169,22 +140,11 @@ void UsbDevice::OnDataPacket(UsbPacket* packet) {
   }
 }
 
+/* Ask host controller to handle data packets */
 void UsbDevice::NotifyEndpoint(uint endpoint_address) {
-  auto endpoint = FindEndpoint(endpoint_address);
-  if (endpoint) {
-    if (endpoint->tokens.empty()) {
-      /* wait for next tick */
-      return;
-    }
-    auto packet = endpoint->tokens.front();
-    OnDataPacket(packet);
-    if (packet->status != USB_RET_NAK) {
-      endpoint->tokens.pop_front();
-      packet->OnComplete();
-    } 
-  } else {
-    MV_PANIC("endpoint not found 0x%x", endpoint_address);
-  }
+  host_->Schedule([this, endpoint_address]() {
+    host_->NotifyEndpoint(this, endpoint_address);
+  });
 }
 
 void UsbDevice::CopyPacketData(UsbPacket* packet, uint8_t* data, int length) {
@@ -227,6 +187,10 @@ int UsbDevice::OnOutputData(uint endpoint_address, uint8_t* data, int length) {
 int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, int length) {
   switch (request)
   {
+  case DeviceOutRequest | USB_REQ_SET_ADDRESS:
+    device_address_ = value;
+    return 0;
+
   case DeviceRequest | USB_REQ_GET_DESCRIPTOR:
     return GetDescriptor(value, data, length);
   
@@ -275,6 +239,7 @@ int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, in
   case VendorInterfaceRequest | 'Q':
     return GetMicrosoftOsDescriptor(index, data, length);
   }
+
   MV_ERROR("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
   return USB_RET_STALL;
 }
@@ -286,8 +251,7 @@ void UsbDevice::SetupDescriptor(const UsbDeviceDescriptor* device_desc,
 }
 
 int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
-  if (length < 2) {
-    MV_ERROR("length too short, index=0x%x length=%d", index, length);
+  if (length < 4) {
     return USB_RET_IOERROR;
   }
   
@@ -313,6 +277,27 @@ int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
     data[pos++] = 0;
   }
   return pos;
+}
+
+int UsbDevice::CopyDeviceQualifier(uint8_t* data, int length) {
+  uint8_t bLength = 0x0A;
+
+  if (length < bLength) {
+    return USB_RET_IOERROR;
+  }
+
+  data[0] = bLength;
+  data[1] = USB_DT_DEVICE_QUALIFIER;
+
+  data[2] = device_descriptor_->bcdUSB & 0xFF;
+  data[3] = device_descriptor_->bcdUSB >> 8;
+  data[4] = device_descriptor_->bDeviceClass;
+  data[5] = device_descriptor_->bDeviceSubClass;
+  data[6] = device_descriptor_->bDeviceProtocol;
+  data[7] = device_descriptor_->bMaxPacketSize0;
+  data[8] = device_descriptor_->bNumConfigurations;
+  data[9] = 0; // reserved
+  return bLength;
 }
 
 int UsbDevice::CopyConfigurationDescriptor(uint index, uint8_t* data, int length) {
@@ -384,8 +369,11 @@ int UsbDevice::GetDescriptor(uint value, uint8_t* data, int length) {
   case USB_DT_STRING:
     return CopyStringsDescriptor(index, data, length);
 
+  case USB_DT_DEVICE_QUALIFIER:
+    return CopyDeviceQualifier(data, length);
+
   default:
-    MV_PANIC("unknown type=%d", type);
+    MV_ERROR("unknown type=%d", type);
     return USB_RET_STALL;
   }
 }
@@ -397,7 +385,9 @@ int UsbDevice::GetStatus(uint8_t* data, int length) {
 
 int UsbDevice::SetConfiguration(uint value) {
   /* delete all endpoints */
-  Reset();
+  RemoveEndpoints();
+  configuration_value_ = 0;
+  config_ = nullptr;
 
   if (value == 0) {
     return 0;
@@ -415,6 +405,7 @@ int UsbDevice::SetConfiguration(uint value) {
           auto desc = &interface->endpoints[k];
           /* create endpoint */
           auto endpoint = new UsbEndpoint;
+          endpoint->device = this;
           endpoint->address = desc->bEndpointAddress;
           endpoint->type = UsbEndpointType(desc->bmAttributes & 3);
           endpoint->interface = j;

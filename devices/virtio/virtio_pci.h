@@ -130,7 +130,6 @@ class VirtioPci : public PciDevice {
   void ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteNotification(uint64_t offset, uint8_t* data, uint32_t size);
-  void EnableQueue(uint16_t queue_index);
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
 
@@ -141,6 +140,7 @@ class VirtioPci : public PciDevice {
   void PushQueueMultiple(VirtQueue& vq, std::vector<VirtElement*>& elements);
   void NotifyQueue(VirtQueue& vq);
   void AddQueue(uint16_t queue_size, VoidCallback callback);
+  virtual void EnableQueue(uint16_t queue_index);
   virtual void ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size);
   virtual void WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size);
 

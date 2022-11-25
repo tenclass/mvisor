@@ -21,6 +21,7 @@
 #include "logger.h"
 #include "utilities.h"
 #include "device_manager.h"
+#include "pci_device.h"
 #include "qcow2.h"
 
 
@@ -46,18 +47,13 @@ DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly, bo
   image->readonly_ = readonly;
   image->snapshot_ = snapshot;
   image->device_ = device;
+  image->host_device_ = dynamic_cast<Device*>((Object*)device->parent());
+  MV_ASSERT(image->host_device_);
   image->Initialize();
   
   image->io_ = device->manager()->io();
   image->worker_thread_ = std::thread(&DiskImage::WorkerProcess, image);
   return image;
-}
-
-ssize_t DiskImage::Discard(off_t position, size_t length, bool write_zeros) {
-  MV_UNUSED(position);
-  MV_UNUSED(length);
-  MV_UNUSED(write_zeros);
-  return 0;
 }
 
 void DiskImage::Finalize() {
@@ -99,52 +95,36 @@ void DiskImage::WorkerProcess() {
   io_->UnregisterDiskImage(this);
 }
 
-void DiskImage::ReadAsync(void *buffer, off_t position, size_t length, IoCallback callback) {
+
+void DiskImage::QueueIoRequest(ImageIoRequest request, IoCallback callback) {
   worker_mutex_.lock();
-  worker_queue_.emplace_back([this, buffer, position, length, callback = std::move(callback)]() {
-    auto ret = Read(buffer, position, length);
-    io_->Schedule([=]() { callback(ret); });
+  worker_queue_.emplace_back([this, request = std::move(request), callback = std::move(callback)]() {
+    auto ret = HandleIoRequest(std::move(request));
+    std::lock_guard<std::recursive_mutex> device_lock(host_device_->mutex());
+    callback(ret);
   });
+
   worker_mutex_.unlock();
   worker_cv_.notify_all();
 }
 
-void DiskImage::WriteAsync(void *buffer, off_t position, size_t length, IoCallback callback) {
-  if (readonly_) {
-    return callback(0);
-  }
-
+void DiskImage::QueueMultipleIoRequests(std::vector<ImageIoRequest> requests, IoCallback callback) {
   worker_mutex_.lock();
-  worker_queue_.emplace_back([this, buffer, position, length, callback = std::move(callback)]() {
-    auto ret = Write(buffer, position, length);
-    io_->Schedule([=]() { callback(ret); });
-  });
-  worker_mutex_.unlock();
-  worker_cv_.notify_all();
-}
+  worker_queue_.emplace_back([this, requests = std::move(requests), callback = std::move(callback)]() {
+    long ret, total = 0;
+    for (auto &req: requests) {
+      ret = HandleIoRequest(std::move(req));
+      if (ret < 0) {
+        total = ret;
+        break;
+      }
+      total += ret;
+    }
 
-void DiskImage::DiscardAsync(off_t position, size_t length, bool write_zeros, IoCallback callback) {
-  if (readonly_) {
-    return callback(0);
-  }
-
-  worker_mutex_.lock();
-  worker_queue_.emplace_back([this, position, length, write_zeros, callback = std::move(callback)]() {
-    auto ret = Discard(position, length, write_zeros);
-    io_->Schedule([=]() { callback(ret); });
+    std::lock_guard<std::recursive_mutex> device_lock(host_device_->mutex());
+    callback(total);
   });
-  worker_mutex_.unlock();
-  worker_cv_.notify_all();
-}
 
-void DiskImage::FlushAsync(IoCallback callback) {
-  worker_mutex_.lock();
-  worker_queue_.emplace_back([this, callback = std::move(callback)]() {
-    auto ret = Flush();
-    io_->Schedule([=]() {
-      callback(ret);
-    });
-  });
   worker_mutex_.unlock();
   worker_cv_.notify_all();
 }

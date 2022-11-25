@@ -159,11 +159,17 @@ class VirtioBlock : public VirtioPci {
       if (debug_) {
         MV_LOG("%s pos=0x%lx len=0x%lx ", is_write ? "write" : "read", position, length);
       }
-      if (is_write) {
-        image_->WriteAsync(buffer, position, length, std::move(io_complete));
-      } else {
-        image_->ReadAsync(buffer, position, length, std::move(io_complete));
-      }
+
+      ImageIoRequest r = {
+        .type = is_write ? kImageIoWrite : kImageIoRead,
+        .position = position,
+        .length = length
+      };
+      r.vector.emplace_back(iovec {
+        .iov_base = buffer,
+        .iov_len = length
+      });
+      image_->QueueIoRequest(r, std::move(io_complete));
       position += length;
     }
   }
@@ -196,12 +202,16 @@ class VirtioBlock : public VirtioPci {
       });
       break;
     }
-    case VIRTIO_BLK_T_FLUSH:
-      image_->FlushAsync([callback = std::move(callback), status](ssize_t ret) {
+    case VIRTIO_BLK_T_FLUSH: {
+      ImageIoRequest r = {
+        .type = kImageIoFlush
+      };
+      image_->QueueIoRequest(r, [callback = std::move(callback), status](ssize_t ret) {
         *status = ret == 0 ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });
       break;
+    }
     case VIRTIO_BLK_T_GET_ID: {
       auto &iov = vector.front();
       void* buffer = iov.iov_base;
@@ -220,8 +230,13 @@ class VirtioBlock : public VirtioPci {
       MV_ASSERT(iov.iov_len == sizeof(*discard));
       size_t position = discard->sector * block_config_.blk_size;
       size_t length = discard->num_sectors * block_config_.blk_size;
-      bool write_zeros = request->type == VIRTIO_BLK_T_WRITE_ZEROES;
-      image_->DiscardAsync(position, length, write_zeros, [status, callback = std::move(callback), length](auto ret) {
+
+      ImageIoRequest r = {
+        .type = request->type == VIRTIO_BLK_T_WRITE_ZEROES ? kImageIoWriteZeros : kImageIoDiscard,
+        .position = position,
+        .length = length
+      };
+      image_->QueueIoRequest(r, [status, callback = std::move(callback), length](auto ret) {
         *status = ret == (ssize_t)length ? VIRTIO_BLK_S_OK : VIRTIO_BLK_S_IOERR;
         callback();
       });

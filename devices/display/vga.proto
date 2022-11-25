@@ -11,9 +11,9 @@ message VgaState {
   bytes   attribute               = 8;
   uint32  crtc_index              = 9;
   bytes   crtc                    = 10;
-  uint32  pallete_read_index      = 11;
-  uint32  pallete_write_index     = 12;
-  bytes   pallete                 = 13;
+  uint32  palette_read_index      = 11;
+  uint32  palette_write_index     = 12;
+  bytes   palette                 = 13;
   uint32  dac_state               = 14;
   uint32  feature_control         = 15;
   uint32  latch                   = 16;

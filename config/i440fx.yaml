@@ -1,0 +1,29 @@
+name: i440fx-machine
+
+machine:
+  memory: 4G
+  vcpu: 4
+  bios: ../share/bios-256k.bin
+
+objects:
+# Use the old name pci-host instead of i440fx-host for compatibility
+  - class: i440fx-host
+
+# PCI devices connected to PCI Host.
+# The PIIX3 must be put first because it must use PCI slot 1
+  - class: piix3
+  - class: piix3-ide
+  - class: piix3-uhci
+  - class: piix4-pm
+  - class: ac97
+
+# I/O devices connected to PIIX3
+  - class: cmos
+  - class: debug-console
+  - class: dummy-device
+  - class: firmware-config
+  - class: kvm-clock
+  - class: ps2
+  - class: i8257-dma
+  - class: i82078-fdc
+

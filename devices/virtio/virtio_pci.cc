@@ -435,7 +435,7 @@ void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size)
     if (use_ioevent_) {
       vq.notification_callback();
     } else {
-      manager_->io()->Schedule(vq.notification_callback);
+      Schedule(vq.notification_callback);
     }
   } else {
     MV_LOG("%s queue %u is not enabled", name_, queue);
@@ -452,6 +452,8 @@ void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data
     } else if (offset < 0x4000) { /* Notification */
       WriteNotification(offset - 0x3000, data, size);
     }
+  } else if (resource->base == pci_bars_[0].address) {
+    /* ignore legacy driver writes */
   } else {
     PciDevice::Write(resource, offset, data, size);
   }
@@ -469,6 +471,9 @@ void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
       ReadDeviceConfig(offset - 0x2000, data, size);
     } else if (offset < 0x4000) { /* Notification */
     }
+  } else if (resource->base == pci_bars_[0].address) {
+    /* let legacy driver fail */
+    bzero(data, size);
   } else {
     PciDevice::Read(resource, offset, data, size);
   }

@@ -3,4 +3,5 @@ syntax = "proto3";
 message UsbDeviceState {
   uint32  configuration_value     = 1;
   uint32  remote_wakeup           = 2;
+  uint32  device_address          = 3;
 }

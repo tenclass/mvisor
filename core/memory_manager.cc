@@ -56,8 +56,8 @@ MemoryManager::MemoryManager(const Machine* machine)
   trace_slot_names_.insert("SeaBIOS");
 
   /* Setup the system memory map for BIOS to run */
-  InitializeSystemRam();
   InitializeReservedMemory();
+  InitializeSystemRam();
   LoadBiosFile();
 }
 

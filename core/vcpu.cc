@@ -221,7 +221,8 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     {
     case 0x40000000: // HV_CPUID_VENDOR_AND_MAX_FUNCTIONS
       entry->eax = HV_CPUID_IMPLEMENT_LIMITS;
-      memcpy(&entry->ebx, "Microsoft Hv", 12);
+      // entry->ebx defaults to "Linux KVM Hv"
+      // memcpy(&entry->ebx, "Microsoft Hv", 12);
       break;
     case 0x40000001: // HV_CPUID_INTERFACE
       memcpy(&entry->eax, "Hv#1\0\0\0\0\0\0\0\0\0\0\0\0", 16);
@@ -394,7 +395,7 @@ void Vcpu::ProcessMmio() {
   auto dm = machine_->device_manager();
   dm->FlushCoalescingMmioBuffer();
 
-  auto *mmio = &kvm_run_->mmio;
+  auto mmio = &kvm_run_->mmio;
   for (size_t i = mmio->len; i < sizeof(mmio->data); i++)
     mmio->data[i] = 0;
   dm->HandleMmio(mmio->phys_addr, mmio->data, mmio->len, mmio->is_write);
@@ -405,7 +406,7 @@ void Vcpu::ProcessIo() {
   auto dm = machine_->device_manager();
   dm->FlushCoalescingMmioBuffer();
 
-  auto *io = &kvm_run_->io;
+  auto io = &kvm_run_->io;
   uint8_t* data = reinterpret_cast<uint8_t*>(kvm_run_) + kvm_run_->io.data_offset;
   dm->HandleIo(io->port, data, io->size, io->direction, io->count);
 }
@@ -537,8 +538,10 @@ void Vcpu::Process() {
       MV_PANIC("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
       break;
     case KVM_EXIT_SHUTDOWN:
+      /* A hard reset request reached here */
       MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
-      goto quit;
+      machine_->Reset();
+      break;
     case KVM_EXIT_HLT:
       MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);
       goto quit;
@@ -718,7 +721,7 @@ void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
   memcpy(&xcrs, state.xcrs().data(), sizeof(xcrs));
   MV_ASSERT(ioctl(fd_, KVM_SET_XCRS, &xcrs) == 0);
 
-  /* tsc must be set before KVM_SET_MSRS, otherwise it may cause the guest to get time in a mess */
+  /* TSC must be set before KVM_SET_MSRS, otherwise it may cause the guest to get time in a mess */
   // https://patchwork.kernel.org/project/kvm/patch/1443418711-24106-4-git-send-email-haozhong.zhang@intel.com/#15469651
   if (ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_CONTROL)) {
     MV_ASSERT(ioctl(fd_, KVM_SET_TSC_KHZ, state.tsc_khz()) == 0);

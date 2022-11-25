@@ -36,7 +36,7 @@
 class SystemRoot : public Device {
  public:
   SystemRoot() {
-    set_parent_name("");
+    default_parent_classes_.clear();
   }
  private:
   friend class DeviceManager;
@@ -51,6 +51,7 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
   machine_(machine), root_(root)
 {
   root_->manager_ = this;
+
   /* Initialize IRQ chip */
   SetupIrqChip();
   
@@ -206,6 +207,26 @@ void DeviceManager::UnregisterVfioGroup(int group_fd) {
 
 void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+  /* Check if resources are overlapped */
+  if (resource->type == kIoResourceTypePio) {
+    auto found = std::find_if(pio_handlers_.begin(), pio_handlers_.end(), [resource](auto& o) {
+      return ranges_overlap(o->resource->base, o->resource->length, resource->base, resource->length);
+    });
+    if (found != pio_handlers_.end()) {
+      MV_PANIC("%s port 0x%x(0x%x) overlapped by %s port 0x%x(0x%x)", device->name(), resource->base,
+        resource->length, (*found)->device->name(), (*found)->resource->base, (*found)->resource->length);
+    }
+  } else if (resource->type == kIoResourceTypeMmio) {
+    auto found = std::find_if(pio_handlers_.begin(), pio_handlers_.end(), [resource](auto& o) {
+      return ranges_overlap(o->resource->base, o->resource->length, resource->base, resource->length);
+    });
+    if (found != pio_handlers_.end()) {
+      MV_PANIC("%s mmio 0x%x(0x%x) overlapped by %s mmio 0x%x(0x%x)", device->name(), resource->base,
+        resource->length, (*found)->device->name(), (*found)->resource->base, (*found)->resource->length);
+    }
+  }
+
   if (resource->type == kIoResourceTypePio) {
     pio_handlers_.push_back(new IoHandler {
       .resource = resource,
@@ -301,7 +322,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
     MV_LOG("%s register IO event address=0x%lx length=%lu fd=%d", device->name(), address, length, event->fd);
   }
 
-  io()->StartPolling(event->fd, EPOLLIN, [event, this](int events) {
+  io()->StartPolling(device, event->fd, EPOLLIN, [event, this](int events) {
     if (events & EPOLLIN) {
       uint64_t tmp;
       read(event->fd, &tmp, sizeof(tmp));
@@ -418,7 +439,8 @@ void DeviceManager::HandleIo(uint16_t port, uint8_t* data, uint16_t size, int is
       lock.unlock();
 
       auto start_time = std::chrono::steady_clock::now();
-      uint8_t* ptr = data;
+      std::lock_guard<std::recursive_mutex> device_lock(device->mutex_);
+      auto ptr = data;
       for (uint32_t i = 0; i < count; i++) {
         if (is_write) {
           device->Write(resource, port - resource->base, ptr, size);
@@ -483,6 +505,7 @@ void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int 
       lock.unlock();
 
       auto start_time = std::chrono::steady_clock::now();
+      std::lock_guard<std::recursive_mutex> device_lock(device->mutex_);
       if (is_write) {
         device->Write(resource, addr - resource->base, data, size);
       } else {
@@ -536,7 +559,7 @@ void DeviceManager::AddDirtyMemory(uint64_t gpa, size_t size) {
 }
 
 /* Sets the level of a GSI input to the interrupt controller model */
-void DeviceManager::SetGsiLevel(uint32_t gsi, uint32_t level) {
+void DeviceManager::SetGsiLevel(uint gsi, uint level) {
   struct kvm_irq_level irq_level = {
     .irq = gsi,
     .level = level
@@ -546,15 +569,33 @@ void DeviceManager::SetGsiLevel(uint32_t gsi, uint32_t level) {
   }
 }
 
+/* Calculate the GSI of a PCI pin and set its level.
+ * GSI can be shared, so we count the level */
+void DeviceManager::SetPciIrqLevel(PciDevice* pci, uint level) {
+  auto gsi = pci->pci_header_.irq_line;
+  if (pci_irq_translator_) {
+    gsi = pci_irq_translator_(pci->slot_, pci->function_, pci->pci_header_.irq_pin);
+  }
+
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
+  if (level) {
+    pci_irq_raised_[gsi].insert(pci->id_);
+  } else {
+    pci_irq_raised_[gsi].erase(pci->id_);
+  }
+  uint set_level = !pci_irq_raised_[gsi].empty();
+  lock.unlock();
+
+  SetGsiLevel(gsi, set_level);
+}
+
 /* It seems we can signal MSI without seting up routing table */
 void DeviceManager::SignalMsi(uint64_t address, uint32_t data) {
   struct kvm_msi msi = {
     .address_lo = (uint32_t)(address),
     .address_hi = (uint32_t)(address >> 32),
     .data = data,
-    .flags = 0,
-    .devid = 0,
-    .pad = {0}
+    .flags = 0
   };
   auto ret = ioctl(machine_->vm_fd_, KVM_SIGNAL_MSI, &msi);
   if (ret < 0) {

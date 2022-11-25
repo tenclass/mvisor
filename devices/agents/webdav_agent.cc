@@ -33,7 +33,8 @@ class WebdavAgent : public Device, public SerialPortInterface {
 
  public:
   WebdavAgent() {
-    set_parent_name("virtio-console");
+    set_default_parent_class("VirtioConsole");
+
     strcpy(port_name_, "org.spice-space.webdav.0");
   }
 

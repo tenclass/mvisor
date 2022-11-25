@@ -1,4 +1,5 @@
 mvisor_sources += files(
+  'ac97.cc',
   'hda_codec.h',
   'hda_duplex.cc',
   'hda_internal.h',
@@ -7,6 +8,7 @@ mvisor_sources += files(
 )
 
 proto_sources += proto_gen.process(
+  'ac97.proto',
   'hda_duplex.proto',
   'ich9_hda.proto'
 )

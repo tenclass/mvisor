@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message AtaCdromState {
+  uint32  sense_key     = 1;
+  uint32  asc           = 2;
+}

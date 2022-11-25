@@ -169,6 +169,7 @@ class Qcow2Image : public DiskImage {
   ssize_t WriteCluster(void* buffer, off_t pos, size_t length);
   ssize_t DiscardCluster(off_t pos, size_t length);
   ssize_t BlockIo(void *buffer, off_t position, size_t length, ImageIoType type);
+  ssize_t FlushAll();
   void FlushL2Tables ();
   void FlushRefcountBlocks();
   void ReleaseImage(bool remove_file);
@@ -177,11 +178,7 @@ class Qcow2Image : public DiskImage {
  public:
   virtual ~Qcow2Image();
   virtual void Initialize();
-  virtual ssize_t Read(void *buffer, off_t position, size_t length);
-  virtual ssize_t Write(void *buffer, off_t position, size_t length);
-  virtual ssize_t Discard(off_t position, size_t length, bool write_zeros);
-  virtual ssize_t Flush();
-  
+  virtual long HandleIoRequest(ImageIoRequest request);
 
   virtual ImageInformation information() {
     return ImageInformation {

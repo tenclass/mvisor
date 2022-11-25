@@ -27,17 +27,18 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
+#include <linux/icmp.h>
 #include <arpa/inet.h>
 #include <ctime>
 
 #include "device_interface.h"
-#include "io_thread.h"
+#include "pci_device.h"
 
-#define UIP_MAX_BUFFER_SIZE         (4096 - 16)
-#define UIP_MAX_UDP_PAYLOAD(packet) (packet->mtu - 20 - 8)
-#define UIP_MAX_TCP_PAYLOAD(packet) (packet->mtu - 144)
+#define UIP_MAX_BUFFER_SIZE           (4096 - 16)
+#define UIP_MAX_UDP_PAYLOAD(packet)   (packet->mtu - 20 - 8)
+#define UIP_MAX_TCP_PAYLOAD(packet)   (packet->mtu - 144)
 
-#define REDIRECT_TIMEOUT_SECONDS    (120)
+#define REDIRECT_TIMEOUT_SECONDS      (120)
 
 struct PseudoHeader {
   uint32_t sip;
@@ -57,6 +58,7 @@ struct Ipv4Packet {
   iphdr*        ip;
   udphdr*       udp;
   tcphdr*       tcp;
+  icmphdr*      icmp;
   void*         data;
   size_t        data_length;
   size_t        data_offset;
@@ -66,8 +68,10 @@ struct Ipv4Packet {
 class Ipv4Socket {
  public:
   Ipv4Socket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip);
+
   virtual ~Ipv4Socket() {}
   virtual void OnPacketFromGuest(Ipv4Packet* packet) = 0;
+  virtual void OnGuestBufferAvaialble();
   
   virtual bool active() = 0;
 
@@ -75,22 +79,20 @@ class Ipv4Socket {
   virtual Ipv4Packet* AllocatePacket(bool urgent);
   uint16_t CalculateChecksum(uint8_t* addr, uint16_t count);
 
-  NetworkBackendInterface* backend_;
-  uint32_t sip_;
-  uint32_t dip_;
-  bool closed_;
-  time_t active_time_;
-  bool debug_;
-
-  IoThread*   io_ = nullptr;
+  NetworkBackendInterface*  backend_;
+  uint32_t                  sip_;
+  uint32_t                  dip_;
+  bool                      closed_;
+  time_t                    active_time_;
+  bool                      debug_;
+  PciDevice*                device_ = nullptr;
 };
 
 
 class TcpSocket : public Ipv4Socket {
  public:
   TcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
-   
-  inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
+  bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
   }
   virtual bool UpdateGuestAck(tcphdr* tcp);
@@ -117,8 +119,7 @@ class TcpSocket : public Ipv4Socket {
 class UdpSocket : public Ipv4Socket {
  public:
   UdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
-
-  inline bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
+  bool Equals(uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) {
     return sip_ == sip && dip_ == dip && sport_ == sport && dport_ == dport;
   }
 
@@ -136,8 +137,9 @@ class RedirectTcpSocket : public TcpSocket {
   RedirectTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport);
   virtual ~RedirectTcpSocket();
   virtual void InitializeRedirect(Ipv4Packet* packet);
+  virtual void OnGuestBufferAvaialble();
+  virtual void OnPacketFromGuest(Ipv4Packet* packet);
   void Shutdown(int how);
-  void OnPacketFromGuest(Ipv4Packet* packet);
   bool UpdateGuestAck(tcphdr* tcp);
   void ReplyReset(Ipv4Packet* packet);
   void Reset();
@@ -150,8 +152,8 @@ class RedirectTcpSocket : public TcpSocket {
   void StartWriting();
   void OnRemoteConnected();
 
-  bool can_read() { return fd_ != -1 && connected_ && !read_done_ && can_read_; }
-  bool can_write() { return fd_ != -1 && connected_ && !write_done_ && can_write_; }
+  inline bool can_read() { return fd_ != -1 && connected_ && !read_done_ && can_read_; }
+  inline bool can_write() { return fd_ != -1 && connected_ && !write_done_ && can_write_; }
 
   bool write_done_ = false;
   bool read_done_ = false;
@@ -176,15 +178,18 @@ class RedirectUdpSocket : public UdpSocket {
     UdpSocket(backend, sip, dip, sport, dport) {
   }
   virtual ~RedirectUdpSocket();
-  void InitializeRedirect();
-  void OnPacketFromGuest(Ipv4Packet* packet);
+  virtual void InitializeRedirect();
+  virtual void OnGuestBufferAvaialble();
+  virtual void OnPacketFromGuest(Ipv4Packet* packet);
   bool active();
 
  protected:
   void StartReading();
 
-  int fd_;
-  IoTimer*  wait_timer_ = nullptr;
+  inline bool can_read() { return fd_ != -1 && can_read_; }
+
+  int       fd_;
+  bool      can_read_ = false;
 };
 
 struct DhcpMessage;
@@ -199,6 +204,41 @@ class DhcpServiceUdpSocket : public UdpSocket {
   size_t FillDhcpOptions(uint8_t* option, int dhcp_type);
 
   std::vector<uint32_t> nameservers_;
+};
+
+class IcmpSocket : public Ipv4Socket {
+ public:
+  IcmpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t echo_id);
+  bool Equals(uint32_t sip, uint32_t dip, uint16_t echo_id) {
+    return sip_ == sip && dip_ == dip && echo_id_ == echo_id;
+  }
+
+ protected:
+  virtual Ipv4Packet* AllocatePacket(bool urgent);
+  uint16_t CalculateIcmpChecksum(Ipv4Packet* packet);
+  void OnDataFromHost(Ipv4Packet* packet);
+
+  uint16_t  echo_id_;
+};
+
+class RedirectIcmpSocket : public IcmpSocket {
+ public:
+  RedirectIcmpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t echo_id) :
+    IcmpSocket(backend, sip, dip, echo_id) {
+  }
+  virtual ~RedirectIcmpSocket();
+  virtual void InitializeRedirect();
+  virtual void OnPacketFromGuest(Ipv4Packet* packet);
+  bool active();
+
+ protected:
+  void StartReading();
+
+  inline bool can_read() { return fd_ != -1 && can_read_; }
+
+  int       fd_;
+  bool      can_read_ = false;
+  bool      raw_mode_ = false;
 };
 
 #endif // _MVISOR_NETWORKS_USER_H

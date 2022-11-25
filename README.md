@@ -31,23 +31,23 @@ What's supported now:
 
 ### Basic functions
 
-1. Multi vCPU ✅
-2. Load SeaBIOS ✅
+1. 440FX / Q35 Chipset ✅
+2. SeaBIOS ✅
 3. Memory Region Management ✅
 4. IOPort Management ✅
 5. Devices Management ✅
-6. RTC(CMOS) ✅
+6. RTC (CMOS) ✅
 7. PS/2 ✅
 8. PCI ISA ICH9-LPC ✅
 9. QEMU CFG ✅
-10. Legacy DMA ❌
-11. IDE ❌ / AHCI ✅
-12. Parallel Port ❌
+10. Legacy DMA ✅
+11. IDE ✅ / AHCI ✅
+12. Floppy Disk ✅
 13. Serial Port ✅
 14. VGA / VBE ✅
 15. Option Roms ✅ / SMBIOS ✅ / ACPI Table ✅
 16. Boot DOS ✅
-17. Boot OS (Windows 8 or 10) ✅
+17. Boot OS (Win98 to Win11 / DOS / Ubuntu) ✅
 18. QCOW2 ✅
 
 ### Multimedia & Networking
@@ -56,12 +56,12 @@ What's supported now:
 2. SpiceAgent ✅
 3. QemuGuestAgent ✅
 4. Qxl ✅
-5. Audio (ICH9-HDA) ✅
+5. Audio (ICH9-HDA / AC97) ✅
 6. Tap network
 7. User network ✅
 8. VFIO ✅
 9. Samba
-10. XHCI ✅ / USB Tablet ✅ / USB Midi ✅ / USB Wacom ✅
+10. USB 1.0 UHCI ✅ / USB 3.0 XHCI ✅ / USB Tablet ✅ / USB Midi ✅ / USB Wacom ✅
 
 ### Hyper-V & Migration
 

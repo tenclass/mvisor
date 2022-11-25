@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef _MVISOR_DEVICES_USB_XHCI_HOST_H
-#define _MVISOR_DEVICES_USB_XHCI_HOST_H
+#ifndef _MVISOR_DEVICES_USB_XHCI_INTERNAL_H
+#define _MVISOR_DEVICES_USB_XHCI_INTERNAL_H
 
 #include <cstdint>
 
@@ -358,4 +358,4 @@ enum TRBCCode {
   } while (0)
 
 
-#endif // _MVISOR_DEVICES_USB_XHCI_HOST_H
+#endif // _MVISOR_DEVICES_USB_XHCI_INTERNAL_H

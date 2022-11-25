@@ -292,3 +292,8 @@ void MigrationNetworkReader::ReadToFile(std::string tag, std::string path, size_
 
   safe_close(&fd);
 }
+
+bool MigrationNetworkReader::Exists(std::string tag) {
+  MV_UNUSED(tag);
+  return true;
+}

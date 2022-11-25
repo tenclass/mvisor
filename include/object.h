@@ -44,6 +44,7 @@ class Object {
   inline bool debug() const { return debug_; }
   inline const Object* parent() const { return parent_; }
   inline const char* parent_name() const { return parent_name_; }
+  inline const std::vector<std::string>& default_parent_classes() const { return default_parent_classes_; }
   inline const std::vector<Object*>& children() const { return children_; }
   inline bool has_key(std::string key) const { return key_values_.find(key) != key_values_.end(); }
   inline Value& operator[](std::string key) { return key_values_[key]; }
@@ -54,6 +55,7 @@ class Object {
   void set_name(const char* name);
   void set_classname(const char* classname);
   void set_parent_name(const char* parent_name);
+  void set_default_parent_class(const char* primary, const char* secondary = nullptr);
 
  protected:
   uint id_ = 0;
@@ -66,6 +68,7 @@ class Object {
   /* Object topology */
   Object* parent_ = nullptr;
   std::vector<Object*> children_;
+  std::vector<std::string> default_parent_classes_;
 };
 
 #endif // _MVISOR_OBJECT_H

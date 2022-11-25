@@ -37,6 +37,7 @@ struct IoHandler {
 };
 
 typedef std::function<void()> VoidCallback;
+typedef std::function<uint (uint, uint, uint)> PciIrqTranslator; 
 
 enum IoEventType {
   kIoEventPio,
@@ -106,10 +107,14 @@ class DeviceManager {
   bool LoadState(MigrationReader* reader);
   
   /* IRQ / MSIs all are GSIs */
-  void SetGsiLevel(uint32_t gsi, uint32_t level);
+  void SetGsiLevel(uint gsi, uint level);
+  void SetPciIrqLevel(PciDevice* pci, uint level);
   void SignalMsi(uint64_t address, uint32_t data);
   int AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd = -1);
   void UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd = -1);
+
+  /* Called by PIIX3 or ICH9 LPC */
+  void set_pci_irq_translator(PciIrqTranslator translator) { pci_irq_translator_ = translator; }
 
   inline Machine* machine() { return machine_; }
   inline Device* root() { return root_; }
@@ -121,19 +126,21 @@ class DeviceManager {
   void UpdateGsiRoutingTable();
 
  private:
-  Machine*                machine_;
-  Device*                 root_;
-  std::set<Device*>       registered_devices_;
-  std::deque<IoHandler*>  mmio_handlers_;
-  std::deque<IoHandler*>  pio_handlers_;
-  std::set<IoEvent*>      ioevents_;
-  std::recursive_mutex    mutex_;
+  Machine*                            machine_;
+  Device*                             root_;
+  std::set<Device*>                   registered_devices_;
+  std::deque<IoHandler*>              mmio_handlers_;
+  std::deque<IoHandler*>              pio_handlers_;
+  std::set<IoEvent*>                  ioevents_;
+  std::recursive_mutex                mutex_;
   std::vector<kvm_irq_routing_entry>  gsi_routing_table_;
-  int                     next_gsi_ = 0;
-  IoAccounting            io_accounting_;
-  int                     vfio_kvm_device_fd_ = -1;
-  kvm_coalesced_mmio_ring*  coalesced_mmio_ring_ = nullptr;
-  std::recursive_mutex    coalesced_mmio_ring_mutex_;
+  int                                 next_gsi_ = 0;
+  IoAccounting                        io_accounting_;
+  int                                 vfio_kvm_device_fd_ = -1;
+  kvm_coalesced_mmio_ring*            coalesced_mmio_ring_ = nullptr;
+  std::recursive_mutex                coalesced_mmio_ring_mutex_;
+  PciIrqTranslator                    pci_irq_translator_;
+  std::unordered_set<uint>            pci_irq_raised_[32];
 };
 
 #endif // _MVISOR_DEVICE_MANAGER_H

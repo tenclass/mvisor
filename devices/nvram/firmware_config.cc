@@ -17,13 +17,18 @@
  */
 
 #include "firmware_config.h"
+
 #include <cstring>
+
 #include "logger.h"
 #include "device_manager.h"
 #include "memory_manager.h"
 #include "machine.h"
 #include "smbios.h"
 #include "firmware_config.pb.h"
+#include "acpi_dsdt/acpi_dsdt.hex.h"
+#include "acpi_dsdt/q35_acpi_dsdt.hex.h"
+
 
 #define FW_CFG_ACPI_DEVICE_ID "QEMU0002"
 
@@ -139,21 +144,30 @@ class FirmwareConfig : public Device {
   }
 
   void InitializeFiles () {
-    AddConfigFile("bios-geometry", nullptr, 0);
-
-    std::string smbios_anchor, smbios_table;
-    Smbios smbios(manager_->machine());
-    smbios.GetTables(smbios_anchor, smbios_table); 
-    AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
-    AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
-
     /* disable S3 S4 (suspend / hibernate) */
     bool disable_s3 = true, disable_s4 = true;
     uint8_t suspend[6] = {128, 0, 0, 129, 128, 128};
     suspend[3] = 1 | (uint(!disable_s3) << 7);
     suspend[4] = 2 | (uint(!disable_s4) << 7);
     AddConfigFile("etc/system-states", suspend, sizeof(suspend));
-    
+
+    /* ACPI DSDT */
+    auto machine = manager_->machine();
+    if (machine->LookupObjectByClass("I440fxHost")) {
+      AddConfigFile("acpi/dsdt", acpi_dsdt_aml_code, sizeof(acpi_dsdt_aml_code));
+    } else if (machine->LookupObjectByClass("Q35Host")) {
+      AddConfigFile("acpi/dsdt", q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
+    } else {
+      MV_WARN("Unknown motherboard. ACPI might not work.");
+    }
+
+    std::string smbios_anchor, smbios_table;
+    Smbios smbios(manager_->machine());
+    smbios.GetTables(smbios_anchor, smbios_table);
+
+    // FIXME: Not implemented yet. Uncommenting these lines would cause windows BSOD 0x7B
+    AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
+    AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
   }
 
   void InitializeFileDir() {
@@ -180,23 +194,31 @@ class FirmwareConfig : public Device {
   void InitializeE820Table() {
     MemoryManager* mm = manager_->machine()->memory_manager();
     std::vector<e820_entry> entries;
-    for (auto slot : mm->GetMemoryFlatView()) {
+
+    for (auto region : mm->regions()) {
       e820_entry entry;
-      entry.address = slot->begin;
-      entry.length = slot->end - slot->begin;
-      if (slot->region->type == kMemoryTypeRam) {
+      entry.address = region->gpa;
+      entry.length = region->size;
+
+      if (region->type == kMemoryTypeRam && std::string("System") == region->name) {
         entry.type = E820_RAM;
-      } else {
+      } else if (region->type == kMemoryTypeReserved) {
         entry.type = E820_RESERVED;
+      } else {
+        continue;
       }
+
       entries.emplace_back(std::move(entry));
     }
+
     AddConfigFile("etc/e820", entries.data(), sizeof(e820_entry) * entries.size());
   }
 
 
  public:
   FirmwareConfig() {
+    set_default_parent_class("Ich9Lpc", "Piix3");
+
     AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2, "Config IO");
     AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "Config DMA");
   }

@@ -52,9 +52,15 @@ class SpiceAgent : public Device, public SerialPortInterface,
 
  public:
   SpiceAgent() {
-    set_parent_name("virtio-console");
-  
+    set_default_parent_class("VirtioConsole");
+
     strcpy(port_name_, "com.redhat.spice.0");
+  }
+
+  void Reset() {
+    Device::Reset();
+    outgoing_clipboard_.clear();
+    incoming_message_.clear();
   }
 
   /* The message may consists of more than one chunk */
@@ -209,7 +215,7 @@ class SpiceAgent : public Device, public SerialPortInterface,
       return false;
     }
 
-    manager_->io()->Schedule([this, event]() {
+    Schedule([this, event]() {
       if (event.z > 0) {
         QueueEvent(event.buttons | (1 << SPICE_MOUSE_BUTTON_UP), event.x, event.y);
         QueueEvent(event.buttons, event.x, event.y);
@@ -228,8 +234,11 @@ class SpiceAgent : public Device, public SerialPortInterface,
     if (!ready_) {
       return false;
     }
+    if (!manager_->LookupDeviceByClass("Qxl")) {
+      return false;
+    }
 
-    manager_->io()->Schedule([=]() {
+    Schedule([=]() {
       auto buffer = std::string(sizeof(VDAgentMonitorsConfig) + sizeof(VDAgentMonConfig), '\0');
       auto config = (VDAgentMonitorsConfig*)buffer.data();
       config->num_of_monitors = 1;
@@ -275,7 +284,7 @@ class SpiceAgent : public Device, public SerialPortInterface,
     clipboard->type = type;
     memcpy(clipboard->data, data.data(), data.size());
 
-    manager_->io()->Schedule([this, type]() {
+    Schedule([this, type]() {
       SendAgentClipboardGrab(type);
     });
     return true;

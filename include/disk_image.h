@@ -41,6 +41,13 @@ enum ImageIoType {
   kImageIoWriteZeros
 };
 
+struct ImageIoRequest {
+  ImageIoType         type;
+  size_t              position;
+  size_t              length;
+  std::vector<iovec>  vector;
+};
+
 struct ImageInformation {
   /* Disk size is block_size * total_blocks */
   size_t block_size;
@@ -65,22 +72,17 @@ class DiskImage : public Object {
 
   /* Interface for a image format to implement */
   virtual ImageInformation information() = 0;
-  virtual ssize_t Read(void *buffer, off_t position, size_t length) = 0;
-  virtual ssize_t Write(void *buffer, off_t position, size_t length) = 0;
-  virtual ssize_t Flush() = 0;
-  /* Optional */
-  virtual ssize_t Discard(off_t position, size_t length, bool write_zeros);
+  virtual long HandleIoRequest(ImageIoRequest request) = 0;
 
   /* Interface for user */
-  virtual void ReadAsync(void *buffer, off_t position, size_t length, IoCallback callback);
-  virtual void WriteAsync(void *buffer, off_t position, size_t length, IoCallback callback);
-  virtual void DiscardAsync(off_t position, size_t length, bool write_zeros, IoCallback callback);
-  virtual void FlushAsync(IoCallback callback);
+  virtual void QueueIoRequest(ImageIoRequest request, IoCallback callback);
+  virtual void QueueMultipleIoRequests(std::vector<ImageIoRequest> requests, IoCallback callback);
 
  protected:
   bool        readonly_ = false;
   bool        snapshot_ = false;
   Device*     device_ = nullptr;
+  Device*     host_device_ = nullptr;
   IoThread*   io_ = nullptr;
   std::string filepath_;
 
@@ -89,11 +91,11 @@ class DiskImage : public Object {
 
  private:
   /* Worker thread to implemente Async IO */
-  std::thread worker_thread_;
-  std::mutex  worker_mutex_;
+  std::thread               worker_thread_;
+  std::mutex                worker_mutex_;
   std::condition_variable   worker_cv_;
   std::deque<VoidCallback>  worker_queue_;
-  bool        finalized_ = false;
+  bool                      finalized_ = false;
 
   void WorkerProcess();
 };

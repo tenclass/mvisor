@@ -66,6 +66,7 @@ class KvmClock : public Device {
   }
 
   void Connect() {
+    Device::Connect();
     auto machine = manager_->machine();
     state_change_listener_ = machine->RegisterStateChangeListener([=]() {
       if (machine->IsPaused()) {
@@ -74,7 +75,6 @@ class KvmClock : public Device {
         LoadClock();
       }
     });
-    Device::Connect();
   }
 
   void Disconnect () {

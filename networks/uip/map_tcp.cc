@@ -27,7 +27,7 @@ MapTcpSocket::MapTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint3
 {
   fd_ = fd;
 
-  io_->StartPolling(fd_, EPOLLIN | EPOLLOUT | EPOLLET, [this](auto events) {
+  device_->StartPolling(fd_, EPOLLIN | EPOLLOUT | EPOLLET, [this](auto events) {
     can_read_ = events & EPOLLIN;
     can_write_ = events & EPOLLOUT;
   

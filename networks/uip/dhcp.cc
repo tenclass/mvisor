@@ -48,7 +48,7 @@ struct DhcpMessage {
 DhcpServiceUdpSocket::DhcpServiceUdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
   : UdpSocket(backend, sip, dip, sport, dport)
 {
-  // Load DNS nameservers
+  // Read DNS nameservers from host
   FILE* fp = fopen("/etc/resolv.conf", "r");
   if (fp) {
     while (!feof(fp)) {
@@ -56,6 +56,8 @@ DhcpServiceUdpSocket::DhcpServiceUdpSocket(NetworkBackendInterface* backend, uin
       fgets(line, sizeof(line), fp);
       if (memcmp(line, "nameserver ", 11) == 0) {
         if (sscanf(line, "%s %s\n", key, val) != 2)
+          continue;
+        if (val[0] == '1' && val[1] == '2' && val[2] == '7')
           continue;
         struct in_addr addr;
         if (inet_aton(val, &addr)) {
@@ -67,8 +69,10 @@ DhcpServiceUdpSocket::DhcpServiceUdpSocket(NetworkBackendInterface* backend, uin
   } else {
     MV_WARN("/etc/resolv.conf not found");
   }
+
   if (nameservers_.empty()) {
-    MV_PANIC("DNS nameservers not found");
+    /* DNS server not found, add default */
+    nameservers_.push_back(0x08080808);
   }
 }
 

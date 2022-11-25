@@ -23,21 +23,8 @@
 #include "device.h"
 #include "logger.h"
 
-#define _MB(x) (x * (1 << 20))
-
-/*
- * PCI Configuration Mechanism #1 I/O ports. See Section 3.7.4.1.
- * ("Configuration Mechanism #1") of the PCI Local Bus Specification 2.1 for
- * details.
- */
-#define PCI_CONFIG_ADDRESS      0xCF8
-#define PCI_CONFIG_DATA         0xCFC
-#define PCI_CONFIG_BUS_FORWARD  0xCFA
-#define PCI_IO_SIZE             0x100
-#define PCI_IOPORT_START        0x6200
-#define PCI_CONFIG_SIZE         (1ULL << 24)
-
-#define PCI_MULTI_FUNCTION 0x80
+#define PCI_MULTI_FUNCTION    0x80
+#define PCI_MAX_MSIX_ENTRIES  32
 
 struct MsiMessage {
   uint32_t address_lo; /* low 32 bits of msi message address */
@@ -82,7 +69,6 @@ struct MsiCapability32 {
   uint32_t pend_bits;
 } __attribute__((packed));
 
-#define PCI_MAX_MSIX_ENTRIES 32
 struct PciMsiConfig {
   bool      enabled;
   bool      is_64bit;
@@ -203,12 +189,12 @@ class PciDevice : public Device {
   virtual ~PciDevice();
   virtual void Disconnect();
 
-  uint8_t bus() { return bus_; }
-  uint8_t slot() { return slot_; }
-  uint8_t function() { return function_; }
-  const PciConfigHeader& pci_header() { return pci_header_; }
-  const PciBarInfo& pci_bar(uint8_t index) { return pci_bars_[index]; }
-  uint    pci_config_size() { return is_pcie_ ? PCIE_DEVICE_CONFIG_SIZE : PCI_DEVICE_CONFIG_SIZE; }
+  inline uint8_t bus() { return bus_; }
+  inline uint8_t slot() { return slot_; }
+  inline uint8_t function() { return function_; }
+  inline const PciConfigHeader& pci_header() { return pci_header_; }
+  inline const PciBarInfo& pci_bar(uint8_t index) { return pci_bars_[index]; }
+  inline uint  pci_config_size() { return is_pcie_ ? PCIE_DEVICE_CONFIG_SIZE : PCI_DEVICE_CONFIG_SIZE; }
 
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);

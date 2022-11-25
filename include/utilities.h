@@ -21,6 +21,7 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <string>
 
 class Object;
 typedef Object* (*ClassCreator) (void);
@@ -35,6 +36,7 @@ struct ClassItem {
 /* Initialize device classes and add to device management for later use */
 void register_class(int type, const char* name, const char* source_path, ClassCreator create);
 Object* realize_class(const char* name);
+std::string get_class_alias(const char* name);
 
 #define __register_class(cb, type) \
 static Object* __create__##cb() { \

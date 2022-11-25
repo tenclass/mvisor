@@ -1,5 +1,7 @@
 mvisor_sources += files(
-  'pci_host.cc'
+  'i440fx_host.cc',
+  'pci_host.cc',
+  'q35_host.cc'
 )
 
 proto_sources += proto_gen.process(

@@ -109,9 +109,11 @@ Object* Configuration::CreateObject(std::string class_name, std::string name) {
 Object* Configuration::GetOrCreateObject(std::string class_name, std::string name) {
   auto &objects = machine_->objects_;
   auto it = objects.find(name);
-  Object* object;
+  Object* object = nullptr;
   if (it == objects.end()) {
-    object = CreateObject(class_name, name);
+    if (!class_name.empty()) {
+      object = CreateObject(class_name, name);
+    }
   } else {
     object = it->second;
   }
@@ -122,15 +124,16 @@ std::string Configuration::GenerateObjectName(std::string class_name) {
   auto &objects = machine_->objects_;
 
   /* try to use class name as name */
-  if(objects.find(class_name) == objects.end()) {
-    return class_name;
+  std::string name = get_class_alias(class_name.c_str());
+  if(objects.find(name) == objects.end()) {
+    return name;
   }
 
   for (int index = 1; index < 256; index++) {
-    char name[100];
-    sprintf(name, "%s-%d", class_name.c_str(), index);
-    if (objects.find(name) == objects.end()) {
-      return name;
+    char tmp[100];
+    sprintf(tmp, "%s-%d", name.c_str(), index);
+    if (objects.find(tmp) == objects.end()) {
+      return tmp;
     }
   }
   /* never get here */
@@ -142,20 +145,43 @@ std::string Configuration::GenerateObjectName(std::string class_name) {
 void Configuration::CreateParents(Object* object) {
   auto &objects = machine_->objects_;
 
-  MV_ASSERT(!object->parent());
-  if (!object->parent_name()[0]) {
+  if (object->parent()) {
     return;
   }
   
-  auto it = objects.find(object->parent_name());
-  if (it == objects.end()) {
-    auto parent = CreateObject(object->parent_name(), object->parent_name());
-    parent->AddChild(object);
-    if (!parent->parent()) {
-      CreateParents(parent);
+  /* Try the user specified parent name */
+  if (object->parent_name()[0]) {
+    auto it = objects.find(object->parent_name());
+    if (it == objects.end()) {
+      MV_PANIC("object parent not found: %s", object->parent_name());
     }
-  } else {
     it->second->AddChild(object);
+    return;
+  }
+
+  /* Search objects by default parent classes */
+  auto& parent_classes = object->default_parent_classes();
+  if (parent_classes.empty()) {
+    return; // root object
+  }
+
+  for (auto classname : parent_classes) {
+    auto it = std::find_if(objects.begin(), objects.end(), [&classname](auto& o) {
+      return classname == o.second->classname();
+    });
+    if (it != objects.end()) {
+      it->second->AddChild(object);
+      return;
+    }
+  }
+
+  /* If not found, we try to create a parent object */
+  std::string parent_classname = parent_classes.front();
+  std::string parnet_name = GenerateObjectName(parent_classname);
+  auto parent = CreateObject(parent_classname, parnet_name);
+  parent->AddChild(object);
+  if (!parent->parent()) {
+    CreateParents(parent);
   }
 }
 
@@ -217,8 +243,10 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
   /* Create objects */
   for (auto it = objects_node.begin(); it != objects_node.end(); it++) {
     auto node = *it;
-    auto class_name = node["class"].as<std::string>();
-    std::string name;
+    std::string name, class_name;
+    if (node["class"]) {
+      class_name = node["class"].as<std::string>();
+    }
     if (node["name"]) {
       name = node["name"].as<std::string>();
     } else {
@@ -226,7 +254,7 @@ void Configuration::LoadObjects(const YAML::Node& objects_node) {
     }
     auto object = GetOrCreateObject(class_name, name);
     if (object == nullptr) {
-      MV_WARN("object class not found %s", name.c_str());
+      MV_WARN("object not found %s %s", class_name.c_str(), name.c_str());
       continue;
     }
 

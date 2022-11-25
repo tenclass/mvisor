@@ -1,13 +1,14 @@
-mvisor_sources += files('dummy.cc')
+# Order by alphabet
 
+subdir('acpi')
 subdir('agents')
 subdir('ahci')
 subdir('audio')
 subdir('display')
-subdir('isa')
+subdir('kvm')
 subdir('nvram')
 subdir('pci')
+subdir('superio')
 subdir('usb')
 subdir('vfio')
 subdir('virtio')
-subdir('kvm')

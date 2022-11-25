@@ -27,6 +27,7 @@
 #include "utilities.h"
 #include "object.h"
 #include "vcpu.h"
+#include "io_thread.h"
 #include "migration.h"
 
 
@@ -68,8 +69,18 @@ class Device : public Object {
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
 
-  const std::list<IoResource*>& io_resources() const { return io_resources_; }
-  DeviceManager* manager() { return manager_; }
+  /* Map to IoThread methods, and you don't need to pass the device object */
+  IoTimer* AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback);
+  void ModifyTimer(IoTimer* timer, int64_t interval_ns);
+  void RemoveTimer(IoTimer* timer);
+  void Schedule(VoidCallback callback);
+  void StartPolling(int fd, uint poll_mask, IoCallback callback);
+  void StopPolling(int fd);
+
+  inline const std::list<IoResource*>& io_resources() const { return io_resources_; }
+  inline DeviceManager* manager() { return manager_; }
+  inline std::recursive_mutex& mutex() { return mutex_; }
+
  protected:
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags = kIoResourceFlagNone);
@@ -77,12 +88,13 @@ class Device : public Object {
   void RemoveIoResource(IoResourceType type, uint64_t base);
   void SetIoResourceEnabled(IoResource* resource, bool enabled);
 
+  friend class IoThread;
   friend class DeviceManager;
   DeviceManager* manager_;
 
   bool                    connected_ = false;
   std::list<IoResource*>  io_resources_;
-  std::mutex              mutex_;
+  std::recursive_mutex    mutex_;
 };
 
 #endif // _MVISOR_DEVICE_H

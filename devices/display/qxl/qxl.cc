@@ -91,7 +91,8 @@ void Qxl::Disconnect() {
 }
 
 void Qxl::Reset() {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::recursive_mutex> render_lock(render_mutex_);
+
   /* Vga Reset() resets mode */
   Vga::Reset();
 
@@ -167,7 +168,7 @@ bool Qxl::LoadState(MigrationReader* reader) {
     return false;
   }
   for (int i = 0; i < NUM_MEMSLOTS && i < state.guest_slots_size(); i++) {
-    auto slot = state.guest_slots(i);
+    auto& slot = state.guest_slots(i);
     if (slot.active()) {
       QXLMemSlot mem_slot = {
         .mem_start = slot.mem_start(),
@@ -197,7 +198,7 @@ bool Qxl::LoadState(MigrationReader* reader) {
     }
   
     /* push update event after loaded */
-    manager_->io()->Schedule([this]() {
+    Schedule([this]() {
       NotifyDisplayUpdate();
     });
   }
@@ -278,7 +279,6 @@ bool Qxl::DeactivatePciBar(uint8_t index) {
 
 void Qxl::UpdateDisplayMode() {
   /* Prevent from calling AcquireUpdate() when setting mode */
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (primary_surface_.active) {
     auto& create = qxl_ram_->create_surface;
     if (mode_ == kDisplayQxlMode && width_ == (int)create.width && height_ == (int)create.height &&
@@ -309,11 +309,17 @@ void Qxl::UpdateIrqLevel() {
   SetIrq(level);
 }
 
-  /* Display resize interface */
+/* Display resize interface */
 bool Qxl::Resize(int width, int height) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
-
-  if (!(qxl_ram_->int_mask & QXL_INTERRUPT_CLIENT_MONITORS_CONFIG)) {
+  /*
+    * Older windows drivers set int_mask to 0 when their ISR is called,
+    * then later set it to ~0. So it doesn't relate to the actual interrupts
+    * handled. However, they are old, so clearly they don't support this
+    * interrupt
+    */
+  if (qxl_ram_->int_mask == 0 || qxl_ram_->int_mask == ~0u ||
+    !(qxl_ram_->int_mask & QXL_INTERRUPT_CLIENT_MONITORS_CONFIG)) {
     return false;
   }
 
@@ -322,7 +328,7 @@ bool Qxl::Resize(int width, int height) {
     return true;
   }
 
-  manager_->io()->Schedule([=]() {
+  Schedule([=]() {
     bzero(&qxl_rom_->client_monitors_config, sizeof(qxl_rom_->client_monitors_config));
     qxl_rom_->client_monitors_config.count = 1;
     auto& head = qxl_rom_->client_monitors_config.heads[0];
@@ -371,8 +377,7 @@ uint64_t Qxl::TranslateAsyncCommand(uint64_t command, bool* async) {
 }
 
 void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-
+  std::lock_guard<std::recursive_mutex> render_lock(render_mutex_);
   switch (command) {
   case QXL_IO_UPDATE_AREA:
     FetchCommands();
@@ -437,6 +442,15 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
   }
 }
 
+void Qxl::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (resource->base == pci_bars_[3].address) {
+    /* ignore all reads to the QXL io ports */
+    memset(data, 0xFF, size);
+  } else {
+    Vga::Read(resource, offset, data, size);
+  }
+}
+
 void Qxl::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   if (resource->base == pci_bars_[3].address) {
     bool async;
@@ -456,7 +470,7 @@ void Qxl::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
 
     if (async) {
       /* Async command needs interrupt */
-      manager_->io()->Schedule([this]() {
+      Schedule([this]() {
         SetInterrupt(QXL_INTERRUPT_IO_CMD);
       });
     }
@@ -510,7 +524,7 @@ int Qxl::GetBitsPerPixelByFormat(uint32_t format) {
   case SPICE_SURFACE_FMT_32_ARGB:
     return 32;
   default:
-    MV_PANIC("unsupported format=0x%x", format);
+    MV_ERROR("unsupported format=0x%x", format);
     return 0;
   }
 }
@@ -609,10 +623,14 @@ void Qxl::ReleaseGuestResource(QXLReleaseInfo* info) {
 
 /* Lock the drawables and translate to display partial bitmaps */
 bool Qxl::AcquireUpdate(DisplayUpdate& update, bool redraw) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::unique_lock<std::recursive_mutex>  lock(mutex_);
+  std::lock_guard<std::recursive_mutex>   render_lock(render_mutex_);
   if (mode_ != kDisplayQxlMode) {
     return Vga::AcquireUpdate(update, redraw);
   }
+
+  /* We cannot hold the device lock for so long, here switch to render lock */
+  lock.unlock();
 
   if (!manager_->machine()->IsPaused()) {
     FetchCommands();

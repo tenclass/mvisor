@@ -8,3 +8,5 @@ mvisor_sources += files(
 proto_sources += proto_gen.process(
   'firmware_config.proto'
 )
+
+subdir('acpi_dsdt')

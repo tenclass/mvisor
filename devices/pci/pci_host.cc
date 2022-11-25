@@ -16,164 +16,93 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "pci_host.h"
+
 #include <cstring>
+
 #include "logger.h"
 #include "device_manager.h"
-#include "pci_device.h"
+#include "machine.h"
 #include "pci_host.pb.h"
 
-#define MCH_CONFIG_ADDR             0xCF8
-#define MCH_CONFIG_DATA             0xCFC
 
-#define MCH_PCIEXBAR                0x60
-#define MCH_PCIEXBAR_SIZE           0x04
+PciHost::PciHost() {
+  slot_ = 0;
+  function_ = 0;
+  set_default_parent_class("SystemRoot");
+  
+  pci_header_.class_code = 0x060000;
+  pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
+  pci_header_.subsys_vendor_id = 0x1AF4;
+  pci_header_.subsys_id = 0x1100;
 
-class PciHost : public PciDevice {
- private:
-  uint64_t          pcie_xbar_base_ = 0;
-  PciConfigAddress  config_;
+  AddIoResource(kIoResourceTypePio, 0xCF8, 4, "PCI Config Address Port",
+    nullptr, kIoResourceFlagCoalescingMmio);
+  AddIoResource(kIoResourceTypePio, 0xCFC, 4, "PCI Config Data Port");
+}
 
- public:
-  PciHost() {
-    slot_ = 0;
-    function_ = 0;
-    is_pcie_ = true;
-    set_parent_name("system-root");
-    
-    pci_header_.vendor_id = 0x8086;
-    pci_header_.device_id = 0x29C0;
-    pci_header_.class_code = 0x060000;
-    pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
-    pci_header_.subsys_vendor_id = 0x1AF4;
-    pci_header_.subsys_id = 0x1100;
+bool PciHost::SaveState(MigrationWriter* writer) {
+  PciHostState state;
+  state.set_config_address(config_.value);
+  writer->WriteProtobuf("PCI_HOST", state);
+  return PciDevice::SaveState(writer);
+}
 
-    AddIoResource(kIoResourceTypePio, MCH_CONFIG_ADDR, 4, "MCH Config Base");
-    AddIoResource(kIoResourceTypePio, MCH_CONFIG_DATA, 4, "MCH Config Data");
+bool PciHost::LoadState(MigrationReader* reader) {
+  if (!PciDevice::LoadState(reader)) {
+    return false;
   }
 
-  virtual bool SaveState(MigrationWriter* writer) {
-    MchState state;
-    state.set_config(config_.value);
-    writer->WriteProtobuf("MCH", state);
-    return PciDevice::SaveState(writer);
-  }
-
-  virtual bool LoadState(MigrationReader* reader) {
-    if (!PciDevice::LoadState(reader)) {
-      return false;
-    }
-    MchState state;
-    if (!reader->ReadProtobuf("MCH", state)) {
-      return false;
-    }
-    config_.value = state.config();
-    MchUpdatePcieXBar();
+  PciHostState state;
+  /* For old snapshots, the name is not PCI_HOST, so just skip it */
+  if (!reader->Exists("PCI_HOST")) {
     return true;
   }
-
-  void MchUpdatePcieXBar() {
-    uint32_t pciexbar = *(uint32_t*)(pci_header_.data + MCH_PCIEXBAR);
-    int enable = pciexbar & 1;
-    if (!!enable != !!pcie_xbar_base_) {
-      uint32_t base = pciexbar & Q35_MASK(64, 35, 28);
-      uint64_t length = (1LL << 20) * 256;
-      if (pcie_xbar_base_) {
-        RemoveIoResource(kIoResourceTypeMmio, pcie_xbar_base_);
-        pcie_xbar_base_ = 0;
-      }
-      if (enable) {
-        AddIoResource(kIoResourceTypeMmio, base, length, "PCIE XBAR");
-        pcie_xbar_base_ = base;
-      }
-    }
+  if (!reader->ReadProtobuf("PCI_HOST", state)) {
+    return false;
   }
+  config_.value = state.config_address();
+  return true;
+}
 
-  void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (resource->base == MCH_CONFIG_ADDR) {
-      memcpy(config_.data + offset, data, size);
-    
-    } else if (resource->base == MCH_CONFIG_DATA) {
-      MV_ASSERT(size <= 4);
-      
-      PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
-      if (pci) {
-        config_.reg_offset = offset;
-        pci->WritePciConfigSpace(config_.value & 0xFF, data, size);
-      } else {
-        MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
+void PciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (resource->base == 0xCF8) {
+    if (offset == 1 && size == 1) {
+      /* 0xCF9 old system reset (DOS)
+       * data[0] bit 2: soft reset 4: hard reset 8: full reset */
+      if (debug_) {
+        MV_LOG("system reset");
       }
-    
-    } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
-      /*
-      * PCI express ECAM (Enhanced Configuration Address Mapping) format.
-      * AKA mmcfg address
-      * bit 20 - 28: bus number
-      * bit 15 - 19: device number
-      * bit 12 - 14: function number
-      * bit  0 - 11: offset in configuration space of a given device
-      */
-      uint32_t addr = offset;
-      uint16_t bus = (addr >> 20) & 0x1FF;
-      uint8_t slot = (addr >> 15) & 0x1F;
-      uint8_t function = (addr >> 12) & 0x7;
-      PciDevice* pci = manager_->LookupPciDevice(bus, slot, function);
-      if (pci) {
-        pci->WritePciConfigSpace(addr & 0xFFF, data, size);
-      } else {
-        MV_ERROR("failed to lookup pci %x:%x.%x offset=0x%lx", bus, slot, function, offset);
-      }
-    
+      manager_->machine()->Reset();
+      return;
+    }
+    memcpy(config_.data + offset, data, size);
+  } else if (resource->base == 0xCFC) {
+    PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
+    if (pci) {
+      config_.reg_offset = offset;
+      pci->WritePciConfigSpace(config_.value & 0xFF, data, size);
     } else {
-      MV_PANIC("not implemented base=0x%lx offset=0x%lx data=0x%x size=%x",
-        resource->base, offset, *(uint32_t*)data, size);
+      MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
     }
+  } else {
+    PciDevice::Write(resource, offset, data, size);
   }
+}
 
-  void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (resource->base == MCH_CONFIG_ADDR) {
-      memcpy(data, config_.data + offset, size);
-    
-    } else if (resource->base == MCH_CONFIG_DATA) {
-      if (size > 4)
-        size = 4;
-      
-      PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
-      if (pci) {
-        config_.reg_offset = offset;
-        pci->ReadPciConfigSpace(config_.value & 0xFF, data, size);
-      } else {
-        memset(data, 0xFF, size);
-      }
-    
-    } else if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
-      uint32_t addr = offset;
-      uint16_t bus = (addr >> 20) & 0x1FF;
-      uint8_t slot = (addr >> 15) & 0x1F;
-      uint8_t function = (addr >> 12) & 0x7;
-      PciDevice* pci = manager_->LookupPciDevice(bus, slot, function);
-      if (pci) {
-        pci->ReadPciConfigSpace(addr & 0xFFF, data, size);
-      } else {
-        memset(data, 0xFF, size);
-      }
-    
+void PciHost::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+  if (resource->base == 0xCF8) {
+    MV_ASSERT(size == 4);
+    memcpy(data, config_.data + offset, size);
+  } else if (resource->base == 0xCFC) {
+    PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
+    if (pci) {
+      config_.reg_offset = offset;
+      pci->ReadPciConfigSpace(config_.value & 0xFF, data, size);
     } else {
-      MV_PANIC("not implemented base=0x%lx offset=0x%lx data=0x%x size=%x",
-        resource->base, offset, *(uint32_t*)data, size);
+      memset(data, 0xFF, size);
     }
+  } else {
+    PciDevice::Read(resource, offset, data, size);
   }
-
-  void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-    PciDevice::WritePciConfigSpace(offset, data, length);
-    if (ranges_overlap(offset, length, MCH_PCIEXBAR, MCH_PCIEXBAR_SIZE)) {
-      MchUpdatePcieXBar();
-    
-    } else if (ranges_overlap(offset, length, 0x9D, 2)) {
-      MV_PANIC("SMRAM not supported yet");
-    
-    }
-  }
-
-};
-
-DECLARE_DEVICE(PciHost);
+}

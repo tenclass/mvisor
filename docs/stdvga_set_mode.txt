@@ -191,14 +191,14 @@ set VGA mode 3
 [vga] w2 0x1cf=0x0
 [2021-11-11 03:18:52] devices/display/vga.cc:102 VbeIoWriteData() set vbe enable 0 to 0 0x0 bpp=0
 
-// pallete mask, should always be 0xff for us
+// palette mask, should always be 0xff for us
 [vga] w1 0x3c6=0xff
 
-// update palletes
-// set pallete index to 0
+// update palettes
+// set palette index to 0
 [vga] w1 0x3c8=0x0
 
-// 192 lines of pallete values 
+// 192 lines of palette values 
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0
@@ -391,9 +391,9 @@ set VGA mode 3
 [vga] w1 0x3c9=0x3f
 [vga] w1 0x3c9=0x3f
 [vga] w1 0x3c9=0x3f
-// 192 lines of palletes end (64 rgb values)
+// 192 lines of palettes end (64 rgb values)
 
-// VGA always update all the pallete values everytime
+// VGA always update all the palette values everytime
 // reset the following (256-64) rgb values
 [vga] w1 0x3c8=0x40
 [vga] w1 0x3c9=0x0
@@ -1163,7 +1163,7 @@ set VGA mode 3
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0
-// pallete ends
+// palette ends
 
 // write VGA attributes 
 // because writing the index and data with the same port, we don't know what the current reading state is
@@ -2034,8 +2034,8 @@ set VGA mode 101
 
 [2021-11-11 03:18:52] devices/display/vga.cc:102 VbeIoWriteData() set vbe enable 0 to 0 0x0 bpp=0
 
-// update palletes
-// reset the pallete index to 0
+// update palettes
+// reset the palette index to 0
 [vga] w1 0x3c8=0x0
 
 // then update 256 rgb values (256 * 3 lines here)
@@ -2807,7 +2807,7 @@ set VGA mode 101
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0
-// palletes end
+// palettes end
 
 // set the video bpp to 8
 [vga] w2 0x1ce=0x3
@@ -3052,7 +3052,7 @@ set VGA mode 101
 [vga] w1 0x3c0=0x0
 [vga] w1 0x3c0=0x20
 
-// update palletes
+// update palettes
 [vga] w1 0x3c8=0x0
 [vga] w1 0x3c9=0x0
 [vga] w1 0x3c9=0x0

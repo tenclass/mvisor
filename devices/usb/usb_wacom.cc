@@ -161,7 +161,6 @@ static const uint8_t hid_report_desc_interface[][300] = {
 
 class UsbWacom : public UsbHid, public WacomInputInterface {
  private:
-  std::mutex mutex_;
   uint idle_ = 0;
   std::deque<WacomEvent> queue_;
   uint max_queue_size_ = 16;
@@ -175,7 +174,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
   virtual void Reset() {
     // remove status report timer
     if (status_report_timer_) {
-      manager_->io()->RemoveTimer(status_report_timer_);
+      RemoveTimer(status_report_timer_);
       status_report_timer_ = nullptr;
     }
     
@@ -190,7 +189,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
     };
 
     if (!status_report_timer_) {
-      status_report_timer_ = manager_->io()->AddTimer(NS_PER_SECOND * 5, true, timer_callback);
+      status_report_timer_ = AddTimer(NS_PER_SECOND * 5, true, timer_callback);
     }
   }
 
@@ -244,14 +243,13 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
       MV_LOG("request=%x data=%p length=%d", endpoint_address, data, length);
     }
 
-    std::unique_lock<std::mutex> lock(mutex_);
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
     if (queue_.empty()) {
       return USB_RET_NAK;
     }
 
     auto event = queue_.front();
     queue_.pop_front();
-    lock.unlock();
 
     return TranslateWacomEventToHidData(event, data, length);
   }
@@ -304,7 +302,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
 
   /* This interface function is called by the UI thread, so use a mutex */
   virtual bool QueueWacomEvent(WacomEvent event) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
 
     if (!started_) {
       return false;
@@ -320,7 +318,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
       queue_.pop_front();
     }
 
-    manager_->io()->Schedule([this]() { NotifyEndpoint(0x83); });
+    NotifyEndpoint(0x83);
     return true;
   }
 

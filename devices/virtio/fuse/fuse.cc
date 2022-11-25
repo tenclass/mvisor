@@ -200,10 +200,12 @@ bool Fuse::Lookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* 
     return false;
   }
 
-  Inode* inode = GetInodeFromStat(&entry_param->attr);
-  if (!inode) {
+  auto inode = GetInodeFromStat(&entry_param->attr);
+  if (inode) {
+    inode->refcount++;
+  } else {
     auto open_flags = S_ISREG(entry_param->attr.st_mode) ? O_RDWR : O_PATH | O_NOFOLLOW;
-    int new_fd = openat(parent_fd, name, open_flags);
+    auto new_fd = openat(parent_fd, name, open_flags);
     if (new_fd == -1) {
       MV_ERROR("lookup openat err name=%s open_flags=%d", name, open_flags);
       return false;
@@ -211,11 +213,9 @@ bool Fuse::Lookup(fuse_ino_t parent, const char* name, struct fuse_entry_param* 
 
     inode = CreateInodeFromFd(new_fd, &entry_param->attr, 1);
     MV_ASSERT(inode != nullptr);
-  } else {
-    inode->refcount++;
   }
   
-  entry_param->ino = (uintptr_t)inode;
+  entry_param->ino = (fuse_ino_t)inode;
   return true;
 }
 

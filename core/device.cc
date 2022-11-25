@@ -27,7 +27,7 @@ Device::Device() {
   strcpy(name_, "unknown");
 
   /* If the device is not specified a default parent, attach it to the top system-root */
-  set_parent_name("system-root");
+  set_default_parent_class("SystemRoot");
 }
 
 Device::~Device() {
@@ -89,7 +89,6 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
-  std::lock_guard<std::mutex> lock(mutex_);
   auto resource = new IoResource {
     .type = type,
     .base = base,
@@ -107,7 +106,6 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::RemoveIoResource(IoResourceType type, const char* name) {
-  std::lock_guard<std::mutex> lock(mutex_);
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
     auto resource = *it;
     if (resource->type == type &&
@@ -124,7 +122,6 @@ void Device::RemoveIoResource(IoResourceType type, const char* name) {
 }
 
 void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
-  std::lock_guard<std::mutex> lock(mutex_);
   for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
     auto resource = *it;
     if (resource->type == type && resource->base == base) {
@@ -165,14 +162,14 @@ void Device::SetIoResourceEnabled(IoResource* resource, bool enabled) {
 }
 
 void Device::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d",
-    name_, resource->base, offset, size);
+  MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d name=%s",
+    name_, resource->base, offset, size, resource->name);
   MV_UNUSED(data);
 }
 
 void Device::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx",
-    name_, resource->base, offset, size, *(uint64_t*)data);
+  MV_PANIC("not implemented %s base=0x%lx offset=0x%lx size=%d data=0x%lx name=%s",
+    name_, resource->base, offset, size, *(uint64_t*)data, resource->name);
 }
 
 bool Device::SaveState(MigrationWriter* writer) {
@@ -184,3 +181,29 @@ bool Device::LoadState(MigrationReader* reader) {
   MV_UNUSED(reader);
   return true;
 }
+
+
+void Device::Schedule(VoidCallback callback) {
+  manager_->io()->Schedule(this, std::move(callback));
+}
+
+IoTimer* Device::AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback) {
+  return manager_->io()->AddTimer(this, interval_ns, permanent, std::move(callback));
+}
+
+void Device::ModifyTimer(IoTimer* timer, int64_t interval_ns) {
+  manager_->io()->ModifyTimer(timer, interval_ns);
+}
+
+void Device::RemoveTimer(IoTimer* timer) {
+  manager_->io()->RemoveTimer(timer);
+}
+
+void Device::StartPolling(int fd, uint poll_mask, IoCallback callback) {
+  manager_->io()->StartPolling(this, fd, poll_mask, std::move(callback));
+}
+
+void Device::StopPolling(int fd) {
+  manager_->io()->StopPolling(fd);
+}
+

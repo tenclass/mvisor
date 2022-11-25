@@ -27,8 +27,8 @@
 
 
 PciDevice::PciDevice() {
-  /* A pci device should be attached to pci bus, except it's a pci host controller */
-  set_parent_name("pci-host");
+  /* A pci device should be attached to pci bus */
+  set_default_parent_class("Q35Host", "I440fxHost");
 
   bus_ = 0;
   slot_ = 0xFF;
@@ -60,18 +60,25 @@ void PciDevice::Disconnect() {
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */
 void PciDevice::LoadRomFile(const char* path) {
   /* Load rom file from path */
+  if (pci_rom_.data) {
+    free(pci_rom_.data);
+  }
+
   auto config = manager_->machine()->configuration();
   int fd = open(config->FindPath(path).c_str(), O_RDONLY);
   MV_ASSERT(fd >= 0);
   struct stat st;
   fstat(fd, &st);
+  pci_rom_.size = st.st_size;
 
-  if (pci_rom_.data) {
-    free(pci_rom_.data);
+  /* 64KB alignment */
+  size_t align = 0x10000;
+  if (st.st_size % align) {
+    pci_rom_.size = (st.st_size / align + 1) * align;
   }
-
-  pci_rom_.size = (st.st_size / PAGE_SIZE + 1) * PAGE_SIZE;
   pci_rom_.data = valloc(pci_rom_.size);
+  bzero(pci_rom_.data, pci_rom_.size);
+
   read(fd, pci_rom_.data, st.st_size);
   safe_close(&fd);
 }
@@ -140,29 +147,21 @@ void PciDevice::SignalMsi(int vector) {
   }
 }
 
-/* According to the ACPI configuration used by SeaBIOS,
- * DEV 0-24       INTx[A-D] -> PIRQ[E-F]
- * DEV 25-29, 31  INTx[A-D] -> PIRQ[A-D]
- * DEV 30         INTx[A-D] -> PIRQ[E-F]
- */
 void PciDevice::SetIrq(uint level) {
-  if (!pci_header_.irq_pin) {
+  MV_ASSERT(level == 0 || level == 1);
+  MV_ASSERT(pci_header_.irq_pin);
+
+  if (level) {
+    pci_header_.status |= PCI_STATUS_INTERRUPT;
+  } else {
+    pci_header_.status &= ~PCI_STATUS_INTERRUPT;
+  }
+
+  if (pci_header_.command & PCI_COMMAND_INTX_DISABLE) {
     return;
   }
 
-  uint8_t intx = pci_header_.irq_pin - 1;
-  uint8_t pirq = (slot_ + intx) % 4 + 4;
-
-  /* For ICH9 special devices, we should read the configuration from LPC RCBA */
-  if (slot_ == 30) {
-    pirq = (intx % 4) + 4;
-  } else if (slot_ >= 25) {
-    MV_ASSERT(pci_header_.irq_pin == 1);
-    pirq = intx % 4;
-  }
-
-  /* PIRQ is starting from index 16 */
-  manager_->SetGsiLevel(16 + pirq, level);
+  manager_->SetPciIrqLevel(this, level);
 }
 
 void PciDevice::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -277,8 +276,10 @@ void PciDevice::UpdateRomMapAddress(uint32_t address) {
 
 /* Handle IO, MMIO ON or OFF */
 void PciDevice::WritePciCommand(uint16_t new_command) {
-  int toggle_io = (pci_header_.command ^ new_command) & PCI_COMMAND_IO;
-  int toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
+  uint diff = pci_header_.command ^ new_command;
+  uint toggle_io = diff & PCI_COMMAND_IO;
+  uint toggle_mem = diff & PCI_COMMAND_MEMORY;
+  uint toggle_intx = diff & PCI_COMMAND_INTX_DISABLE;
 
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (!pci_header_.bars[i])
@@ -299,7 +300,14 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
         DeactivatePciBar(i);
     }
   }
+
   pci_header_.command = new_command;
+
+  /* If interrupt status is set, something has to be done */
+  if (toggle_intx && (pci_header_.status & PCI_STATUS_INTERRUPT)) {
+    bool disabled = new_command & PCI_COMMAND_INTX_DISABLE;
+    manager_->SetPciIrqLevel(this, disabled ? 0 : 1);
+  }
 }
 
 /* Call this function in device constructor */

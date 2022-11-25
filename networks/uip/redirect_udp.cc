@@ -25,28 +25,25 @@
 #include "utilities.h"
 
 RedirectUdpSocket::~RedirectUdpSocket() {
-  if (fd_ != -1) {
-    io_->StopPolling(fd_);
+  if (fd_ >= 0) {
+    device_->StopPolling(fd_);
     safe_close(&fd_);
-  }
-  if (wait_timer_) {
-    io_->RemoveTimer(wait_timer_);
   }
 }
 
 bool RedirectUdpSocket::active() {
-  // Kill timed out
-  if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
+  if (fd_ < 0) {
     return false;
   }
-  if (fd_ == -1) {
+  // Kill timed out
+  if (time(nullptr) - active_time_ >= REDIRECT_TIMEOUT_SECONDS) {
     return false;
   }
   return true;
 }
 
 void RedirectUdpSocket::InitializeRedirect() {
-  fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+  fd_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   MV_ASSERT(fd_ >= 0);
 
   if (debug_) {
@@ -77,30 +74,33 @@ void RedirectUdpSocket::InitializeRedirect() {
 
   auto ret = connect(fd_, (struct sockaddr*)&daddr, sizeof(daddr));
   if (ret < 0) {
-    if (debug_)
-      MV_ERROR("failed to initialize UDP socket");
+    if (debug_) {
+      MV_ERROR("UDP fd=%d failed to connect socket", fd_);
+    }
     safe_close(&fd_);
     return;
   }
 
-  io_->StartPolling(fd_, EPOLLIN | EPOLLET, [this](auto events) {
-    if (events & EPOLLIN) {
+  device_->StartPolling(fd_, EPOLLIN | EPOLLET, [this](auto events) {
+    can_read_ = events & EPOLLIN;
+    if (can_read()) {
       StartReading();
     }
   });
 }
 
+void RedirectUdpSocket::OnGuestBufferAvaialble() {
+  if (can_read()) {
+    StartReading();
+  }
+}
+
 void RedirectUdpSocket::StartReading() {
-  while (fd_ != -1) {
+  while (can_read()) {
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
-      /* FIXME: retry 10ms later, This code is not elegantly */
-      wait_timer_ = io_->AddTimer(NS_PER_SECOND / 100, false, [this]() {
-        wait_timer_ = nullptr;
-        StartReading();
-      });
       if (debug_) {
-        MV_LOG("UDP fd=%d failed to allocate packet, retry later", fd_, this);
+        MV_ERROR("UDP fd=%d failed to allocate packet", fd_, this);
       }
       return;
     }
@@ -111,6 +111,7 @@ void RedirectUdpSocket::StartReading() {
     int ret = recv(fd_, packet->data, recv_size, 0);
     if (ret < 0) {
       packet->Release();
+      can_read_ = false;
       return;
     }
     
@@ -121,7 +122,7 @@ void RedirectUdpSocket::StartReading() {
 }
 
 void RedirectUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
-  if (fd_ == -1) {
+  if (fd_ < 0) {
     packet->Release();
     return;
   }

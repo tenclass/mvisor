@@ -43,7 +43,6 @@ struct AHCIHostControlRegs {
   uint8_t     vendor[0x100-0xA0];
 } __attribute__((packed));
 
-class AhciHost;
 
 class AhciHost : public PciDevice {
  public:
@@ -61,7 +60,7 @@ class AhciHost : public PciDevice {
   bool LoadState(MigrationReader* reader);
 
  private:
-  int num_ports_;
+  uint num_ports_;
   AHCIHostControlRegs host_control_;
   std::array<AhciPort*, 32> ports_ = { 0 };
 };

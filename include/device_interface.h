@@ -120,7 +120,7 @@ struct DisplayPartialBitmap {
   int           x;
   int           y;
   uint8_t*      data;
-  uint8_t*      pallete;
+  uint8_t*      palette;
 };
 struct DisplayMouseCursor {
   uint8_t       visible;
@@ -148,7 +148,7 @@ class DisplayInterface {
  public:
   virtual ~DisplayInterface() = default;
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride) = 0;
-  virtual const uint8_t* GetPallete() const = 0;
+  virtual void GetPalette(const uint8_t** palette, int* count) = 0;
   virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw) = 0;
   virtual void ReleaseUpdate() = 0;
   virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
@@ -288,7 +288,8 @@ struct Ipv4Packet;
 class NetworkBackendInterface {
  public:
   virtual ~NetworkBackendInterface() = default;
-  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac, int mtu) = 0;
+  virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) = 0;
+  virtual void SetMtu(int mtu) = 0;
   virtual void Reset() = 0;
   virtual void OnFrameFromGuest(std::deque<iovec>& vector) = 0;
   virtual bool OnPacketFromHost(Ipv4Packet* packet) = 0;
@@ -319,6 +320,12 @@ class PowerDownInterface {
  public:
   virtual ~PowerDownInterface() = default;
   virtual void PowerDown() = 0;
+};
+
+class CmosDataInterface {
+ public:
+  virtual ~CmosDataInterface() = default;
+  virtual void SetData(uint8_t index, uint8_t data) = 0;
 };
 
 #endif // _MVISOR_DEVICE_INTERFACES_H

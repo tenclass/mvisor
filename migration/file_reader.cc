@@ -102,3 +102,11 @@ size_t MigrationFileReader::ReadRawWithLimit(std::string tag, void* data, size_t
   MV_PANIC("not implemented");
   return 0;
 }
+
+bool MigrationFileReader::Exists(std::string tag) {
+  auto full_path = std::filesystem::path(base_path_) / prefix_ / tag;
+  if (std::filesystem::exists(full_path)) {
+    return true;
+  }
+  return false;
+}
