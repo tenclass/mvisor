@@ -1,0 +1,3 @@
+[submodule "sweet-server"]
+	path = sweet-server
+	url = ssh://git@gitlab.weike.fm:9522/sfcloud/sweet-server.git

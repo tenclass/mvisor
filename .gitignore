@@ -7,3 +7,4 @@ tmp/
 config/default.yaml
 .clang-format
 .vscode/
+.DS_Store
