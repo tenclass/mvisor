@@ -31,7 +31,7 @@ What's supported now:
 
 ### Basic functions
 
-1. 440FX / Q35 Chipset ✅
+1. 440FX ✅ / Q35 Chipset ✅
 2. SeaBIOS ✅
 3. Memory Region Management ✅
 4. IOPort Management ✅
@@ -77,7 +77,6 @@ For CentOS 8,
 
 ```
 yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel libjpeg-devel opus-devel
-yum install -y libyuv-devel x264-devel
 
 meson setup build
 meson compile -C build

@@ -227,7 +227,7 @@ class I82078Fdc : public Device {
     } else {
       fifo_.push_back(error_status_[0]);
     }
-    fifo_.push_back(drive->cylinder());
+    fifo_.push_back(drive ? drive->cylinder(): 0);
 
     main_status_ |= MSR_DIO;
     SetIrqLevel(0);
@@ -447,7 +447,9 @@ class I82078Fdc : public Device {
     case 0x12:  // Perpendicular Mode
       if (length >= 2) {
         if (fifo_[1] & 0x80) {
-          drives_[drive_index_]->set_perpendicular(fifo_[1] & 7);
+          if (drives_[drive_index_]) {
+            drives_[drive_index_]->set_perpendicular(fifo_[1] & 7);
+          }
         }
         fifo_.clear();
         main_status_ = MSR_READY;
