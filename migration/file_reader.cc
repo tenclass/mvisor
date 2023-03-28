@@ -64,7 +64,7 @@ bool MigrationFileReader::ReadProtobuf(std::string tag, Message& message) {
 
 bool MigrationFileReader::ReadMemoryPages(std::string tag, void** pages_ptr, size_t size) {
   BeginRead(tag);
-  *pages_ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_NORESERVE, fd_, 0);
+  *pages_ptr = mmap(*pages_ptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_NORESERVE | MAP_FIXED, fd_, 0);
   if (*pages_ptr == MAP_FAILED) {
     MV_PANIC("failed to map memory %s", tag.c_str());
   }

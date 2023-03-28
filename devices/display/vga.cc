@@ -132,10 +132,6 @@ bool Vga::LoadState(MigrationReader* reader) {
     return false;
   }
 
-  /* Unmap the preallocated */
-  if (vram_base_) {
-    munmap(vram_base_, vram_size_);
-  }
   if (!reader->ReadMemoryPages("VRAM", (void**)&vram_base_, vram_size_)) {
     return false;
   }

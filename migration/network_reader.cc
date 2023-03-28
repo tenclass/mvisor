@@ -195,8 +195,8 @@ bool MigrationNetworkReader::ReadProtobuf(std::string tag, Message& message) {
 }
 
 bool MigrationNetworkReader::ReadMemoryPages(std::string tag, void** pages_ptr, size_t size) {
-  *pages_ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  *pages_ptr = mmap(*pages_ptr, size, PROT_READ | PROT_WRITE,
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED, -1, 0);
   MV_ASSERT(*pages_ptr != MAP_FAILED);
 
   auto remain_size = size;

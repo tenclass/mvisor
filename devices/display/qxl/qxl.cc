@@ -156,9 +156,6 @@ bool Qxl::LoadState(MigrationReader* reader) {
     return false;
   }
 
-  if (qxl_vram32_base_) {
-    munmap(qxl_vram32_base_, qxl_vram32_size_);
-  }
   if (!reader->ReadMemoryPages("VRAM32", (void**)&qxl_vram32_base_, qxl_vram32_size_)) {
     return false;
   }

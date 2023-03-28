@@ -53,3 +53,9 @@ objects:
   # - class: vfio-pci
   #   sysfs: /sys/bus/mdev/devices/c2e088ba-954f-11ec-8584-525400666f2b
   #   debug: Yes
+
+  # - class: virtio-vgpu
+  #   memory: 1G
+  #   staging: No
+  #   blob: No
+  #   node: /dev/dri/renderD131

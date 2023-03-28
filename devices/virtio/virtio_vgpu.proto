@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+message VirtioVgpuState {
+  message VirglContext {
+    message VirglResource {
+      uint64 gpa = 1;
+      uint32 size = 2;
+      bytes  resource_args = 3;
+    }
+    
+    uint32 context_id = 1;
+    repeated VirglResource virgl_resources = 2;
+    repeated bytes virgl_cmds = 3;
+  }
+
+  repeated VirglContext virgl_contexts = 1;
+}

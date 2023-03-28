@@ -687,28 +687,15 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
     Unmap((const MemoryRegion **)&it->region);
   }
 
-  /* Unmap the preallocated */
-  auto old_ram_host = ram_host_;
-  if (ram_host_) {
-    munmap(ram_host_, machine_->ram_size_);
-  }
-
   /* Map the RAM file as copy on write memory */
   if (!reader->ReadMemoryPages("RAM", &ram_host_, machine_->ram_size_)) {
     return false;
   }
 
-  // get offset between old_ram_host and ram_host_
-  int64_t offset = 0;
-  if (ram_host_ != old_ram_host) {
-    offset = (uint8_t*)ram_host_ - (uint8_t*)old_ram_host;
-    MV_LOG("we got different address with new ram_host_, old_ram_host=0x%lx ram_host_=0x%lx offset=0x%lx", 
-      old_ram_host, ram_host_, offset);
-  } 
-
   // reset system memory region
   for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
-    Map(it->begin, it->end - it->begin, (void*)(it->hva + offset), kMemoryTypeRam, "System");
+    Map(it->begin, it->end - it->begin, (void*)it->hva, kMemoryTypeRam, "System");
   }
+
   return true;
 }
