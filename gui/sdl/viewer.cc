@@ -133,6 +133,10 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
 
 void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
   if (cursor_update->visible) {
+    if (!cursor_visible_) {
+      SDL_ShowCursor(SDL_ENABLE);
+      cursor_visible_ = true;
+    }
     if (cursor_update->shape.id == cursor_shape_id_) {
       return;
     }
@@ -140,7 +144,6 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
       SDL_FreeCursor(cursor_);
       cursor_ = nullptr;
     }
-    SDL_ShowCursor(SDL_ENABLE);
     auto& shape = cursor_update->shape;
     uint32_t stride = SPICE_ALIGN(shape.width, 8) >> 3;
 
@@ -157,7 +160,6 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
       SDL_FreeSurface(surface);
     }
     cursor_shape_id_ = shape.id;
-    cursor_visible_ = true;
   } else {
     if (cursor_visible_) {
       cursor_visible_ = false;

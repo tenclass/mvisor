@@ -714,6 +714,7 @@ void Qxl::ParseCursorCommand(uint64_t slot_address) {
     ++current_cursor_.update_timestamp;
     break;
   case QXL_CURSOR_MOVE:
+    current_cursor_.visible = true;
     current_cursor_.x = cursor_cmd->u.position.x;
     current_cursor_.y = cursor_cmd->u.position.y;
     ++current_cursor_.update_timestamp;

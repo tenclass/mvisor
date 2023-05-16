@@ -768,12 +768,14 @@ class VirtioVgpu : public VirtioPci {
     virgl_renderer_context_destroy(cmd->hdr.ctx_id);
 
     // unmap blob regions from this virgl context
-    auto regions = blob_memory_regions_[cmd->hdr.ctx_id];
-    for (auto iter = regions.begin(); iter != regions.end(); iter++) {
-      manager_->machine()->memory_manager()->Unmap(&(iter->second));
-      blob_memory_regions_[cmd->hdr.ctx_id].erase(iter);
+    auto iter = blob_memory_regions_.find(cmd->hdr.ctx_id);
+    if (iter != blob_memory_regions_.end()) {
+      for (auto iter1 = iter->second.begin(); iter1 != iter->second.end(); iter1++) {
+        manager_->machine()->memory_manager()->Unmap(&(iter1->second));
+        iter->second.erase(iter1);
+      }
+      blob_memory_regions_.erase(iter);
     }
-    blob_memory_regions_.erase(cmd->hdr.ctx_id);
 
     // guest didn't support migration when staging=true
     if (vgpu_config_.staging) {

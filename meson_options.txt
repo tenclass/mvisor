@@ -21,3 +21,9 @@ option('qxl',
   value: true,
   description: 'Enable QXL device'
 )
+
+option('vgpu',
+  type: 'boolean',
+  value: false,
+  description: 'Enable VGPU device'
+)
