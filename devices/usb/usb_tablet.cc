@@ -175,7 +175,10 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
     auto event = queue_.front();
     queue_.pop_front();
     
-    MV_ASSERT(length >= 6);
+    if (length < 6) {
+      MV_ERROR("USB Tablet: Invalid input data length %d is less than 6", length);
+      return USB_RET_STALL;
+    }
     data[0] = event.buttons;
     data[1] = event.x & 0xFF;
     data[2] = event.x >> 8;

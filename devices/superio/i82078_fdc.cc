@@ -256,8 +256,8 @@ class I82078Fdc : public Device {
     /* Timers */
     fifo_.push_back(step_rate_);
     fifo_.push_back(head_load_time_ << 1);
-    fifo_.push_back(drive->sectors_per_cylinder());
-    fifo_.push_back((lock_ << 7) | drive->perpendicular() << 2);
+    fifo_.push_back(drive ? drive->sectors_per_cylinder() : 0);
+    fifo_.push_back((lock_ << 7) | (drive ? drive->perpendicular() : 0) << 2);
     fifo_.push_back(config_);
     fifo_.push_back(0);
 

@@ -231,6 +231,7 @@ class Ich9Lpc : public Pmio {
   }
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    uint32_t rcrb_base = (*(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA)) & ICH9_LPC_RCBA_BA_MASK;
     if (resource->base == 0xB2) { // APM IO
       if (offset == 0) {
         data[0] = apm_.control;
@@ -242,12 +243,16 @@ class Ich9Lpc : public Pmio {
         /* disable all PCIs hotplug */
         bzero(data, size);
       }
+    } else if (resource->base == rcrb_base) {
+      MV_WARN("not supported read RCRB offset=0x%x size=%u", offset, size);
+      bzero(data, size);
     } else {
       Pmio::Read(resource, offset, data, size);
     }
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
+    uint32_t rcrb_base = (*(uint32_t*)(pci_header_.data + ICH9_LPC_RCBA)) & ICH9_LPC_RCBA_BA_MASK;
     if (resource->base == 0xB2) { // APM IO
       if (offset == 0) {
         apm_.control = data[0];
@@ -261,6 +266,8 @@ class Ich9Lpc : public Pmio {
       } else {
         apm_.status = data[0];
       }
+    } else if (resource->base == rcrb_base) {
+      MV_WARN("not supported write RCRB offset=0x%x size=%u data=%x", offset, size, *(uint32_t*)data);
     } else {
       Pmio::Write(resource, offset, data, size);
     }

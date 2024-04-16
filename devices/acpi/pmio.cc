@@ -135,7 +135,7 @@ void Pmio::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint
       value = smi_.status;
       break;
     default:
-      MV_PANIC("not supported reading at ACPI offset=0x%x", offset);
+      MV_WARN("not supported reading at ACPI offset=0x%x", offset);
       break;
     }
     memcpy(data, &value, size);
@@ -173,7 +173,7 @@ void Pmio::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uin
       memcpy((uint8_t*)&gpe0_.enable + (offset - 0x28), data, size);
       break;
     default:
-      MV_PANIC("not supported writing at ACPI offset=0x%lx value=0x%lx", offset, value);
+      MV_WARN("not supported writing at ACPI offset=0x%lx value=0x%lx", offset, value);
       break;
     }
   } else {

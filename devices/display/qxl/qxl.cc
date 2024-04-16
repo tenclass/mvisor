@@ -53,7 +53,7 @@ Qxl::Qxl() {
   qxl_rom_base_ = valloc(qxl_rom_size_);
   pci_bars_[2].host_memory = qxl_rom_base_;
 
-  AddPciBar(1, qxl_vram32_size_, kIoResourceTypeRam); /* QXL VRAM32 8MB */
+  AddPciBar(1, qxl_vram32_size_, kIoResourceTypeRam); /* QXL VRAM32 */
   AddPciBar(2, 8192, kIoResourceTypeRam);             /* QXL ROM */
   AddPciBar(3, 32, kIoResourceTypePio);               /* QXL PIO */
 

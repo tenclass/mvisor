@@ -258,7 +258,7 @@ void Vga::GetPalette(const uint8_t** palette, int* count) {
   *count = shift_control >= 2 ? 256 : 16;
   *palette = (const uint8_t*)vga_.palette;
   if (vbe_.registers[VBE_DISPI_ENABLED] & VBE_DISPI_8BIT_DAC) {
-    MV_LOG("warning: 8bit DAC is in use");
+    MV_WARN("warning: 8bit DAC is in use");
   }
 }
 

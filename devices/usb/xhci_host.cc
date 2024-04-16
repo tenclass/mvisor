@@ -476,8 +476,8 @@ void XhciHost::ReadRuntimeRegs(uint64_t offset, uint8_t* data, uint32_t size) {
       MV_PANIC("ReadRuntimeRegs offset=0x%lx size=%u", offset, size);
     }
   } else {
-    auto index = (offset - 0x20) / sizeof(XhciInterruptRegisters);
-    offset = offset % sizeof(XhciInterruptRegisters);
+    auto index = (offset - 0x20) / 0x20;
+    offset = offset % 0x20;
     auto &interrupt = interrupt_regs_[index];
     memcpy(data, (uint8_t*)&interrupt + offset, size);
   }
@@ -766,7 +766,6 @@ TRBCCode XhciHost::AddressSlot(uint slot_id, uint64_t input_addr, bool block_set
     }
   }
 
-  slot.addressed = true;
   slot.device = device;
   slot.context_address = output_addr;
   slot.interrupt_vector = get_field(input_slot[2], TRB_INTR);
@@ -784,6 +783,7 @@ TRBCCode XhciHost::AddressSlot(uint slot_id, uint64_t input_addr, bool block_set
   
   memcpy(output, input_slot, 0x20);
   memcpy(output + 8, input_endpoint0, 0x20);
+  slot.addressed = true;
   return CC_SUCCESS;
 }
 
