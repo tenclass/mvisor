@@ -83,7 +83,10 @@
         "iomanip": "cpp",
         "numbers": "cpp",
         "semaphore": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "bitset": "cpp",
+        "regex": "cpp",
+        "stdio.h": "c"
     },
     "C_Cpp.default.cppStandard": "c++17",
     "C_Cpp.default.includePath": [
@@ -91,6 +94,7 @@
         "${workspaceFolder}/build/mvisor.p",
         "/usr/lib/gcc/x86_64-redhat-linux/8/include/",
         "/usr/include/glib-2.0",
+        "/usr/local/cuda-12.1/targets/x86_64-linux/include/",
         "/usr/include/virgl"
     ]
 }

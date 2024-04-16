@@ -155,7 +155,10 @@ void Vcpu::SetupCpuid() {
         entry->eax &= 0x2E7; // MPX is disabled in CPU features 7
       }
       break;
-    case 0x80000000 ... 0x80000001: // Extended CPUID Information
+    case 0x80000000: // Extended CPUID Information
+      break;
+    case 0x80000001:
+      entry->ecx &= ~(1U << 22); // Disable Topology Extensions
       break;
     case 0x80000002 ... 0x80000004: { // CPU Model String
       static const char cpu_model[48] = "Intel Xeon Processor (Skylake-Server)";
@@ -449,7 +452,7 @@ void Vcpu::ProcessHyperV() {
     }
     break;
   case KVM_EXIT_HYPERV_HCALL:
-    MV_PANIC("KVM_EXIT_HYPERV_HCALL not implemented");
+    MV_WARN("KVM_EXIT_HYPERV_HCALL not implemented");
     break;
   default:
     MV_PANIC("invalid hyperv exit type=%d", hyperv_exit.type);

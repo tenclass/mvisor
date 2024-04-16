@@ -51,6 +51,9 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     AddPciBar(1, 0x1000, kIoResourceTypeMmio);
     device_features_ |= 0;
 
+    // FIXME: num_request_queues has been deprecated in new virtiofs guest driver
+    // https://github.com/virtio-win/kvm-guest-drivers-windows/blob/ad5783acb04ab4b5bf00b5aa1819a777de6be79e/viofs/pci/power.c
+
     // set fs config, num_request_queues > 1 cause windows vm crash
     bzero(&fs_config_, sizeof(fs_config_));
     fs_config_.num_request_queues = 1;

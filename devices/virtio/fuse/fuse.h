@@ -19,19 +19,15 @@
 #ifndef _MVISOR_FUSE_H
 #define _MVISOR_FUSE_H
 
-#include <dirent.h>
-
 #include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
-#include <thread>
 
 #define FUSE_USE_VERSION 34
 
 #include <dirent.h>
 #include <errno.h>
-#include <pthread.h>
 #include <unistd.h>
 #include <deque>
 #include <algorithm>

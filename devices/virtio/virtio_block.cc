@@ -39,7 +39,7 @@ class VirtioBlock : public VirtioPci {
     pci_header_.subsys_id = 0x0002;
     
     AddPciBar(1, 0x1000, kIoResourceTypeMmio);
-    AddMsiXCapability(1, 2, 0, 0x1000);
+    AddMsiXCapability(1, 9, 0, 0x1000);
 
     device_features_ |= (1UL << VIRTIO_BLK_F_SEG_MAX) |
       // (1UL << VIRTIO_BLK_F_GEOMETRY) |
@@ -102,7 +102,7 @@ class VirtioBlock : public VirtioPci {
     block_config_.capacity = information.total_blocks;
     block_config_.blk_size = information.block_size;
 
-    block_config_.num_queues = manager_->machine()->num_vcpus();
+    block_config_.num_queues = 8; // msix table size = num_queues + 1
     block_config_.seg_max = DEFAULT_QUEUE_SIZE - 2;
     block_config_.wce = 1; // write back (enable cache)
     block_config_.max_discard_sectors = __INT_MAX__ / block_config_.blk_size;

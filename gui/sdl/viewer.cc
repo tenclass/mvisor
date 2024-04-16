@@ -216,7 +216,6 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
   case kPlaybackStop: {
     if (!pcm_playback_)
       break;
-    snd_pcm_drain(pcm_playback_);
     snd_pcm_close(pcm_playback_);
     pcm_playback_ = nullptr;
     break;
@@ -226,11 +225,11 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
       if (!playback_format_.frequency || !playback_format_.channels) {
         break;
       }
-
+      
       int err;
       MV_ASSERT(pcm_playback_ == nullptr);
       if ((err = snd_pcm_open(&pcm_playback_, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0) {
-        MV_LOG("snd_pcm_open error: %s", snd_strerror(err));
+        MV_WARN("snd_pcm_open error: %s", snd_strerror(err));
         pcm_playback_error_ = true;
         break;
       }
@@ -238,18 +237,17 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
       err = snd_pcm_set_params(pcm_playback_, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED,
         playback_format_.channels, playback_format_.frequency, 1, playback_format_.interval_ms * 1000 * 50);
       if (err < 0) {
-        MV_PANIC("snd_pcm_set_params error: %s\n", snd_strerror(err));
+        MV_WARN("snd_pcm_set_params error: %s\n", snd_strerror(err));
+        snd_pcm_close(pcm_playback_);
+        pcm_playback_ = nullptr;
+        pcm_playback_error_ = true;
+        break;
       }
     }
     /* assume format is s16le */
     auto frames = snd_pcm_writei(pcm_playback_, data.data(), data.size() / playback_format_.channels / 2);
-    if (frames < 0) {
-      MV_LOG("snd_pcm_writei failed: %s\n", snd_strerror(frames));
-    }
-    if (frames < 0)
-      frames = snd_pcm_recover(pcm_playback_, frames, 0);
-    if (frames < 0) {
-      MV_LOG("snd_pcm_writei failed: %s\n", snd_strerror(frames));
+    if (frames < 0 && frames != -EAGAIN) {
+      MV_WARN("snd_pcm_writei failed: %s, ret=%d\n", snd_strerror(frames), frames);
     }
     break;
   }

@@ -254,8 +254,9 @@ class VirtioVgpu : public VirtioPci {
     }
 
     if (vgpu_config_.capabilities & VIRTGPU_PARAM_CAPSET_QUERY_FIX) {
-      // migrate guest with staging=true may cause resource data loss
-      MV_ASSERT(!vgpu_config_.staging);
+      if (vgpu_config_.staging) {
+        MV_ERROR("migrate guest with staging=true may cause resource data loss");
+      }
     }
 
     VirtioVgpuState state;

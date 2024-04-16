@@ -1,5 +1,5 @@
 name: Default configuration
-base: i440fx.yaml
+base: q35.yaml
 
 machine:
   memory: 4G
@@ -23,7 +23,6 @@ objects:
   - class: usb-tablet
 
   - class: virtio-network
-    backend: uip
     mac: 00:50:00:11:22:33
     map: tcp:0.0.0.0:8022-:22
 
@@ -59,3 +58,8 @@ objects:
   #   staging: No
   #   blob: No
   #   node: /dev/dri/renderD131
+
+  # - class: virtio-cuda
+  #   memory: 1G
+  #   gpu_memory: 8G
+  #   visible_gpus: GPU-0

@@ -1,4 +1,3 @@
-
 mvisor_sources += files(
   'fuse.cc',
   'fuse.h',

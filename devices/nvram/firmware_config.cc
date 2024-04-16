@@ -175,7 +175,7 @@ class FirmwareConfig : public Device {
     int index = 0;
     for (auto &item : files_) {
       auto cfg_file = &dir.files[index];
-      strncpy(cfg_file->name, item.first.c_str(), item.first.size());
+      strncpy(cfg_file->name, item.first.c_str(), sizeof(cfg_file->name));
       cfg_file->size = htobe32(item.second.size());
       cfg_file->select = htobe16(FW_CFG_FILE_FIRST + index);
       cfg_file->reserved = 0;

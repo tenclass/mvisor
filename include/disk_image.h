@@ -82,7 +82,6 @@ class DiskImage : public Object {
   bool        readonly_ = false;
   bool        snapshot_ = false;
   Device*     device_ = nullptr;
-  Device*     host_device_ = nullptr;
   IoThread*   io_ = nullptr;
   std::string filepath_;
 

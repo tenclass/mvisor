@@ -47,8 +47,6 @@ DiskImage* DiskImage::Create(Device* device, std::string path, bool readonly, bo
   image->readonly_ = readonly;
   image->snapshot_ = snapshot;
   image->device_ = device;
-  image->host_device_ = dynamic_cast<Device*>((Object*)device->parent());
-  MV_ASSERT(image->host_device_);
   image->Initialize();
   
   image->io_ = device->manager()->io();
@@ -100,7 +98,7 @@ void DiskImage::QueueIoRequest(ImageIoRequest request, IoCallback callback) {
   worker_mutex_.lock();
   worker_queue_.emplace_back([this, request = std::move(request), callback = std::move(callback)]() {
     auto ret = HandleIoRequest(std::move(request));
-    std::lock_guard<std::recursive_mutex> device_lock(host_device_->mutex());
+    std::lock_guard<std::recursive_mutex> device_lock(device_->mutex());
     callback(ret);
   });
 
@@ -121,7 +119,7 @@ void DiskImage::QueueMultipleIoRequests(std::vector<ImageIoRequest> requests, Io
       total += ret;
     }
 
-    std::lock_guard<std::recursive_mutex> device_lock(host_device_->mutex());
+    std::lock_guard<std::recursive_mutex> device_lock(device_->mutex());
     callback(total);
   });
 

@@ -199,10 +199,13 @@ void VirtioPci::ReadIndirectDescriptorTable(VirtElement& element, VRingDescripto
 }
 
 VirtElement* VirtioPci::PopQueue(VirtQueue& vq) {
+  asm volatile ("mfence": : :"memory");
+
   if (vq.available_ring->index == vq.last_available_index) {
     return nullptr;
   }
-  asm volatile ("mfence": : :"memory");
+
+  asm volatile ("lfence": : :"memory");
 
   auto element = new VirtElement;
   element->Initialize();
@@ -233,6 +236,8 @@ VirtElement* VirtioPci::PopQueue(VirtQueue& vq) {
 }
 
 void VirtioPci::PushQueue(VirtQueue& vq, VirtElement* element) {
+  asm volatile ("mfence": : :"memory");
+
   auto &item = vq.used_ring->items[vq.used_ring->index % vq.size];
   item.id = element->id;
   item.length = element->length;
@@ -245,6 +250,8 @@ void VirtioPci::PushQueue(VirtQueue& vq, VirtElement* element) {
 }
 
 void VirtioPci::PushQueueMultiple(VirtQueue& vq, std::vector<VirtElement*>& elements) {
+  asm volatile ("mfence": : :"memory");
+
   auto index = vq.used_ring->index;
   for (auto element : elements) {
     auto &item = vq.used_ring->items[index++ % vq.size];
@@ -274,11 +281,11 @@ void VirtioPci::NotifyQueue(VirtQueue& vq) {
 
   /* Set queue interrupt bit */
   isr_status_ = 1;
-  /* Make sure MSI X Enabled */
-  if (vq.msix_vector == VIRTIO_MSI_NO_VECTOR) {
-    return;
-  }
   if (msi_config_.enabled) {
+    if (vq.msix_vector == VIRTIO_MSI_NO_VECTOR) {
+      MV_ERROR("msix_vector was not set correctly");
+      return;
+    }
     SignalMsi(vq.msix_vector);
   } else if (pci_header_.irq_pin) {
     SetIrq(isr_status_ & 1);

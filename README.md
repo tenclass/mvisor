@@ -52,7 +52,7 @@ What's supported now:
 
 ### Multimedia & Networking
 
-1. Virtio (Console ✅ / Block ✅ / Net ✅ / VirtioFS ✅ / Balloon)
+1. Virtio (Console ✅ / Block ✅ / Net ✅ / VirtioFS ✅ / VGPU ✅ / CUDA ✅ / Balloon)
 2. SpiceAgent ✅
 3. QemuGuestAgent ✅
 4. Qxl ✅
@@ -73,10 +73,10 @@ What's supported now:
 
 ## Compile & Run
 
-For CentOS 8,
+For CentOS / RockyLinux,
 
 ```
-yum install -y gcc-c++ SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel libjpeg-devel opus-devel
+yum install -y gcc-c++ glib2-devel pixman-devel SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel libjpeg-devel opus-devel
 
 meson setup build
 meson compile -C build
