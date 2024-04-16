@@ -89,17 +89,16 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
         net_config_.mac[i] = mac[i];
     }
     /* Check user network or tap network */
+    std::string network_type = "uip";
     if (has_key("backend")) {
-      std::string network_type = std::get<std::string>(key_values_["backend"]);
-      backend_ = dynamic_cast<NetworkBackendInterface*>(Object::Create(network_type.c_str()));
-      MV_ASSERT(backend_);
-      MacAddress mac;
-      memcpy(mac.data, net_config_.mac, sizeof(mac.data));
-      backend_->Initialize(this, mac);
-      backend_->SetMtu(net_config_.mtu);
-    } else {
-      MV_PANIC("network backend is not set");
+      network_type = std::get<std::string>(key_values_["backend"]);
     }
+    backend_ = dynamic_cast<NetworkBackendInterface*>(Object::Create(network_type.c_str()));
+    MV_ASSERT(backend_);
+    MacAddress mac;
+    memcpy(mac.data, net_config_.mac, sizeof(mac.data));
+    backend_->Initialize(this, mac);
+    backend_->SetMtu(net_config_.mtu);
   }
 
   void Reset() {
