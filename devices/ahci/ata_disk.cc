@@ -46,10 +46,10 @@ static void padstr(char *str, const char *src, int len)
 AtaDisk::AtaDisk() {
   type_ = kAtaStorageTypeDisk;
 
-  drive_info_.world_wide_name = rand();
+  drive_info_.world_wide_name = 0;
   sprintf(drive_info_.serial, "TC%05ld", drive_info_.world_wide_name);
   sprintf(drive_info_.model, "Tenclass Disk");
-  sprintf(drive_info_.version, "1.0");
+  sprintf(drive_info_.version, "1.1");
   
   ata_handlers_[0x06] = [=] () { // DATA SET MANAGEMENT
     if (task_file_->feature0 == 1) { // TRIM (Reference 7.5.6.1)
@@ -502,7 +502,7 @@ void AtaDisk::Ata_IdentifyDevice() {
   p[80] = 0xf0; /* ata3 -> ata6 supported */
   p[81] = 0x16; /* conforms to ata5 */
   /* 14=NOP supported, 5=WCACHE supported, 0=SMART supported */
-  p[82] = (1 << 14) | (1 << 5) | 0;
+  p[82] = (1 << 14) | (1 << 5) | 1;
   /* 13=flush_cache_ext,12=flush_cache,10=lba48 */
   p[83] = (1 << 14) | (1 << 13) | (1 <<12) | (1 << 10);
   /* 14=set to 1, 8=has WWN, 1=SMART self test, 0=SMART error logging */
@@ -551,6 +551,9 @@ void AtaDisk::Ata_IdentifyDevice() {
   p[101] = geometry_.total_sectors >> 16;
   p[102] = geometry_.total_sectors >> 32;
   p[103] = geometry_.total_sectors >> 48;
+
+  /* Physical sector size / Logical sector size */
+  p[106] = 0x6000;
   
   io_.transfer_bytes = io_.buffer_size < 512 ? io_.buffer_size : 512;
   memcpy(io_.buffer, p, io_.transfer_bytes);

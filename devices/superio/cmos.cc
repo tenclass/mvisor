@@ -405,10 +405,10 @@ class Cmos : public Device, public CmosDataInterface {
           UpdateRtcTimer();
         }
         if (diff & REG_B_AIE) {
-          MV_PANIC("alarm is not implemented");
+          MV_WARN("alarm is not implemented");
         }
         if (diff & REG_B_UIE) {
-          MV_PANIC("update-ended interrupt is not implemented");
+          MV_WARN("update-ended interrupt is not implemented");
         }
         break;
       case RTC_REG_C:

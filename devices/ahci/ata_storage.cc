@@ -227,7 +227,7 @@ void AtaStorageDevice::Ata_SetFeatures() {
       break;
     }
     if (debug_) {
-      MV_LOG("switch to DMA mode 0x%x", io_.dma_mode);
+      MV_LOG("%s switch to DMA mode 0x%x", name_, io_.dma_mode);
     }
     break;
   }

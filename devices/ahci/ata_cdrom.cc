@@ -19,6 +19,7 @@
 #include "ata_cdrom.h"
 
 #include <cstring>
+#include <algorithm>
 
 #include "disk_image.h"
 #include "logger.h"
@@ -55,6 +56,14 @@
 #define ASC_SAVING_PARAMETERS_NOT_SUPPORTED  0x39
 #define ASC_DATA_PHASE_ERROR                 0x4b
 #define ASC_MEDIA_REMOVAL_PREVENTED          0x53
+
+/* Some generally useful CD-ROM information */
+#define CD_MINS                       80 /* max. minutes per CD */
+#define CD_SECS                       60 /* seconds per minute */
+#define CD_FRAMES                     75 /* frames per second */
+#define CD_FRAMESIZE                2048 /* bytes per frame, "cooked" mode */
+#define CD_MAX_BYTES       (CD_MINS * CD_SECS * CD_FRAMES * CD_FRAMESIZE)
+
 
 static void padstr(char *str, const char *src, int len)
 {
@@ -211,10 +220,10 @@ AtaCdrom::AtaCdrom()
 {
   type_ = kAtaStorageTypeCdrom;
 
-  drive_info_.world_wide_name = rand();
+  drive_info_.world_wide_name = 0;
   sprintf(drive_info_.serial, "TC%05ld", drive_info_.world_wide_name);
   sprintf(drive_info_.model, "DVD-ROM");
-  sprintf(drive_info_.version, "1.0");
+  sprintf(drive_info_.version, "1.1");
 
   /* ATA command handlers */
   ata_handlers_[0xA0] = [=] () { // ATA_CMD_PACKET
@@ -233,6 +242,12 @@ AtaCdrom::AtaCdrom()
   
   ata_handlers_[0xA1] = [=] () { // ATA_CMD_IDENTIFY_PACKET_DEVICE
     Atapi_IdentifyData();
+  };
+  
+  ata_handlers_[0xEC] = [=] () { // ATA_CMD_IDENTIFY_DEVICE
+    SetSignature(task_file_);
+    AbortCommand();
+    task_file_->status |= ATA_CB_STAT_BSY;
   };
 
 
@@ -262,9 +277,11 @@ AtaCdrom::AtaCdrom()
   };
   
   atapi_handlers_[0x1B] = [=] () { // start stop unit such as load or eject the media
+    task_file_->status |= ATA_CB_STAT_SKC;
   };
   
   atapi_handlers_[0x1E] = [=] () { // prevent allow media removal
+    task_file_->status |= ATA_CB_STAT_SKC;
   };
   
   atapi_handlers_[0x25] = [=] () { // get media capacity
@@ -304,6 +321,7 @@ AtaCdrom::AtaCdrom()
   };
   
   atapi_handlers_[0x2B] = [=] () { // seek
+    Atapi_Seek();
   };
   
   atapi_handlers_[0x35] = [=] () { // flush cache
@@ -330,13 +348,39 @@ AtaCdrom::AtaCdrom()
     }
   };
   
-  atapi_handlers_[0x46] =          // get configuration
+  atapi_handlers_[0x46] = [=] () { // get configuration
+    /* only feature 0 is supported */
+    if (io_.atapi_command[2] != 0 || io_.atapi_command[3] != 0) {
+      SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+      return;
+    }
+
+    if (task_file_->feature0 & 1) {
+      WaitForDma([this]() { Atapi_GetConfiguration(); });
+    } else {
+      Atapi_GetConfiguration();
+    }
+  };
   atapi_handlers_[0x4A] = [=] () { // get event status notification
-    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+    if (!(io_.atapi_command[1] & 1)) {
+      /* Only polling is supported, asynchronous mode is not. */
+      SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+      return;
+    }
+
+    if (task_file_->feature0 & 1) {
+      WaitForDma([this]() { Atapi_GetEventStatusNotification(); });
+    } else {
+      Atapi_GetEventStatusNotification();
+    }
   };
 
   atapi_handlers_[0x51] = [=] () { // read disc information
-    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+    if (task_file_->feature0 & 1) {
+      WaitForDma([this]() { Atapi_ReadDiscInformation(); });
+    } else {
+      Atapi_ReadDiscInformation();
+    }
   };
   
   atapi_handlers_[0x5A] = [=] () { // mode sense 10
@@ -345,12 +389,6 @@ AtaCdrom::AtaCdrom()
     } else {
       Atapi_ModeSense();
     }
-  };
-  
-  ata_handlers_[0xEC] = [=] () { // ATA_CMD_IDENTIFY_DEVICE
-    SetSignature(task_file_);
-    AbortCommand();
-    task_file_->status |= ATA_CB_STAT_BSY;
   };
 }
 
@@ -371,6 +409,12 @@ void AtaCdrom::SetError(uint sense_key, uint asc) {
   task_file_->count0 = (task_file_->count0 & ~7) | ATA_CB_SC_P_CD | ATA_CB_SC_P_IO;
   sense_key_ = sense_key;
   asc_ = asc;
+  if (io_async_) {
+    io_async_ = false;
+    if (debug_) {
+      MV_WARN("failed to process async ATAPI command 0x%x", io_.atapi_command[0]);
+    }
+  }
 }
 
 
@@ -383,8 +427,10 @@ void AtaCdrom::ParseCommandPacket() {
 
   auto handler = atapi_handlers_[command];
   if (!handler) {
-    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
-    MV_HEXDUMP("unhandled ATAPI command", io_.atapi_command, sizeof(io_.atapi_command));
+    SetError(ILLEGAL_REQUEST, ASC_ILLEGAL_OPCODE);
+    if (debug_) {
+      MV_HEXDUMP("unhandled ATAPI command", io_.atapi_command, sizeof(io_.atapi_command));
+    }
     return;
   }
 
@@ -428,7 +474,7 @@ void AtaCdrom::Atapi_ReadSectors(size_t sectors) {
   while (vec_index < io_.vector.size() && remain_bytes > 0) {
     auto& iov = io_.vector[vec_index];
 
-    size_t length = remain_bytes < iov.iov_len ? remain_bytes : iov.iov_len;
+    size_t length = std::min(remain_bytes, iov.iov_len);
     request.vector.emplace_back(iovec {
       .iov_base = iov.iov_base,
       .iov_len = length
@@ -444,8 +490,9 @@ void AtaCdrom::Atapi_ReadSectors(size_t sectors) {
   io_.lba_count -= sectors;
   io_.lba_block += sectors;
 
-  image_->QueueIoRequest(request, [this, sectors](ssize_t ret) {
+  image_->QueueIoRequest(request, [this, sectors, request](ssize_t ret) {
     if (ret <= 0) {
+      MV_ERROR("io error ret=%ld, position=%lu length=%lu", ret, request.position, request.length);
       SetError(ILLEGAL_REQUEST, ASC_LOGICAL_BLOCK_OOR);
       EndCommand();
     } else {
@@ -456,10 +503,17 @@ void AtaCdrom::Atapi_ReadSectors(size_t sectors) {
   });
 }
 
-void AtaCdrom::Atapi_RequestSense() {
-  uint8_t* buf = io_.buffer;
-  int max_len = io_.atapi_command[4];
+void AtaCdrom::Atapi_Seek() {
+  uint lba = be32toh(*(uint32_t*)&io_.atapi_command[2]);
+  if (lba >= geometry_.total_sectors) {
+    SetError(ILLEGAL_REQUEST, ASC_LOGICAL_BLOCK_OOR);
+  } else {
+    task_file_->status |= ATA_CB_STAT_SKC;
+  }
+}
 
+void AtaCdrom::Atapi_RequestSense() {
+  uint8_t buf[18];
   bzero(buf, 18);
   buf[0] = 0x70 | (1 << 7);
   buf[2] = sense_key_;
@@ -470,7 +524,9 @@ void AtaCdrom::Atapi_RequestSense() {
     sense_key_ = NO_SENSE;
   }
 
-  io_.transfer_bytes = max_len > 18 ? 18 : max_len;
+  int max_size = io_.atapi_command[4];
+  io_.transfer_bytes = std::min(max_size, 18);
+  memcpy(io_.buffer, buf, io_.transfer_bytes);
   StartTransfer(kTransferDataToHost, []() {});
 }
 
@@ -489,9 +545,11 @@ void AtaCdrom::Atapi_ModeSense() {
   case 0x2A: // Capabilities
     *(uint16_t*)&buf[0] = htobe16(30 - 2);
     buf[2] = 0x70;
+
     buf[8] = 0x2A;
     buf[9] = 30 - 10;
-    // buf[10] = 0x3B; /* read CDR/CDRW/DVDROM/DVDR/DVDRAM */
+    buf[10] = 0x3B; /* read CDR/CDRW/DVDROM/DVDR/DVDRAM */
+
     buf[12] = 0x70;
     buf[13] = 3 << 5;
     buf[14] = (1 << 0) | (1 << 3) | (1 << 5);
@@ -500,7 +558,7 @@ void AtaCdrom::Atapi_ModeSense() {
     *(uint16_t*)&buf[20] = htobe16(512);
     *(uint16_t*)&buf[22] = htobe16(706);
   
-    io_.transfer_bytes = io_.buffer_size < 30 ? io_.buffer_size : 30;
+    io_.transfer_bytes = std::min((int)io_.buffer_size, 30);
     memcpy(io_.buffer, buf, io_.transfer_bytes);
     StartTransfer(kTransferDataToHost, []() {});
     break;
@@ -549,32 +607,177 @@ void AtaCdrom::Atapi_ReadTableOfContent() {
 }
 
 void AtaCdrom::Atapi_ReadSubchannel() {
-  uint8_t size = io_.atapi_command[8] < 8 ? io_.atapi_command[8] : 8;
-  bzero(io_.buffer, size);
+  size_t length = std::min((int)io_.atapi_command[8], 8);
+  bzero(io_.buffer, length);
 
-  io_.transfer_bytes = size;
+  io_.transfer_bytes = length;
   StartTransfer(kTransferDataToHost, []() {});
+}
+
+void AtaCdrom::Atapi_ReadDiscInformation() {
+  uint8_t type = io_.atapi_command[1] & 0x0F;
+
+  /* Types 1/2 are only defined for Blu-Ray.  */
+  if (type != 0) {
+    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+    return;
+  }
+
+  uint16_t max_size = be16toh(*(uint16_t*)&io_.atapi_command[7]);
+  uint8_t disk_info[34] = {
+    0, 32, 0xE, 1, 1, 1, 1, 0x20, 0x00
+  };
+  io_.transfer_bytes = std::min((size_t)max_size, sizeof(disk_info));
+  memcpy(io_.buffer, disk_info, io_.transfer_bytes);
+  StartTransfer(kTransferDataToHost, []() {});
+}
+
+void AtaCdrom::Atapi_GetConfiguration() {
+  uint8_t buf[20];
+  bzero(buf, sizeof(buf));
+
+  bool is_dvd = geometry_.total_sectors * geometry_.sector_size > CD_MAX_BYTES;
+  if (is_dvd) {
+    *(uint16_t*)&buf[6] = htobe16(0x0010);  /* DVD-ROM */
+  } else {
+    *(uint16_t*)&buf[6] = htobe16(0x0008);  /* CD-ROM */
+  }
+
+  buf[10] = 0x02 | 0x01; /* persistent and current */
+  buf[11] = 8; /* length of the profile list */
+  
+  uint8_t* profile = &buf[12];
+  *(uint16_t*)profile = htobe16(0x0010); /* DVD-ROM */
+  profile[2] = is_dvd ? 0x01 : 0x00;
+  profile[3] = 0;
+
+  profile += 4;
+  *(uint16_t*)profile = htobe16(0x0008); /* CD-ROM */
+  profile[2] = is_dvd ? 0x00 : 0x01;
+  profile[3] = 0;
+
+  *(uint32_t*)&buf[0] = htobe32(20 - 4);
+  
+  size_t max_size = be16toh(*(uint16_t*)&io_.atapi_command[7]);
+  io_.transfer_bytes = std::min((int)max_size, 20);
+  memcpy(io_.buffer, buf, io_.transfer_bytes);
+  StartTransfer(kTransferDataToHost, []() {});
+}
+
+void AtaCdrom::Atapi_GetEventStatusNotification() {
+  uint8_t* buf = io_.buffer;
+
+  /* current supported event: media */
+  buf[3] = 1 << 4;
+
+  if (io_.atapi_command[4] & (1 << 4)) {
+    buf[2] = 1 << 4; // media
+    buf[4] = 0; // 0: no change 2: new media 1: eject requested 
+    buf[5] = 2; // 1: tray open 2: media present
+    buf[6] = 0; // reserved
+    buf[7] = 0; // reserved
+    buf[0] = 0;
+    buf[1] = 4;
+    io_.transfer_bytes = 8;
+    StartTransfer(kTransferDataToHost, []() {});
+  } else {
+    buf[0] = 0;
+    buf[1] = 0;
+    buf[2] = 0x80; // no event
+    io_.transfer_bytes = 4;
+    StartTransfer(kTransferDataToHost, []() {});
+  }
 }
 
 void AtaCdrom::Atapi_Inquiry() {
   uint8_t* buf = io_.buffer;
+  int max_size = io_.atapi_command[4];
 
-  uint8_t size = io_.atapi_command[4];
+  /* If the EVPD (Enable Vital Product Data) bit is set in byte 1,
+    * we are being asked for a specific page of info indicated by byte 2. */
+  if (io_.atapi_command[1] & 1) {
+    uint8_t page = io_.atapi_command[2];
+    int index = 0;
 
-  buf[0] = 0x05; /* CD-ROM */
-  buf[1] = 0x80; /* removable */
-  buf[2] = 0x00; /* ISO */
-  buf[3] = 0x21; /* ATAPI-2 (XXX: put ATAPI-4 ?) */
-  buf[4] = 36 - 5;   /* size */
-  buf[5] = 0;    /* reserved */
-  buf[6] = 0;    /* reserved */
-  buf[7] = 0;    /* reserved */
-  padstr8(buf + 8, 8, "Tenclass");
-  padstr8(buf + 16, 16, drive_info_.model);
-  padstr8(buf + 32, 4, drive_info_.version);
+    buf[index++] = 0x05; /* CD-ROM */
+    buf[index++] = page; /* page code */
+    buf[index++] = 0;    /* reserved */
+    buf[index++] = 0;    /* length */
 
-  io_.transfer_bytes = size > 36 ? 36 : size;
-  StartTransfer(kTransferDataToHost, []() {});
+    switch (page)
+    {
+    case 0x00:
+      /* Supported Pages: List of supported VPD responses. */
+      buf[index++] = 0x00; /* 0x00: Supported Pages, and: */
+      buf[index++] = 0x83; /* 0x83: Device Identification. */
+      break;
+    case 0x83:
+      /* Device Indentification */
+      // Entry 1: Serial
+      if (index + 24 > max_size) {
+        SetError(ILLEGAL_REQUEST, ASC_DATA_PHASE_ERROR);
+        return;
+      }
+      buf[index++] = 0x02; /* Ascii */
+      buf[index++] = 0x00; /* Vendor specific */
+      buf[index++] = 0x00;
+      buf[index++] = 20; /* Remain length */
+      padstr8(buf + index, 20, drive_info_.serial);
+      index += 20;
+
+      // Entry 2: Drive Model and Serial
+      if (index + 72 > max_size) {
+        break;
+      }
+      buf[index++] = 0x02; /* Ascii */
+      buf[index++] = 0x01; /* T10 Vendor ID */
+      buf[index++] = 0x00;
+      buf[index++] = 68; /* Remain length */
+      padstr8(buf + index, 8, "ATA"); /* T10 Vendor ID */
+      index += 8;
+      padstr8(buf + index, 40, drive_info_.model);
+      index += 40;
+      padstr8(buf + index, 20, drive_info_.serial);
+      index += 20;
+
+      // Entry 3: WWN
+      if (drive_info_.world_wide_name && (index + 12 <= max_size)) {
+        buf[index++] = 0x01; /* Binary */
+        buf[index++] = 0x03; /* NAA */
+        buf[index++] = 0x00;
+        buf[index++] = 8; /* Remain length */
+        buf[index++] = drive_info_.world_wide_name >> 40;
+        buf[index++] = drive_info_.world_wide_name >> 32;
+        buf[index++] = drive_info_.world_wide_name >> 24;
+        buf[index++] = drive_info_.world_wide_name >> 16;
+        buf[index++] = drive_info_.world_wide_name >> 8;
+        buf[index++] = drive_info_.world_wide_name;
+      }
+      break;
+    default:
+      SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+      return;
+    }
+
+    buf[3] = index - 4;
+    io_.transfer_bytes = std::min(max_size, index);
+    StartTransfer(kTransferDataToHost, []() {});
+  } else {
+    buf[0] = 0x05; /* CD-ROM */
+    buf[1] = 0x80; /* removable */
+    buf[2] = 0x00; /* ISO */
+    buf[3] = 0x21; /* ATAPI-2 (XXX: put ATAPI-4 ?) */
+    buf[4] = 36 - 5;   /* length */
+    buf[5] = 0;    /* reserved */
+    buf[6] = 0;    /* reserved */
+    buf[7] = 0;    /* reserved */
+    padstr8(buf + 8, 8, "Tenclass");
+    padstr8(buf + 16, 16, drive_info_.model);
+    padstr8(buf + 32, 4, drive_info_.version);
+
+    io_.transfer_bytes = std::min(max_size, 36);
+    StartTransfer(kTransferDataToHost, []() {});
+  }
 }
 
 void AtaCdrom::Atapi_IdentifyData() {
@@ -633,7 +836,7 @@ void AtaCdrom::Atapi_IdentifyData() {
       p[111] = drive_info_.world_wide_name;
   }
 
-  io_.transfer_bytes = io_.buffer_size < 512 ? io_.buffer_size : 512;
+  io_.transfer_bytes = std::min((int)io_.buffer_size, 512);
   memcpy(io_.buffer, p, io_.transfer_bytes);
   StartTransfer(kTransferDataToHost, []() {});
 }

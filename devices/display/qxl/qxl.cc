@@ -382,7 +382,9 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
     NotifyDisplayUpdate();
     break;
   case QXL_IO_NOTIFY_OOM:
-    MV_LOG("QXL_IO_NOTIFY_OOM");
+    if (debug_) {
+      MV_LOG("QXL_IO_NOTIFY_OOM");
+    }
     FlushCommandsAndResources();
     break;
   case QXL_IO_RESET:

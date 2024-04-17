@@ -43,6 +43,10 @@ class AtaCdrom : public AtaStorageDevice {
   void Atapi_RequestSense();
   void Atapi_GetMediaCapacity();
   void Atapi_ReadSubchannel();
+  void Atapi_ReadDiscInformation();
+  void Atapi_GetEventStatusNotification();
+  void Atapi_GetConfiguration();
+  void Atapi_Seek();
   void SetError(uint sense_key, uint asc);
 
   uint    sense_key_;
