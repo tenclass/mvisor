@@ -109,7 +109,7 @@ void Vcpu::SetupCpuid() {
       entry->eax = 0xD; // Max input value for basic information
       break;
     case 0x1: { // ACPI ID & Features
-      entry->eax = CPU_VERSION(6, 85, 7);
+      entry->eax = CPU_VERSION(15, 1, 0);
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
 
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
@@ -161,7 +161,7 @@ void Vcpu::SetupCpuid() {
       entry->ecx &= ~(1U << 22); // Disable Topology Extensions
       break;
     case 0x80000002 ... 0x80000004: { // CPU Model String
-      static const char cpu_model[48] = "Intel Xeon Processor (Skylake-Server)";
+      static const char cpu_model[48] = "AMD Compatible Processor";
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
