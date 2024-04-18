@@ -384,6 +384,15 @@ AtaCdrom::AtaCdrom()
   };
   
   atapi_handlers_[0x5A] = [=] () { // mode sense 10
+    if (io_.atapi_command[2] != 0x2A) {
+      /* Only MODE_PAGE_CAPABILITIES is supported */
+      if (debug_) {
+        MV_WARN("unhandled mode sense %x", io_.atapi_command[2]);
+      }
+      SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
+      return;
+    }
+
     if (task_file_->feature0 & 1) {
       WaitForDma([this]() { Atapi_ModeSense(); });
     } else {
@@ -409,11 +418,14 @@ void AtaCdrom::SetError(uint sense_key, uint asc) {
   task_file_->count0 = (task_file_->count0 & ~7) | ATA_CB_SC_P_CD | ATA_CB_SC_P_IO;
   sense_key_ = sense_key;
   asc_ = asc;
+
+  /* FIXME: the device didn't call StartTransfer */
   if (io_async_) {
     io_async_ = false;
     if (debug_) {
       MV_WARN("failed to process async ATAPI command 0x%x", io_.atapi_command[0]);
     }
+    EndCommand();
   }
 }
 
@@ -494,7 +506,6 @@ void AtaCdrom::Atapi_ReadSectors(size_t sectors) {
     if (ret <= 0) {
       MV_ERROR("io error ret=%ld, position=%lu length=%lu", ret, request.position, request.length);
       SetError(ILLEGAL_REQUEST, ASC_LOGICAL_BLOCK_OOR);
-      EndCommand();
     } else {
       StartTransfer(kTransferDataToHost, [this, sectors]() {
         Atapi_ReadSectors(sectors);
@@ -539,36 +550,24 @@ void AtaCdrom::Atapi_GetMediaCapacity() {
 
 void AtaCdrom::Atapi_ModeSense() {
   uint8_t buf[100] = { 0 };
+  *(uint16_t*)&buf[0] = htobe16(30 - 2);
+  buf[2] = 0x70;
 
-  switch (io_.atapi_command[2])
-  {
-  case 0x2A: // Capabilities
-    *(uint16_t*)&buf[0] = htobe16(30 - 2);
-    buf[2] = 0x70;
+  buf[8] = 0x2A;
+  buf[9] = 30 - 10;
+  buf[10] = 0x3B; /* read CDR/CDRW/DVDROM/DVDR/DVDRAM */
 
-    buf[8] = 0x2A;
-    buf[9] = 30 - 10;
-    buf[10] = 0x3B; /* read CDR/CDRW/DVDROM/DVDR/DVDRAM */
+  buf[12] = 0x70;
+  buf[13] = 3 << 5;
+  buf[14] = (1 << 0) | (1 << 3) | (1 << 5);
+  *(uint16_t*)&buf[16] = htobe16(706);
+  *(uint16_t*)&buf[18] = htobe16(2);
+  *(uint16_t*)&buf[20] = htobe16(512);
+  *(uint16_t*)&buf[22] = htobe16(706);
 
-    buf[12] = 0x70;
-    buf[13] = 3 << 5;
-    buf[14] = (1 << 0) | (1 << 3) | (1 << 5);
-    *(uint16_t*)&buf[16] = htobe16(706);
-    *(uint16_t*)&buf[18] = htobe16(2);
-    *(uint16_t*)&buf[20] = htobe16(512);
-    *(uint16_t*)&buf[22] = htobe16(706);
-  
-    io_.transfer_bytes = std::min((int)io_.buffer_size, 30);
-    memcpy(io_.buffer, buf, io_.transfer_bytes);
-    StartTransfer(kTransferDataToHost, []() {});
-    break;
-  default:
-    if (debug_) {
-      MV_ERROR("unhandled mode sense %x", io_.atapi_command[2]);
-    }
-    SetError(ILLEGAL_REQUEST, ASC_INV_FIELD_IN_CMD_PACKET);
-    break;
-  }
+  io_.transfer_bytes = std::min((int)io_.buffer_size, 30);
+  memcpy(io_.buffer, buf, io_.transfer_bytes);
+  StartTransfer(kTransferDataToHost, []() {});
 }
 
 void AtaCdrom::Atapi_ReadTableOfContent() {
