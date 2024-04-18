@@ -74,6 +74,14 @@ bool Pmio::LoadState(MigrationReader* reader) {
   if (!reader->ReadProtobuf("PMIO", state)) {
     return false;
   }
+  smi_.status = state.smi_status();
+  smi_.enable = state.smi_enable();
+  gpe0_.status = state.gpe0_status();
+  gpe0_.enable = state.gpe0_enable();
+  pm1_.timer = state.pm1_timer();
+  pm1_.control = state.pm1_control();
+  pm1_.enable = state.pm1_enable();
+  pm1_.status = state.pm1_status();
   return true;
 }
 
