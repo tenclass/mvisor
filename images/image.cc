@@ -111,7 +111,7 @@ void DiskImage::QueueMultipleIoRequests(std::vector<ImageIoRequest> requests, Io
   worker_queue_.emplace_back([this, requests = std::move(requests), callback = std::move(callback)]() {
     long ret, total = 0;
     for (auto &req: requests) {
-      ret = HandleIoRequest(std::move(req));
+      ret = HandleIoRequest(req);
       if (ret < 0) {
         total = ret;
         break;

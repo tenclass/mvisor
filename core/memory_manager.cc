@@ -356,7 +356,7 @@ void MemoryManager::StartTrackingDirtyMemory() {
       };
       MV_ASSERT(ioctl(machine_->vm_fd_, KVM_CLEAR_DIRTY_LOG, &clear_dirty) == 0);
     }
-    delete dirty_bitmap;
+    delete[] dirty_bitmap;
   }
 
   // tell listeners start tracking dirty memory

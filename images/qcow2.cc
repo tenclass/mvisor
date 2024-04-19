@@ -622,7 +622,7 @@ void Qcow2Image::FlushRefcountBlocks() {
   }
 }
 
-long Qcow2Image::HandleIoRequest(ImageIoRequest request) {
+long Qcow2Image::HandleIoRequest(const ImageIoRequest& request) {
   long ret = -1;
   switch (request.type)
   {

@@ -70,7 +70,7 @@ class RawImage : public DiskImage {
     total_blocks_ = st.st_size / block_size_;
   }
 
-  long HandleIoRequest(ImageIoRequest request) {
+  long HandleIoRequest(const ImageIoRequest& request) {
     long ret = -1;
 
     switch (request.type)

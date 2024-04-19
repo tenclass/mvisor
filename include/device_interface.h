@@ -25,6 +25,7 @@
 #include <string>
 #include <deque>
 #include <sys/uio.h>
+#include <cstdint>
 
 class KeyboardInputInterface {
  public:
