@@ -91,18 +91,15 @@ void Vcpu::Reset() {
   (((family & 0xF) << 8) | (((model >> 4) & 0xF) << 16) | ((model & 0xF) << 4) | (stepping & 0xF))
 
 void Vcpu::SetupCpuid() {
-  struct {
-    struct kvm_cpuid2 cpuid2;
-    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } cpuid;
-  cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
+  auto cpuid = (kvm_cpuid2*)new uint8_t[sizeof(kvm_cpuid2) + MAX_KVM_CPUID_ENTRIES * sizeof(kvm_cpuid_entry2)]();
+  cpuid->nent = MAX_KVM_CPUID_ENTRIES;
 
-  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, &cpuid) < 0) {
+  if (ioctl(machine_->kvm_fd_, KVM_GET_SUPPORTED_CPUID, cpuid) < 0) {
     MV_PANIC("failed to get supported CPUID");
   }
 
-  for (uint i = 0; i < cpuid.cpuid2.nent; i++) {
-    auto entry = &cpuid.entries[i];
+  for (uint i = 0; i < cpuid->nent; i++) {
+    auto entry = &cpuid->entries[i];
     switch (entry->function)
     {
     case 0x0: // CPUID Signature
@@ -186,30 +183,30 @@ void Vcpu::SetupCpuid() {
       break;
     default:
       /* Remove the function if not handled */
-      memmove(entry, entry + 1, sizeof(*entry) * (cpuid.cpuid2.nent - i - 1));
+      memmove(entry, entry + 1, sizeof(*entry) * (cpuid->nent - i - 1));
       --i;
-      --cpuid.cpuid2.nent;
+      --cpuid->nent;
       continue;
     }
   }
 
   /* Add Hyper-V functions to cpuid */
   if (machine_->hypervisor_) {
-    SetupHyperV(&cpuid.cpuid2);
+    SetupHyperV(cpuid);
   }
 
-  if (ioctl(fd_, KVM_SET_CPUID2, &cpuid) < 0)
+  if (ioctl(fd_, KVM_SET_CPUID2, cpuid) < 0) {
     MV_PANIC("KVM_SET_CPUID2 failed");
+  }
+
+  delete[] cpuid;
 }
 
 void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
-  struct {
-    struct kvm_cpuid2 cpuid2;
-    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } hyperv_cpuid;
-  hyperv_cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
+  auto hyperv_cpuid = (kvm_cpuid2*)new uint8_t[sizeof(kvm_cpuid2) + MAX_KVM_CPUID_ENTRIES * sizeof(kvm_cpuid_entry2)]();
+  hyperv_cpuid->nent = MAX_KVM_CPUID_ENTRIES;
 
-  if (ioctl(fd_, KVM_GET_SUPPORTED_HV_CPUID, &hyperv_cpuid) < 0) {
+  if (ioctl(fd_, KVM_GET_SUPPORTED_HV_CPUID, hyperv_cpuid) < 0) {
     MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV));
     MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV_TIME));
     MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_HYPERV_SYNIC));
@@ -218,8 +215,8 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     MV_PANIC("failed to get supported Hyper-V CPUID. Please upgrade your kernel.");
   }
 
-  for (uint i = 0; i < hyperv_cpuid.cpuid2.nent; i++) {
-    auto entry = &hyperv_cpuid.entries[i];
+  for (uint i = 0; i < hyperv_cpuid->nent; i++) {
+    auto entry = &hyperv_cpuid->entries[i];
     switch (entry->function)
     {
     case 0x40000000: // HV_CPUID_VENDOR_AND_MAX_FUNCTIONS
@@ -260,6 +257,8 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     }
   }
 
+  delete[] hyperv_cpuid;
+
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
     struct kvm_enable_cap enable_cap;
     bzero(&enable_cap, sizeof(enable_cap));
@@ -285,32 +284,28 @@ void Vcpu::SetupMachineCheckException() {
 }
 
 uint64_t Vcpu::GetSupportedMsrFeature(uint index) {
-  struct {
-    kvm_msrs      msrs;
-    kvm_msr_entry entries[1];
-  } msrs;
-
-  msrs.entries[0].index = index;
-  msrs.msrs.nmsrs = 1;
-  if (ioctl(machine_->kvm_fd_, KVM_GET_MSRS, &msrs) != 1) {
+  auto msrs = (kvm_msrs*)new uint8_t[sizeof(kvm_msrs) + 1 * sizeof(kvm_msr_entry)];
+  msrs->entries[0].index = index;
+  msrs->nmsrs = 1;
+  if (ioctl(machine_->kvm_fd_, KVM_GET_MSRS, msrs) != 1) {
     MV_PANIC("failed to get msr feature index=0x%x", index);
   }
-  return msrs.entries[0].data;
+
+  auto feature = msrs->entries[0].data;
+  delete[] msrs;
+  return feature;
 }
 
 void Vcpu::SetupMsrIndices() {
   msr_indices_.clear();
 
   /* Setup common MSRS indices */
-  struct {
-    kvm_msr_list  list;
-    uint32_t      indices[1000];
-  } msr_list;
-  msr_list.list.nmsrs = sizeof(msr_list.indices) / sizeof(uint32_t);
-  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, &msr_list) == 0);
+  auto msr_list = (kvm_msr_list*)new uint8_t[sizeof(kvm_msr_list) + 1000 * sizeof(uint32_t)];
+  msr_list->nmsrs = 1000;
+  MV_ASSERT(ioctl(machine_->kvm_fd_, KVM_GET_MSR_INDEX_LIST, msr_list) == 0);
 
-  for (uint i = 0; i < msr_list.list.nmsrs; i++) {
-    auto index = msr_list.indices[i];
+  for (uint i = 0; i < msr_list->nmsrs; i++) {
+    auto index = msr_list->indices[i];
     // MSR_IA32_BNDCFGS
     if (index == 0xD90) {
       continue;
@@ -333,6 +328,8 @@ void Vcpu::SetupMsrIndices() {
     msr_indices_.insert(index);
   }
 
+  delete[] msr_list;
+
   /* Add up some MSR indices that we cannot get from supported list */
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
     msr_indices_.insert(HV_X64_MSR_SCONTROL);
@@ -354,27 +351,26 @@ void Vcpu::SetupMsrIndices() {
 }
 
 void Vcpu::SetupModelSpecificRegisters() {
-  struct {
-    kvm_msrs      msrs;
-    kvm_msr_entry entries[100];
-  } msrs;
+  auto msrs = (kvm_msrs*)new uint8_t[sizeof(kvm_msrs) + 100 * sizeof(kvm_msr_entry)];
   uint index = 0;
 
   /* UCODE is needed for MCE / MCA */
-  msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_TSC, 0);
-  msrs.entries[index++] = KVM_MSR_ENTRY(MSR_IA32_UCODE_REV, GetSupportedMsrFeature(MSR_IA32_UCODE_REV));
+  msrs->entries[index++] = KVM_MSR_ENTRY(MSR_IA32_TSC, 0);
+  msrs->entries[index++] = KVM_MSR_ENTRY(MSR_IA32_UCODE_REV, GetSupportedMsrFeature(MSR_IA32_UCODE_REV));
 
   if (hyperv_features_ & HV_SYNIC_AVAILABLE) {
-    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SVERSION, HV_SYNIC_VERSION);
-    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SCONTROL, 0);
-    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIMP, 0);
-    msrs.entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIEFP, 0);
+    msrs->entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SVERSION, HV_SYNIC_VERSION);
+    msrs->entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SCONTROL, 0);
+    msrs->entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIMP, 0);
+    msrs->entries[index++] = KVM_MSR_ENTRY(HV_X64_MSR_SIEFP, 0);
   }
 
-  msrs.msrs.nmsrs = index;
-  auto ret = ioctl(fd_, KVM_SET_MSRS, &msrs);
-  if (ret < 0)
+  msrs->nmsrs = index;
+  auto ret = ioctl(fd_, KVM_SET_MSRS, msrs);
+  if (ret < 0) {
     MV_PANIC("KVM_SET_MSRS failed");
+  }
+  delete[] msrs;  
 }
 
 /* Used for debugging sometimes */
@@ -640,19 +636,17 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   state.set_sregs(&sregs, sizeof(sregs));
 
   /* MSRS */
-  struct {
-    kvm_msrs      msrs;
-    kvm_msr_entry entries[MAX_KVM_MSR_ENTRIES];
-  } msrs;
-  bzero(&msrs, sizeof(msrs));
+  size_t msrs_size = sizeof(kvm_msrs) + MAX_KVM_MSR_ENTRIES * sizeof(kvm_msr_entry);
+  auto msrs = (kvm_msrs*)new uint8_t[msrs_size]();
   for (auto index : msr_indices_) {
-    msrs.entries[msrs.msrs.nmsrs++].index = index;
+    msrs->entries[msrs->nmsrs++].index = index;
   }
-  int nr = ioctl(fd_, KVM_GET_MSRS, &msrs);
-  if (nr != (int)msrs.msrs.nmsrs) {
-    MV_PANIC("failed to get MSR(%d) index=0x%x", nr, msrs.entries[nr].index);
+  int nr = ioctl(fd_, KVM_GET_MSRS, msrs);
+  if (nr != (int)msrs->nmsrs) {
+    MV_PANIC("failed to get MSR(%d) index=0x%x", nr, msrs->entries[nr].index);
   }
-  state.set_msrs(&msrs, sizeof(msrs));
+  state.set_msrs(msrs, msrs_size);
+  delete[] msrs;
 
   /* LAPIC */
   kvm_lapic_state lapic;
@@ -671,24 +665,20 @@ void Vcpu::SaveStateTo(VcpuState& state) {
   state.set_debug_regs(&debug, sizeof(debug));
   
   /* CPUID (save for future use) */
-  struct {
-    struct kvm_cpuid2 cpuid2;
-    struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-  } cpuid;
-  bzero(&cpuid, sizeof(cpuid));
-  cpuid.cpuid2.nent = MAX_KVM_CPUID_ENTRIES;
-  MV_ASSERT(ioctl(fd_, KVM_GET_CPUID2, &cpuid) == 0);
-  state.set_cpuid(&cpuid, sizeof(cpuid));
+  size_t cpuid_size = sizeof(kvm_cpuid2) + MAX_KVM_CPUID_ENTRIES * sizeof(kvm_cpuid_entry2);
+  auto cpuid = (kvm_cpuid2*)new uint8_t[cpuid_size]();
+  cpuid->nent = MAX_KVM_CPUID_ENTRIES;
+  MV_ASSERT(ioctl(fd_, KVM_GET_CPUID2, cpuid) == 0);
+  state.set_cpuid(cpuid, cpuid_size);
+  delete[] cpuid;
 }
 
 void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
   if (load_cpuid) {
-    struct {
-      struct kvm_cpuid2 cpuid2;
-      struct kvm_cpuid_entry2 entries[MAX_KVM_CPUID_ENTRIES];
-    } cpuid;
-    memcpy(&cpuid, state.cpuid().data(), sizeof(cpuid));
-    MV_ASSERT(ioctl(fd_, KVM_SET_CPUID2, &cpuid) == 0);
+    auto cpuid = new uint8_t[sizeof(kvm_cpuid2) + MAX_KVM_CPUID_ENTRIES * sizeof(kvm_cpuid_entry2)];
+    memcpy(cpuid, state.cpuid().data(), state.cpuid().size());
+    MV_ASSERT(ioctl(fd_, KVM_SET_CPUID2, cpuid) == 0);
+    delete[] cpuid;
     
     /* Reset MSR indices */
     SetupMsrIndices();
@@ -733,25 +723,23 @@ void Vcpu::LoadStateFrom(VcpuState& state, bool load_cpuid) {
   }
 
   /* MSRS */
-  struct {
-    kvm_msrs      msrs;
-    kvm_msr_entry entries[MAX_KVM_MSR_ENTRIES];
-  } msrs;
-  memcpy(&msrs, state.msrs().data(), sizeof(msrs));
-  int nmsrs = msrs.msrs.nmsrs;
+  auto msrs = (kvm_msrs*)new uint8_t[sizeof(kvm_msrs) + MAX_KVM_MSR_ENTRIES * sizeof(kvm_msr_entry)];
+  memcpy(msrs, state.msrs().data(), state.msrs().size());
+  int nmsrs = msrs->nmsrs;
   while (nmsrs > 0) {
-    auto ret = ioctl(fd_, KVM_SET_MSRS, &msrs);
+    auto ret = ioctl(fd_, KVM_SET_MSRS, msrs);
     MV_ASSERT(ret >= 0);
     if (ret < nmsrs) {
       MV_LOG("Failed to set MSR 0x%x=0x%x. Maybe kernel version is too old?",
-        msrs.entries[ret].index, msrs.entries[ret].data);
+        msrs->entries[ret].index, msrs->entries[ret].data);
       // Skip the failed one
       nmsrs -= ret + 1;
-      memmove(msrs.entries, &msrs.entries[ret + 1], nmsrs * sizeof(kvm_msr_entry));
+      memmove(msrs->entries, &msrs->entries[ret + 1], nmsrs * sizeof(kvm_msr_entry));
     } else {
       nmsrs -= ret;
     }
   }
+  delete[] msrs;
 
   /* KVM vcpu events */
   kvm_vcpu_events events;

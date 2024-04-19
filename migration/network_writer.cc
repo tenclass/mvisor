@@ -113,7 +113,7 @@ bool MigrationNetworkWriter::WriteProtobuf(std::string tag, const Message& messa
   if (ret) {
     ret = WriteRaw(tag, data, size);
   }
-  delete data;
+  delete[] data;
   return ret;
 }
 

@@ -178,7 +178,7 @@ class Qcow2Image : public DiskImage {
  public:
   virtual ~Qcow2Image();
   virtual void Initialize();
-  virtual long HandleIoRequest(ImageIoRequest request);
+  virtual long HandleIoRequest(const ImageIoRequest& request);
 
   virtual ImageInformation information() {
     return ImageInformation {

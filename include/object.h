@@ -23,6 +23,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <cstdint>
 
 #define OBJECT_MAX_NAME_LENGTH 100
 

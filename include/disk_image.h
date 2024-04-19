@@ -72,7 +72,7 @@ class DiskImage : public Object {
 
   /* Interface for a image format to implement */
   virtual ImageInformation information() = 0;
-  virtual long HandleIoRequest(ImageIoRequest request) = 0;
+  virtual long HandleIoRequest(const ImageIoRequest& request) = 0;
 
   /* Interface for user */
   virtual void QueueIoRequest(ImageIoRequest request, IoCallback callback);

@@ -152,9 +152,7 @@ void Machine::Reset() {
   memory_manager_->Reset();
   device_manager_->ResetDevices();
 
-  if (debug_) {
-    MV_LOG("Resettings vCPUs");
-  }
+  MV_LOG("Resettings vCPUs");
 
   for (auto vcpu : vcpus_) {
     vcpu->Schedule([vcpu]() {

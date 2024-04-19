@@ -189,7 +189,7 @@ bool MigrationNetworkReader::ReadProtobuf(std::string tag, Message& message) {
     auto data = new uint8_t[size];
     Read(data, size);
     message.ParsePartialFromArray(data, size);
-    delete data;
+    delete[] data;
   }
   return true;
 }
