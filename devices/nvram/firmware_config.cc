@@ -161,6 +161,12 @@ class FirmwareConfig : public Device {
       MV_WARN("Unknown motherboard. ACPI might not work.");
     }
 
+    auto pvpanic = machine->LookupObjectByClass("Pvpanic");
+    if (pvpanic) {
+      uint16_t port = 0x505;
+      AddConfigFile("etc/pvpanic-port", &port, sizeof(port));
+    }
+
     std::string smbios_anchor, smbios_table;
     Smbios smbios(manager_->machine());
     smbios.GetTables(smbios_anchor, smbios_table);
