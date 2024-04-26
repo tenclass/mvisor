@@ -74,7 +74,7 @@ void AtaStorageDevice::Connect() {
   }
   if (has_key("image")) {
     auto path = std::get<std::string>(key_values_["image"]);
-    image_ = DiskImage::Create(dynamic_cast<Device*>((Object*)this->parent()), path, readonly, snapshot);
+    image_ = DiskImage::Create(dynamic_cast<Device*>((Object*)this->parent()), this, path, readonly, snapshot);
   }
 }
 
