@@ -57,7 +57,7 @@ struct ImageInformation {
 class Device;
 class DiskImage : public Object {
  public:
-  static DiskImage* Create(Device* device, std::string path, bool readonly, bool snapshot);
+  static DiskImage* Create(Device* host, Device* device, std::string path, bool readonly, bool snapshot);
 
   DiskImage();
   virtual ~DiskImage();
@@ -81,6 +81,8 @@ class DiskImage : public Object {
  protected:
   bool        readonly_ = false;
   bool        snapshot_ = false;
+  /* We lock the host_device when we handle IO request callbacks */
+  Device*     host_device_ = nullptr;
   Device*     device_ = nullptr;
   IoThread*   io_ = nullptr;
   std::string filepath_;

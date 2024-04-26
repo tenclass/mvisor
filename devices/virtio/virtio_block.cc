@@ -65,7 +65,7 @@ class VirtioBlock : public VirtioPci {
     bool snapshot = has_key("snapshot") && std::get<bool>(key_values_["snapshot"]);
     if (has_key("image")) {
       std::string path = std::get<std::string>(key_values_["image"]);
-      image_ = DiskImage::Create(this, path, readonly, snapshot);
+      image_ = DiskImage::Create(this, this, path, readonly, snapshot);
 
       /* Qcow2 supports disacard & write zeros */
       if (path.find(".qcow2") != std::string::npos) {
