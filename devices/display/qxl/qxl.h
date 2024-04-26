@@ -20,14 +20,13 @@
 #ifndef _MVISOR_DEVICES_QXL_H
 #define _MVISOR_DEVICES_QXL_H
 
-#include "../vga.h"
-
 #include <list>
 #include <vector>
 #include <mutex>
 
 #include "qxl_dev.h"
 #include "machine.h"
+#include "../display.h"
 
 
 #define NUM_MEMSLOTS 8
@@ -39,8 +38,10 @@ struct PrimarySurface {
 };
 
 
+class QxlParser;
 class QxlRender;
-class Qxl : public Vga, public DisplayResizeInterface {
+class VgaRender;
+class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
  private:
   uint32_t  qxl_rom_size_ = 0;
   void*     qxl_rom_base_ = nullptr;
@@ -63,9 +64,16 @@ class Qxl : public Vga, public DisplayResizeInterface {
   DisplayMouseCursor            current_cursor_;
   const StateChangeListener*    state_change_listener_ = nullptr;
 
-  QxlRender*                    render_ = nullptr;
-  std::recursive_mutex          render_mutex_;
+  VgaRender*                    vga_render_ = nullptr;
+  QxlRender*                    qxl_render_ = nullptr;
+  std::recursive_mutex          qxl_render_mutex_;
   bool                          flushing_commands_ = false;
+
+  std::string default_rom_path_;
+  uint32_t  vram_size_;
+  uint8_t*  vram_base_ = nullptr;
+  uint32_t  vga_surface_size_;
+  IoTimer*  vga_refresh_timer_ = nullptr;
 
  public:
   Qxl();
@@ -78,23 +86,16 @@ class Qxl : public Vga, public DisplayResizeInterface {
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
 
-  // Interfaces
+  /* DisplayInterface */
+  virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
+  virtual void GetPalette(const uint8_t** palette, int* count);
   virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw);
   virtual void ReleaseUpdate();
   virtual bool Resize(int width, int height);
 
-  // QxlRender make use of these methods
-  void* GetMemSlotAddress(uint64_t data);
-  void ReleaseGuestResource(QXLReleaseInfo* info);
-  int GetBitsPerPixelByFormat(uint32_t format);
-  size_t GetMemSlotChunkData(uint64_t data, std::vector<iovec>& vector);
-  size_t GetMemSlotChunkData(QXLDataChunk* chunk, std::vector<iovec>& vector);
-  void GetMemSlotLinearizedChunkData(QXLDataChunk* chunk, std::string& data);
-
  private:
   virtual bool ActivatePciBar(uint8_t index);
   virtual bool DeactivatePciBar(uint8_t index);
-  virtual void UpdateDisplayMode();
 
   void IntializeQxlRom();
   void IntializeQxlRam();
@@ -111,6 +112,16 @@ class Qxl : public Vga, public DisplayResizeInterface {
   bool FetchCursorCommand(QXLCommand& command);
   void ParseSurfaceCommand(uint64_t slot_address);
   void ParseCursorCommand(uint64_t slot_address);
+
+  // QxlRender make use of these methods
+  friend class QxlRender;
+  friend class QxlParser;
+  void* GetMemSlotAddress(uint64_t data);
+  void ReleaseGuestResource(QXLReleaseInfo* info);
+  int GetBitsPerPixelByFormat(uint32_t format);
+  size_t GetMemSlotChunkData(uint64_t data, std::vector<iovec>& vector);
+  size_t GetMemSlotChunkData(QXLDataChunk* chunk, std::vector<iovec>& vector);
+  void GetMemSlotLinearizedChunkData(QXLDataChunk* chunk, std::string& data);
 };
 
 

@@ -27,42 +27,57 @@
 
 #include "qxl.h"
 #include "qxl_render.h"
+#include "../vga/vga_render.h"
 #include "qxl_modes.h"
 #include "qxl.pb.h"
 #include "logger.h"
 
 
 Qxl::Qxl() {
+  /* PCI config */
   default_rom_path_ = "../share/vgabios-qxl.bin";
   pci_header_.vendor_id = 0x1B36;
   pci_header_.device_id = 0x0100;
+  pci_header_.class_code = 0x030000;
   pci_header_.revision_id = 5;
   pci_header_.irq_pin = 1;
+  pci_header_.subsys_vendor_id = 0x1AF4;
+  pci_header_.subsys_id = 0x1100;
   
+  /* Bar 0: 256MB VRAM */
+  vga_surface_size_ = _MB(16);
+  vram_size_ = _MB(256);
+  AddPciBar(0, vram_size_, kIoResourceTypeRam);
+
   /* Bar 1: Windows driver uses this block of memory as a normal memslot
     * Linux driver named it surface RAM */
   qxl_vram32_size_ = _MB(16);
   qxl_vram32_base_ = (uint8_t*)mmap(nullptr, qxl_vram32_size_, PROT_READ | PROT_WRITE,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-  pci_bars_[1].host_memory = qxl_vram32_base_;
-
   MV_ASSERT(madvise(qxl_vram32_base_, qxl_vram32_size_, MADV_DONTDUMP) == 0);
 
   /* Bar 2: 8KB ROM */
   qxl_rom_size_ = 8192;
   qxl_rom_base_ = valloc(qxl_rom_size_);
-  pci_bars_[2].host_memory = qxl_rom_base_;
 
   AddPciBar(1, qxl_vram32_size_, kIoResourceTypeRam); /* QXL VRAM32 */
-  AddPciBar(2, 8192, kIoResourceTypeRam);             /* QXL ROM */
+  AddPciBar(2, qxl_rom_size_, kIoResourceTypeRam);    /* QXL ROM */
   AddPciBar(3, 32, kIoResourceTypePio);               /* QXL PIO */
 
-  render_ = new QxlRender(this);
+  pci_bars_[1].host_memory = qxl_vram32_base_;
+  pci_bars_[2].host_memory = qxl_rom_base_;
+
+  /* VGA registers */
+  AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
+  AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "VBE IO");
+  AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO",
+    nullptr, kIoResourceFlagCoalescingMmio);
 }
 
 Qxl::~Qxl() {
-  /* Destroy renderer */
-  delete render_;
+  // Make sure the device is disconnected
+  MV_ASSERT(vga_render_ == nullptr);
+  MV_ASSERT(qxl_render_ == nullptr);
 
   if (qxl_vram32_base_) {
     munmap(qxl_vram32_base_, qxl_vram32_size_);
@@ -73,7 +88,53 @@ Qxl::~Qxl() {
 }
 
 void Qxl::Connect() {
-  Vga::Connect();
+  /* Initialize rom data and rom bar size */
+  if (!pci_rom_.data) {
+    if (has_key("rom")) {
+      std::string path = std::get<std::string>(key_values_["rom"]);
+      LoadRomFile(path.c_str());
+    } else {
+      LoadRomFile(default_rom_path_.c_str());
+    }
+  }
+
+  /* Initialize VRAM */
+  if (!vram_base_) {
+    if (has_key("vram_size")) {
+      uint64_t size = std::get<uint64_t>(key_values_["vram_size"]);
+      MV_ASSERT(size >= 16 && size <= 512);
+      if (size & (size - 1)) {
+        MV_PANIC("vram_size must be power of 2");
+      }
+      vram_size_ = size << 20;
+    }
+    if (has_key("vga_size")) {
+      uint64_t size = std::get<uint64_t>(key_values_["vga_size"]);
+      MV_ASSERT(size >= 2 && size <= 256);
+      if (size & (size - 1)) {
+        MV_PANIC("vga_size must be power of 2");
+      }
+      vga_surface_size_ = size << 20;
+    }
+    vram_base_ = (uint8_t*)mmap(nullptr, vram_size_, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    pci_bars_[0].size = vram_size_;
+    pci_bars_[0].host_memory = vram_base_;
+
+    MV_ASSERT(madvise(vram_base_, vram_size_, MADV_DONTDUMP) == 0);
+  }
+
+  PciDevice::Connect();
+
+  MV_ASSERT(vga_render_ == nullptr);
+  MV_ASSERT(qxl_render_ == nullptr);
+  qxl_render_ = new QxlRender(this);
+  vga_render_ = new VgaRender(this, vram_base_, vram_size_);
+  vga_refresh_timer_ = AddTimer(NS_PER_SECOND / 10, true, [this]() {
+    if (!primary_surface_.active) {
+      NotifyDisplayUpdate();
+    }
+  });
 
   /* Push all free resources to the ring before saving VM */
   auto machine = manager_->machine();
@@ -87,25 +148,36 @@ void Qxl::Connect() {
 void Qxl::Disconnect() {
   manager_->machine()->UnregisterStateChangeListener(&state_change_listener_);
 
-  Vga::Disconnect();
+  if (vga_refresh_timer_) {
+    RemoveTimer(vga_refresh_timer_);
+    vga_refresh_timer_ = nullptr;
+  }
+
+  delete vga_render_;
+  vga_render_ = nullptr;
+  delete qxl_render_;
+  qxl_render_ = nullptr;
+
+  PciDevice::Disconnect();
 }
 
 void Qxl::Reset() {
-  std::lock_guard<std::recursive_mutex> render_lock(render_mutex_);
-
-  /* Vga Reset() resets mode */
-  Vga::Reset();
+  std::lock_guard<std::recursive_mutex> render_lock(qxl_render_mutex_);
 
   IntializeQxlRom();
   IntializeQxlRam();
 
-  delete render_;
-  render_ = new QxlRender(this);
+  delete vga_render_;
+  vga_render_ = new VgaRender(this, vram_base_, vram_size_);
+  delete qxl_render_;
+  qxl_render_ = new QxlRender(this);
 
   bzero(guest_slots_, sizeof(guest_slots_));
   primary_surface_.active = false;
   current_cursor_.visible = false;
+  current_cursor_.shape.id = 0;
   free_resources_.clear();
+  display_mode_ = kDisplayModeUnknown;
 }
 
 bool Qxl::SaveState(MigrationWriter* writer) {
@@ -135,7 +207,7 @@ bool Qxl::SaveState(MigrationWriter* writer) {
   }
 
   /* surfaces are not used now, but save it any way */
-  auto& surfaces = render_->surfaces();
+  auto& surfaces = qxl_render_->surfaces();
   for (auto it = surfaces.begin(); it != surfaces.end(); it++) {
     if (it->first == 0)
       continue;
@@ -147,16 +219,26 @@ bool Qxl::SaveState(MigrationWriter* writer) {
 
   writer->WriteProtobuf("QXL", state);
   writer->WriteMemoryPages("VRAM32", qxl_vram32_base_, qxl_vram32_size_);
-  return Vga::SaveState(writer);
+  writer->WriteMemoryPages("VRAM", vram_base_, vram_size_);
+  vga_render_->SaveState(writer);
+  return PciDevice::SaveState(writer);
 }
 
 /* Reset should be called before load state */
 bool Qxl::LoadState(MigrationReader* reader) {
-  if (!Vga::LoadState(reader)) {
+  if (!PciDevice::LoadState(reader)) {
+    return false;
+  }
+
+  if (!vga_render_->LoadState(reader)) {
     return false;
   }
 
   if (!reader->ReadMemoryPages("VRAM32", (void**)&qxl_vram32_base_, qxl_vram32_size_)) {
+    return false;
+  }
+
+  if (!reader->ReadMemoryPages("VRAM", (void**)&vram_base_, vram_size_)) {
     return false;
   }
 
@@ -181,24 +263,24 @@ bool Qxl::LoadState(MigrationReader* reader) {
       MV_ERROR("invalid surface id %u", sf.id());
       continue;
     }
-    render_->ParseSurfaceCommand(sf.slot_address());
+    qxl_render_->ParseSurfaceCommand(sf.slot_address());
   }
 
   if (state.has_guest_primary()) {
     primary_surface_.active = true;
-    render_->CreatePrimarySurface(qxl_ram_->create_surface, false);
-    UpdateDisplayMode();
-
+    qxl_render_->CreatePrimarySurface(qxl_ram_->create_surface, false);
     for (int i = 0; i < state.drawbles_size(); i++) {
       auto& dr = state.drawbles(i);
-      render_->ParseDrawCommand(dr.slot_address());
+      qxl_render_->ParseDrawCommand(dr.slot_address());
     }
-  
-    /* push update event after loaded */
-    Schedule([this]() {
-      NotifyDisplayUpdate();
-    });
+    display_mode_ = kDisplayModeQxl;
+  } else {
+    display_mode_ = kDisplayModeVga;
   }
+
+  Schedule([this]() {
+    NotifyDisplayModeChange();
+  });
   return true;
 }
 
@@ -221,7 +303,7 @@ void Qxl::IntializeQxlRom() {
   uint32_t n = 0;
   for (size_t i = 0; i < sizeof(qxl_modes) / sizeof(qxl_modes[0]); i++) {
     size_t size_needed = qxl_modes[i].y_res * qxl_modes[i].stride;
-    if (size_needed > vga_mem_size_) {
+    if (size_needed > vga_surface_size_) {
       continue;
     }
     modes->modes[n] = qxl_modes[i];
@@ -231,7 +313,7 @@ void Qxl::IntializeQxlRom() {
   modes->n_modes = n;
 
   uint32_t ram_header_size = SPICE_ALIGN(sizeof(QXLRam), 4096);
-  uint32_t surface0_area_size = SPICE_ALIGN(vga_mem_size_, 4096);
+  uint32_t surface0_area_size = SPICE_ALIGN(vga_surface_size_, 4096);
   uint32_t num_pages = (vram_size_ - ram_header_size - surface0_area_size) / PAGE_SIZE;
   MV_ASSERT(ram_header_size + surface0_area_size <= vram_size_);
 
@@ -263,7 +345,7 @@ bool Qxl::ActivatePciBar(uint8_t index) {
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
   }
-  return Vga::ActivatePciBar(index);
+  return PciDevice::ActivatePciBar(index);
 }
 
 bool Qxl::DeactivatePciBar(uint8_t index) {
@@ -271,27 +353,7 @@ bool Qxl::DeactivatePciBar(uint8_t index) {
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
   }
-  return Vga::DeactivatePciBar(index);
-}
-
-void Qxl::UpdateDisplayMode() {
-  /* Prevent from calling AcquireUpdate() when setting mode */
-  if (primary_surface_.active) {
-    auto& create = qxl_ram_->create_surface;
-    if (mode_ == kDisplayQxlMode && width_ == (int)create.width && height_ == (int)create.height &&
-      bpp_ == GetBitsPerPixelByFormat(create.format)) {
-      return;
-    }
-    mode_ = kDisplayQxlMode;
-    width_ = create.width;
-    height_ = create.height;
-    stride_ = create.stride;
-    bpp_ = GetBitsPerPixelByFormat(create.format);
-
-    NotifyDisplayModeChange();
-  } else {
-    Vga::UpdateDisplayMode();
-  }
+  return PciDevice::DeactivatePciBar(index);
 }
 
 void Qxl::SetInterrupt(uint32_t interrupt) {
@@ -307,6 +369,27 @@ void Qxl::UpdateIrqLevel() {
 }
 
 /* Display resize interface */
+void Qxl::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
+  if (display_mode_ == kDisplayModeQxl) {
+    auto& surface = qxl_render_->GetSurface(0);
+    *w = surface.width;
+    *h = surface.height;
+    *bpp = surface.bpp;
+    *stride = surface.stride;
+  } else {
+    vga_render_->GetDisplayMode(w, h, bpp, stride);
+  }
+}
+
+void Qxl::GetPalette(const uint8_t** palette, int* count) {
+  if (display_mode_ == kDisplayModeQxl) {
+    *palette = nullptr;
+    *count = 0;
+  } else {
+    vga_render_->GetPalette(palette, count);
+  }
+}
+
 bool Qxl::Resize(int width, int height) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   /*
@@ -321,7 +404,7 @@ bool Qxl::Resize(int width, int height) {
   }
 
   /* This should return true if QXL is capable of sending interrupts to config monitors */
-  if (mode_ != kDisplayQxlMode || !width || !height) {
+  if (display_mode_ != kDisplayModeQxl) {
     return true;
   }
 
@@ -374,11 +457,11 @@ uint64_t Qxl::TranslateAsyncCommand(uint64_t command, bool* async) {
 }
 
 void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
-  std::lock_guard<std::recursive_mutex> render_lock(render_mutex_);
+  std::lock_guard<std::recursive_mutex> render_lock(qxl_render_mutex_);
   switch (command) {
   case QXL_IO_UPDATE_AREA:
     FetchCommands();
-    render_->UpdateArea(qxl_ram_->update_area, qxl_ram_->update_surface);
+    qxl_render_->UpdateArea(qxl_ram_->update_area, qxl_ram_->update_surface);
     NotifyDisplayUpdate();
     break;
   case QXL_IO_NOTIFY_OOM:
@@ -405,22 +488,23 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
     DeleteMemSlot(argument);
     break;
   case QXL_IO_CREATE_PRIMARY:
-    render_->CreatePrimarySurface(qxl_ram_->create_surface, true);
+    qxl_render_->CreatePrimarySurface(qxl_ram_->create_surface, true);
     primary_surface_.active = true;
-    UpdateDisplayMode();
+    display_mode_ = kDisplayModeQxl;
+    NotifyDisplayModeChange();
     break;
   case QXL_IO_DESTROY_PRIMARY:
     FlushCommandsAndResources();
     if (primary_surface_.active) {
-      render_->DestroyPrimarySurface();
+      qxl_render_->DestroyPrimarySurface();
       primary_surface_.active = false;
-      mode_ = kDisplayUnknownMode;
+      display_mode_ = kDisplayModeUnknown;
     }
     break;
   case QXL_IO_DESTROY_ALL_SURFACES:
     FlushCommandsAndResources();
-    delete render_;
-    render_ = new QxlRender(this);
+    delete qxl_render_;
+    qxl_render_ = new QxlRender(this);
     break;
   case QXL_IO_FLUSH_SURFACES_ASYNC:
     if (debug_) {
@@ -445,8 +529,26 @@ void Qxl::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint3
   if (resource->base == pci_bars_[3].address) {
     /* ignore all reads to the QXL io ports */
     memset(data, 0xFF, size);
+    return;
+  }
+
+  /* VGA registers */
+  uint64_t port = resource->base + offset;
+  if (resource->base == VGA_MMIO_BASE) {
+    for (size_t i = 0; i < size; i++) {
+      vga_render_->VgaReadMemory(port + i, &data[i]);
+    }
+  } else if (resource->base == VGA_PIO_BASE) {
+    vga_render_->VgaReadPort(port, &data[0]);
+    for (size_t i = 1; i < size; i++) {
+      vga_render_->VgaReadPort(port + 1, &data[i]);
+    }
+  } else if (resource->base == VBE_PIO_BASE) {
+    if (size == 2) {
+      vga_render_->VbeReadPort(port, (uint16_t*)data);
+    }
   } else {
-    Vga::Read(resource, offset, data, size);
+    return PciDevice::Read(resource, offset, data, size);
   }
 }
 
@@ -473,8 +575,30 @@ void Qxl::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
         SetInterrupt(QXL_INTERRUPT_IO_CMD);
       });
     }
+    return;
+  }
+
+  /* VGA registers */
+  uint64_t port = resource->base + offset;
+  if (resource->base == VGA_MMIO_BASE) {
+    for (size_t i = 0; i < size; i++) {
+      vga_render_->VgaWriteMemory(port + i, data[i]);
+    }
+  } else if (resource->base == VGA_PIO_BASE) {
+    vga_render_->VgaWritePort(port, data[0]);
+    for (size_t i = 1; i < size; i++) {
+      vga_render_->VgaWritePort(port + 1, data[i]);
+    }
+  } else if (resource->base == VBE_PIO_BASE) {
+    MV_ASSERT(size == 2);
+    vga_render_->VbeWritePort(port, *(uint16_t*)data);
   } else {
-    Vga::Write(resource, offset, data, size);
+    return PciDevice::Write(resource, offset, data, size);
+  }
+
+  if (vga_render_->IsModeChanged()) {
+    display_mode_ = kDisplayModeVga;
+    NotifyDisplayModeChange();
   }
 }
 
@@ -623,12 +747,15 @@ void Qxl::ReleaseGuestResource(QXLReleaseInfo* info) {
 /* Lock the drawables and translate to display partial bitmaps */
 bool Qxl::AcquireUpdate(DisplayUpdate& update, bool redraw) {
   std::unique_lock<std::recursive_mutex>  lock(mutex_);
-  std::lock_guard<std::recursive_mutex>   render_lock(render_mutex_);
-  if (mode_ != kDisplayQxlMode) {
-    return Vga::AcquireUpdate(update, redraw);
+  if (display_mode_ == kDisplayModeUnknown) {
+    return false;
+  }
+  if (display_mode_ == kDisplayModeVga) {
+    return vga_render_->GetDisplayUpdate(update);
   }
 
   /* We cannot hold the device lock for so long, here switch to render lock */
+  std::lock_guard<std::recursive_mutex>   render_lock(qxl_render_mutex_);
   lock.unlock();
 
   if (!manager_->machine()->IsPaused()) {
@@ -636,19 +763,14 @@ bool Qxl::AcquireUpdate(DisplayUpdate& update, bool redraw) {
   }
 
   if (redraw) {
-    render_->Redraw();
+    qxl_render_->Redraw();
   }
-  render_->GetUpdatePartials(update.partials);
+  qxl_render_->GetUpdatePartials(update.partials);
   update.cursor = current_cursor_;
   return true;
 }
 
-/* Update the drawing drawables to drawed */
 void Qxl::ReleaseUpdate() {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  if (mode_ != kDisplayQxlMode) {
-    return Vga::ReleaseUpdate();
-  }
 }
 
 void Qxl::FetchCommands() {
@@ -657,10 +779,10 @@ void Qxl::FetchCommands() {
     switch (command.type)
     {
     case QXL_CMD_SURFACE:
-      render_->ParseSurfaceCommand(command.data);
+      qxl_render_->ParseSurfaceCommand(command.data);
       break;
     case QXL_CMD_DRAW:
-      render_->ParseDrawCommand(command.data);
+      qxl_render_->ParseDrawCommand(command.data);
       break;
     default:
       MV_PANIC("unhandled command type=0x%x data=0x%lx", command.type, command.data);

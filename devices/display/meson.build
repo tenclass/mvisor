@@ -1,12 +1,9 @@
 mvisor_sources += files(
-  'vbe.h',
-  'vga.cc',
-  'vga.h'
+  'display.h',
+  'display.cc',
 )
 
-proto_sources += proto_gen.process(
-  'vga.proto'
-)
+subdir('vga')
 
 if get_option('qxl')
   subdir('qxl')

@@ -77,17 +77,17 @@ class Device : public Object {
   void StartPolling(int fd, uint poll_mask, IoCallback callback);
   void StopPolling(int fd);
 
-  inline const std::list<IoResource*>& io_resources() const { return io_resources_; }
-  inline DeviceManager* manager() { return manager_; }
-  inline std::recursive_mutex& mutex() { return mutex_; }
-
- protected:
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
   void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags = kIoResourceFlagNone);
   void RemoveIoResource(IoResourceType type, const char* name);
   void RemoveIoResource(IoResourceType type, uint64_t base);
   void SetIoResourceEnabled(IoResource* resource, bool enabled);
 
+  inline const std::list<IoResource*>& io_resources() const { return io_resources_; }
+  inline DeviceManager* manager() { return manager_; }
+  inline std::recursive_mutex& mutex() { return mutex_; }
+
+ protected:
   friend class IoThread;
   friend class DeviceManager;
   DeviceManager* manager_;

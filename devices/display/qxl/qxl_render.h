@@ -78,11 +78,11 @@ class QxlRender {
   void GetUpdatePartials(std::vector<DisplayPartialBitmap>& partials);
   void UpdateArea(const QXLRect& rect, bool update_surface);
   void Redraw();
+  const Surface& GetSurface(int surface_id);
 
  private:
   void CreateSurface(int surface_id, uint64_t slot_address);
   void DestroySurface(int surface_id);
-  const Surface& GetSurface(int surface_id);
   void AddDirtyRect(int32_t top, int32_t left, int32_t bottom, int32_t right);
   void AddDirtyRectInternal(int32_t top, int32_t left, int32_t bottom, int32_t right);
 };
