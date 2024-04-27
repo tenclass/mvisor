@@ -33,7 +33,7 @@ class Ich9Smbus : public PciDevice {
     pci_header_.subsys_id = 0x1100;
     pci_header_.irq_pin = 1;
 
-    AddPciBar(4, 64, kIoResourceTypePio);
+    SetupPciBar(4, 64, kIoResourceTypePio);
   }
 };
 

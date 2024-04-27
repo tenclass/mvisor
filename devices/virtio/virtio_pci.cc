@@ -31,8 +31,8 @@ VirtioPci::VirtioPci() {
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
     pci_header_.irq_pin = 1;
 
-    AddPciBar(0, 0x40, kIoResourceTypePio);
-    AddPciBar(4, 0x4000, kIoResourceTypeMmio);
+    SetupPciBar(0, 0x40, kIoResourceTypePio);
+    SetupPciBar(4, 0x4000, kIoResourceTypeMmio);
 
     uint8_t cap_common_config[] = {
       0x10, 0x01, 0x04, 0x00, 0x00, 0x00,

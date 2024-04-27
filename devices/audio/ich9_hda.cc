@@ -70,7 +70,7 @@ class Ich9Hda : public PciDevice {
     AddMsiCapability();
   
     /* Memory BAR */
-    AddPciBar(0, 0x4000, kIoResourceTypeMmio);
+    SetupPciBar(0, 0x4000, kIoResourceTypeMmio);
   }
 
   virtual void Connect() {

@@ -47,7 +47,7 @@ Qxl::Qxl() {
   /* Bar 0: 256MB VRAM */
   vga_surface_size_ = _MB(16);
   vram_size_ = _MB(256);
-  AddPciBar(0, vram_size_, kIoResourceTypeRam);
+  SetupPciBar(0, vram_size_, kIoResourceTypeRam);
 
   /* Bar 1: Windows driver uses this block of memory as a normal memslot
     * Linux driver named it surface RAM */
@@ -60,9 +60,9 @@ Qxl::Qxl() {
   qxl_rom_size_ = 8192;
   qxl_rom_base_ = valloc(qxl_rom_size_);
 
-  AddPciBar(1, qxl_vram32_size_, kIoResourceTypeRam); /* QXL VRAM32 */
-  AddPciBar(2, qxl_rom_size_, kIoResourceTypeRam);    /* QXL ROM */
-  AddPciBar(3, 32, kIoResourceTypePio);               /* QXL PIO */
+  SetupPciBar(1, qxl_vram32_size_, kIoResourceTypeRam); /* QXL VRAM32 */
+  SetupPciBar(2, qxl_rom_size_, kIoResourceTypeRam);    /* QXL ROM */
+  SetupPciBar(3, 32, kIoResourceTypePio);               /* QXL PIO */
 
   pci_bars_[1].host_memory = qxl_vram32_base_;
   pci_bars_[2].host_memory = qxl_rom_base_;

@@ -311,7 +311,7 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
 }
 
 /* Call this function in device constructor */
-void PciDevice::AddPciBar(uint8_t index, uint32_t size, IoResourceType type) {
+void PciDevice::SetupPciBar(uint8_t index, uint32_t size, IoResourceType type) {
   auto &bar = pci_bars_[index];
   MV_ASSERT(bar.size == 0);
   bar.size = size;

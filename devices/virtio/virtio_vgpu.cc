@@ -99,7 +99,7 @@ class VirtioVgpu : public VirtioPci {
     // one msi item for one queue
     MV_ASSERT(vgpu_config_.num_queues <= 4);
 
-    AddPciBar(1, 0x1000, kIoResourceTypeMmio);
+    SetupPciBar(1, 0x1000, kIoResourceTypeMmio);
     AddMsiXCapability(1, 4, 0, 0x1000);
   }
 

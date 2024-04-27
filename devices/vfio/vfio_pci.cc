@@ -122,13 +122,13 @@ void VfioPci::SetupPciConfiguration() {
       continue;
     auto bar = pci_header_.bars[i];
     if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
-      AddPciBar(i, bar_region.size, kIoResourceTypePio);
+      SetupPciBar(i, bar_region.size, kIoResourceTypePio);
     } else {
       /* 64bit bar is not supported yet */
       if (bar & PCI_BASE_ADDRESS_MEM_TYPE_64) {
         bar &= ~PCI_BASE_ADDRESS_MEM_TYPE_64;
       }
-      AddPciBar(i, bar_region.size, kIoResourceTypeMmio);
+      SetupPciBar(i, bar_region.size, kIoResourceTypeMmio);
     }
   }
 
