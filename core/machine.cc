@@ -196,6 +196,7 @@ std::vector<Object*> Machine::LookupObjects(std::function<bool (Object*)> compar
 
 /* Power button is pressed */
 void Machine::Shutdown() {
+  io_thread_->FlushDiskImages();
   for (auto o : LookupObjects([](auto o) { return dynamic_cast<PowerDownInterface*>(o); })) {
     auto interface = dynamic_cast<PowerDownInterface*>(o);
     interface->PowerDown();
