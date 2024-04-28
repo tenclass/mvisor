@@ -380,6 +380,9 @@ void VfioPci::SetupPciConfiguration() {
       case PCI_CAP_ID_VNDR:
         /* ignore vendor specific data */
         break;
+      case PCI_CAP_ID_PM:
+        /* ignore power management */
+        break;
       case PCI_CAP_ID_EXP:
         is_pcie_ = true;
         break;
@@ -641,10 +644,6 @@ void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t lengt
       offset, length, *(uint32_t*)data, ret);
   }
 
-  // uint32_t val = 0;
-  // memcpy(&val, data, length);
-  // printf("%s W addr=0x%lx val=0x%x len=%d\n", device_name_.c_str(), offset, val, length);
-
   /* the default bahavior detects BAR activate/deactivate */
   PciDevice::WritePciConfigSpace(offset, data, length);
 
@@ -670,10 +669,12 @@ void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length
     pci_header_.header_type = 0;
   }
 
+  /* Disable PCI-e capability for NVIDIA GPUs to avoid error code 10 */
+  if (pci_header_.vendor_id == 0x10DE && pci_header_.data[0x69] == 0x78) {
+    pci_header_.data[0x69] = 0xB4;
+  }
+
   PciDevice::ReadPciConfigSpace(offset, data, length);
-  // uint32_t val = 0;
-  // memcpy(&val, data, length);
-  // printf("%s R addr=0x%lx val=0x%x len=%d\n", device_name_.c_str(), offset, val, length);
 }
 
 void VfioPci::SetMigrationDeviceState(uint32_t device_state) {
