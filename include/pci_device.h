@@ -216,6 +216,7 @@ class PciDevice : public Device {
   void UpdateRomMapAddress(uint32_t address);
   void LoadRomFile(const char* path);
   void SetupPciBar(uint8_t index, uint32_t size, IoResourceType type);
+  void SetupPciBar64(uint8_t index, uint64_t size, IoResourceType type);
   uint8_t* AddCapability(uint8_t cap, const uint8_t* data, uint8_t length);
   void AddMsiCapability();
   void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);

@@ -89,6 +89,7 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
+  MV_ASSERT(length > 0);
   auto resource = new IoResource {
     .type = type,
     .base = base,

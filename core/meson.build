@@ -7,7 +7,8 @@ mvisor_sources += files(
   'memory_manager.cc',
   'object.cc',
   'pci_device.cc',
-  'vcpu.cc'
+  'vcpu.cc',
+  'vfio_manager.cc'
 )
 
 proto_sources += proto_gen.process(

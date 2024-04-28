@@ -45,6 +45,8 @@ Machine::Machine(std::string config_path) {
 
   /* Initialize system RAM and BIOS ROM */
   memory_manager_ = new MemoryManager(this);
+  /* Initialize Vfio container */
+  vfio_manager_ = new VfioManager(this);
 
   /* Currently, an i440fx / q35 chipset motherboard is implemented */
   Device* root = dynamic_cast<Device*>(LookupObjectByClass("SystemRoot"));
@@ -89,6 +91,7 @@ Machine::~Machine() {
   }
 
   delete device_manager_;
+  delete vfio_manager_;
   delete memory_manager_;
   delete io_thread_;
 

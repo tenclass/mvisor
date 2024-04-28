@@ -33,6 +33,7 @@
 
 
 #define X86_EPT_IDENTITY_BASE 0xFEFFC000
+static const char* type_strings[] = { "Reserved", "RAM", "Device", "ROM", "Unknown" };
 
 
 MemoryManager::MemoryManager(const Machine* machine)
@@ -247,7 +248,6 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
         pending_add.erase(hit);
         delete hit;
       } else {
-        hit->region = nullptr;
         pending_remove.insert(hit);
       }
     } else {
@@ -284,6 +284,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
 
 /* Mapping a memory region in the guest address space */
 const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name) {
+  MV_ASSERT(size > 0);
   MemoryRegion* region = new MemoryRegion;
   region->gpa = gpa;
   region->host = host;
@@ -295,9 +296,9 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   }
   strncpy(region->name, name, 20 - 1);
 
-  if (machine_->debug_) {
-    MV_LOG("map region %s gpa=0x%lx size=0x%lx type=0x%x", region->name,
-      region->gpa, region->size, region->type);
+  if (machine_->debug_)  {
+    MV_LOG("map region %s gpa=0x%lx size=0x%lx type=%s", region->name,
+      region->gpa, region->size, type_strings[region->type]);
   }
 
   AddMemoryRegion(region);
@@ -308,8 +309,8 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
 void MemoryManager::Unmap(const MemoryRegion** pregion) {
   auto region = (MemoryRegion*)*pregion;
   if (machine_->debug_) {
-    MV_LOG("unmap region %s gpa=0x%lx size=%lx type=%x", region->name,
-      region->gpa, region->size, region->type);
+    MV_LOG("unmap region %s gpa=0x%lx size=%lx type=%s", region->name,
+      region->gpa, region->size, type_strings[region->type]);
   }
 
   std::unique_lock lock(mutex_);
@@ -596,14 +597,14 @@ bool MemoryManager::LoadDirtyMemory(MigrationNetworkReader* reader, DirtyMemoryT
 
 /* Used for debugging */
 void MemoryManager::PrintMemoryScope() {
-  static const char* type_strings[] = { "Reserved", "RAM", "Device", "ROM", "Unknown" };
   std::shared_lock lock(mutex_);
   MV_LOG("%lu memory slots", kvm_slots_.size());
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
     MemorySlot* slot = it->second;
     MV_LOG("Slot%3d %016lx-%016lx hva=%016lx %-10s %-10s",
-      slot->id, slot->begin, slot->end, slot->hva, type_strings[slot->region->type],
-      slot->region->name);
+      slot->id, slot->begin, slot->end, slot->hva,
+      slot->region ? type_strings[slot->region->type] : "Unknown",
+      slot->region ? slot->region->name : "(nil)");
   }
 }
 

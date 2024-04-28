@@ -226,7 +226,7 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
     return;
   }
 
-  uint8_t bar = (offset - PCI_BAR_OFFSET(0)) / sizeof(uint32_t);
+  uint64_t bar = (offset - PCI_BAR_OFFSET(0)) / sizeof(uint32_t);
   if (bar < PCI_BAR_NUMS) {
     MV_ASSERT(length == 4);;
     WritePciBar(bar, *(uint32_t*)data);
@@ -330,6 +330,15 @@ void PciDevice::SetupPciBar(uint8_t index, uint32_t size, IoResourceType type) {
   pci_header_.bars[index] |= bar.special_bits;
 }
 
+
+void PciDevice::SetupPciBar64(uint8_t index, uint64_t size, IoResourceType type) {
+  /* TODO: over 4GB memory size */
+  MV_ASSERT(size <= 1ULL << 32);
+  SetupPciBar(index, size, type);
+  pci_bars_[index].special_bits |= PCI_BASE_ADDRESS_MEM_TYPE_64;
+  pci_bars_[index + 1].address_mask = 0xFFFFFFFF;
+}
+
 /* Called when an bar is activate by guest BIOS or OS */
 bool PciDevice::ActivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
@@ -339,7 +348,12 @@ bool PciDevice::ActivatePciBar(uint8_t index) {
   if (bar.type == kIoResourceTypePio) {
     AddIoResource(kIoResourceTypePio, bar.address, bar.size, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "PCI BAR MMIO");
+    if (bar.special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+      uint64_t address = uint64_t(pci_bars_[index + 1].address) << 32 | bar.address;
+      AddIoResource(kIoResourceTypeMmio, address, bar.size, "PCI BAR MMIO");
+    } else {
+      AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "PCI BAR MMIO");
+    }
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr);
     AddIoResource(kIoResourceTypeRam, bar.address, bar.size, "PCI BAR RAM", bar.host_memory);
@@ -415,7 +429,7 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
     return;
   }
 
-  if (bar.active) {
+  if (bar.type && bar.active) {
     if(!DeactivatePciBar(index)){
       MV_PANIC("DeactivatePciBar would never fail");
       return;
@@ -425,7 +439,7 @@ void PciDevice::WritePciBar(uint8_t index, uint32_t value) {
   bar.address = new_address;
   pci_header_.bars[index] = bar.address | bar.special_bits;
 
-  if (bar.address && !bar.active) {
+  if (bar.type && !bar.active) {
     ActivatePciBar(index);
   }
 }

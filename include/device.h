@@ -32,6 +32,7 @@
 
 
 enum IoResourceType {
+  kIoResourceTypeUnknown,
   kIoResourceTypePio,
   kIoResourceTypeMmio,
   kIoResourceTypeRam

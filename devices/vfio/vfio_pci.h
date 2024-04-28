@@ -24,6 +24,7 @@
 #include "linuz/vfio.h"
 #include "pci_device.h"
 #include "memory_manager.h"
+#include "vfio_manager.h"
 #include "machine.h"
 
 #define MAX_VFIO_REGIONS      (12)
@@ -43,6 +44,7 @@ struct VfioRegion {
   uint32_t  type;
   uint32_t  subtype;
   std::vector<VfioMmapArea> mmap_areas;
+  void*     mmap;
 };
 
 struct VfioInterrupt {
@@ -69,48 +71,41 @@ class VfioPci : public PciDevice {
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
   virtual void ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length);
-  virtual void WritePciCommand(uint16_t new_command);
+  virtual void WritePciCommand(uint16_t command);
 
   /* VFIO migration */
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
 
  protected:
-  void SetupVfioGroup();
   void SetupVfioDevice();
-  void SetupVfioContainer();
   void SetupPciConfiguration();
-  void SetupPciInterrupts();
   void SetupGfxPlane();
-  void SetupDmaMaps();
   void SetupMigraionInfo();
+  void DisableInterrupts();
+  void SetIntxInterruptEnabled(bool enabled);
 
   void UpdateMsiRoutes();
-  void MapDmaPages(const MemorySlot* slot);
-  void UnmapDmaPages(const MemorySlot* slot);
   void MapBarRegion(uint8_t index);
   void UnmapBarRegion(uint8_t index);
-  ssize_t ReadRegion(uint8_t index, uint64_t offset, void* data, uint32_t length);
-  ssize_t WriteRegion(uint8_t index, uint64_t offset, void* data, uint32_t length);
-  int     FindRegion(uint32_t type, uint32_t subtype);
+  int  FindRegion(uint32_t type, uint32_t subtype);
   void SetMigrationDeviceState(uint32_t device_state);
-  void EnableIRQ(uint32_t index, uint32_t vector, int* fds, uint8_t count);
+  void SetInterruptEventFds(uint32_t index, uint32_t vector, int action, int* fds, uint8_t count);
+  void SetInterruptMasked(uint32_t index, bool masked);
 
  private:
+  VfioManager*  vfio_manager_ = nullptr;
   std::string   sysfs_path_;
   std::string   device_name_;
-  int           container_fd_ = -1;
-  int           group_id_ = -1;
-  int           group_fd_ = -1;
   int           device_fd_ = -1;
+  int           intx_trigger_fd_ = -1;
+  int           intx_unmask_fd_ = -1;
+  bool          multi_function_ = false;
   vfio_device_info                                      device_info_;
   std::array<VfioRegion, MAX_VFIO_REGIONS>              regions_;
   std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>        interrupts_;
   VfioMigration                                         migration_;
-  const MemoryListener*                                 memory_listener_ = nullptr;
-  const DirtyMemoryListener*                            dirty_memory_listener_ = nullptr;
   const StateChangeListener*                            state_change_listener_ = nullptr;
-  std::map<const MemorySlot*, vfio_iommu_type1_dma_map> iommu_dma_maps_;
 };
 
 #endif // _MVISOR_DEVICES_VFIO_VFIO_PCI_H
