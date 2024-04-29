@@ -290,10 +290,10 @@ void VfioPci::SetupVfioDevice() {
         irq_info.argsz, irq_info.flags, irq_info.count, ret);
     }
 
-    /* FIXME: currently my mdev only uses one IRQ */
-    if (index == VFIO_PCI_MSI_IRQ_INDEX) {
-      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
-      MV_ASSERT(irq_info.count == 1 || irq_info.count == 3);
+    if (index == VFIO_PCI_INTX_IRQ_INDEX || index == VFIO_PCI_MSI_IRQ_INDEX || index == VFIO_PCI_MSIX_IRQ_INDEX) {
+      if (!(irq_info.flags & VFIO_IRQ_INFO_EVENTFD)) {
+        MV_PANIC("%s irq index %d does not support eventfd", device_name_.c_str(), index);
+      }
     }
   }
 }
