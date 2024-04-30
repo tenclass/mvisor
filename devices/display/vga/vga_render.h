@@ -99,7 +99,7 @@ class VgaRender {
   void VgaWriteMemory(uint64_t offset, uint32_t value);
   void VgaReadMemory(uint64_t offset, uint8_t* data);
   void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
-  void GetPalette(const uint8_t** palette, int* count);
+  void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
   bool IsModeChanged();
   bool GetDisplayUpdate(DisplayUpdate& update);
 };

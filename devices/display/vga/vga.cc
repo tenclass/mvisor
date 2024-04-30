@@ -152,9 +152,9 @@ void Vga::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
   }
 }
 
-void Vga::GetPalette(const uint8_t** palette, int* count) {
+void Vga::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
   if (vga_render_) {
-    vga_render_->GetPalette(palette, count);
+    vga_render_->GetPalette(palette, count, dac_8bit);
   }
 }
 

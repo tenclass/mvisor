@@ -114,13 +114,11 @@ void VgaRender::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
   *stride = stride_;
 }
 
-void VgaRender::GetPalette(const uint8_t** palette, int* count) {
+void VgaRender::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
   int shift_control = (vga_.gfx[VGA_GFX_MODE] >> 5) & 3;
   *count = shift_control >= 2 ? 256 : 16;
   *palette = (const uint8_t*)vga_.palette;
-  if (vbe_.registers[VBE_DISPI_ENABLED] & VBE_DISPI_8BIT_DAC) {
-    MV_WARN("warning: 8bit DAC is in use");
-  }
+  *dac_8bit = vbe_.registers[VBE_DISPI_ENABLED] & VBE_DISPI_8BIT_DAC;
 }
 
 

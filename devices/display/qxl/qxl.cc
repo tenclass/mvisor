@@ -381,12 +381,13 @@ void Qxl::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
   }
 }
 
-void Qxl::GetPalette(const uint8_t** palette, int* count) {
+void Qxl::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
   if (display_mode_ == kDisplayModeQxl) {
     *palette = nullptr;
     *count = 0;
+    *dac_8bit = false;
   } else {
-    vga_render_->GetPalette(palette, count);
+    vga_render_->GetPalette(palette, count, dac_8bit);
   }
 }
 

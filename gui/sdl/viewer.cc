@@ -109,13 +109,16 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
     SDL_Color colors[256];
     const uint8_t* p;
     int count;
-    display_->GetPalette(&p, &count);
-    for (int i = 0; i < count; i++) {
-      colors[i].r = *p++ << 2;
-      colors[i].g = *p++ << 2;
-      colors[i].b = *p++ << 2;
+    bool dac_8bit;
+    display_->GetPalette(&p, &count, &dac_8bit);
+    if (!dac_8bit) {
+      for (int i = 0; i < count; i++) {
+        colors[i].r = *p++ << 2;
+        colors[i].g = *p++ << 2;
+        colors[i].b = *p++ << 2;
+      }
     }
-    SDL_SetPaletteColors(palette_, colors, 0, 256);
+    SDL_SetPaletteColors(palette_, colors, 0, count);
     SDL_SetSurfacePalette(surface, palette_);
   }
 

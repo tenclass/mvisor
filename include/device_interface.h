@@ -149,7 +149,7 @@ class DisplayInterface {
  public:
   virtual ~DisplayInterface() = default;
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride) = 0;
-  virtual void GetPalette(const uint8_t** palette, int* count) = 0;
+  virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) = 0;
   virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw) = 0;
   virtual void ReleaseUpdate() = 0;
   virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
