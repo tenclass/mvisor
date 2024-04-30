@@ -136,7 +136,9 @@ void VfioPci::Reset() {
 void VfioPci::DisableAllInterrupts() {
   /* deactivate current irq */
   if (active_irq_index_ != -1) {
-    MV_LOG("%s deactivate irq index=%d", device_name_.c_str(), active_irq_index_);
+    if (debug_) {
+      MV_LOG("%s deactivate irq index=%d", device_name_.c_str(), active_irq_index_);
+    }
     vfio_irq_set irq_set = {
       .argsz = sizeof(vfio_irq_set),
       .flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER,
