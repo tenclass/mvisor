@@ -95,7 +95,7 @@ void VfioPci::Disconnect() {
     machine->UnregisterStateChangeListener(&state_change_listener_);
   }
 
-  DisableInterrupts();
+  DisableAllInterrupts();
   manager_->machine()->vfio_manager()->DetachDevice(device_fd_);
   safe_close(&device_fd_);
 
@@ -129,12 +129,26 @@ void VfioPci::Reset() {
     }
   }
 
-  DisableInterrupts();
+  DisableAllInterrupts();
   PciDevice::Reset();
 }
 
-void VfioPci::DisableInterrupts() {
-  if (msi_config_.enabled) {
+void VfioPci::DisableAllInterrupts() {
+  /* deactivate current irq */
+  if (active_irq_index_ != -1) {
+    MV_LOG("%s deactivate irq index=%d", device_name_.c_str(), active_irq_index_);
+    vfio_irq_set irq_set = {
+      .argsz = sizeof(vfio_irq_set),
+      .flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER,
+      .index = (uint)active_irq_index_,
+      .start = 0,
+      .count = 0
+    };
+    MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, &irq_set) == 0);
+  }
+
+  /* remove notifiers */
+  if (active_irq_index_ == VFIO_PCI_MSI_IRQ_INDEX || active_irq_index_ == VFIO_PCI_MSIX_IRQ_INDEX) {
     for (auto &interrupt : interrupts_) {
       if (interrupt.gsi > 0) {
         manager_->RemoveMsiNotifier(interrupt.gsi, interrupt.event_fd);
@@ -142,39 +156,33 @@ void VfioPci::DisableInterrupts() {
       }
       safe_close(&interrupt.event_fd);
     }
-  } else {
-    SetIntxInterruptEnabled(false);
+  } else if (active_irq_index_ == VFIO_PCI_INTX_IRQ_INDEX) {
+    if (intx_trigger_fd_ != -1) {
+      manager_->SetPciIrqNotifier(this, intx_trigger_fd_, -1, false);
+      safe_close(&intx_trigger_fd_);
+      safe_close(&intx_unmask_fd_);
+    }
   }
+  active_irq_index_ = -1;
 }
 
-void VfioPci::SetIntxInterruptEnabled(bool enabled) {
+void VfioPci::EnableIntxInterrupt() {
   if (!pci_header_.irq_pin) {
     return;
   }
   if (debug_) {
-    MV_LOG("%s set intx interrupt %s", device_name_.c_str(), enabled ? "enabled" : "disabled");
+    MV_LOG("%s enable INTx interrupt", device_name_.c_str());
   }
 
-  if (enabled) {
-    if (intx_trigger_fd_ == -1) {
-      SetInterruptMasked(VFIO_PCI_INTX_IRQ_INDEX, true);
-      intx_trigger_fd_ = eventfd(0, 0);
-      intx_unmask_fd_ = eventfd(0, 0);
-      SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_TRIGGER, &intx_trigger_fd_, 1);
-      SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_UNMASK, &intx_unmask_fd_, 1);
-      manager_->SetPciIrqNotifier(this, intx_trigger_fd_, intx_unmask_fd_, true);
-      SetInterruptMasked(VFIO_PCI_INTX_IRQ_INDEX, false);
-    }
-  } else {
-    if (intx_trigger_fd_ != -1) {
-      SetInterruptMasked(VFIO_PCI_INTX_IRQ_INDEX, true);
-      manager_->SetPciIrqNotifier(this, intx_trigger_fd_, -1, false);
-      safe_close(&intx_trigger_fd_);
-      safe_close(&intx_unmask_fd_);
-      SetInterruptMasked(VFIO_PCI_INTX_IRQ_INDEX, false);
-      SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_TRIGGER, nullptr, 0);
-    }
+  if (intx_trigger_fd_ == -1) {
+    intx_trigger_fd_ = eventfd(0, 0);
+    intx_unmask_fd_ = eventfd(0, 0);
+    SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_TRIGGER, &intx_trigger_fd_, 1);
+    SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_UNMASK, &intx_unmask_fd_, 1);
+    manager_->SetPciIrqNotifier(this, intx_trigger_fd_, intx_unmask_fd_, true);
+    SetInterruptMasked(VFIO_PCI_INTX_IRQ_INDEX, false);
   }
+  active_irq_index_ = VFIO_PCI_INTX_IRQ_INDEX;
 }
 
 void VfioPci::SetupVfioDevice() {
@@ -199,9 +207,6 @@ void VfioPci::SetupVfioDevice() {
 
     int ret = ioctl(device_fd_, VFIO_DEVICE_GET_REGION_INFO, region_info);
     if (ret < 0) {
-      if (debug_) {
-        MV_ERROR("failed to get region info %d, ret=%d", index, ret);
-      }
       free(region_info);
       continue;
     }
@@ -214,6 +219,7 @@ void VfioPci::SetupVfioDevice() {
       continue;
     }
     if (region_info->index >= MAX_VFIO_REGIONS) {
+      MV_WARN("region index %d exceeds max regions %d", region_info->index, MAX_VFIO_REGIONS);
       free(region_info);
       continue;
     }
@@ -285,15 +291,22 @@ void VfioPci::SetupVfioDevice() {
     irq_info.argsz = sizeof(irq_info);
     irq_info.index = index;
     auto ret = ioctl(device_fd_, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
+    if (irq_info.count == 0) {
+      continue;
+    }
     if (debug_) {
       MV_LOG("irq index=%d size=%u flags=%x count=%d ret=%d", index,
         irq_info.argsz, irq_info.flags, irq_info.count, ret);
     }
 
-    if (index == VFIO_PCI_INTX_IRQ_INDEX || index == VFIO_PCI_MSI_IRQ_INDEX || index == VFIO_PCI_MSIX_IRQ_INDEX) {
-      if (!(irq_info.flags & VFIO_IRQ_INFO_EVENTFD)) {
-        MV_PANIC("%s irq index %d does not support eventfd", device_name_.c_str(), index);
-      }
+    /* check if interrupt flags satisfy our requirements */
+    if (index == VFIO_PCI_INTX_IRQ_INDEX) {
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_MASKABLE);
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_AUTOMASKED);
+    } else if (index == VFIO_PCI_MSI_IRQ_INDEX || index == VFIO_PCI_MSIX_IRQ_INDEX) {
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_NORESIZE);
     }
   }
 }
@@ -433,13 +446,14 @@ void VfioPci::WritePciCommand(uint16_t command) {
   uint16_t old_comand = pci_header_.command;
   PciDevice::WritePciCommand(command);
 
-  if (!msi_config_.enabled) {
-    if ((old_comand ^ command) & PCI_COMMAND_INTX_DISABLE) {
-      if (command & PCI_COMMAND_INTX_DISABLE) {
-        SetIntxInterruptEnabled(false);
-      } else {
-        SetIntxInterruptEnabled(true);
-      }
+  if (active_irq_index_ > VFIO_PCI_INTX_IRQ_INDEX) {
+    return;
+  }
+  if ((old_comand ^ command) & PCI_COMMAND_INTX_DISABLE) {
+    if (!(command & PCI_COMMAND_INTX_DISABLE)) {
+      EnableIntxInterrupt();
+    } else {
+      DisableAllInterrupts();
     }
   }
 }
@@ -565,7 +579,11 @@ void VfioPci::SetInterruptEventFds(uint32_t index, uint32_t vector, int action, 
     irq_set->flags = VFIO_IRQ_SET_DATA_NONE | action;
   }
   memcpy(irq_set->data, fds, sizeof(int) * count);
-  MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set) == 0);
+  auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);
+  if (debug_) {
+    MV_LOG("%s set irq event fds, index=%d vector=%d action=%d count=%d ret=%d", device_name_.c_str(),
+      index, vector, action, count, ret);
+  }
 }
 
 void VfioPci::SetInterruptMasked(uint32_t index, bool masked) {
@@ -581,21 +599,27 @@ void VfioPci::SetInterruptMasked(uint32_t index, bool masked) {
   } else {
     irq_set.flags |= VFIO_IRQ_SET_ACTION_UNMASK;
   }
-  ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, &irq_set);
+  auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, &irq_set);
+  if (debug_) {
+    MV_LOG("%s set irq masked, index=%d masked=%d ret=%d", device_name_.c_str(), index, masked, ret);
+  }
 }
 
 void VfioPci::UpdateMsiRoutes() {
-  uint nr_vectors = 0;
-  uint16_t control = 0;
-  if (msi_config_.is_msix) {
-    control = msi_config_.msix->control;
-    nr_vectors = msi_config_.msix_table_size;
-  } else {
-    control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
-    nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
+  DisableAllInterrupts();
+
+  if (!msi_config_.enabled) {
+    return;
   }
 
-  DisableInterrupts();
+  active_irq_index_ = msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX;
+  uint nr_vectors = 0;
+  if (msi_config_.is_msix) {
+    nr_vectors = msi_config_.msix_table_size;
+  } else {
+    uint16_t control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
+    nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
+  }
 
   for (uint vector = 0; vector < nr_vectors; vector++) {
     auto &interrupt = interrupts_[vector];
@@ -616,16 +640,13 @@ void VfioPci::UpdateMsiRoutes() {
       msi_data = msi_config_.msi32->data;
     }
 
+    if (debug_) {
+      MV_LOG("%s set msi vector=%d address=0x%lx data=0x%x", device_name_.c_str(), vector, msi_address, msi_data);
+    }
     if (msi_config_.enabled && msi_address) {
       if (interrupt.gsi == -1) {
         interrupt.gsi = manager_->AddMsiNotifier(msi_address, msi_data, interrupt.event_fd);
-        SetInterruptEventFds(msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX,
-          vector, VFIO_IRQ_SET_ACTION_TRIGGER, &interrupt.event_fd, 1);
-      }
-    } else {
-      if (interrupt.gsi != -1) {
-        manager_->RemoveMsiNotifier(interrupt.gsi, interrupt.event_fd);
-        interrupt.gsi = -1;
+        SetInterruptEventFds(active_irq_index_, vector, VFIO_IRQ_SET_ACTION_TRIGGER, &interrupt.event_fd, 1);
       }
     }
   }

@@ -82,8 +82,8 @@ class VfioPci : public PciDevice {
   void SetupPciConfiguration();
   void SetupGfxPlane();
   void SetupMigraionInfo();
-  void DisableInterrupts();
-  void SetIntxInterruptEnabled(bool enabled);
+  void DisableAllInterrupts();
+  void EnableIntxInterrupt();
 
   void UpdateMsiRoutes();
   void MapBarRegion(uint8_t index);
@@ -100,6 +100,7 @@ class VfioPci : public PciDevice {
   int           device_fd_ = -1;
   int           intx_trigger_fd_ = -1;
   int           intx_unmask_fd_ = -1;
+  int           active_irq_index_ = -1;
   bool          multi_function_ = false;
   vfio_device_info                                      device_info_;
   std::array<VfioRegion, MAX_VFIO_REGIONS>              regions_;
