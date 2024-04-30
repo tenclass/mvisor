@@ -247,6 +247,10 @@ void VfioPci::SetupVfioDevice() {
           auto cap_type = (vfio_region_info_cap_type*)cap_header;
           region.type = cap_type->type;
           region.subtype = cap_type->subtype;
+        } else if (cap_header->id == VFIO_REGION_INFO_CAP_MSIX_MAPPABLE) {
+          msix_table_mapped_ = true;
+        } else {
+          MV_WARN("unhandled region cap id=%d", cap_header->id);
         }
         if (cap_header->next) {
           cap_header = (vfio_info_cap_header*)(ptr + cap_header->next);
@@ -352,6 +356,7 @@ void VfioPci::SetupPciConfiguration() {
 
   /* Setup capabilites */
   if (pci_header_.status & PCI_STATUS_CAP_LIST) {
+    PciCapabilityHeader* last_cap = nullptr;
     uint pos = pci_header_.capability & ~3;
     while (pos) {
       auto cap = (PciCapabilityHeader*)(pci_header_.data + pos);
@@ -387,7 +392,6 @@ void VfioPci::SetupPciConfiguration() {
         msi_config_.msix_space_size = sizeof(msi_config_.msix_table);
         msi_config_.msix_space_offset = msi_config_.msix->table_offset & PCI_MSIX_TABLE_OFFSET;
         msi_config_.msix_bar = msi_config_.msix->table_offset & PCI_MSIX_TABLE_BIR;
-        MV_ASSERT(msi_config_.msix_bar < sizeof(pci_header_.bars) / sizeof(uint32_t));
         break;
       }
       case PCI_CAP_ID_VNDR:
@@ -398,6 +402,12 @@ void VfioPci::SetupPciConfiguration() {
         break;
       case PCI_CAP_ID_EXP:
         is_pcie_ = true;
+        /* skip pcie capability */
+        if (last_cap) {
+          last_cap->next = cap->next;
+        } else {
+          pci_header_.capability = cap->next;
+        }
         break;
       default:
         if (debug_) {
@@ -405,6 +415,7 @@ void VfioPci::SetupPciConfiguration() {
         }
         break;
       }
+      last_cap = cap;
       pos = cap->next;
     }
   }
@@ -621,17 +632,28 @@ void VfioPci::UpdateMsiRoutes() {
     nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
   }
 
+  int fds[nr_vectors];
+  for (uint i = 0; i < nr_vectors; i++) {
+    fds[i] = -1;
+  }
+
   for (uint vector = 0; vector < nr_vectors; vector++) {
     auto &interrupt = interrupts_[vector];
-    if (interrupt.event_fd == -1) {
-      interrupt.event_fd = eventfd(0, 0);
-    }
+    MV_ASSERT(interrupt.gsi == -1 && interrupt.event_fd == -1);
+    interrupt.event_fd = eventfd(0, 0);
+    fds[vector] = interrupt.event_fd;
   
     uint64_t msi_address;
     uint32_t msi_data;
     if (msi_config_.is_msix) {
-      msi_address = ((uint64_t)msi_config_.msix_table[vector].message.address_hi << 32) | msi_config_.msix_table[vector].message.address_lo;
-      msi_data = msi_config_.msix_table[vector].message.data;
+      auto entries = msi_config_.msix_table;
+      if (msix_table_mapped_) {
+        /* If MSIX table is mmaped, no MMIO write is handled and the table is not updated,
+         * so we need to read the table from the mmaped region */
+        entries = (MsiXTableEntry*)((uint8_t*)regions_[msi_config_.msix_bar].mmap + msi_config_.msix_space_offset);
+      }
+      msi_address = ((uint64_t)entries[vector].message.address_hi << 32) | entries[vector].message.address_lo;
+      msi_data = entries[vector].message.data;
     } else if (msi_config_.is_64bit) {
       msi_address = ((uint64_t)msi_config_.msi64->address1 << 32) | msi_config_.msi64->address0;
       msi_data = msi_config_.msi64->data;
@@ -643,13 +665,9 @@ void VfioPci::UpdateMsiRoutes() {
     if (debug_) {
       MV_LOG("%s set msi vector=%d address=0x%lx data=0x%x", device_name_.c_str(), vector, msi_address, msi_data);
     }
-    if (msi_config_.enabled && msi_address) {
-      if (interrupt.gsi == -1) {
-        interrupt.gsi = manager_->AddMsiNotifier(msi_address, msi_data, interrupt.event_fd);
-        SetInterruptEventFds(active_irq_index_, vector, VFIO_IRQ_SET_ACTION_TRIGGER, &interrupt.event_fd, 1);
-      }
-    }
+    interrupt.gsi = manager_->AddMsiNotifier(msi_address, msi_data, interrupt.event_fd);
   }
+  SetInterruptEventFds(active_irq_index_, 0, VFIO_IRQ_SET_ACTION_TRIGGER, fds, nr_vectors);
 }
 
 void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
@@ -677,8 +695,10 @@ void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t lengt
 void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   MV_ASSERT(offset + length <= pci_config_size());
 
-  /* read from VFIO device */
-  if (!ranges_overlap(offset, length, msi_config_.offset + PCI_MSI_FLAGS, 1)) {
+  /* We want to emulate the capability fields (skip PCIe cap)
+   * Disable PCI-e capability for NVIDIA GPUs to avoid error code 10
+   */
+  if (offset + length <= 0x40) {
     auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
     auto ret = pread(device_fd_, pci_header_.data + offset, length, config_region.offset + offset);
     MV_ASSERT(ret == (ssize_t)length);
@@ -688,11 +708,6 @@ void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length
     pci_header_.header_type = 0x80;
   } else {
     pci_header_.header_type = 0;
-  }
-
-  /* Disable PCI-e capability for NVIDIA GPUs to avoid error code 10 */
-  if (pci_header_.vendor_id == 0x10DE && pci_header_.data[0x69] == 0x78) {
-    pci_header_.data[0x69] = 0xB4;
   }
 
   PciDevice::ReadPciConfigSpace(offset, data, length);

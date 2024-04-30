@@ -102,6 +102,7 @@ class VfioPci : public PciDevice {
   int           intx_unmask_fd_ = -1;
   int           active_irq_index_ = -1;
   bool          multi_function_ = false;
+  bool          msix_table_mapped_ = false;
   vfio_device_info                                      device_info_;
   std::array<VfioRegion, MAX_VFIO_REGIONS>              regions_;
   std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>        interrupts_;
