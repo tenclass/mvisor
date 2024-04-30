@@ -410,6 +410,46 @@ void Viewer::SendPointerEvent() {
   }
 }
 
+void Viewer::HandleSpeicalKey(const SDL_Keysym& keysym) {
+  switch (keysym.sym)
+  {
+  case SDLK_F2:
+    MV_LOG("Save");
+    machine_->Pause();
+    machine_->Save("/tmp/save");
+    break;
+  case SDLK_F3:
+    MV_LOG("Migration");
+    std::thread([this]() {
+      MV_ASSERT(machine_->Save("127.0.0.1", 9979));
+    }).detach();
+    break;
+  case SDLK_F4:
+    MV_LOG("Migration Post");
+    MV_ASSERT(machine_->PostSave());
+    break;
+  case SDLK_F11:
+    if (machine_->IsPaused()) {
+      MV_LOG("Resume");
+      machine_->Resume();
+    } else {
+      MV_LOG("Pause");
+      machine_->Pause();
+    }
+    break;
+  case SDLK_F12:
+    if (machine_->IsPaused()) {
+      MV_LOG("Reset");
+      machine_->Resume();
+      machine_->Reset();
+    } else {
+      MV_LOG("Shutdown");
+      machine_->Shutdown();
+    }
+    break;
+  }
+}
+
 void Viewer::HandleEvent(const SDL_Event& event) {
   uint8_t transcoded[10] = { 0 };
 
@@ -427,40 +467,9 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     break;
   }
   case SDL_KEYDOWN:
-    if (event.key.keysym.sym == SDLK_F11) {
-      if (machine_->IsPaused()) {
-        MV_LOG("Resume");
-        machine_->Resume();
-      } else {
-        MV_LOG("Pause");
-        machine_->Pause();
-      }
-      return;
-    } else if (event.key.keysym.sym == SDLK_F2) {
-      MV_LOG("Save");
-      machine_->Pause();
-      machine_->Save("/tmp/save");
-      return;
-    } else if (event.key.keysym.sym == SDLK_F3) {
-      MV_LOG("Migration");
-      std::thread([this]() {
-        MV_ASSERT(machine_->Save("127.0.0.1", 9979));
-      }).detach();
-      return;
-    } else if (event.key.keysym.sym == SDLK_F4) {
-      MV_LOG("Migration Post");
-      MV_ASSERT(machine_->PostSave());
-      return;
-    } else if (event.key.keysym.sym == SDLK_F12) {
-      if (machine_->IsPaused()) {
-        MV_LOG("Reset");
-        machine_->Resume();
-        machine_->Reset();
-      } else {
-        MV_LOG("Shutdown");
-        machine_->Shutdown();
-      }
-      return;
+    // handle alt + Fx
+    if (event.key.keysym.mod & KMOD_ALT) {
+      HandleSpeicalKey(event.key.keysym);
     }
     // fall through
   case SDL_KEYUP:

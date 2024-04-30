@@ -52,6 +52,7 @@ class Viewer {
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   void HandleEvent(const SDL_Event& event);
+  void HandleSpeicalKey(const SDL_Keysym& keysym);
   PointerInputInterface* GetActivePointer();
   void SendPointerEvent();
   void SendResizerEvent();
