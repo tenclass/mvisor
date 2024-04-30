@@ -189,6 +189,12 @@ size_t DhcpServiceUdpSocket::FillDhcpOptions(uint8_t* option, int dhcp_type) {
   *(uint32_t*)p = htonl(backend_->router_ip());
   p += 4;
 
+  // lease time
+  *p++ = 51;
+  *p++ = 4;
+  *(uint32_t*)p = htonl(86400);
+  p += 4;
+
   // nameserver
   *p++ = 6;
   *p++ = nameservers_.size() * 4;
