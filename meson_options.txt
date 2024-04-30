@@ -28,8 +28,3 @@ option('vgpu',
   description: 'Enable VGPU device'
 )
 
-option('cuda',
-  type: 'boolean',
-  value: false,
-  description: 'Enable CUDA device'
-)

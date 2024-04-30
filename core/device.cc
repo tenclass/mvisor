@@ -135,7 +135,7 @@ void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
       return;
     }
   }
-  MV_PANIC("not found type=%d base=0x%lx", type, base);
+  MV_PANIC("%s not found type=%d base=0x%lx", name_, type, base);
 }
 
 void Device::SetIoResourceEnabled(IoResource* resource, bool enabled) {

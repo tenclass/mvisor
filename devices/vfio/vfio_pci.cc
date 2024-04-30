@@ -554,7 +554,7 @@ void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, 
     if (pci_bars_[i].address == resource->base) {
       auto ret = pwrite(device_fd_, data, size, regions_[i].offset + offset);
       if (ret != (ssize_t)size) {
-        MV_PANIC("failed to write VFIO device, offset=0x%x size=0x%x data=0x%x", offset, size, *(uint32_t*)data);
+        MV_PANIC("failed to write VFIO device, bar=%d offset=0x%x size=0x%x data=0x%x", i, offset, size, *(uint32_t*)data);
       }
 
       if (msi_config_.is_msix && i == msi_config_.msix_bar) {
@@ -572,7 +572,7 @@ void VfioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, u
     if (pci_bars_[i].address == resource->base) {
       auto ret = pread(device_fd_, data, size, regions_[i].offset + offset);
       if (ret != (ssize_t)size) {
-        MV_PANIC("failed to read VFIO device, offset=0x%x size=0x%x", offset, size);
+        MV_PANIC("failed to read VFIO device, bar=%d offset=0x%x size=0x%x", i, offset, size);
       }
       return;
     }
@@ -726,13 +726,8 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
     return false;
   }
 
-  /* Map buffer for saving */
+  /* buffer for saving */
   auto& area = migration_.region->mmap_areas.front();
-  void* buffer = mmap(nullptr, area.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-    device_fd_, migration_.region->offset + area.offset);
-  if (buffer == MAP_FAILED) {
-    MV_PANIC("failed to map area offset=0x%lx size=0x%lx", area.offset, area.size);
-  }
 
   SetMigrationDeviceState(VFIO_DEVICE_STATE_SAVING);
   int fd = writer->BeginWrite("DATA");
@@ -766,14 +761,14 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
       data_size = pending_bytes;
     
     if (dynamic_cast<MigrationNetworkWriter*>(writer)) {
-      if (writer->WriteRaw("VFIO_DATA", buffer, data_size)) {
+      if (writer->WriteRaw("VFIO_DATA", area.mmap, data_size)) {
         ret = data_size;
       } else {
         MV_ERROR("send vfio data error");
         break;
       }
     } else {
-      ret = write(fd, buffer, data_size);
+      ret = write(fd, area.mmap, data_size);
     }
     MV_ASSERT(ret == (ssize_t)data_size);
   }
@@ -781,7 +776,6 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
   writer->EndWrite("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
   
-  munmap(buffer, area.size);
   return success && PciDevice::SaveState(writer);
 }
 
@@ -798,16 +792,14 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   }
 
   /* Update MSI routes */
-  UpdateMsiRoutes();
-
-  /* Map buffer for restoring */
-  auto& area = migration_.region->mmap_areas.front();
-  void* buffer = mmap(nullptr, area.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-    device_fd_, migration_.region->offset + area.offset);
-  if (buffer == MAP_FAILED) {
-    MV_PANIC("failed to map area offset=0x%lx size=0x%lx", area.offset, area.size);
+  if (msi_config_.enabled) {
+    UpdateMsiRoutes();
+  } else {
+    EnableIntxInterrupt();
   }
 
+  /* buffer for restoring */
+  auto& area = migration_.region->mmap_areas.front();
   SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
   int fd = reader->BeginRead("DATA");
 
@@ -822,9 +814,9 @@ bool VfioPci::LoadState(MigrationReader* reader) {
     
     ssize_t ret;
     if (dynamic_cast<MigrationNetworkReader*>(reader)) {
-      ret = reader->ReadRawWithLimit("VFIO_DATA", buffer, area.size);
+      ret = reader->ReadRawWithLimit("VFIO_DATA", area.mmap, area.size);
     } else {
-      ret = read(fd, buffer, area.size);
+      ret = read(fd, area.mmap, area.size);
     }
 
     if (ret > 0) {
@@ -840,7 +832,6 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   reader->EndRead("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
   
-  munmap(buffer, area.size);
   return success;
 }
 

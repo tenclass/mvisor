@@ -78,7 +78,6 @@ configure_file(output: 'version.h',
 summary({
   'sdl': get_option('sdl'),
   'vgpu': get_option('vgpu'),
-  'cuda': get_option('cuda'),
   'sweet-server': get_option('sweet-server')
 }, bool_yn: true, section: 'Options')
 

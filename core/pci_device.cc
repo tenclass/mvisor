@@ -345,18 +345,23 @@ bool PciDevice::ActivatePciBar(uint8_t index) {
   if (bar.active)
     return true;
 
+  uint64_t address;
+  if (pci_bars_[index].special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+    address = pci_header_.bars[index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
+    address <<= 32;
+    address |= pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  } else {
+    address = pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  }
+  uint64_t length = pci_bars_[index].size;
+
   if (bar.type == kIoResourceTypePio) {
-    AddIoResource(kIoResourceTypePio, bar.address, bar.size, "PCI BAR IO");
+    AddIoResource(kIoResourceTypePio, address, length, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    if (bar.special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-      uint64_t address = uint64_t(pci_bars_[index + 1].address) << 32 | bar.address;
-      AddIoResource(kIoResourceTypeMmio, address, bar.size, "PCI BAR MMIO");
-    } else {
-      AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "PCI BAR MMIO");
-    }
+    AddIoResource(kIoResourceTypeMmio, address, length, "PCI BAR MMIO");
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr);
-    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, "PCI BAR RAM", bar.host_memory);
+    AddIoResource(kIoResourceTypeRam, address, length, "PCI BAR RAM", bar.host_memory);
   }
   bar.active = true;
   return true;
@@ -368,12 +373,21 @@ bool PciDevice::DeactivatePciBar(uint8_t index) {
   if (!bar.active)
     return true;
 
+  uint64_t address;
+  if (pci_bars_[index].special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+    address = pci_header_.bars[index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
+    address <<= 32;
+    address |= pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  } else {
+    address = pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  }
+
   if (bar.type == kIoResourceTypePio) {
-    RemoveIoResource(kIoResourceTypePio, bar.address);
+    RemoveIoResource(kIoResourceTypePio, address);
   } else if (bar.type == kIoResourceTypeMmio) {
-    RemoveIoResource(kIoResourceTypeMmio, bar.address);
+    RemoveIoResource(kIoResourceTypeMmio, address);
   } else if (bar.type == kIoResourceTypeRam) {
-    RemoveIoResource(kIoResourceTypeRam, bar.address);
+    RemoveIoResource(kIoResourceTypeRam, address);
   }
   bar.active = false;
   return true;
