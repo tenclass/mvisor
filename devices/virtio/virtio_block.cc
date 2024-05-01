@@ -38,7 +38,7 @@ class VirtioBlock : public VirtioPci {
     pci_header_.device_id = 0x1001;
     pci_header_.subsys_id = 0x0002;
     
-    AddPciBar(1, 0x1000, kIoResourceTypeMmio);
+    SetupPciBar(1, 0x1000, kIoResourceTypeMmio);
     AddMsiXCapability(1, 9, 0, 0x1000);
 
     device_features_ |= (1UL << VIRTIO_BLK_F_SEG_MAX) |

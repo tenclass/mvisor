@@ -122,8 +122,8 @@ class Ac97 : public PciDevice, public PlaybackInterface {
     pci_header_.irq_pin = 1;
     pci_header_.status |= PCI_STATUS_FAST_BACK;
 
-    AddPciBar(0, 1024, kIoResourceTypePio); // Native Audio Mixer
-    AddPciBar(1, 256, kIoResourceTypePio);  // Native Audio Bus Master
+    SetupPciBar(0, 1024, kIoResourceTypePio); // Native Audio Mixer
+    SetupPciBar(1, 256, kIoResourceTypePio);  // Native Audio Bus Master
 
     MV_ASSERT(sizeof(Ac97Mixer) == 0x80);
 

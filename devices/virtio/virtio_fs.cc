@@ -48,7 +48,7 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     pci_header_.device_id = 0x105A;
     pci_header_.revision_id = 0x01;
 
-    AddPciBar(1, 0x1000, kIoResourceTypeMmio);
+    SetupPciBar(1, 0x1000, kIoResourceTypeMmio);
     device_features_ |= 0;
 
     // FIXME: num_request_queues has been deprecated in new virtiofs guest driver

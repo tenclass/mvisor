@@ -71,7 +71,6 @@ DeviceManager::~DeviceManager() {
     root_->Disconnect();
   }
   
-  safe_close(&vfio_kvm_device_fd_);
   MV_ASSERT(ioevents_.empty());
 }
 
@@ -98,6 +97,8 @@ void DeviceManager::PrintDevices() {
       case kIoResourceTypeRam:
         MV_LOG("\tRAM  address 0x%016lx-0x016%lx %d", resource->base, resource->base + resource->length - 1, resource->enabled);
         break;
+      case kIoResourceTypeUnknown:
+        MV_PANIC("unknown resource type");
       }
     }
   }
@@ -164,46 +165,6 @@ void DeviceManager::RegisterDevice(Device* device) {
 void DeviceManager::UnregisterDevice(Device* device) {
   registered_devices_.erase(device);
 }
-
-
-void DeviceManager::RegisterVfioGroup(int group_fd) {
-  if (vfio_kvm_device_fd_ == -1) {
-    kvm_create_device create = {
-      .type = KVM_DEV_TYPE_VFIO,
-      .fd = 0,
-      .flags = 0
-    };
-    if (ioctl(machine_->vm_fd_, KVM_CREATE_DEVICE, &create) < 0) {
-      MV_PANIC("failed to create KVM VFIO device");
-    }
-    vfio_kvm_device_fd_ = create.fd;
-  }
-
-  kvm_device_attr attr = {
-    .flags = 0,
-    .group = KVM_DEV_VFIO_GROUP,
-    .attr = KVM_DEV_VFIO_GROUP_ADD,
-    .addr = (uint64_t)&group_fd
-  };
-  if (ioctl(vfio_kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
-    MV_PANIC("failed to add group %d to KVM VFIO device %d", group_fd, vfio_kvm_device_fd_);
-  }
-}
-
-void DeviceManager::UnregisterVfioGroup(int group_fd) {
-  MV_ASSERT(vfio_kvm_device_fd_ != -1);
-
-  kvm_device_attr attr = {
-    .flags = 0,
-    .group = KVM_DEV_VFIO_GROUP,
-    .attr = KVM_DEV_VFIO_GROUP_DEL,
-    .addr = (uint64_t)&group_fd
-  };
-  if (ioctl(vfio_kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
-    MV_PANIC("failed to delete group %d to KVM VFIO device %d", group_fd, vfio_kvm_device_fd_);
-  }
-}
-
 
 void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource) {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -535,7 +496,7 @@ void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int 
 
   if (machine_->debug()) {
     machine_->memory_manager()->PrintMemoryScope();
-    MV_LOG("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
+    MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
       is_write ? "write" : "read", addr, size, *(uint64_t*)data);
   }
 }
@@ -569,6 +530,32 @@ void DeviceManager::SetGsiLevel(uint gsi, uint level) {
   }
 }
 
+void DeviceManager::SetPciIrqNotifier(PciDevice* pci, int trigger_fd, int unmask_fd, bool assign) {
+  auto gsi = pci->pci_header_.irq_line;
+  if (pci_irq_translator_) {
+    gsi = pci_irq_translator_(pci->slot_, pci->function_, pci->pci_header_.irq_pin);
+  }
+  MV_ASSERT(gsi < 32);
+
+  kvm_irqfd irqfd = {
+    .fd = (uint)trigger_fd,
+    .gsi = (uint)gsi,
+    .flags = (uint)(assign ? 0 : KVM_IRQFD_FLAG_DEASSIGN)
+  };
+  if (unmask_fd != -1) {
+    irqfd.flags |= KVM_IRQFD_FLAG_RESAMPLE;
+    irqfd.resamplefd = unmask_fd;
+  }
+
+  if (machine_->debug_) {
+    MV_LOG("%s %s trigger fd=%d resamplefd=%d gsi=%d", pci->name(),
+      assign ? "assign" : "deassign", trigger_fd, unmask_fd, gsi);
+  }
+  if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
+    MV_PANIC("%s failed to assign irqfd=%d to gsi=%d", pci->name(), trigger_fd, gsi);
+  }
+}
+
 /* Calculate the GSI of a PCI pin and set its level.
  * GSI can be shared, so we count the level */
 void DeviceManager::SetPciIrqLevel(PciDevice* pci, uint level) {
@@ -576,6 +563,7 @@ void DeviceManager::SetPciIrqLevel(PciDevice* pci, uint level) {
   if (pci_irq_translator_) {
     gsi = pci_irq_translator_(pci->slot_, pci->function_, pci->pci_header_.irq_pin);
   }
+  MV_ASSERT(gsi < 32);
 
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   if (level) {
@@ -673,7 +661,7 @@ void DeviceManager::SetupGsiRoutingTable() {
 }
 
 /* This GSI is currently used with IRQ fd */
-int DeviceManager::AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd) {
+int DeviceManager::AddMsiNotifier(uint64_t address, uint32_t data, int trigger_fd) {
   auto gsi = next_gsi_++;
 
   kvm_irq_routing_entry entry = {
@@ -695,53 +683,46 @@ int DeviceManager::AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd) 
 
   UpdateGsiRoutingTable();
   if (trigger_fd != -1) {
-    kvm_irqfd irqfd;
-    bzero(&irqfd, sizeof(irqfd));
-    irqfd.fd = (uint)trigger_fd;
-    irqfd.gsi = (uint)gsi;
+    kvm_irqfd irqfd = {
+      .fd = (uint)trigger_fd,
+      .gsi = (uint)gsi
+    };
     if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
       MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
     }
+  }
+
+  if (machine_->debug_) {
+    MV_LOG("msi route gsi=%d address=0x%lx data=0x%x", gsi, address, data);
   }
   return gsi;
 }
 
 /* Setting the address to 0 to remove a MSI route */
-void DeviceManager::UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd) {
+void DeviceManager::RemoveMsiNotifier(int gsi, int trigger_fd) {
   std::unique_lock<std::recursive_mutex> lock(mutex_);
   auto it = std::find_if(gsi_routing_table_.begin(), gsi_routing_table_.end(), [gsi](auto &entry) {
     return entry.gsi == (uint)gsi;
   });
 
-  kvm_irqfd irqfd;
-  bzero(&irqfd, sizeof(irqfd));
-  irqfd.fd = (uint)trigger_fd;
-  irqfd.gsi = (uint)gsi;
-
   if (it == gsi_routing_table_.end()) {
     MV_PANIC("not found gsi=%d", gsi);
-  } else if (address == 0) {
-    /* deassign the irqfd and remove from table */
-    if (trigger_fd != -1) {
-      irqfd.flags = KVM_IRQFD_FLAG_DEASSIGN;
-      if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
-        MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
-      }
-    }
-    gsi_routing_table_.erase(it);
-  } else {
-    /* update entry and irqfd */
-    auto& msi = it->u.msi;
-    msi.address_lo = (uint32_t)address;
-    msi.address_hi = (uint32_t)(address >> 32);
-    msi.data = data;
+  }
 
-    if (trigger_fd != -1) {
-      if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
-        MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
-      }
+  kvm_irqfd irqfd = {
+    .fd = (uint)trigger_fd,
+    .gsi = (uint)gsi,
+    .flags = KVM_IRQFD_FLAG_DEASSIGN
+  };
+
+  /* deassign the irqfd and remove from table */
+  if (trigger_fd != -1) {
+    irqfd.flags = KVM_IRQFD_FLAG_DEASSIGN;
+    if (ioctl(machine_->vm_fd_, KVM_IRQFD, &irqfd) < 0) {
+      MV_PANIC("failed to assign irqfd=%d to gsi=%d", trigger_fd, gsi);
     }
   }
+  gsi_routing_table_.erase(it);
   lock.unlock();
   
   UpdateGsiRoutingTable();

@@ -59,7 +59,7 @@ What's supported now:
 5. Audio (ICH9-HDA / AC97) ✅
 6. Tap network
 7. User network ✅
-8. VFIO ✅
+8. VFIO (mdev & passthrough) ✅
 9. Samba
 10. USB 1.0 UHCI ✅ / USB 3.0 XHCI ✅ / USB Tablet ✅ / USB Midi ✅ / USB Wacom ✅
 
@@ -73,13 +73,16 @@ What's supported now:
 
 ## Compile & Run
 
-For CentOS / RockyLinux,
+For RockyLinux 9.3,
 
 ```
-yum install -y gcc-c++ glib2-devel pixman-devel SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel libjpeg-devel opus-devel
+dnf install epel-release gdb
+dnf --enablerepo=devel install -y gcc-c++ glib2-devel pixman-devel SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel libjpeg-devel opus-devel
 
 meson setup build
 meson compile -C build
+
+./build/mvisor -c config/sample.yaml
 ```
 
 An ISO image file is needed to install OS. Modify config/default.yaml to configure image path.

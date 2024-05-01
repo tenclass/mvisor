@@ -26,12 +26,5 @@ if get_option('vgpu')
   ]
 endif
 
-if get_option('cuda')
-  subdir('cuda')
-
-  mvisor_sources += files(
-    'virtio_cuda.cc'
-  )
-endif
 
 subdir('fuse')

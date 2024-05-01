@@ -40,7 +40,7 @@ IdeHost::IdeHost() {
   pci_header_.status |= PCI_STATUS_FAST_BACK;
 
   /* IDE Bus master */
-  AddPciBar(4, 16, kIoResourceTypePio);
+  SetupPciBar(4, 16, kIoResourceTypePio);
 
   /* Legacy IDE ports */
   AddIoResource(kIoResourceTypePio, 0x01F0, 8, "IDE Primary");

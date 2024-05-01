@@ -89,6 +89,7 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
 }
 
 void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
+  MV_ASSERT(length > 0);
   auto resource = new IoResource {
     .type = type,
     .base = base,
@@ -134,7 +135,7 @@ void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
       return;
     }
   }
-  MV_PANIC("not found type=%d base=0x%lx", type, base);
+  MV_PANIC("%s not found type=%d base=0x%lx", name_, type, base);
 }
 
 void Device::SetIoResourceEnabled(IoResource* resource, bool enabled) {

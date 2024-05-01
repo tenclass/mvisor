@@ -50,7 +50,7 @@ AhciHost::AhciHost() {
   AddMsiCapability();
 
   /* Memory bar */
-  AddPciBar(5, 4096, kIoResourceTypeMmio);
+  SetupPciBar(5, 4096, kIoResourceTypeMmio);
 }
 
 AhciHost::~AhciHost() {

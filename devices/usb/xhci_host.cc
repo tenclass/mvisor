@@ -46,7 +46,7 @@ XhciHost::XhciHost() {
   pci_header_.data[0x60] = 0x30;
   next_capability_offset_ = 0x90;
 
-  AddPciBar(0, 0x4000, kIoResourceTypeMmio);
+  SetupPciBar(0, 0x4000, kIoResourceTypeMmio);
   AddMsiXCapability(0, 16, 0x3000, 0x1000);
 
   bzero(port_states_.data(), sizeof(port_states_[0]) * port_states_.size());

@@ -33,6 +33,7 @@ VfioPci::VfioPci() {
     interrupt.event_fd = -1;
     interrupt.gsi = -1;
   }
+  bzero(&regions_, sizeof(regions_));
 }
 
 VfioPci::~VfioPci() {
@@ -40,50 +41,79 @@ VfioPci::~VfioPci() {
 }
 
 void VfioPci::Connect() {
-  PciDevice::Connect();
-
+  vfio_manager_ = manager_->machine()->vfio_manager();
   if (!has_key("sysfs")) {
-    MV_PANIC("Please specify 'sysfs' for vfio-pci, like '/sys/bus/mdev/devices/xxx'");
+    MV_PANIC("Please specify 'sysfs' for vfio-pci, like '/sys/bus/mdev/devices/xxx' or '/sys/bus/pci/devices/xxx'");
   }
   sysfs_path_ = std::get<std::string>(key_values_["sysfs"]);
+  device_name_ = basename(sysfs_path_.c_str());
 
-  SetupVfioGroup();
-  SetupVfioContainer();
+  /* Check if host pci address 0000:01:00.[function] */
+  if (sysfs_path_.find("pci") != std::string::npos) {
+    // separate by '.' to get device and function
+    auto dot_pos = device_name_.find('.');
+    if (dot_pos == std::string::npos) {
+      MV_PANIC("invalid device name %s (should be like 0000:01:00.0)", device_name_.c_str());
+    }
+    // if function is not 0, we need to locate the multi-function device
+    auto function = device_name_.substr(dot_pos + 1);
+    if (function != "0") {
+      auto master_device = device_name_.substr(0, dot_pos) + ".0";
+      auto objects = manager_->machine()->LookupObjects([=](auto obj) {
+        if (this != obj && obj->has_key("sysfs")) {
+          auto sysfs = std::get<std::string>((*obj)["sysfs"]);
+          return sysfs.find(master_device) != std::string::npos;
+        }
+        return false;
+      });
+      if (objects.empty()) {
+        MV_WARN("multi-function device %s not found", master_device.c_str());
+      } else {
+        auto master = dynamic_cast<VfioPci*>(objects[0]);
+        if (master->slot_ == 0xFF) {
+          MV_PANIC("multi-function device %s not registered before %s", master_device.c_str(), device_name_.c_str());
+        }
+        this->slot_ = master->slot_;
+        this->function_ = std::stoi(function);
+      }
+    } else {
+      multi_function_ = true;
+    }
+  }
+
+  PciDevice::Connect();
+
   SetupVfioDevice();
   SetupPciConfiguration();
   SetupGfxPlane();
-  SetupDmaMaps();
   SetupMigraionInfo();
 }
 
 void VfioPci::Disconnect() {
   auto machine = manager_->machine();
-  if (memory_listener_) {
-    machine->memory_manager()->UnregisterMemoryListener(&memory_listener_);
-  }
-  if (dirty_memory_listener_) {
-    machine->memory_manager()->UnregisterDirtyMemoryListener(&dirty_memory_listener_);
-  }
   if (state_change_listener_) {
     machine->UnregisterStateChangeListener(&state_change_listener_);
   }
 
-  for (auto &interrupt : interrupts_) {
-    if (interrupt.gsi > 0) {
-      manager_->UpdateMsiRoute(interrupt.gsi, 0, 0, -1);
+  DisableAllInterrupts();
+  manager_->machine()->vfio_manager()->DetachDevice(device_fd_);
+  safe_close(&device_fd_);
+
+  /* unmap vfio regions */
+  for (auto &region : regions_) {
+    if (region.mmap) {
+      munmap(region.mmap, region.size);
     }
-    if (interrupt.event_fd > 0) {
-      // If we use IRQFD, we don't use polling to handle interrupts
-      // StopPolling(interrupt.event_fd);
-      safe_close(&interrupt.event_fd);
+    for (auto &area : region.mmap_areas) {
+      if (area.mmap) {
+        munmap(area.mmap, area.size);
+      }
     }
   }
-
-  manager_->UnregisterVfioGroup(group_fd_);
-
-  safe_close(&device_fd_);
-  safe_close(&container_fd_);
-  safe_close(&group_fd_);
+  if (pci_rom_.data) {
+    free(pci_rom_.data);
+    pci_rom_.data = nullptr;
+  }
   PciDevice::Disconnect();
 }
 
@@ -99,7 +129,192 @@ void VfioPci::Reset() {
     }
   }
 
+  DisableAllInterrupts();
   PciDevice::Reset();
+}
+
+void VfioPci::DisableAllInterrupts() {
+  /* deactivate current irq */
+  if (active_irq_index_ != -1) {
+    if (debug_) {
+      MV_LOG("%s deactivate irq index=%d", device_name_.c_str(), active_irq_index_);
+    }
+    vfio_irq_set irq_set = {
+      .argsz = sizeof(vfio_irq_set),
+      .flags = VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER,
+      .index = (uint)active_irq_index_,
+      .start = 0,
+      .count = 0
+    };
+    MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, &irq_set) == 0);
+  }
+
+  /* remove notifiers */
+  if (active_irq_index_ == VFIO_PCI_MSI_IRQ_INDEX || active_irq_index_ == VFIO_PCI_MSIX_IRQ_INDEX) {
+    for (auto &interrupt : interrupts_) {
+      if (interrupt.gsi > 0) {
+        manager_->RemoveMsiNotifier(interrupt.gsi, interrupt.event_fd);
+        interrupt.gsi = -1;
+      }
+      safe_close(&interrupt.event_fd);
+    }
+  } else if (active_irq_index_ == VFIO_PCI_INTX_IRQ_INDEX) {
+    if (intx_trigger_fd_ != -1) {
+      manager_->SetPciIrqNotifier(this, intx_trigger_fd_, -1, false);
+      safe_close(&intx_trigger_fd_);
+      safe_close(&intx_unmask_fd_);
+    }
+  }
+  active_irq_index_ = -1;
+}
+
+void VfioPci::EnableIntxInterrupt() {
+  if (!pci_header_.irq_pin) {
+    return;
+  }
+  if (debug_) {
+    MV_LOG("%s enable INTx interrupt", device_name_.c_str());
+  }
+
+  if (intx_trigger_fd_ == -1) {
+    intx_trigger_fd_ = eventfd(0, 0);
+    intx_unmask_fd_ = eventfd(0, 0);
+    SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_TRIGGER, &intx_trigger_fd_, 1);
+    SetInterruptEventFds(VFIO_PCI_INTX_IRQ_INDEX, 0, VFIO_IRQ_SET_ACTION_UNMASK, &intx_unmask_fd_, 1);
+    manager_->SetPciIrqNotifier(this, intx_trigger_fd_, intx_unmask_fd_, true);
+    SetInterruptMasked(VFIO_PCI_INTX_IRQ_INDEX, false);
+  }
+  active_irq_index_ = VFIO_PCI_INTX_IRQ_INDEX;
+}
+
+void VfioPci::SetupVfioDevice() {
+  device_fd_ = vfio_manager_->AttachDevice(sysfs_path_);
+ 
+  /* get device info */
+  bzero(&device_info_, sizeof(device_info_));
+  device_info_.argsz = sizeof(device_info_);
+  MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_INFO, &device_info_) == 0);
+  MV_ASSERT(device_info_.flags & VFIO_DEVICE_FLAGS_PCI);
+  MV_ASSERT(device_info_.num_regions > VFIO_PCI_CONFIG_REGION_INDEX);
+  MV_ASSERT(device_info_.num_irqs > VFIO_PCI_MSIX_IRQ_INDEX);
+
+  /* find vfio regions */
+  bzero(&regions_, sizeof(regions_));
+  for (uint index = VFIO_PCI_BAR0_REGION_INDEX; index < device_info_.num_regions; index++) {
+    auto argsz = sizeof(vfio_region_info);
+    auto region_info = (vfio_region_info*)malloc(argsz);
+    bzero(region_info, argsz);
+    region_info->argsz = argsz;
+    region_info->index = index;
+
+    int ret = ioctl(device_fd_, VFIO_DEVICE_GET_REGION_INFO, region_info);
+    if (ret < 0) {
+      free(region_info);
+      continue;
+    }
+    if (region_info->argsz != argsz) {
+      region_info = (vfio_region_info*)realloc(region_info, region_info->argsz);
+      MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_REGION_INFO, region_info) == 0);
+    }
+    if (!region_info->size) {
+      free(region_info);
+      continue;
+    }
+    if (region_info->index >= MAX_VFIO_REGIONS) {
+      MV_WARN("region index %d exceeds max regions %d", region_info->index, MAX_VFIO_REGIONS);
+      free(region_info);
+      continue;
+    }
+    
+    auto &region = regions_[region_info->index];
+    region.index = region_info->index;
+    region.flags = region_info->flags;
+    region.offset = region_info->offset;
+    region.size = region_info->size;
+
+    if ((region_info->flags & VFIO_REGION_INFO_FLAG_CAPS) && region_info->cap_offset) {
+      auto ptr = (uint8_t*)region_info;
+      auto cap_header = (vfio_info_cap_header*)(ptr + region_info->cap_offset);
+      while (true) {
+        if (cap_header->id == VFIO_REGION_INFO_CAP_SPARSE_MMAP) {
+          auto cap_mmap = (vfio_region_info_cap_sparse_mmap*)cap_header;
+          for (uint j = 0; j < cap_mmap->nr_areas; j++) {
+            region.mmap_areas.push_back({
+              .offset = cap_mmap->areas[j].offset,
+              .size = cap_mmap->areas[j].size,
+              .mmap = nullptr
+            });
+          }
+        } else if (cap_header->id == VFIO_REGION_INFO_CAP_TYPE) {
+          auto cap_type = (vfio_region_info_cap_type*)cap_header;
+          region.type = cap_type->type;
+          region.subtype = cap_type->subtype;
+        } else if (cap_header->id == VFIO_REGION_INFO_CAP_MSIX_MAPPABLE) {
+          msix_table_mapped_ = true;
+        } else {
+          MV_WARN("unhandled region cap id=%d", cap_header->id);
+        }
+        if (cap_header->next) {
+          cap_header = (vfio_info_cap_header*)(ptr + cap_header->next);
+        } else {
+          break;
+        }
+      }
+    }
+    if (debug_) {
+      MV_LOG("region index=%u flags=0x%x size=0x%lx type=%d subtype=%d sparse=%lu",
+        region.index, region.flags, region.size, region.type, region.subtype, region.mmap_areas.size());
+    }
+    free(region_info);
+
+    /* map regions */
+    if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
+      int protect = 0;
+      if (region.flags & VFIO_REGION_INFO_FLAG_READ)
+        protect |= PROT_READ;
+      if (region.flags & VFIO_REGION_INFO_FLAG_WRITE)
+        protect |= PROT_WRITE;
+      if (region.mmap_areas.empty()) {
+        region.mmap = mmap(nullptr, region.size, protect, MAP_SHARED, device_fd_, region.offset);
+      } else {
+        for (auto &area : region.mmap_areas) {
+          area.mmap = mmap(nullptr, area.size, protect, MAP_SHARED, device_fd_, region.offset + area.offset);
+          if (area.mmap == MAP_FAILED) {
+            MV_PANIC("failed to map region %d, area offset=0x%lx size=0x%lx", index, area.offset, area.size);
+          }
+        }
+      }
+    }
+  }
+
+  /* find vfio interrupts */
+  for (auto &interrupt : interrupts_) {
+    interrupt.event_fd = -1;
+  }
+  for (uint index = 0; index < device_info_.num_irqs; index++) {
+    vfio_irq_info irq_info;
+    bzero(&irq_info, sizeof(irq_info));
+    irq_info.argsz = sizeof(irq_info);
+    irq_info.index = index;
+    auto ret = ioctl(device_fd_, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
+    if (irq_info.count == 0) {
+      continue;
+    }
+    if (debug_) {
+      MV_LOG("irq index=%d size=%u flags=%x count=%d ret=%d", index,
+        irq_info.argsz, irq_info.flags, irq_info.count, ret);
+    }
+
+    /* check if interrupt flags satisfy our requirements */
+    if (index == VFIO_PCI_INTX_IRQ_INDEX) {
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_MASKABLE);
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_AUTOMASKED);
+    } else if (index == VFIO_PCI_MSI_IRQ_INDEX || index == VFIO_PCI_MSIX_IRQ_INDEX) {
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
+      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_NORESIZE);
+    }
+  }
 }
 
 void VfioPci::SetupPciConfiguration() {
@@ -111,9 +326,6 @@ void VfioPci::SetupPciConfiguration() {
   if (ret < (int)config_size) {
     MV_PANIC("failed to read device config space, ret=%d", ret);
   }
-  /* Multifunction is not supported yet */
-  pci_header_.header_type &= ~PCI_MULTI_FUNCTION;
-  MV_ASSERT(pci_header_.header_type == PCI_HEADER_TYPE_NORMAL);
 
   /* Setup bars */
   for (uint8_t i = 0; i < VFIO_PCI_ROM_REGION_INDEX; i++) {
@@ -122,18 +334,31 @@ void VfioPci::SetupPciConfiguration() {
       continue;
     auto bar = pci_header_.bars[i];
     if (bar & PCI_BASE_ADDRESS_SPACE_IO) {
-      AddPciBar(i, bar_region.size, kIoResourceTypePio);
+      SetupPciBar(i, bar_region.size, kIoResourceTypePio);
     } else {
-      /* 64bit bar is not supported yet */
       if (bar & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-        bar &= ~PCI_BASE_ADDRESS_MEM_TYPE_64;
+        SetupPciBar64(i, bar_region.size, kIoResourceTypeMmio);
+      } else {
+        SetupPciBar(i, bar_region.size, kIoResourceTypeMmio);
       }
-      AddPciBar(i, bar_region.size, kIoResourceTypeMmio);
     }
+  }
+
+  /* Setup ROM bar */
+  auto &rom_region = regions_[VFIO_PCI_ROM_REGION_INDEX];
+  if (rom_region.size) {
+    if (pci_rom_.data) {
+      free(pci_rom_.data);
+    }
+    pci_rom_.data = valloc(rom_region.size);
+    pci_rom_.size = rom_region.size;
+    ret = pread(device_fd_, pci_rom_.data, rom_region.size, rom_region.offset);
+    MV_ASSERT(ret == (int)rom_region.size);
   }
 
   /* Setup capabilites */
   if (pci_header_.status & PCI_STATUS_CAP_LIST) {
+    PciCapabilityHeader* last_cap = nullptr;
     uint pos = pci_header_.capability & ~3;
     while (pos) {
       auto cap = (PciCapabilityHeader*)(pci_header_.data + pos);
@@ -169,20 +394,30 @@ void VfioPci::SetupPciConfiguration() {
         msi_config_.msix_space_size = sizeof(msi_config_.msix_table);
         msi_config_.msix_space_offset = msi_config_.msix->table_offset & PCI_MSIX_TABLE_OFFSET;
         msi_config_.msix_bar = msi_config_.msix->table_offset & PCI_MSIX_TABLE_BIR;
-        MV_ASSERT(msi_config_.msix_bar < sizeof(pci_header_.bars) / sizeof(uint32_t));
         break;
       }
       case PCI_CAP_ID_VNDR:
         /* ignore vendor specific data */
         break;
+      case PCI_CAP_ID_PM:
+        /* ignore power management */
+        break;
       case PCI_CAP_ID_EXP:
         is_pcie_ = true;
-        MV_HEXDUMP("unsupported PCI Express", pci_header_.data, PCI_DEVICE_CONFIG_SIZE);
+        /* skip pcie capability */
+        if (last_cap) {
+          last_cap->next = cap->next;
+        } else {
+          pci_header_.capability = cap->next;
+        }
         break;
       default:
-        MV_ERROR("unhandled capability=0x%x", cap->type);
+        if (debug_) {
+          MV_WARN("unhandled capability=0x%x", cap->type);
+        }
         break;
       }
+      last_cap = cap;
       pos = cap->next;
     }
   }
@@ -197,288 +432,6 @@ void VfioPci::SetupGfxPlane() {
   auto ret = ioctl(device_fd_, VFIO_DEVICE_QUERY_GFX_PLANE, &gfx_plane_info);
   if (ret == 0) {
     /* Register GFX plane */
-  }
-}
-
-void VfioPci::MapDmaPages(const MemorySlot* slot) {
-  vfio_iommu_type1_dma_map dma_map = {
-    .argsz = sizeof(dma_map),
-    .flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE,
-    .vaddr = slot->hva,
-    .iova = slot->begin,
-    .size = slot->end - slot->begin
-  };
-  if (ioctl(container_fd_, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
-    MV_PANIC("failed to map vaddr=0x%lx size=0x%lx", dma_map.iova, dma_map.size);
-  }
-
-  // record dma map for network migration
-  iommu_dma_maps_[slot] = dma_map;
-}
-
-void VfioPci::UnmapDmaPages(const MemorySlot* slot) {
-  vfio_iommu_type1_dma_unmap dma_ummap = {
-    .argsz = sizeof(dma_ummap),
-    .flags = 0,
-    .iova = slot->begin,
-    .size = slot->end - slot->begin
-  };
-  if (ioctl(container_fd_, VFIO_IOMMU_UNMAP_DMA, &dma_ummap) < 0) {
-    MV_PANIC("failed to unmap vaddr=0x%lx size=0x%lx", dma_ummap.iova, dma_ummap.size);
-  }
-  iommu_dma_maps_.erase(slot);
-}
-
-void VfioPci::SetupDmaMaps() {
-  auto mm = manager_->machine()->memory_manager();
-
-  /* Map all current slots */
-  for (auto slot : mm->GetMemoryFlatView()) {
-    if (slot->type == kMemoryTypeRam && 0 == strcmp("System", slot->region->name)) {
-      MapDmaPages(slot);
-    }
-  }
-
-  /* Add memory listener to keep DMA maps synchronized */
-  memory_listener_ = mm->RegisterMemoryListener([this](auto slot, bool unmap) {
-    if (slot->type == kMemoryTypeRam && 0 == strcmp("System", slot->region->name)) {
-      if (unmap) {
-        UnmapDmaPages(slot);
-      } else {
-        MapDmaPages(slot);
-      }
-    }
-  });
-
-  /* Add dirty memory listener to track memory in DMA */
-  dirty_memory_listener_ = mm->RegisterDirtyMemoryListener([this](const DirtyMemoryCommand command) {
-    std::vector<struct DirtyMemoryBitmap> bitmaps;
-    switch (command) {
-      case kGetDirtyMemoryBitmap: {
-        auto dirty_buffer_size = sizeof(vfio_iommu_type1_dirty_bitmap) + sizeof(vfio_iommu_type1_dirty_bitmap_get);
-        uint8_t dirty_buffer[dirty_buffer_size];
-
-        auto dirty_bitmap = (struct vfio_iommu_type1_dirty_bitmap*)dirty_buffer;
-        auto dirty_bitmap_get = (struct vfio_iommu_type1_dirty_bitmap_get*)dirty_bitmap->data;
-
-        dirty_bitmap->argsz = dirty_buffer_size;
-        dirty_bitmap->flags = VFIO_IOMMU_DIRTY_PAGES_FLAG_GET_BITMAP;
-
-        for (auto it = iommu_dma_maps_.begin(); it != iommu_dma_maps_.end(); ++it) {
-          size_t bitmap_size = ALIGN(it->second.size / PAGE_SIZE, 64) / 8;
-          std::string bitmap(bitmap_size, '\0');
-
-          // get dirty memory bitmap for this iommu region from vfio
-          dirty_bitmap_get->iova = it->second.iova;
-          dirty_bitmap_get->size = it->second.size;
-          dirty_bitmap_get->bitmap = {
-            .pgsize = PAGE_SIZE,
-            .size = bitmap_size,
-            .data = (__u64*)bitmap.data()
-          };
-          MV_ASSERT(ioctl(container_fd_, VFIO_IOMMU_DIRTY_PAGES, dirty_bitmap) == 0);
-
-          // save it to return for network migration
-          bitmaps.push_back({
-            .region = {
-              .hva = it->second.vaddr,
-              .begin = it->second.iova,
-              .end = it->second.iova + it->second.size
-            },
-            .data = std::move(bitmap)
-          });
-        }
-        break;
-      }
-      case kStopTrackingDirtyMemory:
-      case kStartTrackingDirtyMemory: {
-        struct vfio_iommu_type1_dirty_bitmap dirty_bitmap = {
-          .argsz = sizeof(dirty_bitmap),
-          .flags = (uint32_t)(command == kStartTrackingDirtyMemory ? 
-            VFIO_IOMMU_DIRTY_PAGES_FLAG_START : VFIO_IOMMU_DIRTY_PAGES_FLAG_STOP)
-        };
-        MV_ASSERT(ioctl(container_fd_, VFIO_IOMMU_DIRTY_PAGES, &dirty_bitmap) == 0);
-        break;
-      }
-      default:
-        MV_PANIC("unknown command");
-        break;
-    }
-    return bitmaps;
-  });
-}
-
-void VfioPci::SetupVfioGroup() {
-  /* Get VFIO group id from device path */
-  char path[1024];
-  auto len = readlink((sysfs_path_ + "/iommu_group").c_str(), path, 1024);
-  if (len < 0) {
-    MV_PANIC("failed to read iommu_group");
-  }
-  path[len] = 0;
-  if (sscanf(basename(path), "%d", &group_id_) != 1) {
-    MV_PANIC("failed to get group id from %s", path);
-  }
-  
-  /* Open group */
-  sprintf(path, "/dev/vfio/%d", group_id_);
-  group_fd_ = open(path, O_RDWR);
-  if (group_fd_ < 0) {
-    MV_PANIC("failed to open %s", path);
-  }
-
-  /* Check if it is OK */
-  vfio_group_status status = { .argsz = sizeof(status), .flags = 0 };
-  MV_ASSERT(ioctl(group_fd_, VFIO_GROUP_GET_STATUS, &status) == 0);
-  if (!(status.flags & VFIO_GROUP_FLAGS_VIABLE)) {
-    MV_PANIC("VFIO group %d is not viable", group_id_);
-  }
-}
-
-void VfioPci::SetupVfioContainer() {
-  /* Create container */
-  container_fd_ = open("/dev/vfio/vfio", O_RDWR);
-  if (container_fd_ < 0) {
-    MV_PANIC("failed to open /dev/vfio/vfio");
-  }
-
-  /* Here use type1 iommu */
-  MV_ASSERT(ioctl(container_fd_, VFIO_GET_API_VERSION) == VFIO_API_VERSION);
-  MV_ASSERT(ioctl(container_fd_, VFIO_CHECK_EXTENSION, VFIO_TYPE1v2_IOMMU));
-  MV_ASSERT(ioctl(group_fd_, VFIO_GROUP_SET_CONTAINER, &container_fd_) == 0);
-  MV_ASSERT(ioctl(container_fd_, VFIO_SET_IOMMU, VFIO_TYPE1v2_IOMMU) == 0);
-  
-  /* Get IOMMU type1 info */
-  size_t argsz = sizeof(vfio_iommu_type1_info);
-  auto info = (vfio_iommu_type1_info*)malloc(argsz);
-  info->argsz = argsz;
-  MV_ASSERT(ioctl(container_fd_, VFIO_IOMMU_GET_INFO, info) == 0);
-  if (info->argsz != argsz) {
-    info = (vfio_iommu_type1_info*)realloc(info, info->argsz);
-    MV_ASSERT(ioctl(container_fd_, VFIO_IOMMU_GET_INFO, info) == 0);
-  }
-
-  /* Enumerate capabilities, currently migration capability */
-  if (info->flags & VFIO_IOMMU_INFO_CAPS && info->cap_offset) {
-    uint8_t* ptr = (uint8_t*)info;
-    auto cap_header = (vfio_info_cap_header*)(ptr + info->cap_offset);
-    while (true) {
-      if (cap_header->id == VFIO_IOMMU_TYPE1_INFO_CAP_MIGRATION) {
-        auto cap_migration = (vfio_iommu_type1_info_cap_migration*)cap_header;
-        /* page size should support 4KB */
-        MV_ASSERT(cap_migration->pgsize_bitmap & PAGE_SIZE);
-      }
-      if (cap_header->next) {
-        cap_header = (vfio_info_cap_header*)(ptr + cap_header->next);
-      } else {
-        break;
-      }
-    }
-  }
-  free(info);
-  
-  /* Add iommu group to KVM */
-  manager_->RegisterVfioGroup(group_fd_);
-}
-
-void VfioPci::SetupVfioDevice() {
-  device_name_ = basename(sysfs_path_.c_str());
-  device_fd_ = ioctl(group_fd_, VFIO_GROUP_GET_DEVICE_FD, device_name_.c_str());
- 
-  /* get device info */
-  bzero(&device_info_, sizeof(device_info_));
-  device_info_.argsz = sizeof(device_info_);
-  MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_INFO, &device_info_) == 0);
-  
-  MV_ASSERT(device_info_.flags & VFIO_DEVICE_FLAGS_RESET);
-  MV_ASSERT(device_info_.flags & VFIO_DEVICE_FLAGS_PCI);
-  MV_ASSERT(device_info_.num_regions > VFIO_PCI_CONFIG_REGION_INDEX);
-  MV_ASSERT(device_info_.num_irqs > VFIO_PCI_MSIX_IRQ_INDEX);
-
-  /* find vfio regions */
-  bzero(&regions_, sizeof(regions_));
-  for (uint index = VFIO_PCI_BAR0_REGION_INDEX; index < device_info_.num_regions; index++) {
-    auto argsz = sizeof(vfio_region_info);
-    auto region_info = (vfio_region_info*)malloc(argsz);
-    bzero(region_info, argsz);
-    region_info->argsz = argsz;
-    region_info->index = index;
-
-    MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_REGION_INFO, region_info) == 0);
-    if (region_info->argsz != argsz) {
-      region_info = (vfio_region_info*)realloc(region_info, region_info->argsz);
-      MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_GET_REGION_INFO, region_info) == 0);
-    }
-    if (!region_info->size) {
-      free(region_info);
-      continue;
-    }
-    if (region_info->index >= MAX_VFIO_REGIONS) {
-      free(region_info);
-      continue;
-    }
-    
-    auto &region = regions_[region_info->index];
-    region.index = region_info->index;
-    region.flags = region_info->flags;
-    region.offset = region_info->offset;
-    region.size = region_info->size;
-
-    if ((region_info->flags & VFIO_REGION_INFO_FLAG_CAPS) && region_info->cap_offset) {
-      auto ptr = (uint8_t*)region_info;
-      auto cap_header = (vfio_info_cap_header*)(ptr + region_info->cap_offset);
-      while (true) {
-        if (cap_header->id == VFIO_REGION_INFO_CAP_SPARSE_MMAP) {
-          auto cap_mmap = (vfio_region_info_cap_sparse_mmap*)cap_header;
-          for (uint j = 0; j < cap_mmap->nr_areas; j++) {
-            region.mmap_areas.push_back({
-              .offset = cap_mmap->areas[j].offset,
-              .size = cap_mmap->areas[j].size,
-              .mmap = nullptr
-            });
-          }
-        } else if (cap_header->id == VFIO_REGION_INFO_CAP_TYPE) {
-          auto cap_type = (vfio_region_info_cap_type*)cap_header;
-          region.type = cap_type->type;
-          region.subtype = cap_type->subtype;
-        }
-        if (cap_header->next) {
-          cap_header = (vfio_info_cap_header*)(ptr + cap_header->next);
-        } else {
-          break;
-        }
-      }
-    }
-    if (debug_) {
-      MV_LOG("region index=%u flags=0x%x size=0x%lx type=%d subtype=%d sparse=%lu",
-        region.index, region.flags, region.size, region.type, region.subtype, region.mmap_areas.size());
-    }
-    free(region_info);
-  }
-
-  /* find vfio interrupts */
-  for (auto &interrupt : interrupts_) {
-    interrupt.event_fd = -1;
-  }
-  for (uint index = 0; index < device_info_.num_irqs; index++) {
-    vfio_irq_info irq_info;
-    bzero(&irq_info, sizeof(irq_info));
-    irq_info.argsz = sizeof(irq_info);
-    irq_info.index = index;
-    auto ret = ioctl(device_fd_, VFIO_DEVICE_GET_IRQ_INFO, &irq_info);
-    if (debug_) {
-      MV_LOG("irq index=%d size=%u flags=%x count=%d ret=%d", index,
-        irq_info.argsz, irq_info.flags, irq_info.count, ret);
-    }
-
-    /* FIXME: currently my mdev only uses one IRQ */
-    if (index == VFIO_PCI_MSI_IRQ_INDEX) {
-      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
-      MV_ASSERT(irq_info.count == 1 || irq_info.count == 3);
-    } else if (index == VFIO_PCI_MSIX_IRQ_INDEX) {
-      MV_ASSERT(irq_info.flags & VFIO_IRQ_INFO_EVENTFD);
-      MV_ASSERT(irq_info.count == 1 || irq_info.count == 3);
-    }
   }
 }
 
@@ -502,42 +455,63 @@ void VfioPci::SetupMigraionInfo() {
   });
 }
 
+void VfioPci::WritePciCommand(uint16_t command) {
+  uint16_t old_comand = pci_header_.command;
+  PciDevice::WritePciCommand(command);
+
+  if (active_irq_index_ > VFIO_PCI_INTX_IRQ_INDEX) {
+    return;
+  }
+  if ((old_comand ^ command) & PCI_COMMAND_INTX_DISABLE) {
+    if (!(command & PCI_COMMAND_INTX_DISABLE)) {
+      EnableIntxInterrupt();
+    } else {
+      DisableAllInterrupts();
+    }
+  }
+}
+
 void VfioPci::MapBarRegion(uint8_t index) {
-  auto &bar = pci_bars_[index];
+  uint64_t address;
+  if (pci_bars_[index].special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+    address = pci_header_.bars[index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
+    address <<= 32;
+    address |= pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  } else {
+    address = pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  }
+  uint64_t length = pci_bars_[index].size;
+
   auto &region = regions_[index];
-  int protect = 0;
-  if (region.flags & VFIO_REGION_INFO_FLAG_READ)
-    protect |= PROT_READ;
-  if (region.flags & VFIO_REGION_INFO_FLAG_WRITE)
-    protect |= PROT_WRITE;
   if (region.mmap_areas.empty()) {
-    bar.host_memory = mmap(nullptr, region.size, protect, MAP_SHARED, device_fd_, region.offset);
-    AddIoResource(kIoResourceTypeRam, bar.address, bar.size, "VFIO BAR RAM", bar.host_memory);
+    AddIoResource(kIoResourceTypeRam, address, length, "VFIO BAR RAM", region.mmap);
   } else {
     /* The MMIO region is overlapped by the mmap areas */
-    AddIoResource(kIoResourceTypeMmio, bar.address, bar.size, "VFIO BAR MMIO");
+    AddIoResource(kIoResourceTypeMmio, address, length, "VFIO BAR MMIO");
     for (auto &area : region.mmap_areas) {
-      area.mmap = mmap(nullptr, area.size, protect, MAP_SHARED, device_fd_, region.offset + area.offset);
-      if (area.mmap == MAP_FAILED) {
-        MV_PANIC("failed to map region %d, area offset=0x%lx size=0x%lx", index, area.offset, area.size);
-      }
-      AddIoResource(kIoResourceTypeRam, bar.address + area.offset, area.size, "VFIO BAR RAM", area.mmap);
+      AddIoResource(kIoResourceTypeRam, address + area.offset, area.size, "VFIO BAR RAM", area.mmap);
     }
   }
 }
 
 void VfioPci::UnmapBarRegion(uint8_t index) {
-  auto &bar = pci_bars_[index];
+  uint64_t address;
+  if (pci_bars_[index].special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+    address = pci_header_.bars[index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
+    address <<= 32;
+    address |= pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  } else {
+    address = pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
+  }
+
   auto &region = regions_[index];
   if (region.mmap_areas.empty()) {
-    RemoveIoResource(kIoResourceTypeRam, bar.address);
-    munmap(bar.host_memory, region.size);
+    RemoveIoResource(kIoResourceTypeRam, address);
   } else {
     for (auto &area : region.mmap_areas) {
-      RemoveIoResource(kIoResourceTypeRam, bar.address + area.offset);
-      munmap(area.mmap, area.size);
+      RemoveIoResource(kIoResourceTypeRam, address + area.offset);
     }
-    RemoveIoResource(kIoResourceTypeMmio, bar.address);
+    RemoveIoResource(kIoResourceTypeMmio, address);
   }
 }
 
@@ -557,24 +531,13 @@ bool VfioPci::DeactivatePciBar(uint8_t index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-    MV_ASSERT(bar.active && bar.type == kIoResourceTypeMmio);
-    UnmapBarRegion(index);
-    bar.active = false;
+    if (bar.active) {
+      UnmapBarRegion(index);
+      bar.active = false;
+    }
     return true;
   }
   return PciDevice::DeactivatePciBar(index);
-}
-
-ssize_t VfioPci::ReadRegion(uint8_t index, uint64_t offset, void* data, uint32_t length) {
-  MV_ASSERT(index < MAX_VFIO_REGIONS);
-  auto &region = regions_[index];
-  return pread(device_fd_, data, length, region.offset + offset);
-}
-
-ssize_t VfioPci::WriteRegion(uint8_t index, uint64_t offset, void* data, uint32_t length) {
-  MV_ASSERT(index < MAX_VFIO_REGIONS);
-  auto &region = regions_[index];
-  return pwrite(device_fd_, data, length, region.offset + offset);
 }
 
 int VfioPci::FindRegion(uint32_t type, uint32_t subtype) {
@@ -589,13 +552,15 @@ int VfioPci::FindRegion(uint32_t type, uint32_t subtype) {
 void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (pci_bars_[i].address == resource->base) {
-      WriteRegion(i, offset, data, size);
+      auto ret = pwrite(device_fd_, data, size, regions_[i].offset + offset);
+      if (ret != (ssize_t)size) {
+        MV_PANIC("failed to write VFIO device, bar=%d offset=0x%x size=0x%x data=0x%x", i, offset, size, *(uint32_t*)data);
+      }
+
       if (msi_config_.is_msix && i == msi_config_.msix_bar) {
         // we need to continue to set msix table
         break;
-      } 
-
-      // just return
+      }
       return;
     }
   }
@@ -605,55 +570,92 @@ void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, 
 void VfioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (pci_bars_[i].address == resource->base) {
-      ReadRegion(i, offset, data, size);
+      auto ret = pread(device_fd_, data, size, regions_[i].offset + offset);
+      if (ret != (ssize_t)size) {
+        MV_PANIC("failed to read VFIO device, bar=%d offset=0x%x size=0x%x", i, offset, size);
+      }
       return;
     }
   }
   PciDevice::Read(resource, offset, data, size);
 }
 
-void VfioPci::EnableIRQ(uint32_t index, uint32_t vector, int *fds, uint8_t count) {
+void VfioPci::SetInterruptEventFds(uint32_t index, uint32_t vector, int action, int *fds, uint8_t count) {
   uint8_t buffer[sizeof(vfio_irq_set) + sizeof(int) * count];
   auto irq_set = (vfio_irq_set *)buffer;
   irq_set->argsz = sizeof(vfio_irq_set) + sizeof(int) * count;
-  irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER;
+  irq_set->flags = VFIO_IRQ_SET_DATA_EVENTFD | action;
   irq_set->index = index;
   irq_set->start = vector;
   irq_set->count = count;
+  if (fds == nullptr) {
+    irq_set->flags = VFIO_IRQ_SET_DATA_NONE | action;
+  }
   memcpy(irq_set->data, fds, sizeof(int) * count);
-  MV_ASSERT(ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set) == 0);
+  auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, irq_set);
+  if (debug_) {
+    MV_LOG("%s set irq event fds, index=%d vector=%d action=%d count=%d ret=%d", device_name_.c_str(),
+      index, vector, action, count, ret);
+  }
+}
+
+void VfioPci::SetInterruptMasked(uint32_t index, bool masked) {
+  vfio_irq_set irq_set = {
+    .argsz = sizeof(vfio_irq_set),
+    .flags = VFIO_IRQ_SET_DATA_NONE,
+    .index = index,
+    .start = 0,
+    .count = 1
+  };
+  if (masked) {
+    irq_set.flags |= VFIO_IRQ_SET_ACTION_MASK;
+  } else {
+    irq_set.flags |= VFIO_IRQ_SET_ACTION_UNMASK;
+  }
+  auto ret = ioctl(device_fd_, VFIO_DEVICE_SET_IRQS, &irq_set);
+  if (debug_) {
+    MV_LOG("%s set irq masked, index=%d masked=%d ret=%d", device_name_.c_str(), index, masked, ret);
+  }
 }
 
 void VfioPci::UpdateMsiRoutes() {
-  uint nr_vectors = 0;
-  uint16_t control = 0;
-  if (msi_config_.is_msix) {
-    control = msi_config_.msix->control;
-    nr_vectors = msi_config_.msix_table_size;
-    msi_config_.enabled = control & PCI_MSIX_FLAGS_ENABLE;
-  } else {
-    control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
-    nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
-    msi_config_.enabled = control & PCI_MSI_FLAGS_ENABLE;
+  DisableAllInterrupts();
+
+  if (!msi_config_.enabled) {
+    return;
   }
 
-  if (msi_config_.enabled) {
-    int fds[nr_vectors];
-    memset(fds, -1, sizeof(fds));
-    EnableIRQ(msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX, 0, fds, nr_vectors);
+  active_irq_index_ = msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX;
+  uint nr_vectors = 0;
+  if (msi_config_.is_msix) {
+    nr_vectors = msi_config_.msix_table_size;
+  } else {
+    uint16_t control =  msi_config_.is_64bit ? msi_config_.msi64->control : msi_config_.msi32->control;
+    nr_vectors = 1 << ((control & PCI_MSI_FLAGS_QSIZE) >> 4);
+  }
+
+  int fds[nr_vectors];
+  for (uint i = 0; i < nr_vectors; i++) {
+    fds[i] = -1;
   }
 
   for (uint vector = 0; vector < nr_vectors; vector++) {
     auto &interrupt = interrupts_[vector];
-    if (interrupt.event_fd == -1) {
-      interrupt.event_fd = eventfd(0, 0);
-    }
+    MV_ASSERT(interrupt.gsi == -1 && interrupt.event_fd == -1);
+    interrupt.event_fd = eventfd(0, 0);
+    fds[vector] = interrupt.event_fd;
   
     uint64_t msi_address;
     uint32_t msi_data;
     if (msi_config_.is_msix) {
-      msi_address = ((uint64_t)msi_config_.msix_table[vector].message.address_hi << 32) | msi_config_.msix_table[vector].message.address_lo;
-      msi_data = msi_config_.msix_table[vector].message.data;
+      auto entries = msi_config_.msix_table;
+      if (msix_table_mapped_) {
+        /* If MSIX table is mmaped, no MMIO write is handled and the table is not updated,
+         * so we need to read the table from the mmaped region */
+        entries = (MsiXTableEntry*)((uint8_t*)regions_[msi_config_.msix_bar].mmap + msi_config_.msix_space_offset);
+      }
+      msi_address = ((uint64_t)entries[vector].message.address_hi << 32) | entries[vector].message.address_lo;
+      msi_data = entries[vector].message.data;
     } else if (msi_config_.is_64bit) {
       msi_address = ((uint64_t)msi_config_.msi64->address1 << 32) | msi_config_.msi64->address0;
       msi_data = msi_config_.msi64->data;
@@ -663,50 +665,17 @@ void VfioPci::UpdateMsiRoutes() {
     }
 
     if (debug_) {
-      MV_LOG("msi_address=0x%lx msi_data=%d vector=%d", msi_address, msi_data, vector);
+      MV_LOG("%s set msi vector=%d address=0x%lx data=0x%x", device_name_.c_str(), vector, msi_address, msi_data);
     }
-
-    if (msi_config_.enabled && msi_address) {
-      if (interrupt.gsi == -1) {
-        interrupt.gsi = manager_->AddMsiRoute(msi_address, msi_data, interrupt.event_fd);
-
-        // set irq with KVM_IRQFD
-        EnableIRQ(msi_config_.is_msix ? VFIO_PCI_MSIX_IRQ_INDEX : VFIO_PCI_MSI_IRQ_INDEX, vector, &interrupt.event_fd, 1);
-      } else {
-        manager_->UpdateMsiRoute(interrupt.gsi, msi_address, msi_data, interrupt.event_fd);
-      }
-    } else {
-      if (interrupt.gsi != -1) {
-        manager_->UpdateMsiRoute(interrupt.gsi, 0, 0, interrupt.event_fd);
-        interrupt.gsi = -1;
-      }
-    }
+    interrupt.gsi = manager_->AddMsiNotifier(msi_address, msi_data, interrupt.event_fd);
   }
-}
-
-void VfioPci::WritePciCommand(uint16_t new_command) {
-  int toggle_io = (pci_header_.command ^ new_command) & PCI_COMMAND_IO;
-  int toggle_mem = (pci_header_.command ^ new_command) & PCI_COMMAND_MEMORY;
-
-  for (int i = 0; i < PCI_BAR_NUMS; i++) {
-    auto &bar = pci_bars_[i];
-    if (!bar.address || bar.active) {
-      continue;
-    }
-
-    // DeactivatePciBar only can be called in vfio-pci Disconnect routine
-    if (toggle_io && bar.type == kIoResourceTypePio && (new_command & PCI_COMMAND_IO)) {
-      ActivatePciBar(i);
-    } else if (toggle_mem && bar.type != kIoResourceTypePio && (new_command & PCI_COMMAND_MEMORY)) {
-      ActivatePciBar(i);
-    }
-  }
-  pci_header_.command = new_command;
+  SetInterruptEventFds(active_irq_index_, 0, VFIO_IRQ_SET_ACTION_TRIGGER, fds, nr_vectors);
 }
 
 void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   MV_ASSERT(length <= 4);
-  MV_ASSERT(offset + length <= PCIE_DEVICE_CONFIG_SIZE);
+  MV_ASSERT(offset + length <= pci_config_size());
+
   auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
 
   /* write the VFIO device, check if msi */
@@ -726,12 +695,22 @@ void VfioPci::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t lengt
 }
 
 void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
-  MV_ASSERT(offset + length <= PCIE_DEVICE_CONFIG_SIZE);
+  MV_ASSERT(offset + length <= pci_config_size());
 
-  /* read from VFIO device */
-  auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
-  auto ret = pread(device_fd_, pci_header_.data + offset, length, config_region.offset + offset);
-  MV_ASSERT(ret == (ssize_t)length);
+  /* We want to emulate the capability fields (skip PCIe cap)
+   * Disable PCI-e capability for NVIDIA GPUs to avoid error code 10
+   */
+  if (offset + length <= 0x40) {
+    auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
+    auto ret = pread(device_fd_, pci_header_.data + offset, length, config_region.offset + offset);
+    MV_ASSERT(ret == (ssize_t)length);
+  }
+
+  if (multi_function_) {
+    pci_header_.header_type = 0x80;
+  } else {
+    pci_header_.header_type = 0;
+  }
 
   PciDevice::ReadPciConfigSpace(offset, data, length);
 }
@@ -747,13 +726,8 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
     return false;
   }
 
-  /* Map buffer for saving */
+  /* buffer for saving */
   auto& area = migration_.region->mmap_areas.front();
-  void* buffer = mmap(nullptr, area.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-    device_fd_, migration_.region->offset + area.offset);
-  if (buffer == MAP_FAILED) {
-    MV_PANIC("failed to map area offset=0x%lx size=0x%lx", area.offset, area.size);
-  }
 
   SetMigrationDeviceState(VFIO_DEVICE_STATE_SAVING);
   int fd = writer->BeginWrite("DATA");
@@ -787,14 +761,14 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
       data_size = pending_bytes;
     
     if (dynamic_cast<MigrationNetworkWriter*>(writer)) {
-      if (writer->WriteRaw("VFIO_DATA", buffer, data_size)) {
+      if (writer->WriteRaw("VFIO_DATA", area.mmap, data_size)) {
         ret = data_size;
       } else {
         MV_ERROR("send vfio data error");
         break;
       }
     } else {
-      ret = write(fd, buffer, data_size);
+      ret = write(fd, area.mmap, data_size);
     }
     MV_ASSERT(ret == (ssize_t)data_size);
   }
@@ -802,7 +776,6 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
   writer->EndWrite("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
   
-  munmap(buffer, area.size);
   return success && PciDevice::SaveState(writer);
 }
 
@@ -819,16 +792,14 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   }
 
   /* Update MSI routes */
-  UpdateMsiRoutes();
-
-  /* Map buffer for restoring */
-  auto& area = migration_.region->mmap_areas.front();
-  void* buffer = mmap(nullptr, area.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-    device_fd_, migration_.region->offset + area.offset);
-  if (buffer == MAP_FAILED) {
-    MV_PANIC("failed to map area offset=0x%lx size=0x%lx", area.offset, area.size);
+  if (msi_config_.enabled) {
+    UpdateMsiRoutes();
+  } else {
+    EnableIntxInterrupt();
   }
 
+  /* buffer for restoring */
+  auto& area = migration_.region->mmap_areas.front();
   SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
   int fd = reader->BeginRead("DATA");
 
@@ -843,9 +814,9 @@ bool VfioPci::LoadState(MigrationReader* reader) {
     
     ssize_t ret;
     if (dynamic_cast<MigrationNetworkReader*>(reader)) {
-      ret = reader->ReadRawWithLimit("VFIO_DATA", buffer, area.size);
+      ret = reader->ReadRawWithLimit("VFIO_DATA", area.mmap, area.size);
     } else {
-      ret = read(fd, buffer, area.size);
+      ret = read(fd, area.mmap, area.size);
     }
 
     if (ret > 0) {
@@ -861,7 +832,6 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   reader->EndRead("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
   
-  munmap(buffer, area.size);
   return success;
 }
 

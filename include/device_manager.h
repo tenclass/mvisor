@@ -81,8 +81,6 @@ class DeviceManager {
   void RegisterDevice(Device* device);
   void UnregisterDevice(Device* device);
   void ResetDevices();
-  void RegisterVfioGroup(int group_fd);
-  void UnregisterVfioGroup(int group_fd);
 
   void RegisterIoHandler(Device* device, const IoResource* resource);
   void UnregisterIoHandler(Device* device, const IoResource* resource);
@@ -110,8 +108,9 @@ class DeviceManager {
   void SetGsiLevel(uint gsi, uint level);
   void SetPciIrqLevel(PciDevice* pci, uint level);
   void SignalMsi(uint64_t address, uint32_t data);
-  int AddMsiRoute(uint64_t address, uint32_t data, int trigger_fd = -1);
-  void UpdateMsiRoute(int gsi, uint64_t address, uint32_t data, int trigger_fd = -1);
+  int AddMsiNotifier(uint64_t address, uint32_t data, int trigger_fd = -1);
+  void RemoveMsiNotifier(int gsi, int trigger_fd);
+  void SetPciIrqNotifier(PciDevice* pci, int trigger_fd, int unmask_fd = -1, bool assign = true);
 
   /* Called by PIIX3 or ICH9 LPC */
   void set_pci_irq_translator(PciIrqTranslator translator) { pci_irq_translator_ = translator; }
@@ -136,7 +135,6 @@ class DeviceManager {
   std::vector<kvm_irq_routing_entry>  gsi_routing_table_;
   int                                 next_gsi_ = 0;
   IoAccounting                        io_accounting_;
-  int                                 vfio_kvm_device_fd_ = -1;
   kvm_coalesced_mmio_ring*            coalesced_mmio_ring_ = nullptr;
   std::recursive_mutex                coalesced_mmio_ring_mutex_;
   PciIrqTranslator                    pci_irq_translator_;

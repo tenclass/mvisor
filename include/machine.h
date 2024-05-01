@@ -35,6 +35,7 @@
 #include "io_thread.h"
 #include "memory_manager.h"
 #include "device_manager.h"
+#include "vfio_manager.h"
 #include "configuration.h"
 
 struct StateChangeListener {
@@ -73,6 +74,7 @@ class Machine {
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
+  inline VfioManager* vfio_manager() { return vfio_manager_; }
   inline const Configuration* configuration() { return config_; }
   inline int num_vcpus() { return num_vcpus_; }
   inline uint64_t ram_size() { return ram_size_; }
@@ -95,6 +97,7 @@ class Machine {
   friend class Vcpu;
   friend class MemoryManager;
   friend class DeviceManager;
+  friend class VfioManager;
   friend class Configuration;
 
   void InitializeKvm();
@@ -116,6 +119,7 @@ class Machine {
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;
+  VfioManager* vfio_manager_;
   Configuration* config_;
   IoThread* io_thread_;
   MigrationNetworkWriter* network_writer_ = nullptr;

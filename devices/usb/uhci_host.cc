@@ -38,7 +38,7 @@ UhciHost::UhciHost() {
   /* Specification Release 1.0 */
   pci_header_.data[0x60] = 0x10;
 
-  AddPciBar(4, 32, kIoResourceTypePio);
+  SetupPciBar(4, 32, kIoResourceTypePio);
 }
 
 void UhciHost::Connect() {
