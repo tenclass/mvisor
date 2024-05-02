@@ -27,6 +27,7 @@
 #include <sys/eventfd.h>
 #include "device_manager.h"
 #include "logger.h"
+#include "linuz/vfio.h"
 
 VfioPci::VfioPci() {
   for (auto &interrupt : interrupts_) {
@@ -34,6 +35,7 @@ VfioPci::VfioPci() {
     interrupt.gsi = -1;
   }
   bzero(&regions_, sizeof(regions_));
+  bzero(&migration_, sizeof(migration_));
 }
 
 VfioPci::~VfioPci() {
@@ -86,7 +88,12 @@ void VfioPci::Connect() {
   SetupVfioDevice();
   SetupPciConfiguration();
   SetupGfxPlane();
-  SetupMigraionInfo();
+  SetupMigrationV1Info();
+  SetupMigrationV2Info();
+
+  if (migration_.enabled && debug_) {
+    MV_LOG("%s migration enabled version=%d", device_name_.c_str(), migration_.version);
+  }
 }
 
 void VfioPci::Disconnect() {
@@ -435,15 +442,47 @@ void VfioPci::SetupGfxPlane() {
   }
 }
 
-void VfioPci::SetupMigraionInfo() {
+void VfioPci::SetupMigrationV1Info() {
   bzero(&migration_, sizeof(migration_));
-  auto index = FindRegion(VFIO_REGION_TYPE_MIGRATION, VFIO_REGION_SUBTYPE_MIGRATION);
-  if (index < 0) {
+  auto it = std::find_if(regions_.begin(), regions_.end(), [](auto &region) {
+    return region.type == VFIO_REGION_TYPE_MIGRATION_DEPRECATED &&
+            region.subtype == VFIO_REGION_SUBTYPE_MIGRATION_DEPRECATED; 
+  });
+  if (it == regions_.end()) {
     return;
   }
   migration_.enabled = true;
-  migration_.region = &regions_[index];
+  migration_.region = it;
+  migration_.version = 1;
   MV_ASSERT(migration_.region->mmap_areas.size() == 1);
+
+  auto machine = manager_->machine();
+  state_change_listener_ = machine->RegisterStateChangeListener([=]() {
+    if (machine->IsPaused()) {
+      SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_STOP);
+    } else {
+      SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_RUNNING);
+    }
+  });
+}
+
+void VfioPci::SetupMigrationV2Info() {
+  uint64_t buf[DIV_ROUND_UP(sizeof(struct vfio_device_feature) +
+                            sizeof(struct vfio_device_feature_migration),
+                            sizeof(uint64_t))] = {};
+  auto feature = (struct vfio_device_feature *)buf;
+  auto mig = (struct vfio_device_feature_migration *)feature->data;
+
+  feature->argsz = sizeof(buf);
+  feature->flags = VFIO_DEVICE_FEATURE_GET | VFIO_DEVICE_FEATURE_MIGRATION;
+  if (ioctl(device_fd_, VFIO_DEVICE_FEATURE, feature)) {
+    return;
+  }
+  
+  if (mig->flags & VFIO_MIGRATION_STOP_COPY) {
+    migration_.enabled = true;
+    migration_.version = 2;
+  }
 
   auto machine = manager_->machine();
   state_change_listener_ = machine->RegisterStateChangeListener([=]() {
@@ -471,82 +510,45 @@ void VfioPci::WritePciCommand(uint16_t command) {
   }
 }
 
-void VfioPci::MapBarRegion(uint8_t index) {
-  uint64_t address;
-  if (pci_bars_[index].special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-    address = pci_header_.bars[index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
-    address <<= 32;
-    address |= pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
-  } else {
-    address = pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
-  }
-  uint64_t length = pci_bars_[index].size;
-
-  auto &region = regions_[index];
-  if (region.mmap_areas.empty()) {
-    AddIoResource(kIoResourceTypeRam, address, length, "VFIO BAR RAM", region.mmap);
-  } else {
-    /* The MMIO region is overlapped by the mmap areas */
-    AddIoResource(kIoResourceTypeMmio, address, length, "VFIO BAR MMIO");
-    for (auto &area : region.mmap_areas) {
-      AddIoResource(kIoResourceTypeRam, address + area.offset, area.size, "VFIO BAR RAM", area.mmap);
-    }
-  }
-}
-
-void VfioPci::UnmapBarRegion(uint8_t index) {
-  uint64_t address;
-  if (pci_bars_[index].special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
-    address = pci_header_.bars[index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
-    address <<= 32;
-    address |= pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
-  } else {
-    address = pci_header_.bars[index] & PCI_BASE_ADDRESS_MEM_MASK;
-  }
-
-  auto &region = regions_[index];
-  if (region.mmap_areas.empty()) {
-    RemoveIoResource(kIoResourceTypeRam, address);
-  } else {
-    for (auto &area : region.mmap_areas) {
-      RemoveIoResource(kIoResourceTypeRam, address + area.offset);
-    }
-    RemoveIoResource(kIoResourceTypeMmio, address);
-  }
-}
-
-bool VfioPci::ActivatePciBar(uint8_t index) {
+bool VfioPci::ActivatePciBar(uint index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
-    MV_ASSERT(!bar.active && bar.type == kIoResourceTypeMmio);
-    MapBarRegion(index);
+    MV_ASSERT(!bar.active);
+    MV_ASSERT(bar.type == kIoResourceTypeMmio);
+    if (region.mmap_areas.empty()) {
+      AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "VFIO BAR RAM", region.mmap);
+    } else {
+      /* The MMIO region is overlapped by the mmap areas */
+      AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "VFIO BAR MMIO");
+      for (auto &area : region.mmap_areas) {
+        AddIoResource(kIoResourceTypeRam, bar.address64 + area.offset, area.size, "VFIO BAR RAM", area.mmap);
+      }
+    }
     bar.active = true;
     return true;
   }
   return PciDevice::ActivatePciBar(index);
 }
 
-bool VfioPci::DeactivatePciBar(uint8_t index) {
+bool VfioPci::DeactivatePciBar(uint index) {
   auto &bar = pci_bars_[index];
   auto &region = regions_[index];
   if (region.flags & VFIO_REGION_INFO_FLAG_MMAP) {
     if (bar.active) {
-      UnmapBarRegion(index);
+      if (region.mmap_areas.empty()) {
+        RemoveIoResource(kIoResourceTypeRam, bar.address64);
+      } else {
+        for (auto &area : region.mmap_areas) {
+          RemoveIoResource(kIoResourceTypeRam, bar.address64 + area.offset);
+        }
+        RemoveIoResource(kIoResourceTypeMmio, bar.address64);
+      }
       bar.active = false;
     }
     return true;
   }
   return PciDevice::DeactivatePciBar(index);
-}
-
-int VfioPci::FindRegion(uint32_t type, uint32_t subtype) {
-  for (uint8_t i = 0; i < regions_.size(); i++) {
-    if (regions_[i].type == type && regions_[i].subtype == subtype) {
-      return i;
-    }
-  }
-  return -ENOENT;
 }
 
 void VfioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -717,19 +719,31 @@ void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length
 
 void VfioPci::SetMigrationDeviceState(uint32_t device_state) {
   MV_ASSERT(migration_.enabled);
-  pwrite(device_fd_, &device_state, sizeof(device_state), migration_.region->offset);
+  if (migration_.version == 1) {
+    pwrite(device_fd_, &device_state, sizeof(device_state), migration_.region->offset);
+  } else {
+    uint64_t buf[DIV_ROUND_UP(sizeof(struct vfio_device_feature) +
+                              sizeof(struct vfio_device_feature_mig_state),
+                              sizeof(uint64_t))] = {};
+    auto feature = (struct vfio_device_feature *)buf;
+    auto mig_state = (struct vfio_device_feature_mig_state *)feature->data;
+    feature->argsz = sizeof(buf);
+    feature->flags = VFIO_DEVICE_FEATURE_SET | VFIO_DEVICE_FEATURE_MIG_DEVICE_STATE;
+    mig_state->device_state = device_state;
+    if (ioctl(device_fd_, VFIO_DEVICE_FEATURE, feature)) {
+      MV_ERROR("failed to set migration device state %d", device_state);
+    }
+    if (mig_state->data_fd != -1) {
+      migration_.data_fd = mig_state->data_fd;
+    }
+  }
 }
 
-bool VfioPci::SaveState(MigrationWriter* writer) {
-  if (!migration_.enabled) {
-    MV_LOG("%s:%s blocked migration", name_, device_name_.c_str());
-    return false;
-  }
-
+bool VfioPci::SaveDeviceStateV1(MigrationWriter* writer) {
   /* buffer for saving */
   auto& area = migration_.region->mmap_areas.front();
 
-  SetMigrationDeviceState(VFIO_DEVICE_STATE_SAVING);
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_SAVING);
   int fd = writer->BeginWrite("DATA");
   bool success = false;
 
@@ -774,34 +788,67 @@ bool VfioPci::SaveState(MigrationWriter* writer) {
   }
 
   writer->EndWrite("DATA");
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_STOP);
+  return success;
+}
+
+bool VfioPci::SaveDeviceStateV2(MigrationWriter* writer) {
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP_COPY);
+
+  int fd = writer->BeginWrite("DATA");
+  bool success = false;
+  size_t buffer_size = 1024 * 1024;
+  auto buffer = new uint8_t[buffer_size];
+
+  /* Read from data_fd and write to fd */
+  while (true) {
+    auto ret = read(migration_.data_fd, buffer, buffer_size);
+    if (ret < 0) {
+      success = false;
+      break;
+    }
+    if (ret == 0) {
+      success = true;
+      break;
+    }
+    if (dynamic_cast<MigrationNetworkWriter*>(writer)) {
+      if (!writer->WriteRaw("VFIO_DATA", buffer, ret)) {
+        success = false;
+        break;
+      }
+    } else {
+      MV_ASSERT(write(fd, buffer, ret) == ret);
+    }
+  }
+
+  delete[] buffer;
+  writer->EndWrite("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
-  
+  return success;
+}
+
+bool VfioPci::SaveState(MigrationWriter* writer) {
+  if (!migration_.enabled) {
+    MV_LOG("%s:%s blocked migration", name_, device_name_.c_str());
+    return false;
+  }
+
+  bool success = false;
+  if (migration_.version == 1) {
+    success = SaveDeviceStateV1(writer);
+  } else {
+    success = SaveDeviceStateV2(writer);
+  }
   return success && PciDevice::SaveState(writer);
 }
 
-bool VfioPci::LoadState(MigrationReader* reader) {
-  bool success = false;
-  if (!PciDevice::LoadState(reader)) {
-    return success;
-  }
-
-  /* Restore the PCI config space to VFIO device */
-  auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
-  for (uint i = 0; i < pci_config_size(); i += 2) {
-    pwrite(device_fd_, &pci_header_.data[i], 2, config_region.offset + i);
-  }
-
-  /* Update MSI routes */
-  if (msi_config_.enabled) {
-    UpdateMsiRoutes();
-  } else {
-    EnableIntxInterrupt();
-  }
+bool VfioPci::LoadDeviceStateV1(MigrationReader* reader) {
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_RESUMING);
 
   /* buffer for restoring */
   auto& area = migration_.region->mmap_areas.front();
-  SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
   int fd = reader->BeginRead("DATA");
+  bool success = false;
 
   while (true) {
     uint64_t data_offset = 0;
@@ -830,8 +877,70 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   }
 
   reader->EndRead("DATA");
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_STOP);
+  return success;
+}
+
+bool VfioPci::LoadDeviceStateV2(MigrationReader* reader) {
+  SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
+
+  int fd = reader->BeginRead("DATA");
+  bool success = false;
+  size_t buffer_size = 1024 * 1024;
+  auto buffer = new uint8_t[buffer_size];
+
+  while (true) {
+    ssize_t ret;
+    if (dynamic_cast<MigrationNetworkReader*>(reader)) {
+      ret = reader->ReadRawWithLimit("VFIO_DATA", buffer, buffer_size);
+    } else {
+      ret = read(fd, buffer, buffer_size);
+    }
+
+    if (ret > 0) {
+      MV_ASSERT(write(migration_.data_fd, buffer, ret) == ret);
+    }
+    if (ret < (ssize_t)buffer_size) {
+      success = true;
+      break;
+    }
+  }
+
+  delete[] buffer;
+  reader->EndRead("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
-  
+  return success;
+}
+
+bool VfioPci::LoadState(MigrationReader* reader) {
+  bool success = false;
+  if (!PciDevice::LoadState(reader)) {
+    return success;
+  }
+
+  if (!migration_.enabled) {
+    MV_LOG("%s:%s blocked migration", name_, device_name_.c_str());
+    return false;
+  }
+
+  /* Restore the PCI config space to VFIO device */
+  auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
+  for (uint i = 0; i < pci_config_size(); i += 4) {
+    pwrite(device_fd_, &pci_header_.data[i], 4, config_region.offset + i);
+  }
+
+  /* Update MSI routes */
+  if (msi_config_.enabled) {
+    UpdateMsiRoutes();
+  } else {
+    EnableIntxInterrupt();
+  }
+
+  if (migration_.version == 1) {
+    success = LoadDeviceStateV1(reader);
+  } else {
+    success = LoadDeviceStateV2(reader);
+  }
   return success;
 }
 

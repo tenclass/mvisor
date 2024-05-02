@@ -152,8 +152,9 @@ struct PciBarInfo {
   IoResourceType        type;
   uint32_t              size;
   uint32_t              address;
-  uint64_t              address_mask;
+  uint32_t              address_mask;
   uint32_t              special_bits;
+  uint64_t              address64;
   bool                  active;
   void*                 host_memory;
 };
@@ -201,25 +202,26 @@ class PciDevice : public Device {
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void WritePciCommand(uint16_t command);
-  void WritePciBar(uint8_t index, uint32_t value);
-
-  /* PCI devices may override these members to handle bar regsiter events */
-  virtual bool ActivatePciBar(uint8_t index);
-  virtual bool DeactivatePciBar(uint8_t index);
 
   /* PCI Migration */
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
+
  protected:
   friend class DeviceManager;
 
-  void UpdateRomMapAddress(uint32_t address);
+  /* PCI devices may override these members to handle bar regsiter events */
+  virtual bool ActivatePciBar(uint index);
+  virtual bool DeactivatePciBar(uint index);
+
+  void UpdateRomBarAddress(uint32_t address);
+  void UpdatePciBarAddress(uint index, uint32_t address);
   void LoadRomFile(const char* path);
-  void SetupPciBar(uint8_t index, uint32_t size, IoResourceType type);
-  void SetupPciBar64(uint8_t index, uint64_t size, IoResourceType type);
+  void SetupPciBar(uint index, uint32_t size, IoResourceType type);
+  void SetupPciBar64(uint index, uint64_t size, IoResourceType type);
   uint8_t* AddCapability(uint8_t cap, const uint8_t* data, uint8_t length);
   void AddMsiCapability();
-  void AddMsiXCapability(uint8_t bar, uint16_t table_size, uint64_t space_offset, uint64_t space_size);
+  void AddMsiXCapability(uint bar_index, uint16_t table_size, uint64_t space_offset, uint64_t space_size);
   void SignalMsi(int vector = 0);
   void SetIrq(uint level);
 

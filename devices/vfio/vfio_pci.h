@@ -21,7 +21,6 @@
 
 #include <cstdint>
 #include <string>
-#include "linuz/vfio.h"
 #include "pci_device.h"
 #include "memory_manager.h"
 #include "vfio_manager.h"
@@ -54,7 +53,9 @@ struct VfioInterrupt {
 
 struct VfioMigration {
   bool        enabled;
+  int         version;
   VfioRegion* region;
+  int         data_fd;
 };
 
 class VfioPci : public PciDevice {
@@ -64,8 +65,6 @@ class VfioPci : public PciDevice {
   virtual void Connect();
   virtual void Disconnect();
   virtual void Reset();
-  virtual bool ActivatePciBar(uint8_t index);
-  virtual bool DeactivatePciBar(uint8_t index);
   
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
@@ -78,20 +77,23 @@ class VfioPci : public PciDevice {
   virtual bool LoadState(MigrationReader* reader);
 
  protected:
+  virtual bool ActivatePciBar(uint index);
+  virtual bool DeactivatePciBar(uint index);
   void SetupVfioDevice();
   void SetupPciConfiguration();
   void SetupGfxPlane();
-  void SetupMigraionInfo();
+  void SetupMigrationV1Info();
+  void SetupMigrationV2Info();
   void DisableAllInterrupts();
   void EnableIntxInterrupt();
-
   void UpdateMsiRoutes();
-  void MapBarRegion(uint8_t index);
-  void UnmapBarRegion(uint8_t index);
-  int  FindRegion(uint32_t type, uint32_t subtype);
   void SetMigrationDeviceState(uint32_t device_state);
   void SetInterruptEventFds(uint32_t index, uint32_t vector, int action, int* fds, uint8_t count);
   void SetInterruptMasked(uint32_t index, bool masked);
+  bool SaveDeviceStateV1(MigrationWriter* writer);
+  bool SaveDeviceStateV2(MigrationWriter* writer);
+  bool LoadDeviceStateV1(MigrationReader* reader);
+  bool LoadDeviceStateV2(MigrationReader* reader);
 
  private:
   VfioManager*  vfio_manager_ = nullptr;

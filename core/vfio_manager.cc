@@ -6,7 +6,6 @@
 #include <linux/kvm.h>
 
 #include "vfio_manager.h"
-#include "linuz/vfio.h"
 #include "logger.h"
 #include "machine.h"
 
