@@ -794,6 +794,10 @@ bool VfioPci::SaveDeviceStateV1(MigrationWriter* writer) {
 
 bool VfioPci::SaveDeviceStateV2(MigrationWriter* writer) {
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP_COPY);
+  if (migration_.data_fd == -1) {
+    MV_ERROR("failed to get migration data fd");
+    return false;
+  }
 
   int fd = writer->BeginWrite("DATA");
   bool success = false;
@@ -821,6 +825,7 @@ bool VfioPci::SaveDeviceStateV2(MigrationWriter* writer) {
     }
   }
 
+  safe_close(&migration_.data_fd);
   delete[] buffer;
   writer->EndWrite("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
@@ -883,6 +888,10 @@ bool VfioPci::LoadDeviceStateV1(MigrationReader* reader) {
 
 bool VfioPci::LoadDeviceStateV2(MigrationReader* reader) {
   SetMigrationDeviceState(VFIO_DEVICE_STATE_RESUMING);
+  if (migration_.data_fd == -1) {
+    MV_ERROR("failed to get migration data fd");
+    return false;
+  }
 
   int fd = reader->BeginRead("DATA");
   bool success = false;
@@ -906,6 +915,7 @@ bool VfioPci::LoadDeviceStateV2(MigrationReader* reader) {
     }
   }
 
+  safe_close(&migration_.data_fd);
   delete[] buffer;
   reader->EndRead("DATA");
   SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
