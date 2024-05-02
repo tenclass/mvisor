@@ -448,7 +448,9 @@ void Vcpu::ProcessHyperV() {
     }
     break;
   case KVM_EXIT_HYPERV_HCALL:
-    MV_WARN("KVM_EXIT_HYPERV_HCALL not implemented");
+    if (machine_->debug_) {
+      MV_WARN("KVM_EXIT_HYPERV_HCALL not implemented");
+    }
     break;
   default:
     MV_PANIC("invalid hyperv exit type=%d", hyperv_exit.type);
