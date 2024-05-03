@@ -284,7 +284,6 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
 
 /* Mapping a memory region in the guest address space */
 const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name) {
-  MV_ASSERT(size > 0);
   MemoryRegion* region = new MemoryRegion;
   region->gpa = gpa;
   region->host = host;
@@ -301,6 +300,7 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
       region->gpa, region->size, type_strings[region->type]);
   }
 
+  MV_ASSERT(size > 0);
   AddMemoryRegion(region);
   return region;
 }

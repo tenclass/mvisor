@@ -6,7 +6,6 @@
 #include <linux/kvm.h>
 
 #include "vfio_manager.h"
-#include "linuz/vfio.h"
 #include "logger.h"
 #include "machine.h"
 
@@ -33,14 +32,16 @@ VfioManager::~VfioManager() {
 
 void VfioManager::FreeIommuGroup(IommuGroup* group) {
   /* Remove group from KVM device */
-  kvm_device_attr attr = {
-    .flags = 0,
-    .group = KVM_DEV_VFIO_GROUP,
-    .attr = KVM_DEV_VFIO_GROUP_DEL,
-    .addr = (uint64_t)&group->group_fd
-  };
-  if (ioctl(kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
-    MV_PANIC("failed to remove group %d from KVM VFIO device %d", group->group_fd, kvm_device_fd_);
+  if (kvm_device_fd_ != -1) {
+    kvm_device_attr attr = {
+      .flags = 0,
+      .group = KVM_DEV_VFIO_GROUP,
+      .attr = KVM_DEV_VFIO_GROUP_DEL,
+      .addr = (uint64_t)&group->group_fd
+    };
+    if (ioctl(kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
+      MV_PANIC("failed to remove group %d from KVM VFIO device %d", group->group_fd, kvm_device_fd_);
+    }
   }
 
   safe_close(&group->group_fd);
@@ -100,28 +101,30 @@ IommuGroup* VfioManager::GetIommuGroup(std::string sysfs_path) {
     MV_ASSERT(ioctl(group_fd, VFIO_GROUP_SET_CONTAINER, &container_fd_) == 0);
   }
 
-  /* add group to KVM device */
-  if (kvm_device_fd_ == -1) {
-    kvm_create_device create = {
-      .type = KVM_DEV_TYPE_VFIO,
-      .fd = 0,
-      .flags = 0
-    };
-    if (ioctl(machine_->vm_fd_, KVM_CREATE_DEVICE, &create) < 0) {
-      MV_PANIC("failed to create KVM VFIO device");
-    }
-    kvm_device_fd_ = create.fd;
-  }
+  /* Add group to KVM device
+   * Currently disabled this feature because it makes the vGPU snapshots CPU 100% while restoring
+   */
+  // if (kvm_device_fd_ == -1) {
+  //   kvm_create_device create = {
+  //     .type = KVM_DEV_TYPE_VFIO,
+  //     .fd = 0,
+  //     .flags = 0
+  //   };
+  //   if (ioctl(machine_->vm_fd_, KVM_CREATE_DEVICE, &create) < 0) {
+  //     MV_PANIC("failed to create KVM VFIO device");
+  //   }
+  //   kvm_device_fd_ = create.fd;
+  // }
 
-  kvm_device_attr attr = {
-    .flags = 0,
-    .group = KVM_DEV_VFIO_GROUP,
-    .attr = KVM_DEV_VFIO_GROUP_ADD,
-    .addr = (uint64_t)&group_fd
-  };
-  if (ioctl(kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
-    MV_PANIC("failed to add group %d to KVM VFIO device %d", group_fd, kvm_device_fd_);
-  }
+  // kvm_device_attr attr = {
+  //   .flags = 0,
+  //   .group = KVM_DEV_VFIO_GROUP,
+  //   .attr = KVM_DEV_VFIO_GROUP_ADD,
+  //   .addr = (uint64_t)&group_fd
+  // };
+  // if (ioctl(kvm_device_fd_, KVM_SET_DEVICE_ATTR, &attr) < 0) {
+  //   MV_PANIC("failed to add group %d to KVM VFIO device %d", group_fd, kvm_device_fd_);
+  // }
 
   /* Create IommuGroup */
   auto group = new IommuGroup();
