@@ -340,7 +340,7 @@ void Qxl::IntializeQxlRam() {
 }
 
 /* Setup ioeventfd for notify commands, reduce IO operations */
-bool Qxl::ActivatePciBar(uint8_t index) {
+bool Qxl::ActivatePciBar(uint index) {
   if (index == 3) {
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
@@ -348,7 +348,7 @@ bool Qxl::ActivatePciBar(uint8_t index) {
   return PciDevice::ActivatePciBar(index);
 }
 
-bool Qxl::DeactivatePciBar(uint8_t index) {
+bool Qxl::DeactivatePciBar(uint index) {
   if (index == 3) {
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
