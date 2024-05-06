@@ -132,6 +132,14 @@ void RedirectTcpSocket::InitializeRedirect(Ipv4Packet* packet) {
   // Set non-blocking
   MV_ASSERT(fcntl(fd_, F_SETFL, fcntl(fd_, F_GETFL, 0) | O_NONBLOCK) != -1);
 
+  // SO_OOBINLINE
+  int flag_oob = 1;
+  MV_ASSERT(setsockopt(fd_, SOL_SOCKET, SO_OOBINLINE, &flag_oob, sizeof(flag_oob)) == 0);
+
+  // Disable Nagle's algorithm
+  int flag = 1;
+  MV_ASSERT(setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) == 0);
+
   sockaddr_in daddr = {
     .sin_family = AF_INET,
     .sin_port = htons(dport_),
@@ -235,7 +243,7 @@ void RedirectTcpSocket::StartReading() {
       Shutdown(SHUT_RD);
     } else {
       packet->data_length = ret;
-      OnDataFromHost(packet, TCP_FLAG_ACK);
+      OnDataFromHost(packet, TCP_FLAG_ACK | TCP_FLAG_PSH);
       seq_host_ += packet->data_length;
       active_time_ = time(nullptr);
     }
@@ -285,15 +293,21 @@ void RedirectTcpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
 
   ack_host_ += packet->data_length;
 
-  // If no data length, this ack packet is not necessary, right?
-  if (packet->data_length > 0) {
+  if (can_write()) {
+    StartWriting();
+  }
+
+  /* If seq host is equal to old, no data is read, but we need to send ACK
+   * If no data length, this ack packet is not necessary, right?
+   */
+  auto old = seq_host_;
+  if (can_read()) {
+    StartReading();
+  }
+  if (seq_host_ == old && packet->data_length > 0) {
     auto ack_packet = AllocatePacket(true);
     if (ack_packet) {
       OnDataFromHost(ack_packet, TCP_FLAG_ACK);
     }
-  }
-
-  if (can_write()) {
-    StartWriting();
   }
 }
