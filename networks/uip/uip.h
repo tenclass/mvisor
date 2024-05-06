@@ -34,9 +34,9 @@
 #include "device_interface.h"
 #include "pci_device.h"
 
-#define UIP_MAX_BUFFER_SIZE           (4096 - 16)
-#define UIP_MAX_UDP_PAYLOAD(packet)   (packet->mtu - 20 - 8)
-#define UIP_MAX_TCP_PAYLOAD(packet)   (packet->mtu - 144)
+#define UIP_MAX_BUFFER_SIZE           (4096)
+#define UIP_MAX_UDP_PAYLOAD(packet)   (packet->mtu - 20)
+#define UIP_MAX_TCP_PAYLOAD(packet)   (packet->mtu - 20 - 20)
 
 #define REDIRECT_TIMEOUT_SECONDS      (120)
 

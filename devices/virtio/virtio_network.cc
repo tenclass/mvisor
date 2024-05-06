@@ -54,7 +54,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     GenerateRandomMac(net_config_.mac);
     net_config_.status = VIRTIO_NET_S_LINK_UP;
     net_config_.duplex = 1;
-    net_config_.speed = 1000;
+    net_config_.speed = 10000;
     net_config_.mtu = DEFAULT_MTU;
   }
 
@@ -101,6 +101,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     if (has_key("mtu")) {
       net_config_.mtu = std::get<uint64_t>(key_values_["mtu"]);
       backend_->SetMtu(net_config_.mtu);
+    } else {
+      backend_->SetMtu(DEFAULT_MTU);
     }
   }
 
