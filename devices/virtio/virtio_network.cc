@@ -24,6 +24,7 @@
 #include "device_interface.h"
 #include "logger.h"
 
+#define DEFAULT_MTU 1500
 
 class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
  private:
@@ -54,9 +55,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     net_config_.status = VIRTIO_NET_S_LINK_UP;
     net_config_.duplex = 1;
     net_config_.speed = 1000;
-
-    /* use big packet */
-    net_config_.mtu = 4080;
+    net_config_.mtu = DEFAULT_MTU;
   }
 
   void GenerateRandomMac(uint8_t mac[6]) {
@@ -98,7 +97,11 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     MacAddress mac;
     memcpy(mac.data, net_config_.mac, sizeof(mac.data));
     backend_->Initialize(this, mac);
-    backend_->SetMtu(net_config_.mtu);
+
+    if (has_key("mtu")) {
+      net_config_.mtu = std::get<uint64_t>(key_values_["mtu"]);
+      backend_->SetMtu(net_config_.mtu);
+    }
   }
 
   void Reset() {
@@ -128,7 +131,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
     /* Some low verison driver doesn't support MTU configuration, set it to normal value */
     if (!(driver_features_ & (1UL << VIRTIO_NET_F_MTU))) {
-      net_config_.mtu = 1518;
+      net_config_.mtu = DEFAULT_MTU;
       backend_->SetMtu(net_config_.mtu);
     }
   }

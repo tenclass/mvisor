@@ -27,7 +27,7 @@
 #include <sys/stat.h>
 #include <linux/kvm.h>
 
-#include "dirty_memory.pb.h"
+#include "memory_manager.pb.h"
 #include "machine.h"
 #include "logger.h"
 

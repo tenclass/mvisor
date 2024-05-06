@@ -39,7 +39,7 @@
 #include <queue>
 
 #include "migration.h"
-#include "image.pb.h"
+#include "io_thread.pb.h"
 
 typedef std::function<void()> VoidCallback;
 typedef std::function<void(long)> IoCallback;

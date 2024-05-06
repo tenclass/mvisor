@@ -25,6 +25,8 @@ objects:
   - class: virtio-network
     mac: 00:50:00:11:22:33
     map: tcp:0.0.0.0:8022-:22
+    # Using big packet may cause error in windows guest
+    # mtu: 1518
 
   - class: ata-cdrom 
     image: /data/ubuntu-21.10-desktop-amd64.iso
