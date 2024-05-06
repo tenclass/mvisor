@@ -14,8 +14,8 @@ mvisor_sources += files(
 proto_sources += proto_gen.process(
   'pci_device.proto',
   'vcpu.proto',
-  'dirty_memory.proto',
-  'image.proto'
+  'memory_manager.proto',
+  'io_thread.proto'
 )
 
 mvisor_deps += dependency('yaml-cpp')
