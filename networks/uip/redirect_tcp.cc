@@ -293,10 +293,6 @@ void RedirectTcpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
 
   ack_host_ += packet->data_length;
 
-  if (can_write()) {
-    StartWriting();
-  }
-
   /* If seq host is equal to old, no data is read, but we need to send ACK
    * If no data length, this ack packet is not necessary, right?
    */
@@ -309,5 +305,9 @@ void RedirectTcpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
     if (ack_packet) {
       OnDataFromHost(ack_packet, TCP_FLAG_ACK);
     }
+  }
+
+  if (can_write()) {
+    StartWriting();
   }
 }
