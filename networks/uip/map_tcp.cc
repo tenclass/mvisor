@@ -27,6 +27,14 @@ MapTcpSocket::MapTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint3
 {
   fd_ = fd;
 
+  // SO_OOBINLINE
+  int flag_oob = 1;
+  MV_ASSERT(setsockopt(fd_, SOL_SOCKET, SO_OOBINLINE, &flag_oob, sizeof(flag_oob)) == 0);
+
+  // Disable Nagle's algorithm
+  int flag = 1;
+  MV_ASSERT(setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) == 0);
+
   device_->StartPolling(fd_, EPOLLIN | EPOLLOUT | EPOLLET, [this](auto events) {
     can_read_ = events & EPOLLIN;
     can_write_ = events & EPOLLOUT;

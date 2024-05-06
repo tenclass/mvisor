@@ -364,6 +364,7 @@ void Viewer::Schedule(VoidCallback callback) {
  */
 int Viewer::MainLoop() {
   SetThreadName("mvisor-viewer");
+  RegisterKeyboardShortcuts();
 
   // Loop until all vcpu exits
   SDL_Event event;
@@ -413,25 +414,24 @@ void Viewer::SendPointerEvent() {
   }
 }
 
-void Viewer::HandleSpeicalKey(const SDL_Keysym& keysym) {
-  switch (keysym.sym)
-  {
-  case SDLK_F2:
+void Viewer::RegisterKeyboardShortcuts() {
+  keyboard_shortcuts_[SDLK_F2] = [this]() {
     MV_LOG("Save");
     machine_->Pause();
     machine_->Save("/tmp/save");
-    break;
-  case SDLK_F3:
+  };
+
+  keyboard_shortcuts_[SDLK_F3] = [this]() {
     MV_LOG("Migration");
-    std::thread([this]() {
-      MV_ASSERT(machine_->Save("127.0.0.1", 9979));
-    }).detach();
-    break;
-  case SDLK_F4:
+    MV_ASSERT(machine_->Save("127.0.0.1", 9979));
+  };
+
+  keyboard_shortcuts_[SDLK_F4] = [this]() {
     MV_LOG("Migration Post");
     MV_ASSERT(machine_->PostSave());
-    break;
-  case SDLK_F11:
+  };
+
+  keyboard_shortcuts_[SDLK_F11] = [this]() {
     if (machine_->IsPaused()) {
       MV_LOG("Resume");
       machine_->Resume();
@@ -439,8 +439,9 @@ void Viewer::HandleSpeicalKey(const SDL_Keysym& keysym) {
       MV_LOG("Pause");
       machine_->Pause();
     }
-    break;
-  case SDLK_F12:
+  };
+
+  keyboard_shortcuts_[SDLK_F12] = [this]() {
     if (machine_->IsPaused()) {
       MV_LOG("Reset");
       machine_->Resume();
@@ -449,8 +450,7 @@ void Viewer::HandleSpeicalKey(const SDL_Keysym& keysym) {
       MV_LOG("Shutdown");
       machine_->Shutdown();
     }
-    break;
-  }
+  };
 }
 
 void Viewer::HandleEvent(const SDL_Event& event) {
@@ -471,8 +471,15 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   }
   case SDL_KEYDOWN:
     // handle alt + Fx
-    if (event.key.keysym.mod & KMOD_ALT) {
-      HandleSpeicalKey(event.key.keysym);
+    if (event.key.keysym.mod & KMOD_LALT) {
+      auto it = keyboard_shortcuts_.find(event.key.keysym.sym);
+      if (it != keyboard_shortcuts_.end()) {
+        // release alt key
+        TranslateScancode(SDL_SCANCODE_LALT, false, transcoded);
+        keyboard_->QueueKeyboardEvent(transcoded, 0);
+        // run the shortcut in a detached thread
+        std::thread(it->second).detach();
+      }
     }
     // fall through
   case SDL_KEYUP:

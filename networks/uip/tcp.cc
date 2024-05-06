@@ -28,6 +28,8 @@ TcpSocket::TcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t di
   mss_ = 1460;
   // setup initial sequence and acknowledge
   seq_host_ = 0x66666666;
+  window_scale_ = 6;
+  window_size_ = 65535 << window_scale_;
 }
 
 void TcpSocket::SynchronizeTcp(tcphdr* tcp) {
@@ -76,15 +78,25 @@ void TcpSocket::ParseTcpOptions(tcphdr* tcp) {
   }
 }
 
+/* TCP options set for packets from host to guest */
 void TcpSocket::FillTcpOptions(tcphdr* tcp) {
   uint8_t* options = (uint8_t*)tcp + sizeof(*tcp);
   uint8_t* tcp_data = (uint8_t*)tcp + (tcp->doff * 4);
   bzero(options, tcp_data - options);
   uint8_t* p = options;
-  // Window scale = 0
+  // Window scale = 6, max window size = 64K * (1 << 6) = 4M
   *p++ = 3;
   *p++ = 3;
-  *p++ = 0;
+  *p++ = 6;
+  // MSS
+  *p++ = 2;
+  *p++ = 4;
+  *(uint16_t*)p = htons(mss_);
+  p += 2;
+  // 5 NOPs
+  for (int i = 0; i < 5; i++) {
+    *p++ = 1;
+  }
 }
 
 bool TcpSocket::UpdateGuestAck(tcphdr* tcp) {
@@ -151,26 +163,28 @@ void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {
   if (flags & TCP_FLAG_ACK) {
     tcp->ack = 1;
   }
+  if (flags & TCP_FLAG_PSH) {
+    tcp->psh = 1;
+  }
   if (flags & TCP_FLAG_FIN) {
     tcp->fin = 1;
   }
   if (flags & TCP_FLAG_RST) {
     tcp->rst = 1;
   }
+  tcp->doff = 5;
   if (flags & TCP_FLAG_SYN) {
     tcp->syn = 1;
-    tcp->doff = 8;
-    // To get peer window scale work, add options
+    // Add 4 * 3 = 12 bytes for options
+    tcp->doff += 3;
     FillTcpOptions(tcp);
-  } else {
-    tcp->doff = 5;
   }
 
-  // fixed window size, no more than 64K, window scale = 0
+  // FIXME: fixed window size
   if (tcp->rst) {
     tcp->window = 0;
   } else {
-    tcp->window = htons(UIP_MAX_TCP_PAYLOAD(packet));
+    tcp->window = htons(window_size_ >> window_scale_);
   }
   tcp->check = 0;
   tcp->urg_ptr = 0;

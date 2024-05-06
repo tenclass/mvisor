@@ -52,7 +52,7 @@ class Viewer {
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   void HandleEvent(const SDL_Event& event);
-  void HandleSpeicalKey(const SDL_Keysym& keysym);
+  void RegisterKeyboardShortcuts();
   PointerInputInterface* GetActivePointer();
   void SendPointerEvent();
   void SendResizerEvent();
@@ -89,6 +89,7 @@ class Viewer {
 
   bool pcm_playback_error_ = false;
   snd_pcm_t* pcm_playback_ = nullptr;
+  std::unordered_map<int, VoidCallback> keyboard_shortcuts_;
 };
 
 #endif // _MVISOR_VIEWER_H
