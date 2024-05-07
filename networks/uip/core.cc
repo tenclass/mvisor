@@ -102,7 +102,7 @@ class Uip : public Object, public NetworkBackendInterface {
     device_ = device;
     guest_mac_ = mac;
     memcpy(router_mac_.data, "\x52\x55\xC0\xA8\x00\x01", ETH_ALEN);
-    mtu_ = 4096 - 16;
+    mtu_ = 1500;
 
     // Default configuration 192.168.128.1/24
     router_subnet_mask_ = 0xFFFFFF00;
@@ -159,7 +159,7 @@ class Uip : public Object, public NetworkBackendInterface {
 
   virtual void SetMtu(int mtu) {
     mtu_ = mtu;
-    MV_ASSERT(mtu_ + 16 <= 4096);
+    MV_ASSERT(mtu_ <= 4096);
   }
 
   virtual void Reset() {
