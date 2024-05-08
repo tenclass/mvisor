@@ -90,6 +90,8 @@ class Uip : public Object, public NetworkBackendInterface {
   virtual void Initialize(NetworkDeviceInterface* device, MacAddress& mac) override;
   virtual void SetMtu(int mtu) override;
   virtual void Reset() override;
+  virtual void OnReceiveAvailable() override;
+  virtual void OnFrameFromGuest(std::deque<iovec>& vector) override;
   virtual Ipv4Packet* AllocatePacket(bool urgent);
   virtual bool OnPacketFromHost(Ipv4Packet* packet);
 
@@ -106,8 +108,6 @@ class Uip : public Object, public NetworkBackendInterface {
   void ParseMapRule(std::string input);
   void StartMapServices();
   void OnTimer();
-  virtual void OnReceiveAvailable();
-  virtual void OnFrameFromGuest(std::deque<iovec>& vector);
   bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size);
   void ParseEthPacket(Ipv4Packet* packet);
   void ParseArpPacket(ethhdr* eth, ArpMessage* arp);

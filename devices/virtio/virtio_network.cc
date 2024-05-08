@@ -111,8 +111,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     VirtioPci::Reset();
   
     /* MQ is not supported yet */
-    AddQueue(512, std::bind(&VirtioNetwork::OnReceive, this, 0));
-    AddQueue(256, std::bind(&VirtioNetwork::OnTransmit, this, 1));
+    AddQueue(1024, std::bind(&VirtioNetwork::OnReceive, this, 0));
+    AddQueue(1024, std::bind(&VirtioNetwork::OnTransmit, this, 1));
     AddQueue(64, std::bind(&VirtioNetwork::OnControl, this, 2));
 
     backend_->Reset();
