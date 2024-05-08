@@ -16,10 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "icmp.h"
+#include <arpa/inet.h>
 
 
-IcmpSocket::IcmpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t echo_id):
+IcmpSocket::IcmpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t echo_id):
   Ipv4Socket(backend, sip, dip) {
   echo_id_ = echo_id;
 }

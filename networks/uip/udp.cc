@@ -16,12 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
-
+#include "udp.h"
 #include <arpa/inet.h>
 
 
-UdpSocket::UdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
+UdpSocket::UdpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
   Ipv4Socket(backend, sip, dip), sport_(sport), dport_(dport)
 {
 }

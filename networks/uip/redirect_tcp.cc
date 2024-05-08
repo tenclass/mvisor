@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "redirect_tcp.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -24,7 +24,7 @@
 #include "logger.h"
 #include "utilities.h"
 
-RedirectTcpSocket::RedirectTcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
+RedirectTcpSocket::RedirectTcpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
   : TcpSocket(backend, sip, dip, sport, dport)
 {
 }
@@ -229,8 +229,8 @@ void RedirectTcpSocket::StartReading() {
     }
 
     /* FIXME: Limit packet size for Linux driver */
-    if (available > UIP_MAX_TCP_PAYLOAD(packet)) {
-      available = UIP_MAX_TCP_PAYLOAD(packet);
+    if (available > IPV4_MAX_TCP_PAYLOAD(packet)) {
+      available = IPV4_MAX_TCP_PAYLOAD(packet);
     }
 
     int ret = recv(fd_, packet->data, available, 0);

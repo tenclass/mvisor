@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "dhcp.h"
 
 #include <cstring>
 #include <arpa/inet.h>
@@ -45,7 +45,7 @@ struct DhcpMessage {
 } __attribute__((packed));
 
 
-DhcpServiceUdpSocket::DhcpServiceUdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
+DhcpServiceUdpSocket::DhcpServiceUdpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport)
   : UdpSocket(backend, sip, dip, sport, dport)
 {
   // Read DNS nameservers from host
