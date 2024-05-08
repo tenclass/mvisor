@@ -84,7 +84,9 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  udp->check = CalculateUdpChecksum(packet);
+  if (!(packet->vnet->flags & VIRTIO_NET_HDR_F_DATA_VALID)) {
+    udp->check = CalculateUdpChecksum(packet);
+  }
 
   backend_->OnPacketFromHost(packet);
 }

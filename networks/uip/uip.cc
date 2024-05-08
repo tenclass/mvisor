@@ -347,6 +347,12 @@ void Uip::OnReceiveAvailable() {
       (*it)->OnGuestBufferAvaialble();
     }
   }
+
+  for (auto it = icmp_sockets_.begin(); it != icmp_sockets_.end() && queued_packets_.empty(); it++) {
+    if ((*it)->active()) {
+      (*it)->OnGuestBufferAvaialble();
+    }
+  }
 }
 
 void Uip::OnFrameFromGuest(std::deque<iovec>& vector) {
@@ -360,23 +366,24 @@ void Uip::OnFrameFromGuest(std::deque<iovec>& vector) {
     copied += v.iov_len;
   }
 
-  packet->eth = (ethhdr*)packet->buffer;
+  packet->vnet = (virtio_net_hdr_v1*)packet->buffer;
+  packet->eth = (ethhdr*)&packet->vnet[1];
   ParseEthPacket(packet);
 }
 
-bool Uip::OnFrameFromHost(uint16_t protocol, void* buffer, size_t size) {
-  /* Ethernet header is filled here */
-  ethhdr* eth = (ethhdr*)buffer;
-  eth->h_proto = htons(protocol);
-  memcpy(eth->h_dest, guest_mac_.data, sizeof(eth->h_dest));
-  memcpy(eth->h_source, router_mac_.data, sizeof(eth->h_source));
-
-  return device_->WriteBuffer(buffer, size);
-}
-
 bool Uip::OnPacketFromHost(Ipv4Packet* packet) {
-  size_t packet_length = sizeof(ethhdr) + ntohs(packet->ip->tot_len);
-  if (OnFrameFromHost(ETH_P_IP, packet->buffer, packet_length)) {
+  memcpy(packet->eth->h_dest, guest_mac_.data, sizeof(packet->eth->h_dest));
+  memcpy(packet->eth->h_source, router_mac_.data, sizeof(packet->eth->h_source));
+  size_t buffer_length = sizeof(*packet->vnet) + sizeof(*packet->eth);
+  if (packet->eth->h_proto == htons(ETH_P_IP)) {
+    buffer_length += ntohs(packet->ip->tot_len);
+  } else if (packet->eth->h_proto == htons(ETH_P_ARP)) {
+    buffer_length += sizeof(ArpMessage);
+  } else {
+    MV_WARN("Unknown ethernet packet protocol=%x", ntohs(packet->eth->h_proto));
+  }
+  
+  if(device_->WriteBuffer(packet->buffer, buffer_length)) {
     packet->Release();
     return true;
   } else {
@@ -393,7 +400,13 @@ Ipv4Packet* Uip::AllocatePacket(bool urgent) {
   Ipv4Packet* packet = new Ipv4Packet;
   MV_ASSERT(packet);
   packet->mtu = mtu_;
-  packet->eth = (ethhdr*)packet->buffer;
+  packet->vnet = (virtio_net_hdr_v1*)packet->buffer;
+  bzero(packet->vnet, sizeof(*packet->vnet));
+  if (device_->offload_checksum()) {
+    packet->vnet->flags = VIRTIO_NET_HDR_F_DATA_VALID;
+  }
+  packet->eth = (ethhdr*)&packet->vnet[1];
+  packet->eth->h_proto = htons(ETH_P_IP);
   packet->ip = (iphdr*)&packet->eth[1];
   packet->data = (void*)&packet->ip[1];
   packet->tcp = nullptr;
@@ -422,8 +435,7 @@ void Uip::ParseEthPacket(Ipv4Packet* packet) {
     ParseIpPacket(packet);
     break;
   case ETH_P_ARP:
-    ParseArpPacket(eth, (ArpMessage*)&eth[1]);
-    packet->Release();
+    ParseArpPacket(packet);
     break;
   case ETH_P_IPV6:
     if (real_device_->debug()) {
@@ -450,28 +462,25 @@ void Uip::ParseEthPacket(Ipv4Packet* packet) {
   }
 }
 
-void Uip::ParseArpPacket(ethhdr* eth, ArpMessage* arp) {
-  MV_UNUSED(eth);
+void Uip::ParseArpPacket(Ipv4Packet* packet) {
+  auto arp = (ArpMessage*)&packet->eth[1];
   if (ntohs(arp->ar_op) == 1) { // ARP request
     uint32_t dip = ntohl(arp->ar_tip);
     if (dip == router_ip_) {
+      ArpMessage request = *arp;
       // ARP reply
-      uint8_t buffer[42];
-      ArpMessage* reply = (ArpMessage*)&buffer[14];
-      reply->ar_hrd = arp->ar_hrd;
-      reply->ar_pro = arp->ar_pro;
-      reply->ar_hln = arp->ar_hln;
-      reply->ar_pln = arp->ar_pln;
-      reply->ar_op = htons(2);
-      memcpy(reply->ar_tha, arp->ar_sha, ETH_ALEN);
-      reply->ar_tip = arp->ar_sip;
-      memcpy(reply->ar_sha, router_mac_.data, ETH_ALEN);
-      reply->ar_sip = htonl(router_ip_);
-      OnFrameFromHost(ETH_P_ARP, buffer, sizeof(buffer));
+      arp->ar_op = htons(2);
+      memcpy(arp->ar_tha, &request.ar_sha, ETH_ALEN);
+      arp->ar_tip = request.ar_sip;
+      memcpy(arp->ar_sha, router_mac_.data, ETH_ALEN);
+      arp->ar_sip = htonl(router_ip_);
+      OnPacketFromHost(packet);
+      return;
     }
   } else {
     MV_ERROR("Invalid Arp op=0x%x", arp->ar_op);
   }
+  packet->Release();
 }
 
 void Uip::ParseIpPacket(Ipv4Packet* packet) {

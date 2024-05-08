@@ -99,9 +99,6 @@ void RedirectUdpSocket::StartReading() {
   while (can_read()) {
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
-      if (debug_) {
-        MV_ERROR("UDP fd=%d failed to allocate packet", fd_, this);
-      }
       return;
     }
 

@@ -77,8 +77,10 @@ void IcmpSocket::OnDataFromHost(Ipv4Packet* packet) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  icmp->checksum = 0;
-  icmp->checksum = CalculateIcmpChecksum(packet);
+  if (!(packet->vnet->flags & VIRTIO_NET_HDR_F_DATA_VALID)) {
+    icmp->checksum = 0;
+    icmp->checksum = CalculateIcmpChecksum(packet);
+  }
 
   backend_->OnPacketFromHost(packet);
 }

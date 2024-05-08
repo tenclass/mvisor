@@ -47,10 +47,22 @@ void Tap::Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
   /* Set the tap device name */
   struct ifreq ifr;
   bzero(&ifr, sizeof(ifr));
-  ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
+  ifr.ifr_flags = IFF_TAP | IFF_NO_PI | IFF_VNET_HDR;
   strncpy(ifr.ifr_name, ifname_.c_str(), IFNAMSIZ);
   if (ioctl(tap_fd_, TUNSETIFF, (void*)&ifr) < 0) {
     MV_PANIC("Failed to create tap device");
+  }
+
+  /* Set virtio-net header size */
+  int vnet_hdr_sz = 12;
+  if (ioctl(tap_fd_, TUNSETVNETHDRSZ, &vnet_hdr_sz) < 0) {
+    MV_PANIC("Failed to set vnet header size for tap device");
+  }
+
+  // Set checksum offloading */
+  int offload = TUN_F_CSUM;
+  if (ioctl(tap_fd_, TUNSETOFFLOAD, offload) < 0) {
+    MV_PANIC("Failed to set offload for tap device");
   }
 
   // Set non-blocking
@@ -81,7 +93,7 @@ void Tap::Reset() {
 }
 
 void Tap::StartReading() {
-  size_t buffer_size = mtu_ + 20;
+  size_t buffer_size = mtu_ + 30;
   uint8_t buffer[buffer_size];
 
   while (can_read()) {
@@ -98,6 +110,8 @@ void Tap::StartReading() {
       return;
     }
 
+    // MV_HEXDUMP("in", buffer, len);
+
     if (!device_->WriteBuffer(buffer, len)) {
       return;
     }
@@ -109,7 +123,7 @@ void Tap::StartWriting() {
 
 void Tap::OnFrameFromGuest(std::deque<iovec>& vector) {
   if(can_write()) {
-    size_t buffer_size = mtu_ + 20;
+    size_t buffer_size = mtu_ + 30;
     uint8_t buffer[buffer_size];
     size_t copied = 0;
     for (auto &v : vector) {
@@ -120,6 +134,8 @@ void Tap::OnFrameFromGuest(std::deque<iovec>& vector) {
       memcpy(buffer + copied, v.iov_base, v.iov_len);
       copied += v.iov_len;
     }
+
+    // MV_HEXDUMP("out", buffer, copied);
 
     ssize_t len = write(tap_fd_, buffer, copied);
     if (len < 0) {

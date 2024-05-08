@@ -108,9 +108,8 @@ class Uip : public Object, public NetworkBackendInterface {
   void ParseMapRule(std::string input);
   void StartMapServices();
   void OnTimer();
-  bool OnFrameFromHost(uint16_t protocol, void* buffer, size_t size);
   void ParseEthPacket(Ipv4Packet* packet);
-  void ParseArpPacket(ethhdr* eth, ArpMessage* arp);
+  void ParseArpPacket(Ipv4Packet* packet);
   void ParseIpPacket(Ipv4Packet* packet);
   IcmpSocket* LookupIcmpSocket(uint32_t sip, uint32_t dip, uint16_t echo_id);
   bool ParseIcmpPacket(Ipv4Packet* packet);

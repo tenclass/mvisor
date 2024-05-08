@@ -11,6 +11,7 @@ class RedirectIcmpSocket : public IcmpSocket {
   virtual ~RedirectIcmpSocket();
   virtual void InitializeRedirect();
   virtual void OnPacketFromGuest(Ipv4Packet* packet);
+  virtual void OnGuestBufferAvaialble();
   bool active();
 
  protected:

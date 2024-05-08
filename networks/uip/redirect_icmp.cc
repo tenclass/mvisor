@@ -86,13 +86,16 @@ void RedirectIcmpSocket::InitializeRedirect() {
   });
 }
 
+void RedirectIcmpSocket::OnGuestBufferAvaialble() {
+  if (can_read()) {
+    StartReading();
+  }
+}
+
 void RedirectIcmpSocket::StartReading() {
   while (can_read()) {
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
-      if (debug_) {
-        MV_ERROR("ICMP fd=%d failed to allocate packet", fd_, this);
-      }
       return;
     }
 

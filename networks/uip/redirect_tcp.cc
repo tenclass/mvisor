@@ -222,9 +222,6 @@ void RedirectTcpSocket::StartReading() {
     /* Check if virtio buffer is full */
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
-      if (debug_) {
-        MV_ERROR("TCP fd=%d failed to allocate packet", fd_);
-      }
       return;
     }
 

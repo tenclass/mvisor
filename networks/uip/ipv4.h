@@ -6,6 +6,7 @@
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <linux/icmp.h>
+#include <linuz/virtio_net.h>
 
 #define IPV4_MAX_BUFFER_SIZE           (4096)
 #define IPV4_MAX_UDP_PAYLOAD(packet)   (packet->mtu - 20)
@@ -28,6 +29,7 @@ struct Ipv4Packet {
   Ipv4Socket*   socket;
   uint8_t       buffer[IPV4_MAX_BUFFER_SIZE];
   int           mtu;
+  virtio_net_hdr_v1* vnet;
   ethhdr*       eth;
   iphdr*        ip;
   udphdr*       udp;
