@@ -8,9 +8,8 @@
 #include <linux/icmp.h>
 #include <linuz/virtio_net.h>
 
-#define IPV4_MAX_BUFFER_SIZE           (4096)
-#define IPV4_MAX_UDP_PAYLOAD(packet)   (packet->mtu - 20)
-#define IPV4_MAX_TCP_PAYLOAD(packet)   (packet->mtu - 20 - 20)
+#define IPV4_MAX_UDP_PAYLOAD(packet)   ((int)packet->buffer_size - 14 - 20 - 8)
+#define IPV4_MAX_TCP_PAYLOAD(packet)   ((int)packet->buffer_size - 14 - 20 - 20)
 
 #define REDIRECT_TIMEOUT_SECONDS      (120)
 
@@ -27,7 +26,10 @@ struct PseudoHeader {
 class Ipv4Socket;
 struct Ipv4Packet {
   Ipv4Socket*   socket;
-  uint8_t       buffer[IPV4_MAX_BUFFER_SIZE];
+  uint8_t*      buffer;
+  size_t        buffer_size;
+  bool          offload_checksum;
+  bool          offload_segmentation;
   int           mtu;
   virtio_net_hdr_v1* vnet;
   ethhdr*       eth;

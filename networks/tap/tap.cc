@@ -60,7 +60,7 @@ void Tap::Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
   }
 
   // Set checksum offloading */
-  int offload = TUN_F_CSUM;
+  int offload = TUN_F_CSUM | TUN_F_TSO4 | TUN_F_UFO;
   if (ioctl(tap_fd_, TUNSETOFFLOAD, offload) < 0) {
     MV_PANIC("Failed to set offload for tap device");
   }
@@ -93,7 +93,7 @@ void Tap::Reset() {
 }
 
 void Tap::StartReading() {
-  size_t buffer_size = mtu_ + 30;
+  size_t buffer_size = (device_->offload_segmentation() ? 65536 : mtu_) + 30;
   uint8_t buffer[buffer_size];
 
   while (can_read()) {
@@ -110,8 +110,6 @@ void Tap::StartReading() {
       return;
     }
 
-    // MV_HEXDUMP("in", buffer, len);
-
     if (!device_->WriteBuffer(buffer, len)) {
       return;
     }
@@ -123,14 +121,14 @@ void Tap::StartWriting() {
 
 void Tap::OnFrameFromGuest(std::deque<iovec>& vector) {
   if(can_write()) {
-    size_t buffer_size = mtu_ + 30;
+    size_t buffer_size = 0;
+    for (auto &v : vector) {
+      buffer_size += v.iov_len;
+    }
+
     uint8_t buffer[buffer_size];
     size_t copied = 0;
     for (auto &v : vector) {
-      if (copied + v.iov_len > buffer_size) {
-        MV_WARN("packet too large for buffer, target=%zu, current=%zu", copied + v.iov_len, buffer_size);
-        continue;
-      }
       memcpy(buffer + copied, v.iov_base, v.iov_len);
       copied += v.iov_len;
     }

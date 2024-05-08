@@ -204,8 +204,14 @@ void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  if (!(packet->vnet->flags & VIRTIO_NET_HDR_F_DATA_VALID)) {
+  if (!packet->offload_checksum) {
     tcp->check = CalculateTcpChecksum(packet);
+  }
+
+  if (packet->offload_segmentation) {
+    packet->vnet->gso_type = VIRTIO_NET_HDR_GSO_TCPV4;
+    packet->vnet->hdr_len = (uint8_t*)packet->data - packet->buffer;
+    packet->vnet->gso_size = mss_;
   }
 
   backend_->OnPacketFromHost(packet);

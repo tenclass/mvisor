@@ -267,6 +267,7 @@ struct MacAddress {
 class NetworkDeviceInterface {
  public:
   virtual bool offload_checksum() = 0;
+  virtual bool offload_segmentation() = 0;
   virtual ~NetworkDeviceInterface() = default;
   virtual bool WriteBuffer(void* buffer, size_t size) = 0;
 };

@@ -84,8 +84,14 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  if (!(packet->vnet->flags & VIRTIO_NET_HDR_F_DATA_VALID)) {
+  if (!packet->offload_checksum) {
     udp->check = CalculateUdpChecksum(packet);
+  }
+
+  if (packet->offload_segmentation) {
+    packet->vnet->gso_type = VIRTIO_NET_HDR_GSO_UDP;
+    packet->vnet->hdr_len = (uint8_t*)packet->data - packet->buffer;
+    packet->vnet->gso_size = packet->mtu - 20 - 8;
   }
 
   backend_->OnPacketFromHost(packet);

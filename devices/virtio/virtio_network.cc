@@ -44,6 +44,10 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     device_features_ |=
       (1UL << VIRTIO_NET_F_CSUM) |
       (1UL << VIRTIO_NET_F_GUEST_CSUM) |
+      (1UL << VIRTIO_NET_F_GUEST_TSO4) |
+      (1UL << VIRTIO_NET_F_GUEST_UFO) |
+      (1UL << VIRTIO_NET_F_HOST_TSO4) |
+      (1UL << VIRTIO_NET_F_HOST_UFO) |
       (1UL << VIRTIO_NET_F_MTU) |
       (1UL << VIRTIO_NET_F_MAC) |
       (1UL << VIRTIO_NET_F_STATUS) |
@@ -113,8 +117,8 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     VirtioPci::Reset();
   
     /* MQ is not supported yet */
-    AddQueue(1024, std::bind(&VirtioNetwork::OnReceive, this, 0));
-    AddQueue(1024, std::bind(&VirtioNetwork::OnTransmit, this, 1));
+    AddQueue(256, std::bind(&VirtioNetwork::OnReceive, this, 0));
+    AddQueue(256, std::bind(&VirtioNetwork::OnTransmit, this, 1));
     AddQueue(64, std::bind(&VirtioNetwork::OnControl, this, 2));
 
     backend_->Reset();
@@ -142,6 +146,13 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
   bool offload_checksum() {
     if (driver_features_ & (1UL << VIRTIO_NET_F_GUEST_CSUM)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool offload_segmentation() {
+    if (driver_features_ & (1UL << VIRTIO_NET_F_GUEST_TSO4)) {
       return true;
     }
     return false;

@@ -356,8 +356,15 @@ void Uip::OnReceiveAvailable() {
 }
 
 void Uip::OnFrameFromGuest(std::deque<iovec>& vector) {
+  size_t buffer_size = 0;
+  for (auto &v : vector) {
+    buffer_size += v.iov_len;
+  }
+
   auto packet = new Ipv4Packet;
+  packet->buffer = new uint8_t[buffer_size];
   packet->Release = [packet]() {
+    delete[] packet->buffer;
     delete packet;
   };
   size_t copied = 0;
@@ -372,6 +379,9 @@ void Uip::OnFrameFromGuest(std::deque<iovec>& vector) {
 }
 
 bool Uip::OnPacketFromHost(Ipv4Packet* packet) {
+  if (packet->offload_checksum) {
+    packet->vnet->flags |= VIRTIO_NET_HDR_F_DATA_VALID;
+  }
   memcpy(packet->eth->h_dest, guest_mac_.data, sizeof(packet->eth->h_dest));
   memcpy(packet->eth->h_source, router_mac_.data, sizeof(packet->eth->h_source));
   size_t buffer_length = sizeof(*packet->vnet) + sizeof(*packet->eth);
@@ -399,12 +409,13 @@ Ipv4Packet* Uip::AllocatePacket(bool urgent) {
   }
   Ipv4Packet* packet = new Ipv4Packet;
   MV_ASSERT(packet);
+  packet->offload_checksum = device_->offload_checksum();
+  packet->offload_segmentation = device_->offload_segmentation();
   packet->mtu = mtu_;
+  packet->buffer_size = packet->offload_segmentation ? 65536 : packet->mtu;
+  packet->buffer = new uint8_t[packet->buffer_size + 30];
   packet->vnet = (virtio_net_hdr_v1*)packet->buffer;
   bzero(packet->vnet, sizeof(*packet->vnet));
-  if (device_->offload_checksum()) {
-    packet->vnet->flags = VIRTIO_NET_HDR_F_DATA_VALID;
-  }
   packet->eth = (ethhdr*)&packet->vnet[1];
   packet->eth->h_proto = htons(ETH_P_IP);
   packet->ip = (iphdr*)&packet->eth[1];
@@ -414,6 +425,7 @@ Ipv4Packet* Uip::AllocatePacket(bool urgent) {
   packet->icmp = nullptr;
   packet->data_length = 0;
   packet->Release = [packet]() {
+    delete[] packet->buffer;
     delete packet;
   };
   return packet;
