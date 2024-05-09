@@ -16,14 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "tcp.h"
 
 #include <arpa/inet.h>
 
 #include "logger.h"
 
 
-TcpSocket::TcpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
+TcpSocket::TcpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
   Ipv4Socket(backend, sip, dip), sport_(sport), dport_(dport) {
   mss_ = 1460;
   // setup initial sequence and acknowledge
@@ -131,7 +131,7 @@ uint16_t TcpSocket::CalculateTcpChecksum(Ipv4Packet* packet) {
 
   ip = packet->ip;
   tcp_len = ntohs(ip->tot_len) - ip->ihl * 4;
-  MV_ASSERT(tcp_len <= UIP_MAX_TCP_PAYLOAD(packet) + 20);
+  MV_ASSERT(tcp_len <= IPV4_MAX_TCP_PAYLOAD(packet) + 20);
 
   hdr.sip = ip->saddr;
   hdr.dip  = ip->daddr;
@@ -204,7 +204,15 @@ void TcpSocket::OnDataFromHost(Ipv4Packet* packet, uint32_t flags) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  tcp->check = CalculateTcpChecksum(packet);
+  if (!packet->offload_checksum) {
+    tcp->check = CalculateTcpChecksum(packet);
+  }
+
+  if (packet->offload_segmentation) {
+    packet->vnet->gso_type = VIRTIO_NET_HDR_GSO_TCPV4;
+    packet->vnet->hdr_len = (uint8_t*)packet->data - packet->buffer;
+    packet->vnet->gso_size = mss_;
+  }
 
   backend_->OnPacketFromHost(packet);
 }

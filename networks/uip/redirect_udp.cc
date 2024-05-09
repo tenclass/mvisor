@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "redirect_udp.h"
 
 #include <fcntl.h>
 #include <arpa/inet.h>
@@ -99,14 +99,11 @@ void RedirectUdpSocket::StartReading() {
   while (can_read()) {
     auto packet = AllocatePacket(false);
     if (packet == nullptr) {
-      if (debug_) {
-        MV_ERROR("UDP fd=%d failed to allocate packet", fd_, this);
-      }
       return;
     }
 
     /* FIXME: Limit packet size for Linux driver */
-    auto recv_size = UIP_MAX_UDP_PAYLOAD(packet);
+    auto recv_size = IPV4_MAX_UDP_PAYLOAD(packet);
 
     int ret = recv(fd_, packet->data, recv_size, 0);
     if (ret < 0) {

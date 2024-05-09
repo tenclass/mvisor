@@ -16,12 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
-
+#include "udp.h"
 #include <arpa/inet.h>
 
 
-UdpSocket::UdpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
+UdpSocket::UdpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t sport, uint16_t dport) :
   Ipv4Socket(backend, sip, dip), sport_(sport), dport_(dport)
 {
 }
@@ -85,7 +84,15 @@ void UdpSocket::OnDataFromHost(Ipv4Packet* packet) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  udp->check = CalculateUdpChecksum(packet);
+  if (!packet->offload_checksum) {
+    udp->check = CalculateUdpChecksum(packet);
+  }
+
+  if (packet->offload_segmentation) {
+    packet->vnet->gso_type = VIRTIO_NET_HDR_GSO_UDP;
+    packet->vnet->hdr_len = (uint8_t*)packet->data - packet->buffer;
+    packet->vnet->gso_size = packet->mtu - 20 - 8;
+  }
 
   backend_->OnPacketFromHost(packet);
 }

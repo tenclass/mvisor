@@ -16,10 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "icmp.h"
+#include <arpa/inet.h>
 
 
-IcmpSocket::IcmpSocket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip, uint16_t echo_id):
+IcmpSocket::IcmpSocket(Uip* backend, uint32_t sip, uint32_t dip, uint16_t echo_id):
   Ipv4Socket(backend, sip, dip) {
   echo_id_ = echo_id;
 }
@@ -76,8 +77,10 @@ void IcmpSocket::OnDataFromHost(Ipv4Packet* packet) {
 
   // checksum
   ip->check = CalculateChecksum((uint8_t*)ip, ip->ihl * 4);
-  icmp->checksum = 0;
-  icmp->checksum = CalculateIcmpChecksum(packet);
+  if (!packet->offload_checksum) {
+    icmp->checksum = 0;
+    icmp->checksum = CalculateIcmpChecksum(packet);
+  }
 
   backend_->OnPacketFromHost(packet);
 }

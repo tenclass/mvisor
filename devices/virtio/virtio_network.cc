@@ -42,6 +42,12 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     AddMsiXCapability(1, 4, 0, 0x1000);
     
     device_features_ |=
+      (1UL << VIRTIO_NET_F_CSUM) |
+      (1UL << VIRTIO_NET_F_GUEST_CSUM) |
+      (1UL << VIRTIO_NET_F_GUEST_TSO4) |
+      (1UL << VIRTIO_NET_F_GUEST_UFO) |
+      (1UL << VIRTIO_NET_F_HOST_TSO4) |
+      (1UL << VIRTIO_NET_F_HOST_UFO) |
       (1UL << VIRTIO_NET_F_MTU) |
       (1UL << VIRTIO_NET_F_MAC) |
       (1UL << VIRTIO_NET_F_STATUS) |
@@ -111,7 +117,7 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     VirtioPci::Reset();
   
     /* MQ is not supported yet */
-    AddQueue(512, std::bind(&VirtioNetwork::OnReceive, this, 0));
+    AddQueue(256, std::bind(&VirtioNetwork::OnReceive, this, 0));
     AddQueue(256, std::bind(&VirtioNetwork::OnTransmit, this, 1));
     AddQueue(64, std::bind(&VirtioNetwork::OnControl, this, 2));
 
@@ -138,6 +144,20 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
   }
 
+  bool offload_checksum() {
+    if (driver_features_ & (1UL << VIRTIO_NET_F_GUEST_CSUM)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool offload_segmentation() {
+    if (driver_features_ & (1UL << VIRTIO_NET_F_GUEST_TSO4)) {
+      return true;
+    }
+    return false;
+  }
+
   void OnReceive(int queue_index) {
     MV_UNUSED(queue_index);
     if (backend_) {
@@ -149,7 +169,9 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     auto &vq = queues_[queue_index];
   
     while (auto element = PopQueue(vq)) {
-      HandleTransmit(vq, element);
+      auto &vector = element->vector;
+      MV_ASSERT(vector.size() >= 1);
+      backend_->OnFrameFromGuest(vector);
       PushQueue(vq, element);
     }
     NotifyQueue(vq);
@@ -174,9 +196,6 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
 
     std::vector<VirtElement*> elements;
-
-    virtio_net_hdr_v1* net_header = nullptr;
-    size_t net_header_length = sizeof(*net_header);
   
     size_t offset = 0;
     while (offset < size) {
@@ -189,22 +208,6 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
       }
       element->length = 0;
 
-      if (offset == 0) {
-        /* Prepend virtio net header to the buffer vector*/
-        auto &iov = element->vector.front();
-        net_header = (virtio_net_hdr_v1*)iov.iov_base;
-        bzero(net_header, net_header_length);
-        element->length += net_header_length;
-
-        /* Big packet mode has standalone buffer for virtio net header */ 
-        if (iov.iov_len == net_header_length) {
-          element->vector.pop_front();
-        } else {
-          iov.iov_base = (uint8_t*)iov.iov_base + net_header_length;
-          iov.iov_len -= net_header_length;
-        }
-      }
-
       size_t remain_bytes = size - offset;
       for (auto &iov : element->vector) {
         size_t bytes = iov.iov_len < remain_bytes ? iov.iov_len : remain_bytes;
@@ -216,33 +219,16 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
 
       elements.push_back(element);
       if (offset < size) {
-        MV_ERROR("mergeable rxbuf mode is not supported yet. offset=%lu size=%lu mtu=%u",
+        MV_PANIC("mergeable rxbuf mode is not supported yet. offset=%lu size=%lu mtu=%u",
           offset, size, net_config_.mtu);
       }
     }
 
+    auto net_header = (virtio_net_hdr_v1*)elements.front()->vector.front().iov_base;
     net_header->num_buffers = elements.size();
     PushQueueMultiple(vq, elements);
     NotifyQueue(vq);
     return true;
-  }
-
-  void HandleTransmit(VirtQueue& vq, VirtElement* element) {
-    MV_UNUSED(vq);
-
-    auto &vector = element->vector;
-    MV_ASSERT(vector.size() >= 1);
-    auto &front = vector.front();
-    virtio_net_hdr_v1* header = (virtio_net_hdr_v1*)front.iov_base;
-    MV_ASSERT(header->gso_type == VIRTIO_NET_HDR_GSO_NONE);
-
-    if (front.iov_len == sizeof(*header)) {
-      vector.pop_front();
-    } else {
-      front.iov_base = &header[1];
-      front.iov_len -= sizeof(*header);
-    }
-    backend_->OnFrameFromGuest(vector);
   }
 
   void HandleControl(VirtQueue& vq, VirtElement* element) {

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "uip.h"
+#include "ipv4.h"
 
 #include <arpa/inet.h>
 
@@ -24,7 +24,7 @@
 #include "logger.h"
 
 
-Ipv4Socket::Ipv4Socket(NetworkBackendInterface* backend, uint32_t sip, uint32_t dip) :
+Ipv4Socket::Ipv4Socket(Uip* backend, uint32_t sip, uint32_t dip) :
   backend_(backend), sip_(sip), dip_(dip) {
   debug_ = false;
   active_time_ = time(nullptr);

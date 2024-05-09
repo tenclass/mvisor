@@ -39,7 +39,7 @@ subdir('core')
 subdir('migration')
 subdir('devices')
 subdir('images')
-subdir('networks/uip')
+subdir('networks')
 subdir('utilities')
 
 if get_option('sdl')
