@@ -26,7 +26,7 @@ struct PixelFormat {
   uint8_t green_shift;
   uint8_t blue_shift;
   uint8_t padding[3];
-};
+} __attribute__((packed));
 
 struct VncRect {
     int top;
@@ -42,7 +42,7 @@ class VncConnection {
   int                 fd_;
   bool                shared_ = false;
   PixelFormat         pixel_format_;
-  std::list<int32_t>  client_encodings_;
+  std::vector<int32_t>client_encodings_;
   int                 frame_buffer_width_ = 0;
   int                 frame_buffer_height_ = 0;
   pixman_image_t*     frame_buffer_ = nullptr;
@@ -56,7 +56,7 @@ class VncConnection {
   uint8_t             modifiers_ = 0;
 
   std::thread               update_thread_;
-  std::mutex                update_mutex_;
+  std::recursive_mutex      update_mutex_;
   std::condition_variable   update_cv_;
   z_stream                  zstream_ = {};
 
@@ -70,6 +70,7 @@ class VncConnection {
   std::list<DisplayUpdateListener>::iterator      display_update_listener_;
   std::list<ClipboardListener>::iterator          clipboard_listener_;
 
+  void CreateFrameBuffer();
   void SendServerInit();
   void LookupDevices();
   void ResizeFrameBuffer();
@@ -79,6 +80,7 @@ class VncConnection {
   void AddDirtyRectInternal(int top, int left, int bottom, int right);
   void AddDirtyRect(int top, int left, int bottom, int right);
   void UpdateLoop();
+  pixman_format_code_t GetPixelFormat(int bpp);
 
   uint8_t ReadUInt8();
   uint16_t ReadUInt16();

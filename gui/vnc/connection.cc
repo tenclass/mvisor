@@ -78,7 +78,9 @@ void VncConnection::LookupDevices() {
 
     display_update_listener_ = display_->RegisterDisplayUpdateListener([this](const DisplayUpdate& update) {
       server_->Schedule([this, update=std::move(update)]() {
-        Render(update);
+        if (state_ == kVncRunning) {
+          Render(update);
+        }
       });
     });
   }
@@ -129,6 +131,17 @@ bool VncConnection::OnReceive() {
     if (n <= 0) {
       return false;
     }
+
+    // const char* message_type_names[] = {
+    //   "SetPixelFormat",
+    //   "",
+    //   "SetEncodings",
+    //   "FramebufferUpdateRequest",
+    //   "KeyEvent",
+    //   "PointerEvent",
+    //   "ClientCutText",
+    // };
+    // MV_LOG("VNC message type %d %s", message_type, message_type_names[message_type]);
 
     switch (message_type)
     {
@@ -207,10 +220,6 @@ void VncConnection::SendServerInit() {
   display_->GetDisplayMode(&w, &h, &bpp, nullptr);
   frame_buffer_width_ = w;
   frame_buffer_height_ = h;
-  if (frame_buffer_ == nullptr) {
-    frame_buffer_ = pixman_image_create_bits_no_clear(PIXMAN_a8b8g8r8, w, h, nullptr, w * 4);
-    MV_ASSERT(frame_buffer_);
-  }
 
   ServerInitMessage msg = {
     .framebuffer_width = htons(w),
@@ -247,10 +256,22 @@ bool VncConnection::OnSetPixelFormat() {
 
   uint8_t pixel_format[16];
   ReadData(pixel_format, sizeof(pixel_format));
-  
-  if (memcmp(pixel_format, &pixel_format_, sizeof(pixel_format_)) != 0) {
-    MV_WARN("VNC pixel format mismatch");
-    return false;
+
+  std::lock_guard<std::recursive_mutex> lock(update_mutex_);
+  pixel_format_.bits_per_pixel = pixel_format[0];
+  pixel_format_.depth = pixel_format[1];
+  pixel_format_.big_endian = pixel_format[2];
+  pixel_format_.true_color = pixel_format[3];
+  pixel_format_.red_max = ntohs(*(uint16_t*)&pixel_format[4]);
+  pixel_format_.green_max = ntohs(*(uint16_t*)&pixel_format[6]);
+  pixel_format_.blue_max = ntohs(*(uint16_t*)&pixel_format[8]);
+  pixel_format_.red_shift = pixel_format[10];
+  pixel_format_.green_shift = pixel_format[11];
+  pixel_format_.blue_shift = pixel_format[12];
+
+  if (frame_buffer_ != nullptr) {
+    pixman_image_unref(frame_buffer_);
+    frame_buffer_ = nullptr;
   }
   return true;
 }
@@ -259,6 +280,7 @@ bool VncConnection::OnSetPixelFormat() {
 bool VncConnection::OnSetEncodings() {
   ReadSkip(1); // padding
 
+  std::lock_guard<std::recursive_mutex> lock(update_mutex_);
   client_encodings_.clear();
   auto n_encodings = ReadUInt16();
   for (int i = 0; i < n_encodings; i++) {
@@ -271,13 +293,11 @@ bool VncConnection::OnSetEncodings() {
     MV_WARN("VNC encoding RAW not supported");
     return false;
   }
-
-  // Now we can send framebuffer update
-  SendDesktopSize();
   return true;
 }
 
 bool VncConnection::IsEncodingSupported(int32_t encoding) {
+  std::lock_guard<std::recursive_mutex> lock(update_mutex_);
   return std::find(client_encodings_.begin(), client_encodings_.end(), encoding) != client_encodings_.end();
 }
 
@@ -293,9 +313,12 @@ struct FrameBufferUpdateRequest {
 bool VncConnection::OnFrameBufferUpdateRequest() {
   FrameBufferUpdateRequest req;
   ReadData(&req, sizeof(req));
+  req.x = ntohs(req.x);
+  req.y = ntohs(req.y);
+  req.w = ntohs(req.w);
+  req.h = ntohs(req.h);
 
   if (req.incremental == 0) {
-    dirty_rects_.clear();
     display_->Refresh();
   }
   frame_buffer_update_requested_ = true;
@@ -391,7 +414,7 @@ PointerInputInterface* VncConnection::GetActivePointer() {
 }
 
 void VncConnection::ResizeFrameBuffer() {
-  std::unique_lock<std::mutex> lock(update_mutex_);
+  std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   int w, h, bpp;
   display_->GetDisplayMode(&w, &h, &bpp, nullptr);
   frame_buffer_width_ = w;
@@ -399,12 +422,10 @@ void VncConnection::ResizeFrameBuffer() {
 
   if (frame_buffer_) {
     pixman_image_unref(frame_buffer_);
+    frame_buffer_ = nullptr;
   }
-  frame_buffer_ = pixman_image_create_bits(PIXMAN_a8b8g8r8, w, h, nullptr, w * 4);
-  MV_ASSERT(frame_buffer_);
 
   dirty_rects_.clear();
-  AddDirtyRect(0, 0, w, h);
   if (state_ == kVncRunning) {
     SendDesktopSize();
   }
@@ -421,9 +442,33 @@ void VncConnection::SendDesktopSize() {
   }
 }
 
-void VncConnection::RenderSurface(const DisplayPartialBitmap* partial) {
+pixman_format_code_t VncConnection::GetPixelFormat(int bpp) {
+  switch (bpp) {
+  case 8:
+    return PIXMAN_a2b2g2r2;
+  case 16:
+    return PIXMAN_b5g6r5;
+  case 24:
+    return PIXMAN_b8g8r8;
+  default:
+    return PIXMAN_a8b8g8r8;
+  }
+}
+
+void VncConnection::CreateFrameBuffer() {
   if (frame_buffer_ == nullptr) {
-    return;
+    auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
+    auto code = GetPixelFormat(pixel_format_.bits_per_pixel);
+    auto stride_bytes = frame_buffer_width_ * bytes_per_pixel;
+    frame_buffer_ = pixman_image_create_bits(code, frame_buffer_width_, frame_buffer_height_, nullptr, stride_bytes);
+    MV_ASSERT(frame_buffer_);
+  }
+}
+
+void VncConnection::RenderSurface(const DisplayPartialBitmap* partial) {
+  auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
+  if (frame_buffer_ == nullptr) {
+    CreateFrameBuffer();
   }
 
   auto src = partial->data;
@@ -443,10 +488,14 @@ void VncConnection::RenderSurface(const DisplayPartialBitmap* partial) {
       for (int x = 0; x < src_w; x++) {
         auto index = src[y * src_stride + x];
         auto color = palette + index * 3;
-        dst[4 * x + 0] = color[2] << 2;
-        dst[4 * x + 1] = color[1] << 2;
-        dst[4 * x + 2] = color[0] << 2;
-        dst[4 * x + 3] = 0;
+        if (pixel_format_.bits_per_pixel == 8) {
+          dst[bytes_per_pixel * x] = ((color[2] >> 4) & 3) | ((color[1] >> 4) & 3) << 2 | ((color[0] >> 4) & 3) << 4;
+        } else {
+          dst[bytes_per_pixel * x + 0] = color[2] << 2;
+          dst[bytes_per_pixel * x + 1] = color[1] << 2;
+          dst[bytes_per_pixel * x + 2] = color[0] << 2;
+          dst[bytes_per_pixel * x + 3] = 0;
+        }
       }
       dst += stride;
     }
@@ -472,7 +521,7 @@ void VncConnection::RenderCursor(const DisplayMouseCursor* cursor_update) {
   if (cursor_update->visible == 0) {
     if (cursor_shape_id_ != 0) {
       // Create a blank cursor if the cursor is hidden
-      std::lock_guard<std::mutex> lock(update_mutex_);
+      std::lock_guard<std::recursive_mutex> lock(update_mutex_);
       if (cursor_buffer_) {
         pixman_image_unref(cursor_buffer_);
       }
@@ -489,7 +538,7 @@ void VncConnection::RenderCursor(const DisplayMouseCursor* cursor_update) {
       return;
     }
 
-    std::lock_guard<std::mutex> lock(update_mutex_);
+    std::lock_guard<std::recursive_mutex> lock(update_mutex_);
     if (cursor_buffer_) {
       pixman_image_unref(cursor_buffer_);
       cursor_buffer_ = nullptr;
@@ -554,7 +603,7 @@ void VncConnection::Render(const DisplayUpdate& update) {
 }
 
 void VncConnection::SendCursorUpdate() {
-  std::unique_lock<std::mutex> lock(update_mutex_);
+  std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   if (!cursor_buffer_ || !IsEncodingSupported(-314)) {
     return;
   }
@@ -577,9 +626,15 @@ void VncConnection::SendCursorUpdate() {
 }
 
 void VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
-  std::unique_lock<std::mutex> lock(update_mutex_);
+  std::unique_lock<std::recursive_mutex> lock(update_mutex_);
+  if (frame_buffer_ == nullptr) {
+    // Frame buffer is destroyed if client set pixel format
+    return;
+  }
+
   MV_ASSERT(width > 0 && height > 0);
   MV_ASSERT(x + width <= frame_buffer_width_ && y + height <= frame_buffer_height_);
+  auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
 
   uint8_t header[16] = {0};
   *(uint16_t*)&header[2] = htons(1);  // number of rectangles
@@ -601,10 +656,10 @@ void VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
     // fill raw encoding data
     auto stride = pixman_image_get_stride(frame_buffer_);
     auto data = (uint8_t*)pixman_image_get_data(frame_buffer_);
-    auto src = data + y * stride + x * 4;
+    auto src = data + y * stride + x * bytes_per_pixel;
     for (int i = 0; i < height; i++) {
       zstream_.next_in = src;
-      zstream_.avail_in = width * 4;
+      zstream_.avail_in = width * bytes_per_pixel;
       MV_ASSERT(deflate(&zstream_, Z_SYNC_FLUSH) == Z_OK);
       src += stride;
     }
@@ -619,10 +674,10 @@ void VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
 
     auto stride = pixman_image_get_stride(frame_buffer_);
     auto data = (uint8_t*)pixman_image_get_data(frame_buffer_);
-    auto dst = data + y * stride + x * 4;
+    auto dst = data + y * stride + x * bytes_per_pixel;
     
     for (int i = 0; i < height; i++) {
-      send(fd_, dst, width * 4, 0);
+      send(fd_, dst, width * bytes_per_pixel, 0);
       dst += stride;
     }
   }
@@ -634,7 +689,7 @@ void VncConnection::UpdateLoop() {
   while (fd_ != -1) {
     std::unique_lock<std::mutex> lock(server_->mutex());
     update_cv_.wait(lock, [this]() {
-      return fd_ == -1 || frame_buffer_update_requested_ || cursor_update_requested_;
+      return fd_ == -1 || (frame_buffer_update_requested_ && !dirty_rects_.empty()) || cursor_update_requested_;
     });
     if (fd_ == -1) {
       break;
