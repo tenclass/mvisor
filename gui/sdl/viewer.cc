@@ -285,12 +285,15 @@ void Viewer::LookupDevices() {
     auto port_name = std::string(port->port_name());
     if (port_name == "com.redhat.spice.0") {
       clipboard_ = dynamic_cast<ClipboardInterface*>(o);
-    }
-    port->set_callback([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
-      Schedule([this, port, event, data = std::string((const char*)data, size)] () {
-        OnSerialPortEvent(port, event, data);
+      spice_agent_listener_ = port->RegisterSerialPortListener([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
+        Schedule([this, port, event, data = std::string((const char*)data, size)] () {
+          if (event == kSerialPortStatusChanged) {
+            /* Set screen size when VDAgent is ready */
+            SendResizerEvent();
+          }
+        });
       });
-    });
+    }
   }
   /* At least one display device is required for SDL viewer */
   MV_ASSERT(display_);
@@ -320,23 +323,6 @@ void Viewer::LookupDevices() {
         OnClipboardFromGuest(clipboard_data);
       });
     });
-  }
-}
-
-void Viewer::OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data) {
-  MV_UNUSED(data);
-
-  switch (event)
-  {
-  case kSerialPortStatusChanged:
-    if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
-      /* Set screen size when VDAgent is ready */
-      SendResizerEvent();
-    }
-    break;
-  case kSerialPortData:
-    /* Handle Qemu guest agent data here */
-    break;
   }
 }
 

@@ -58,7 +58,6 @@ class Viewer {
   void SendResizerEvent();
   void OnPlayback(PlaybackState state, const std::string& data);
   void OnClipboardFromGuest(const ClipboardData& clipboard_data);
-  void OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data);
   void Schedule(VoidCallback callback);
 
   Machine*                machine_;
@@ -75,6 +74,7 @@ class Viewer {
   std::list<DisplayUpdateListener>::iterator      display_update_listener_;
   std::list<ClipboardListener>::iterator          clipboard_listener_;
   std::list<PlaybackListener>::iterator           playback_listener_;
+  std::list<SerialPortListener>::iterator         spice_agent_listener_;
 
   SDL_Window* window_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;
