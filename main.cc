@@ -19,25 +19,29 @@
 #include <cstdio>
 #include <string>
 #include <unistd.h>
-#include <uuid/uuid.h>
 #include <getopt.h>
 
 #include <filesystem>
 
 #include "version.h"
 #include "machine.h"
-
+#include "utilities.h"
+#include "gui/vnc/server.h"
 
 static Machine*     machine = nullptr;
+static VncServer*   vnc_server = nullptr;
+static std::thread  vnc_server_thread;
 
 #ifdef HAS_SWEET_SERVER
 #include "sweet-server/server.h"
 static SweetServer* sweet_server = nullptr;
+static std::thread  sweet_server_thread;
 #endif
 
 #ifdef HAS_SDL
 #include "gui/sdl/viewer.h"
 static Viewer*      viewer = nullptr;
+static std::thread  viewer_thread;
 #endif
 
 
@@ -50,10 +54,15 @@ static void IntializeArguments(int argc, char* argv[]) {
     }
   }
 
-  char uuid_string[40];
-  uuid_t uuid;
-  uuid_generate(uuid);
-  uuid_unparse(uuid, uuid_string);
+  char uuid_string[40] = {0};
+  // Generate a random uuid string like "550e8400-e29b-41d4-a716-446655440000"
+  for (int i = 0; i < 36; i++) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      uuid_string[i] = '-';
+    } else {
+      uuid_string[i] = "0123456789abcdef"[rand() % 16];
+    }
+  }
 
   char* new_argv[argc + 3];
   for (int i = 0; i < argc; i++) {
@@ -70,15 +79,16 @@ static void IntializeArguments(int argc, char* argv[]) {
 static void PrintHelp() {
   printf("Usage: mvisor [option]\n");
   printf("Options\n");
-  printf("  -h, --help            Display this information.\n");
-  printf("  -v, --version         Display mvisor version information.\n");
-  printf("  -u, --uuid            Specified mvisor uuid information.\n");
-  printf("  -n, --name            Specified mvisor name information.\n");
   printf("  -c, --config          Specified mvisor config file path.\n");
-  printf("  -s, --sweet           Specified mvisor socket file path.\n");
-  printf("  -p, --pidfile         Specified mvisor pid file path.\n");
+  printf("  -h, --help            Display this information.\n");
   printf("  -l, --load            Load mvisor snapshot information.\n");
   printf("  -m, --migration       Start mvisor witn port from migration.\n");
+  printf("  -n, --name            Specified mvisor name information.\n");
+  printf("  -p, --pidfile         Specified mvisor pid file path.\n");
+  printf("  -s, --sweet           Specified mvisor socket file path.\n");
+  printf("  -u, --uuid            Specified mvisor uuid information.\n");
+  printf("  -v, --version         Display mvisor version information.\n");
+  printf("  -vnc [port]           Start a VNC server at specified port.\n");
 }
 
 static void PrintVersion() {
@@ -90,20 +100,22 @@ static void PrintVersion() {
 }
 
 static struct option long_options[] = {
-  {"help", no_argument, 0, 'h'},
-  {"uuid", required_argument, 0, 'u'},
-  {"name", required_argument, 0, 'n'},
   {"config", required_argument, 0, 'c'},
-  {"sweet", required_argument, 0, 's'},
-  {"pidfile", required_argument, 0, 'p'},
+  {"help", no_argument, 0, 'h'},
   {"load", required_argument, 0, 'l'},
   {"migration", required_argument, 0, 'm'},
-  {"version", no_argument, 0, 'v'},
+  {"name", required_argument, 0, 'n'},
+  {"pidfile", required_argument, 0, 'p'},
+  {"sweet", required_argument, 0, 's'},
+  {"uuid", required_argument, 0, 'u'},
+  {"version", no_argument, 0, 'V'},
+  {"vnc", required_argument, 0, 'v'},
   {NULL, 0, 0, 0}
 };
 
 int main(int argc, char* argv[]) {
   IntializeArguments(argc, argv);
+  SetThreadName("mvisor-main");
 
   std::string config_path = "../config/default.yaml";
   std::string vm_uuid, vm_name;
@@ -111,9 +123,10 @@ int main(int argc, char* argv[]) {
   std::string pid_path;
   std::string load_path;
   std::string migration_port;
+  uint16_t vnc_port = 0;
 
   int c, option_index = 0;
-  while ((c = getopt_long_only(argc, argv, "hvc:u:n:s:p:l:", long_options, &option_index)) != -1) {
+  while ((c = getopt_long_only(argc, argv, "hVc:u:n:s:p:l:", long_options, &option_index)) != -1) {
     switch (c)
     {
     case 'h':
@@ -141,6 +154,9 @@ int main(int argc, char* argv[]) {
       migration_port = optarg;
       break;
     case 'v':
+      vnc_port = atoi(optarg);
+      break;
+    case 'V':
       PrintVersion();
       return 0;
     case '?':
@@ -156,26 +172,33 @@ int main(int argc, char* argv[]) {
     fclose(fp);
   }
 
-  int ret = 0;
   machine = new Machine(config_path);
   machine->set_vm_uuid(vm_uuid);
   machine->set_vm_name(vm_name.empty() ? vm_uuid : vm_name);
 
-#ifdef HAS_SWEET_SERVER
-  /* There are two modes to control the virtual machine,
-   * the GUI mode is to start a SDL viewwer,
-   * and the non-GUI mode is to start a sweet server
-   */
-  if (!sweet_path.empty()) {
-    sweet_server = new SweetServer(machine, sweet_path);
-    auto quit_callback = [](int signum) {
-      MV_UNUSED(signum);
+  /* Register CTRL+C signal handler */
+  auto quit_callback = [](int signum) {
+    MV_UNUSED(signum);
+    machine->Quit();
+  };
+  signal(SIGINT, quit_callback);
+  signal(SIGTERM, quit_callback);
+  MV_UNUSED(vnc_port);
 
-      machine->Quit();
-      sweet_server->Close();
-    };
-    signal(SIGINT, quit_callback);
-    signal(SIGTERM, quit_callback);
+  if (vnc_port) {
+    vnc_server = new VncServer(machine, vnc_port);
+    vnc_server_thread = std::thread([]() {
+      vnc_server->MainLoop();
+    });
+  }
+
+  /* SweetServer is used in Tenclass products */
+  if (!sweet_path.empty()) {
+#ifdef HAS_SWEET_SERVER
+    sweet_server = new SweetServer(machine, sweet_path);
+    sweet_server_thread = std::thread([]() {
+      sweet_server->MainLoop();
+    });
 
     if (!migration_port.empty()) {
       std::thread([&migration_port]() {
@@ -186,33 +209,58 @@ int main(int argc, char* argv[]) {
         machine->Load(load_path);
       }).detach();
     }
-
-    ret = sweet_server->MainLoop();
-    delete machine;
-    delete sweet_server;
-  }
+#else
+    MV_ERROR("Sweet server is not supported in this build");
 #endif
-
-#ifdef HAS_SDL
-  if (sweet_path.empty()) {
-    /* SDL handles default signals */
-    viewer = new Viewer(machine);
-
+  } else {
+    /* Automatically start the SDL viewer if the GUI is enabled */
     if (!migration_port.empty()) {
       machine->Load(atoi(migration_port.c_str()));
     } else if (!load_path.empty()) {
       machine->Load(load_path);
     }
-    machine->Resume();
 
-    ret = viewer->MainLoop();
-    delete machine;
-    delete viewer;
-  }
+#ifdef HAS_SDL
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+      MV_LOG("Failed to initialize SDL: %s", SDL_GetError());
+    } else {
+      /* SDL handles default signals */
+      viewer = new Viewer(machine);
+      viewer_thread = std::thread([]() {
+        viewer->MainLoop();
+      });
+    }
 #endif
 
+    machine->Resume();
+  }
+
+  machine->WaitToQuit();
   if (!pid_path.empty()) {
     unlink(pid_path.c_str());
   }
-  return ret;
+
+  if (vnc_server) {
+    vnc_server->Close();
+    vnc_server_thread.join();
+    delete vnc_server;
+  }
+
+#ifdef HAS_SWEET_SERVER
+  if (sweet_server) {
+    sweet_server->Close();
+    sweet_server_thread.join();
+    delete sweet_server;
+  }
+#endif
+
+#ifdef HAS_SDL
+  if (viewer) {
+    viewer_thread.join();
+    delete viewer;
+  }
+  SDL_Quit();
+#endif
+  delete machine;
+  return 0;
 }

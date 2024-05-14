@@ -39,7 +39,7 @@ class Ich9Hda : public PciDevice {
   uint32_t          rirb_counter_;
   IoTimePoint       wall_clock_base_;
 
-  const StateChangeListener*      state_change_listener_ = nullptr;
+  std::list<VoidCallback>::iterator state_change_listener_;
   std::vector<HdaCodecInterface*> codecs_;
 
   struct Ich9HdaStreamState {
@@ -93,9 +93,7 @@ class Ich9Hda : public PciDevice {
   virtual void Disconnect() {
     codecs_.clear();
     PciDevice::Disconnect();
-    if (state_change_listener_) {
-      manager_->machine()->UnregisterStateChangeListener(&state_change_listener_);
-    }
+    manager_->machine()->UnregisterStateChangeListener(state_change_listener_);
   }
 
   virtual void Reset() {

@@ -109,7 +109,7 @@ class VfioPci : public PciDevice {
   std::array<VfioRegion, MAX_VFIO_REGIONS>              regions_;
   std::array<VfioInterrupt, MAX_VFIO_INTERRUPTS>        interrupts_;
   VfioMigration                                         migration_;
-  const StateChangeListener*                            state_change_listener_ = nullptr;
+  std::list<VoidCallback>::iterator                     state_change_listener_;
 };
 
 #endif // _MVISOR_DEVICES_VFIO_VFIO_PCI_H

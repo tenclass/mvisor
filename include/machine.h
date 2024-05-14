@@ -38,10 +38,6 @@
 #include "vfio_manager.h"
 #include "configuration.h"
 
-struct StateChangeListener {
-  VoidCallback callback;
-};
-
 
 /* The Machine class handles all the VM initialization and common operations
  * such as startup, quit, pause, resume */
@@ -58,6 +54,7 @@ class Machine {
   bool IsValid() { return valid_; }
   bool IsPaused() { return valid_ && paused_; }
   void WaitToResume();
+  void WaitToQuit();
   void Save(const std::string path);
   void Load(const std::string path);
   const char* GetStatus();
@@ -69,8 +66,8 @@ class Machine {
   Object* LookupObjectByName(std::string name);
   Object* LookupObjectByClass(std::string class_name);
   std::vector<Object*> LookupObjects(std::function<bool (Object*)> compare);
-  const StateChangeListener* RegisterStateChangeListener(VoidCallback callback);
-  void UnregisterStateChangeListener(const StateChangeListener** plistener);
+  std::list<VoidCallback>::iterator RegisterStateChangeListener(VoidCallback callback);
+  void UnregisterStateChangeListener(std::list<VoidCallback>::iterator it);
 
   inline DeviceManager* device_manager() { return device_manager_; }
   inline MemoryManager* memory_manager() { return memory_manager_; }
@@ -134,8 +131,9 @@ class Machine {
   std::mutex mutex_;
   std::condition_variable wait_to_resume_;
   std::condition_variable wait_to_pause_condition_;
+  std::condition_variable wait_to_quit_condition_;
   uint wait_count_ = 0;
-  std::set<const StateChangeListener*> state_change_listeners_;
+  std::list<VoidCallback> state_change_listeners_;
 };
 
 #endif // MVISOR_MACHINE_H

@@ -62,7 +62,7 @@ class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
   PrimarySurface                primary_surface_;
   std::vector<QXLReleaseInfo*>  free_resources_;
   DisplayMouseCursor            current_cursor_;
-  const StateChangeListener*    state_change_listener_ = nullptr;
+  std::list<VoidCallback>::iterator state_change_listener_;
 
   VgaRender*                    vga_render_ = nullptr;
   QxlRender*                    qxl_render_ = nullptr;
@@ -89,11 +89,11 @@ class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
   /* DisplayInterface */
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
   virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
-  virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw);
-  virtual void ReleaseUpdate();
+  virtual void Refresh();
   virtual bool Resize(int width, int height);
 
  private:
+  virtual void NotifyDisplayUpdate();
   virtual bool ActivatePciBar(uint index);
   virtual bool DeactivatePciBar(uint index);
 
@@ -110,7 +110,6 @@ class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
   void FetchCommands();
   bool FetchGraphicsCommand(QXLCommand& command);
   bool FetchCursorCommand(QXLCommand& command);
-  void ParseSurfaceCommand(uint64_t slot_address);
   void ParseCursorCommand(uint64_t slot_address);
 
   // QxlRender make use of these methods

@@ -146,6 +146,9 @@ void Machine::Quit() {
     vcpu->Kick();
   }
   io_thread_->Stop();
+
+  /* Safe to quit main thread now */
+  wait_to_quit_condition_.notify_all();
 }
 
 /* Recover BIOS data and reset all vCPU */
@@ -214,8 +217,8 @@ void Machine::Resume() {
   paused_ = false;
 
   /* Before running, broadcast messages */
-  for (auto listener : state_change_listeners_) {
-    listener->callback();
+  for (auto& listener : state_change_listeners_) {
+    listener();
   }
   
   /* Resume threads */
@@ -241,8 +244,8 @@ void Machine::Pause() {
   });
 
   /* Here all the threads are stopped, broadcast messages */
-  for (auto listener : state_change_listeners_) {
-    listener->callback();
+  for (auto& listener : state_change_listeners_) {
+    listener();
   }
 
   /* Wait for IO thread to stop */
@@ -268,22 +271,23 @@ void Machine::WaitToResume() {
   });
 }
 
-/* Listeners are called after Pause / Resume */
-const StateChangeListener* Machine::RegisterStateChangeListener(VoidCallback callback) {
-  auto listener = new StateChangeListener {
-    .callback = callback
-  };
-  std::lock_guard<std::mutex> lock(mutex_);
-  state_change_listeners_.insert(listener);
-  return listener;
+/* Main thread call this method to sleep */
+void Machine::WaitToQuit() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  wait_to_quit_condition_.wait(lock, [this]() {
+    return !valid_;
+  });
 }
 
-void Machine::UnregisterStateChangeListener(const StateChangeListener** plistener) {
+/* Listeners are called after Pause / Resume */
+std::list<VoidCallback>::iterator Machine::RegisterStateChangeListener(VoidCallback callback) {
   std::lock_guard<std::mutex> lock(mutex_);
-  if (state_change_listeners_.erase(*plistener)) {
-    delete *plistener;
-    *plistener = nullptr;
-  }
+  return state_change_listeners_.emplace(state_change_listeners_.end(), callback);
+}
+
+void Machine::UnregisterStateChangeListener(std::list<VoidCallback>::iterator it) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_change_listeners_.erase(it);
 }
 
 bool Machine::PrepareForSaving() {

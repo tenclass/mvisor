@@ -108,10 +108,18 @@ void VgaRender::GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, ui
 }
 
 void VgaRender::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
-  *w = width_;
-  *h = height_;
-  *bpp = bpp_;
-  *stride = stride_;
+  if (w) {
+    *w = width_;
+  }
+  if (h) {
+    *h = height_;
+  }
+  if (bpp) {
+    *bpp = bpp_;
+  }
+  if (stride) {
+    *stride = stride_;
+  }
 }
 
 void VgaRender::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
