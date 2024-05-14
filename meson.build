@@ -1,5 +1,5 @@
 project('mvisor', 'c', 'cpp',
-  version: '2.5.3',
+  version: '2.6.0',
   license: 'GPLv3',
   default_options: [
     'buildtype=debug',
