@@ -153,6 +153,7 @@ class DisplayInterface {
   virtual ~DisplayInterface() = default;
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride) = 0;
   virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) = 0;
+  virtual bool GetScreenshot(DisplayUpdate& update) = 0;
   virtual void Refresh() = 0;
   virtual std::list<DisplayModeChangeListener>::iterator RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
   virtual void UnregisterDisplayModeChangeListener(std::list<DisplayModeChangeListener>::iterator it) = 0;
@@ -215,48 +216,21 @@ enum SerialPortEvent {
   kSerialPortData
 };
 
+typedef std::function <void(SerialPortEvent, uint8_t*, size_t)> SerialPortListener;
 class SerialPortInterface {
  public:
   virtual ~SerialPortInterface() = default;
-  virtual void OnMessage(uint8_t* data, size_t size) {
-    if (callback_)
-      callback_(kSerialPortData, data, size);
-  }
-  virtual void OnWritable() {
-    writable_ = true;
-  }
-  virtual void SendMessage(uint8_t* data, size_t size) {
-    device_->SendMessage(this, data, size);
-  }
+  virtual void OnMessage(uint8_t* data, size_t size) = 0;
+  virtual void OnWritable() = 0;
+  virtual void SendMessage(uint8_t* data, size_t size) = 0;
+  virtual void Initialize(SerialDeviceInterface* device, uint32_t id) = 0;
+  virtual std::list<SerialPortListener>::iterator RegisterSerialPortListener(SerialPortListener callback) = 0;
+  virtual void UnregisterSerialPortListener(std::list<SerialPortListener>::iterator it) = 0;
 
-  void Initialize(SerialDeviceInterface* device, uint32_t id) {
-    device_ = device;
-    port_id_ = id;
-  }
-
-  virtual void set_ready(bool ready) {
-    ready_ = ready;
-    if (callback_) {
-      callback_(kSerialPortStatusChanged, nullptr, 0);
-    }
-  }
-
-  virtual void set_callback(std::function<void(SerialPortEvent, uint8_t*, size_t)> callback) {
-    callback_ = callback;
-  }
-
-  inline uint32_t     port_id() const { return port_id_; }
-  inline const char*  port_name() const { return port_name_; }
-  inline bool         ready() const { return ready_; }
-
- protected:
-  SerialDeviceInterface* device_;
-  std::function<void(SerialPortEvent, uint8_t*, size_t)> callback_;
-  uint32_t  port_id_;
-  char      port_name_[100];
-  bool      ready_ = false;
-  bool      writable_ = false;
-
+  virtual uint32_t     port_id() const = 0;
+  virtual const char*  port_name() const = 0;
+  virtual bool         ready() const = 0;
+  virtual void         set_ready(bool ready) = 0;
 };
 
 

@@ -24,11 +24,11 @@
 
 #include "device.h"
 #include "device_manager.h"
-#include "device_interface.h"
+#include "serial_port.h"
 #include "utilities.h"
 #include "logger.h"
 
-class QemuGuestAgent : public Device, public SerialPortInterface {
+class QemuGuestAgent : public Device, public SerialPort {
  public:
   QemuGuestAgent() {
     set_default_parent_class("VirtioConsole");

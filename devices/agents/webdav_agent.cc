@@ -23,11 +23,11 @@
 #include <string>
 
 #include "device.h"
-#include "device_interface.h"
+#include "serial_port.h"
 #include "utilities.h"
 #include "logger.h"
 
-class WebdavAgent : public Device, public SerialPortInterface {
+class WebdavAgent : public Device, public SerialPort {
  private:
   std::string buffer_;
 

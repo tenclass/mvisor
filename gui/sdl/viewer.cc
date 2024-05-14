@@ -302,7 +302,7 @@ void Viewer::LookupDevices() {
     });
   });
   display_update_listener_ = display_->RegisterDisplayUpdateListener([this](auto& update) {
-    Schedule([this, update]() {
+    Schedule([this, update=std::move(update)]() {
       Render(update);
     });
   });

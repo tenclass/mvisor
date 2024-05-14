@@ -26,7 +26,7 @@
 
 #include "device.h"
 #include "device_manager.h"
-#include "device_interface.h"
+#include "serial_port.h"
 #include "spice/vd_agent.h"
 #include "spice/enums.h"
 #include "utilities.h"
@@ -34,7 +34,7 @@
 
 using namespace std::chrono;
 
-class SpiceAgent : public Device, public SerialPortInterface,
+class SpiceAgent : public Device, public SerialPort,
   public DisplayResizeInterface, public PointerInputInterface,
   public ClipboardInterface
 {
@@ -57,14 +57,14 @@ class SpiceAgent : public Device, public SerialPortInterface,
     strcpy(port_name_, "com.redhat.spice.0");
   }
 
-  void Reset() {
+  void Reset() override {
     Device::Reset();
     outgoing_clipboard_.clear();
     incoming_message_.clear();
   }
 
   /* The message may consists of more than one chunk */
-  virtual void OnMessage(uint8_t* data, size_t size) {
+  virtual void OnMessage(uint8_t* data, size_t size) override {
     auto chunk = (VDIChunkHeader*)data;
     MV_ASSERT(size >= sizeof(VDIChunkHeader));
     MV_ASSERT(size == sizeof(VDIChunkHeader) + chunk->size);

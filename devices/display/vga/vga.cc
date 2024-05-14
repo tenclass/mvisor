@@ -147,15 +147,25 @@ void Vga::Disconnect() {
 }
 
 void Vga::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (vga_render_) {
     vga_render_->GetDisplayMode(w, h, bpp, stride);
   }
 }
 
 void Vga::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (vga_render_) {
     vga_render_->GetPalette(palette, count, dac_8bit);
   }
+}
+
+bool Vga::GetScreenshot(DisplayUpdate& update) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (display_mode_ == kDisplayModeVga) {
+    return vga_render_->GetDisplayUpdate(update);
+  }
+  return false;
 }
 
 void Vga::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {

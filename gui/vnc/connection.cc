@@ -77,7 +77,7 @@ void VncConnection::LookupDevices() {
     });
 
     display_update_listener_ = display_->RegisterDisplayUpdateListener([this](const DisplayUpdate& update) {
-      server_->Schedule([this, update]() {
+      server_->Schedule([this, update=std::move(update)]() {
         Render(update);
       });
     });
@@ -236,6 +236,10 @@ void VncConnection::SendServerInit() {
   send(fd_, &msg, offsetof(ServerInitMessage, name) + name_length, 0);
 
   update_thread_ = std::thread(&VncConnection::UpdateLoop, this);
+  // If machine is paused, resume it
+  if (server_->machine()->IsPaused()) {
+    server_->machine()->Resume();
+  }
 }
 
 bool VncConnection::OnSetPixelFormat() {
@@ -269,6 +273,7 @@ bool VncConnection::OnSetEncodings() {
   }
 
   // Now we can send framebuffer update
+  SendDesktopSize();
   return true;
 }
 

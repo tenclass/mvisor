@@ -399,6 +399,17 @@ void Qxl::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
   }
 }
 
+bool Qxl::GetScreenshot(DisplayUpdate& update) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (display_mode_ == kDisplayModeQxl) {
+    qxl_render_->Redraw();
+    qxl_render_->GetUpdatePartials(update.partials);
+    return update.partials.size() > 0;
+  } else {
+    return vga_render_->GetDisplayUpdate(update);
+  }
+}
+
 void Qxl::Refresh() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (display_mode_ == kDisplayModeQxl) {

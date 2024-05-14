@@ -52,6 +52,7 @@ class Vga : public PciDevice, public Display {
   /* DisplayInterface */
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
   virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
+  virtual bool GetScreenshot(DisplayUpdate& update);
   virtual void Refresh();
 };
 

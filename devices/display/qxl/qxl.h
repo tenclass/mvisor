@@ -89,6 +89,7 @@ class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
   /* DisplayInterface */
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
   virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
+  virtual bool GetScreenshot(DisplayUpdate& update);
   virtual void Refresh();
   virtual bool Resize(int width, int height);
 
