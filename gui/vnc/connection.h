@@ -97,7 +97,6 @@ class VncConnection {
   void Render(const DisplayUpdate& update);
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
-  void RegisterKeyboardShortcuts();
   PointerInputInterface* GetActivePointer();
 
  public:
