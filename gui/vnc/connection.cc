@@ -132,17 +132,6 @@ bool VncConnection::OnReceive() {
       return false;
     }
 
-    // const char* message_type_names[] = {
-    //   "SetPixelFormat",
-    //   "",
-    //   "SetEncodings",
-    //   "FramebufferUpdateRequest",
-    //   "KeyEvent",
-    //   "PointerEvent",
-    //   "ClientCutText",
-    // };
-    // MV_LOG("VNC message type %d %s", message_type, message_type_names[message_type]);
-
     switch (message_type)
     {
     case 0: // SetPixelFormat
@@ -660,9 +649,12 @@ void VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
     for (int i = 0; i < height; i++) {
       zstream_.next_in = src;
       zstream_.avail_in = width * bytes_per_pixel;
-      MV_ASSERT(deflate(&zstream_, Z_SYNC_FLUSH) == Z_OK);
+      MV_ASSERT(deflate(&zstream_, Z_NO_FLUSH) == Z_OK);
       src += stride;
     }
+    
+    // Z_SYNC_FLUSH to flush the data
+    MV_ASSERT(deflate(&zstream_, Z_SYNC_FLUSH) == Z_OK);
 
     // fix compressed size
     uint32_t compressed_size = compressed.size() - 20 - zstream_.avail_out;
