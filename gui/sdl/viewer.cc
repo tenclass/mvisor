@@ -27,6 +27,7 @@
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   bzero(&pointer_state_, sizeof(pointer_state_));
   LookupDevices();
+  MV_ASSERT(SDL_Init(SDL_INIT_VIDEO) == 0);
 }
 
 Viewer::~Viewer() {
@@ -42,6 +43,8 @@ Viewer::~Viewer() {
   if (clipboard_) {
     clipboard_->UnregisterClipboardListener(clipboard_listener_);
   }
+
+  SDL_Quit();
 }
 
 void Viewer::DestroyWindow() {

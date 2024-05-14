@@ -183,14 +183,6 @@ int main(int argc, char* argv[]) {
   };
   signal(SIGINT, quit_callback);
   signal(SIGTERM, quit_callback);
-  MV_UNUSED(vnc_port);
-
-  if (vnc_port) {
-    vnc_server = new VncServer(machine, vnc_port);
-    vnc_server_thread = std::thread([]() {
-      vnc_server->MainLoop();
-    });
-  }
 
   /* SweetServer is used in Tenclass products */
   if (!sweet_path.empty()) {
@@ -220,19 +212,29 @@ int main(int argc, char* argv[]) {
       machine->Load(load_path);
     }
 
-#ifdef HAS_SDL
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-      MV_LOG("Failed to initialize SDL: %s", SDL_GetError());
+    const char* displayVar = std::getenv("DISPLAY");
+    if (displayVar == nullptr) {
+      if (vnc_port == 0) {
+        vnc_port = 5901;
+      }
     } else {
+#ifdef HAS_SDL
       /* SDL handles default signals */
       viewer = new Viewer(machine);
       viewer_thread = std::thread([]() {
         viewer->MainLoop();
       });
-    }
 #endif
+    }
 
     machine->Resume();
+  }
+
+  if (vnc_port) {
+    vnc_server = new VncServer(machine, vnc_port);
+    vnc_server_thread = std::thread([]() {
+      vnc_server->MainLoop();
+    });
   }
 
   machine->WaitToQuit();
@@ -259,7 +261,6 @@ int main(int argc, char* argv[]) {
     viewer_thread.join();
     delete viewer;
   }
-  SDL_Quit();
 #endif
   delete machine;
   return 0;
