@@ -31,8 +31,7 @@ mvisor_include = [include_directories('include')]
 mvisor_sources = ['main.cc']
 
 mvisor_deps = [
-  dependency('threads'),
-  dependency('uuid')
+  dependency('threads')
 ]
 
 subdir('core')
@@ -41,15 +40,7 @@ subdir('devices')
 subdir('images')
 subdir('networks')
 subdir('utilities')
-
-if get_option('sdl')
-  subdir('gui' / 'sdl')
-  mvisor_version_data.set('HAS_SDL', true)
-endif
-if get_option('gtk')
-  subdir('gui' / 'gtk')
-  mvisor_version_data.set('HAS_GTK', true)
-endif
+subdir('gui')
 
 if get_option('sweet-server')
   subdir('sweet-server')

@@ -44,7 +44,7 @@ class SpiceAgent : public Device, public SerialPortInterface,
   VDAgentMouseState               last_mouse_state_;
   /* Cache clipboard data */
   std::string                     outgoing_clipboard_;
-  std::vector<ClipboardListener>  clipboard_listeners_;
+  std::list<ClipboardListener>    clipboard_listeners_;
   /* Buffer to build incoming message */
   std::string                     incoming_message_;
   /* Max clipboard size, default is 1MB */
@@ -296,8 +296,14 @@ class SpiceAgent : public Device, public SerialPortInterface,
     }
   }
 
-  void RegisterClipboardListener(ClipboardListener callback) {
-    clipboard_listeners_.push_back(callback);
+  std::list<ClipboardListener>::iterator RegisterClipboardListener(ClipboardListener callback) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return clipboard_listeners_.emplace(clipboard_listeners_.end(), callback);
+  }
+
+  void UnregisterClipboardListener(std::list<ClipboardListener>::iterator it) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    clipboard_listeners_.erase(it);
   }
 };
 

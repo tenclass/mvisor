@@ -86,7 +86,16 @@
         "stop_token": "cpp",
         "bitset": "cpp",
         "regex": "cpp",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "__node_handle": "cpp",
+        "__split_buffer": "cpp",
+        "queue": "cpp",
+        "stack": "cpp",
+        "__nullptr": "cpp",
+        "config.h": "c",
+        "__hash_table": "cpp",
+        "__tree": "cpp",
+        "ios": "cpp"
     },
     "C_Cpp.default.cppStandard": "c++17",
     "C_Cpp.default.includePath": [
@@ -95,6 +104,7 @@
         "/usr/lib/gcc/x86_64-redhat-linux/8/include/",
         "/usr/include/glib-2.0",
         "/usr/local/cuda-12.1/targets/x86_64-linux/include/",
-        "/usr/include/virgl"
+        "/usr/include/virgl",
+        "/usr/include/pixman-1/"
     ]
 }

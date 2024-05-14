@@ -108,7 +108,7 @@ class Ac97 : public PciDevice, public PlaybackInterface {
   uint32_t                      global_control_;
   uint32_t                      global_status_;
   uint8_t                       codec_accessing_;
-  std::vector<PlaybackListener> playback_listeners_;
+  std::list<PlaybackListener>   playback_listeners_;
 
  public:
   Ac97() {
@@ -246,10 +246,6 @@ class Ac97 : public PciDevice, public PlaybackInterface {
     *channels = 2;
     *frequency = 48000;
     *interval_ms = STREAM_FRAME_INTERVAL_MS;
-  }
-
-  void RegisterPlaybackListener(PlaybackListener callback) {
-    playback_listeners_.push_back(callback);
   }
 
   void GetVolume(uint16_t value, uint16_t mask, bool reverse, bool* mute, int* left, int* right) {
@@ -636,6 +632,16 @@ class Ac97 : public PciDevice, public PlaybackInterface {
     } else {
       PciDevice::Write(resource, offset, data, size);
     }
+  }
+
+  std::list<PlaybackListener>::iterator RegisterPlaybackListener(PlaybackListener callback) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    return playback_listeners_.emplace(playback_listeners_.end(), callback);
+  }
+
+  void UnregisterPlaybackListener(std::list<PlaybackListener>::iterator it) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    playback_listeners_.erase(it);
   }
 };
 

@@ -113,8 +113,6 @@ void QxlRender::ParseSurfaceCommand(uint64_t slot_address) {
 
 
 void QxlRender::ParseDrawCommand(uint64_t slot_address) {
-  // struct timespec ts1, ts2;
-  // clock_gettime(CLOCK_REALTIME, &ts1);
   auto qxl_drawable = (QXLDrawable*)qxl_->GetMemSlotAddress(slot_address);
 
   QxlParser drawable(this);
@@ -176,8 +174,6 @@ void QxlRender::ParseDrawCommand(uint64_t slot_address) {
   qxl_->ReleaseGuestResource(&qxl_drawable->release_info);
 
   AddDirtyRect(bbox.top, bbox.left, bbox.bottom, bbox.right);
-  // clock_gettime(CLOCK_REALTIME, &ts2);
-  // printf("diff draw %lu ns\n", ts2.tv_nsec - ts1.tv_nsec);
 }
 
 void QxlRender::UpdateArea(const QXLRect& rect, bool update_surface) {

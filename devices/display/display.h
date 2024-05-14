@@ -19,6 +19,7 @@
 #ifndef _MVISOR_DEVICES_DISPLAY_H
 #define _MVISOR_DEVICES_DISPLAY_H
 
+#include <mutex>
 #include "device_interface.h"
 
 enum DisplayMode {
@@ -29,18 +30,20 @@ enum DisplayMode {
 };
 
 class Display : public DisplayInterface {
- private:
-  std::vector<DisplayModeChangeListener> display_mode_change_listeners_;
-  std::vector<DisplayUpdateListener> display_update_listeners_;
-
  protected:
-  DisplayMode display_mode_ = kDisplayModeUnknown;
-  void NotifyDisplayModeChange();
-  void NotifyDisplayUpdate();
+  std::recursive_mutex                  display_mutex_;
+  std::list<DisplayModeChangeListener>  display_mode_change_listeners_;
+  std::list<DisplayUpdateListener>      display_update_listeners_;
+  DisplayMode                           display_mode_ = kDisplayModeUnknown;
+
+  virtual void NotifyDisplayModeChange();
+  virtual void NotifyDisplayUpdate() = 0;
 
  public:
-  virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback);
-  virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback);
+  virtual std::list<DisplayModeChangeListener>::iterator RegisterDisplayModeChangeListener(DisplayModeChangeListener callback);
+  virtual std::list<DisplayUpdateListener>::iterator RegisterDisplayUpdateListener(DisplayUpdateListener callback);
+  virtual void UnregisterDisplayModeChangeListener(std::list<DisplayModeChangeListener>::iterator listener);
+  virtual void UnregisterDisplayUpdateListener(std::list<DisplayUpdateListener>::iterator listener);
 };
 
 

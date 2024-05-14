@@ -21,6 +21,7 @@
 
 #include <functional>
 #include <vector>
+#include <list>
 #include <cstring>
 #include <string>
 #include <deque>
@@ -95,7 +96,8 @@ typedef std::function <void()> VirtioFsListener;
 class VirtioFsInterface {
  public:
   virtual ~VirtioFsInterface() = default;
-  virtual void RegisterVirtioFsListener(VirtioFsListener callback) = 0;
+  virtual std::list<VirtioFsListener>::iterator RegisterVirtioFsListener(VirtioFsListener callback) = 0;
+  virtual void UnregisterVirtioFsListener(std::list<VirtioFsListener>::iterator it) = 0;
 };
 
 struct ClipboardData {
@@ -108,7 +110,8 @@ typedef std::function <void(const ClipboardData clipboard_data)> ClipboardListen
 class ClipboardInterface {
  public:
   virtual ~ClipboardInterface() = default;
-  virtual void RegisterClipboardListener(ClipboardListener callback) = 0;
+  virtual std::list<ClipboardListener>::iterator RegisterClipboardListener(ClipboardListener callback) = 0;
+  virtual void UnregisterClipboardListener(std::list<ClipboardListener>::iterator it) = 0;
   virtual bool ClipboardDataToGuest(uint type, const std::string& data) = 0;
 };
 
@@ -144,16 +147,17 @@ struct DisplayUpdate {
 };
 
 typedef std::function <void(void)> DisplayModeChangeListener;
-typedef std::function <void(void)> DisplayUpdateListener;
+typedef std::function <void(const DisplayUpdate&)> DisplayUpdateListener;
 class DisplayInterface {
  public:
   virtual ~DisplayInterface() = default;
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride) = 0;
   virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) = 0;
-  virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw) = 0;
-  virtual void ReleaseUpdate() = 0;
-  virtual void RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
-  virtual void RegisterDisplayUpdateListener(DisplayUpdateListener callback) = 0;
+  virtual void Refresh() = 0;
+  virtual std::list<DisplayModeChangeListener>::iterator RegisterDisplayModeChangeListener(DisplayModeChangeListener callback) = 0;
+  virtual void UnregisterDisplayModeChangeListener(std::list<DisplayModeChangeListener>::iterator it) = 0;
+  virtual std::list<DisplayUpdateListener>::iterator RegisterDisplayUpdateListener(DisplayUpdateListener callback) = 0;
+  virtual void UnregisterDisplayUpdateListener(std::list<DisplayUpdateListener>::iterator it) = 0;
 };
 
 
@@ -175,7 +179,8 @@ class PlaybackInterface {
  public:
   virtual ~PlaybackInterface() = default;
   virtual void GetPlaybackFormat(uint* format, uint* channels, uint* frequency, uint* interval_ms) = 0;
-  virtual void RegisterPlaybackListener(PlaybackListener callback) = 0;
+  virtual std::list<PlaybackListener>::iterator RegisterPlaybackListener(PlaybackListener callback) = 0;
+  virtual void UnregisterPlaybackListener(std::list<PlaybackListener>::iterator it) = 0;
 };
 
 struct RecordFormat {
@@ -193,7 +198,8 @@ class RecordInterface {
   public:
   virtual ~RecordInterface() = default;
   virtual void WriteRecordDataToDevice(const std::string& record_data) = 0;
-  virtual void RegisterRecordListener(RecordListener callback) = 0;
+  virtual std::list<RecordListener>::iterator RegisterRecordListener(RecordListener callback) = 0;
+  virtual void UnregisterRecordListener(std::list<RecordListener>::iterator it) = 0;
 };
 
 

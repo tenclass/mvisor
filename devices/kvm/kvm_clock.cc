@@ -27,8 +27,8 @@
 
 class KvmClock : public Device {
  private:
-  kvm_clock_data              kvm_clock_;
-  const StateChangeListener*  state_change_listener_ = nullptr;
+  kvm_clock_data                    kvm_clock_;
+  std::list<VoidCallback>::iterator state_change_listener_;
 
   void SynchronizeClock() {
     auto machine = manager_->machine();
@@ -78,9 +78,7 @@ class KvmClock : public Device {
   }
 
   void Disconnect () {
-    if (state_change_listener_) {
-      manager_->machine()->UnregisterStateChangeListener(&state_change_listener_);
-    }
+    manager_->machine()->UnregisterStateChangeListener(state_change_listener_);
     Device::Disconnect();
   }
 

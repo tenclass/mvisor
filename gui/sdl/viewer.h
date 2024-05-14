@@ -41,18 +41,18 @@ class Viewer {
  public:
   Viewer(Machine* machine);
   ~Viewer();
-  int MainLoop();
+  void MainLoop();
 
  private:
   void LookupDevices();
   void DestroyWindow();
-  void Render();
+  void Render(const DisplayUpdate& update);
   void CreateWindow();
   void UpdateCaption();
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   void HandleEvent(const SDL_Event& event);
-  void RegisterKeyboardShortcuts();
+  void SetupKeyboardShortcuts();
   PointerInputInterface* GetActivePointer();
   void SendPointerEvent();
   void SendResizerEvent();
@@ -61,15 +61,20 @@ class Viewer {
   void OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data);
   void Schedule(VoidCallback callback);
 
-  Machine* machine_;
-  ClipboardInterface* clipboard_;
-  std::string clipboard_data_;
-  DisplayInterface* display_;
-  PlaybackInterface* playback_;
-  KeyboardInputInterface* keyboard_;
-  std::vector<PointerInputInterface*> pointers_;
-  std::vector<DisplayResizeInterface*> resizers_;
-  PlaybackFormat playback_format_;
+  Machine*                machine_;
+  ClipboardInterface*     clipboard_ = nullptr;
+  std::string             clipboard_data_;
+  DisplayInterface*       display_ = nullptr;
+  PlaybackInterface*      playback_= nullptr;
+  KeyboardInputInterface* keyboard_ = nullptr;
+  std::vector<PointerInputInterface*>   pointers_;
+  std::vector<DisplayResizeInterface*>  resizers_;
+  PlaybackFormat          playback_format_;
+
+  std::list<DisplayModeChangeListener>::iterator  display_mode_listener_;
+  std::list<DisplayUpdateListener>::iterator      display_update_listener_;
+  std::list<ClipboardListener>::iterator          clipboard_listener_;
+  std::list<PlaybackListener>::iterator           playback_listener_;
 
   SDL_Window* window_ = nullptr;
   SDL_Renderer* renderer_ = nullptr;

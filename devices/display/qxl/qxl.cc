@@ -146,7 +146,7 @@ void Qxl::Connect() {
 }
 
 void Qxl::Disconnect() {
-  manager_->machine()->UnregisterStateChangeListener(&state_change_listener_);
+  manager_->machine()->UnregisterStateChangeListener(state_change_listener_);
 
   if (vga_refresh_timer_) {
     RemoveTimer(vga_refresh_timer_);
@@ -162,8 +162,6 @@ void Qxl::Disconnect() {
 }
 
 void Qxl::Reset() {
-  std::lock_guard<std::recursive_mutex> render_lock(qxl_render_mutex_);
-
   IntializeQxlRom();
   IntializeQxlRam();
 
@@ -370,24 +368,42 @@ void Qxl::UpdateIrqLevel() {
 
 /* Display resize interface */
 void Qxl::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (display_mode_ == kDisplayModeQxl) {
     auto& surface = qxl_render_->GetSurface(0);
-    *w = surface.width;
-    *h = surface.height;
-    *bpp = surface.bpp;
-    *stride = surface.stride;
+    if (w) {
+      *w = surface.width;
+    }
+    if (h) {
+      *h = surface.height;
+    }
+    if (bpp) {
+      *bpp = surface.bpp;
+    }
+    if (stride) {
+      *stride = surface.stride;
+    }
   } else {
     vga_render_->GetDisplayMode(w, h, bpp, stride);
   }
 }
 
 void Qxl::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (display_mode_ == kDisplayModeQxl) {
     *palette = nullptr;
     *count = 0;
     *dac_8bit = false;
   } else {
     vga_render_->GetPalette(palette, count, dac_8bit);
+  }
+}
+
+void Qxl::Refresh() {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (display_mode_ == kDisplayModeQxl) {
+    qxl_render_->Redraw();
+    NotifyDisplayUpdate();
   }
 }
 
@@ -458,7 +474,6 @@ uint64_t Qxl::TranslateAsyncCommand(uint64_t command, bool* async) {
 }
 
 void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
-  std::lock_guard<std::recursive_mutex> render_lock(qxl_render_mutex_);
   switch (command) {
   case QXL_IO_UPDATE_AREA:
     FetchCommands();
@@ -561,6 +576,7 @@ void Qxl::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
     {
     case QXL_IO_NOTIFY_CMD:
     case QXL_IO_NOTIFY_CURSOR:
+      FetchCommands();
       NotifyDisplayUpdate();
       break;
     case QXL_IO_UPDATE_IRQ:
@@ -746,32 +762,23 @@ void Qxl::ReleaseGuestResource(QXLReleaseInfo* info) {
 }
 
 /* Lock the drawables and translate to display partial bitmaps */
-bool Qxl::AcquireUpdate(DisplayUpdate& update, bool redraw) {
-  std::unique_lock<std::recursive_mutex>  lock(mutex_);
+void Qxl::NotifyDisplayUpdate() {
   if (display_mode_ == kDisplayModeUnknown) {
-    return false;
+    return;
   }
+
+  DisplayUpdate update;
   if (display_mode_ == kDisplayModeVga) {
-    return vga_render_->GetDisplayUpdate(update);
+    vga_render_->GetDisplayUpdate(update);
+  } else if (display_mode_ == kDisplayModeQxl) {
+    qxl_render_->GetUpdatePartials(update.partials);
+    update.cursor = current_cursor_;
   }
 
-  /* We cannot hold the device lock for so long, here switch to render lock */
-  std::lock_guard<std::recursive_mutex>   render_lock(qxl_render_mutex_);
-  lock.unlock();
-
-  if (!manager_->machine()->IsPaused()) {
-    FetchCommands();
+  std::lock_guard<std::recursive_mutex> lock(display_mutex_);
+  for (auto& listener : display_update_listeners_) {
+    listener(update);
   }
-
-  if (redraw) {
-    qxl_render_->Redraw();
-  }
-  qxl_render_->GetUpdatePartials(update.partials);
-  update.cursor = current_cursor_;
-  return true;
-}
-
-void Qxl::ReleaseUpdate() {
 }
 
 void Qxl::FetchCommands() {

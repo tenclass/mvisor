@@ -6,13 +6,13 @@ option('sweet-server',
 
 option('sdl',
   type: 'boolean',
-  value: true,
+  value: false,
   description: 'Enable SDL GUI'
 )
 
 option('gtk',
   type: 'boolean',
-  value: true,
+  value: false,
   description: 'Enable GTK GUI'
 )
 
