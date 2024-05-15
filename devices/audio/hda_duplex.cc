@@ -76,8 +76,8 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   uint32_t                      pcm_formats_;
   std::vector<HdaNode>          nodes_;
   std::array<HdaStream, 2>      streams_;
-  std::vector<PlaybackListener> playback_listeners_;
-  std::vector<RecordListener>   record_listeners_;
+  std::list<PlaybackListener>   playback_listeners_;
+  std::list<RecordListener>     record_listeners_;
   std::deque<std::string>       record_buffer_;
   PciDevice*                    hda_host_;
 
@@ -520,10 +520,6 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     *interval_ms = STREAM_FRAME_INTERVAL_MS;
   }
 
-  void RegisterPlaybackListener(PlaybackListener callback) {
-    playback_listeners_.push_back(callback);
-  }
-
   void WriteStreamToSharedBuffer(HdaStream* stream, const std::string& record_data) {
     size_t frame_bytes = stream->bytes_per_frame;
     size_t write_pos = 0;
@@ -556,8 +552,24 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     }
   }
 
-  void RegisterRecordListener(RecordListener callback) {
-    record_listeners_.push_back(callback);
+  std::list<PlaybackListener>::iterator RegisterPlaybackListener(PlaybackListener callback) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    return playback_listeners_.emplace(playback_listeners_.end(), callback);
+  }
+
+  void UnregisterPlaybackListener(std::list<PlaybackListener>::iterator it) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    playback_listeners_.erase(it);
+  }
+
+  std::list<RecordListener>::iterator RegisterRecordListener(RecordListener callback) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    return record_listeners_.emplace(record_listeners_.end(), callback);
+  }
+
+  void UnregisterRecordListener(std::list<RecordListener>::iterator it) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    record_listeners_.erase(it);
   }
 };
 

@@ -91,6 +91,25 @@ void VfioPci::Connect() {
   SetupMigrationV1Info();
   SetupMigrationV2Info();
 
+  auto machine = manager_->machine();
+  state_change_listener_ = machine->RegisterStateChangeListener([=]() {
+    if (migration_.enabled) {
+      if (machine->IsPaused()) {
+        if (migration_.version == 1) {
+          SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_STOP);
+        } else {
+          SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
+        }
+      } else {
+        if (migration_.version == 1) {
+          SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_RUNNING);
+        } else {
+          SetMigrationDeviceState(VFIO_DEVICE_STATE_RUNNING);
+        }
+      }
+    }
+  });
+
   if (migration_.enabled && debug_) {
     MV_LOG("%s migration enabled version=%d", device_name_.c_str(), migration_.version);
   }
@@ -98,9 +117,7 @@ void VfioPci::Connect() {
 
 void VfioPci::Disconnect() {
   auto machine = manager_->machine();
-  if (state_change_listener_) {
-    machine->UnregisterStateChangeListener(&state_change_listener_);
-  }
+  machine->UnregisterStateChangeListener(state_change_listener_);
 
   DisableAllInterrupts();
   manager_->machine()->vfio_manager()->DetachDevice(device_fd_);
@@ -455,15 +472,6 @@ void VfioPci::SetupMigrationV1Info() {
   migration_.region = it;
   migration_.version = 1;
   MV_ASSERT(migration_.region->mmap_areas.size() == 1);
-
-  auto machine = manager_->machine();
-  state_change_listener_ = machine->RegisterStateChangeListener([=]() {
-    if (machine->IsPaused()) {
-      SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_STOP);
-    } else {
-      SetMigrationDeviceState(VFIO_DEVICE_STATE_V1_RUNNING);
-    }
-  });
 }
 
 void VfioPci::SetupMigrationV2Info() {
@@ -483,15 +491,6 @@ void VfioPci::SetupMigrationV2Info() {
     migration_.enabled = true;
     migration_.version = 2;
   }
-
-  auto machine = manager_->machine();
-  state_change_listener_ = machine->RegisterStateChangeListener([=]() {
-    if (machine->IsPaused()) {
-      SetMigrationDeviceState(VFIO_DEVICE_STATE_STOP);
-    } else {
-      SetMigrationDeviceState(VFIO_DEVICE_STATE_RUNNING);
-    }
-  });
 }
 
 void VfioPci::WritePciCommand(uint16_t command) {

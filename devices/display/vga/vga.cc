@@ -147,15 +147,25 @@ void Vga::Disconnect() {
 }
 
 void Vga::GetDisplayMode(int* w, int* h, int* bpp, int* stride) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (vga_render_) {
     vga_render_->GetDisplayMode(w, h, bpp, stride);
   }
 }
 
 void Vga::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (vga_render_) {
     vga_render_->GetPalette(palette, count, dac_8bit);
   }
+}
+
+bool Vga::GetScreenshot(DisplayUpdate& update) {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (display_mode_ == kDisplayModeVga) {
+    return vga_render_->GetDisplayUpdate(update);
+  }
+  return false;
 }
 
 void Vga::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -202,18 +212,20 @@ void Vga::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
   }
 }
 
-/* This interface method is called by UI thread, remember to lock the device */
-bool Vga::AcquireUpdate(DisplayUpdate& update, bool redraw) {
-  std::unique_lock<std::recursive_mutex> lock(mutex_);
-  /* VGA always update the whole surface */
-  MV_UNUSED(redraw);
-  if (display_mode_ == kDisplayModeUnknown) {
-    return false;
+void Vga::NotifyDisplayUpdate() {
+  if (display_mode_ == kDisplayModeVga) {
+    DisplayUpdate update;
+    vga_render_->GetDisplayUpdate(update);
+
+    std::lock_guard<std::recursive_mutex> lock(display_mutex_);
+    for (auto &listener : display_update_listeners_) {
+      listener(update);
+    }
   }
-  return vga_render_->GetDisplayUpdate(update);
 }
 
-void Vga::ReleaseUpdate() {
+void Vga::Refresh() {
+  // Do nothing because the VGA is always updating the whole surface
 }
 
 DECLARE_DEVICE(Vga);

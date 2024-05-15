@@ -1,6 +1,4 @@
 mvisor_sources += files(
-  'keymap.c',
-  'keymap.h',
   'viewer.cc',
   'viewer.h'
 )

@@ -37,8 +37,8 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   Fuse* fuse_ = nullptr;
   std::string mount_path_;
   virtio_fs_config fs_config_;
-  std::unordered_set<uint64_t> dirp_pointer_set_;
-  std::vector<VirtioFsListener> virtio_fs_listeners_;
+  std::unordered_set<uint64_t>  dirp_pointer_set_;
+  std::list<VirtioFsListener>   virtio_fs_listeners_;
 
  public:
   VirtioFs() {
@@ -114,8 +114,14 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     }
   }
 
-  void RegisterVirtioFsListener(VirtioFsListener callback) { 
-    virtio_fs_listeners_.push_back(callback); 
+  std::list<VirtioFsListener>::iterator RegisterVirtioFsListener(VirtioFsListener callback) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    return virtio_fs_listeners_.emplace(virtio_fs_listeners_.end(), callback);
+  }
+
+  void UnregisterVirtioFsListener(std::list<VirtioFsListener>::iterator it) {
+    std::unique_lock<std::recursive_mutex> lock(mutex_);
+    virtio_fs_listeners_.erase(it);
   }
 
   void NotifyVirtioFs() {

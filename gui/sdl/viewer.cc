@@ -20,19 +20,30 @@
 #include <unistd.h>
 #include <chrono>
 #include "logger.h"
-#include "keymap.h"
+#include "../keymap.h"
 #include "spice/enums.h"
 #include "spice/vd_agent.h"
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   bzero(&pointer_state_, sizeof(pointer_state_));
-
-  SDL_Init(SDL_INIT_VIDEO);
   LookupDevices();
+  MV_ASSERT(SDL_Init(SDL_INIT_VIDEO) == 0);
 }
 
 Viewer::~Viewer() {
   DestroyWindow();
+
+  if (display_) {
+    display_->UnregisterDisplayModeChangeListener(display_mode_listener_);
+    display_->UnregisterDisplayUpdateListener(display_update_listener_);
+  }
+  if (playback_) {
+    playback_->UnregisterPlaybackListener(playback_listener_);
+  }
+  if (clipboard_) {
+    clipboard_->UnregisterClipboardListener(clipboard_listener_);
+  }
+
   SDL_Quit();
 }
 
@@ -148,9 +159,9 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
       cursor_ = nullptr;
     }
     auto& shape = cursor_update->shape;
-    uint32_t stride = SPICE_ALIGN(shape.width, 8) >> 3;
 
     if (shape.type == SPICE_CURSOR_TYPE_MONO) {
+      uint32_t stride = SPICE_ALIGN(shape.width, 8) >> 3;
       uint8_t mask[4 * 100] = { 0 };
       cursor_ = SDL_CreateCursor((const uint8_t*)shape.data.data() + stride * shape.height,
         mask, shape.width, shape.height, shape.hotspot_x, shape.hotspot_y);
@@ -172,17 +183,13 @@ void Viewer::RenderCursor(const DisplayMouseCursor* cursor_update) {
 }
 
 /* Only use mutex with dequee, since we don't want to block the IoThread */
-void Viewer::Render() {
-  DisplayUpdate update;
-  if (display_->AcquireUpdate(update, false)) {
-    RenderCursor(&update.cursor);
+void Viewer::Render(const DisplayUpdate& update) {
+  RenderCursor(&update.cursor);
 
-    for (auto& partial : update.partials) {
-      if (partial.bpp == bpp_ && partial.x + partial.width <= width_ && partial.y + partial.height <= height_) {
-        RenderSurface(&partial);
-      }
+  for (auto& partial : update.partials) {
+    if (partial.bpp == bpp_ && partial.x + partial.width <= width_ && partial.y + partial.height <= height_) {
+      RenderSurface(&partial);
     }
-    display_->ReleaseUpdate();
   }
 
   if (!update.partials.empty()) {
@@ -278,58 +285,44 @@ void Viewer::LookupDevices() {
     auto port_name = std::string(port->port_name());
     if (port_name == "com.redhat.spice.0") {
       clipboard_ = dynamic_cast<ClipboardInterface*>(o);
-    }
-    port->set_callback([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
-      Schedule([this, port, event, data = std::string((const char*)data, size)] () {
-        OnSerialPortEvent(port, event, data);
+      spice_agent_listener_ = port->RegisterSerialPortListener([this, port](SerialPortEvent event, uint8_t* data, size_t size) {
+        Schedule([this, port, event, data = std::string((const char*)data, size)] () {
+          if (event == kSerialPortStatusChanged) {
+            /* Set screen size when VDAgent is ready */
+            SendResizerEvent();
+          }
+        });
       });
-    });
+    }
   }
   /* At least one display device is required for SDL viewer */
   MV_ASSERT(display_);
 
-  display_->RegisterDisplayModeChangeListener([this]() {
+  display_mode_listener_ = display_->RegisterDisplayModeChangeListener([this]() {
     Schedule([this]() {
       DestroyWindow();
       CreateWindow();
     });
   });
-  display_->RegisterDisplayUpdateListener([this]() {
-    Schedule([this]() {
-      Render();
+  display_update_listener_ = display_->RegisterDisplayUpdateListener([this](auto& update) {
+    Schedule([this, update=std::move(update)]() {
+      Render(update);
     });
   });
   if (playback_) {
-    playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
+    playback_listener_ = playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
       Schedule([this, state, data = std::string((const char*)iov.iov_base, iov.iov_len)] () {
         OnPlayback(state, data);
       });
     });
   }
   if(clipboard_) {
-    clipboard_->RegisterClipboardListener([this](const ClipboardData clipboard_data) {
+    clipboard_listener_ = clipboard_->RegisterClipboardListener([this](const ClipboardData clipboard_data) {
       /* std::move don't copy data, but replace data reference */
       Schedule([this, clipboard_data = std::move(clipboard_data)] () {
         OnClipboardFromGuest(clipboard_data);
       });
     });
-  }
-}
-
-void Viewer::OnSerialPortEvent(SerialPortInterface* port, SerialPortEvent event, const std::string& data) {
-  MV_UNUSED(data);
-
-  switch (event)
-  {
-  case kSerialPortStatusChanged:
-    if (strcmp(port->port_name(), "com.redhat.spice.0") == 0) {
-      /* Set screen size when VDAgent is ready */
-      SendResizerEvent();
-    }
-    break;
-  case kSerialPortData:
-    /* Handle Qemu guest agent data here */
-    break;
   }
 }
 
@@ -362,9 +355,9 @@ void Viewer::Schedule(VoidCallback callback) {
 /* Reference about SDL-2:
  * https://wiki.libsdl.org/APIByCategory
  */
-int Viewer::MainLoop() {
+void Viewer::MainLoop() {
   SetThreadName("mvisor-viewer");
-  RegisterKeyboardShortcuts();
+  SetupKeyboardShortcuts();
 
   // Loop until all vcpu exits
   SDL_Event event;
@@ -381,7 +374,6 @@ int Viewer::MainLoop() {
       SendResizerEvent();
     }
   }
-  return 0;
 }
 
 void Viewer::SendResizerEvent() {
@@ -414,7 +406,7 @@ void Viewer::SendPointerEvent() {
   }
 }
 
-void Viewer::RegisterKeyboardShortcuts() {
+void Viewer::SetupKeyboardShortcuts() {
   keyboard_shortcuts_[SDLK_F2] = [this]() {
     MV_LOG("Save");
     machine_->Pause();
@@ -475,7 +467,8 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       auto it = keyboard_shortcuts_.find(event.key.keysym.sym);
       if (it != keyboard_shortcuts_.end()) {
         // release alt key
-        TranslateScancode(SDL_SCANCODE_LALT, false, transcoded);
+        auto qcode = ScancodeFromUsb(SDL_SCANCODE_LALT);
+        QcodeToAtset1(qcode, 0, transcoded);
         keyboard_->QueueKeyboardEvent(transcoded, 0);
         // run the shortcut in a detached thread
         std::thread(it->second).detach();
@@ -483,7 +476,14 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     }
     // fall through
   case SDL_KEYUP:
-    if (keyboard_ && TranslateScancode(event.key.keysym.scancode, event.type == SDL_KEYDOWN, transcoded)) {
+    if (keyboard_) {
+      auto qcode = ScancodeFromUsb(event.key.keysym.scancode);
+      if (qcode == 0) {
+        break;
+      }
+      if (QcodeToAtset1(qcode, event.type == SDL_KEYDOWN, transcoded) == 0) {
+        break;
+      }
       auto mod = SDL_GetModState();
       uint8_t modifiers = ((mod & KMOD_NUM) ? 2: 0) | ((mod & KMOD_CAPS) ? 4 : 0);
       keyboard_->QueueKeyboardEvent(transcoded, modifiers);

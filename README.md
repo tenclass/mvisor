@@ -57,7 +57,7 @@ What's supported now:
 3. QemuGuestAgent ✅
 4. Qxl ✅
 5. Audio (ICH9-HDA / AC97) ✅
-6. Tap network
+6. Tap network ✅
 7. User network ✅
 8. VFIO (mdev & passthrough) ✅
 9. Samba
@@ -75,14 +75,18 @@ What's supported now:
 
 For RockyLinux 9.3,
 
-```
-dnf install epel-release gdb
-dnf --enablerepo=devel install -y gcc-c++ glib2-devel pixman-devel SDL2-devel yaml-cpp-devel libuuid-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel alsa-lib-devel libjpeg-devel opus-devel
+```bash
+dnf install epel-release gdb cmake
+
+dnf --enablerepo=devel install -y gcc-c++ glib2-devel pixman-devel yaml-cpp-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel
+
+# If SDL enabled
+dnf --enablerepo=devel install -y SDL2-devel alsa-lib-devel
 
 meson setup build
 meson compile -C build
 
-./build/mvisor -c config/sample.yaml
+./build/mvisor -c config/sample.yaml -vnc 5900
 ```
 
 An ISO image file is needed to install OS. Modify config/default.yaml to configure image path.

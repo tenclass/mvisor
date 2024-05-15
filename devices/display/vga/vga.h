@@ -34,6 +34,8 @@ class Vga : public PciDevice, public Display {
   uint8_t*    vram_base_ = nullptr;
   IoTimer*    refresh_timer_ = nullptr;
 
+  virtual void NotifyDisplayUpdate();
+
  public:
   Vga();
   virtual ~Vga();
@@ -50,8 +52,8 @@ class Vga : public PciDevice, public Display {
   /* DisplayInterface */
   virtual void GetDisplayMode(int* w, int* h, int* bpp, int* stride);
   virtual void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
-  virtual bool AcquireUpdate(DisplayUpdate& update, bool redraw);
-  virtual void ReleaseUpdate();
+  virtual bool GetScreenshot(DisplayUpdate& update);
+  virtual void Refresh();
 };
 
 #endif // _MVISOR_DEVICES_VGA_H
