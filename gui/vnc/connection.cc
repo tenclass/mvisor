@@ -1,6 +1,11 @@
-
+#include "version.h"
 #include <cstring>
 #include <arpa/inet.h>
+
+#ifdef HAS_OPENSSL
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#endif
 
 #include "../keymap.h"
 #include "spice/vd_agent.h"
@@ -14,7 +19,8 @@ VncConnection::VncConnection(VncServer* server, int fd) : server_(server), fd_(f
   LookupDevices();
 
   // Send VNC version
-  send(fd_, vnc_version, strlen(vnc_version), 0);
+  send(fd_, &vnc_version[0], 1, 0);
+  send(fd_, &vnc_version[1], strlen(vnc_version) - 1, 0);
 
   // z_stream initialization
   zstream_.zalloc = Z_NULL;
@@ -123,6 +129,64 @@ void VncConnection::ReadSkip(size_t size) {
   recv(fd_, buf, size, 0);
 }
 
+bool VncConnection::CheckClientAuth(const char* buffer, ssize_t length) {
+#ifdef HAS_OPENSSL
+  if (length < 16) {
+    return false;
+  }
+
+  uint8_t encrypted[16], key[8];
+  auto password = server_->password();
+  for (size_t i = 0; i < sizeof(password); i++) {
+    key[i] = i < password.size() ? password[i] : 0;
+  }
+  for (size_t i = 0; i < sizeof(key); i++) {
+    uint8_t r = key[i];
+    r = (r & 0xf0) >> 4 | (r & 0x0f) << 4;
+    r = (r & 0xcc) >> 2 | (r & 0x33) << 2;
+    r = (r & 0xaa) >> 1 | (r & 0x55) << 1;
+    key[i] = r;
+  }
+
+  EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+  MV_ASSERT(ctx);
+  if (EVP_CipherInit_ex(ctx, EVP_des_ecb(), nullptr, key, nullptr, 1) == 0) {
+    MV_WARN("EVP_CipherInit_ex failed %s", ERR_error_string(ERR_get_error(), nullptr));
+    EVP_CIPHER_CTX_free(ctx);
+    return false;
+  }
+
+  // Encrypt chanllenge with password
+  int outlen = 0;
+  if (EVP_CipherUpdate(ctx, encrypted, &outlen, challenge_, sizeof(challenge_)) == 0) {
+    MV_WARN("EVP_CipherUpdate failed %s", ERR_error_string(ERR_get_error(), nullptr));
+    EVP_CIPHER_CTX_free(ctx);
+    return false;
+  }
+  if (EVP_CipherFinal_ex(ctx, encrypted + outlen, &outlen) == 0) {
+    MV_WARN("EVP_CipherFinal_ex failed %s", ERR_error_string(ERR_get_error(), nullptr));
+    EVP_CIPHER_CTX_free(ctx);
+    return false;
+  }
+  EVP_CIPHER_CTX_free(ctx);
+
+  if (memcmp(encrypted, buffer, sizeof(encrypted)) != 0) {
+    MV_WARN("VNC auth failed");
+    const char failed_string[] = "Authentication failed";
+    *(uint32_t*)&buffer[0] = htonl(1);
+    *(uint32_t*)&buffer[4] = htonl(sizeof(failed_string));
+    send(fd_, buffer, 8, 0);
+    send(fd_, failed_string, sizeof(failed_string), 0);
+    return false;
+  }
+  return true;
+#else
+  MV_UNUSED(buffer);
+  MV_UNUSED(length);
+  return false;
+#endif
+}
+
 bool VncConnection::OnReceive() {
   if (state_ == kVncRunning) {
     // Handle VNC message
@@ -168,11 +232,33 @@ bool VncConnection::OnReceive() {
       return false;
     }
     state_ = kVncSecurity;
-    char security_types[] = {1, 1};
+    char security_types[] = {1, (char)server_->security_type()};
     send(fd_, security_types, sizeof(security_types), 0);
     break;
   }
   case kVncSecurity: {
+    if (n < 1 || buf[0] != server_->security_type()) {
+      MV_WARN("VNC security type not supported %d", buf[0]);
+      return false;
+    }
+    if (server_->security_type() == kVncSecurityVncAuth) {
+      // VNC authentication
+      for (int i = 0; i < 16; i++) {
+        challenge_[i] = rand() % 256;
+      }
+      send(fd_, challenge_, sizeof(challenge_), 0);
+      state_ = kVncAuth;
+    } else {
+      state_ = kVNcInit;
+      uint32_t status = 0;
+      send(fd_, &status, sizeof(status), 0);
+    }
+    break;
+  }
+  case kVncAuth: {
+    if (!CheckClientAuth(buf, n)) {
+      return false;
+    }
     state_ = kVNcInit;
     uint32_t status = 0;
     send(fd_, &status, sizeof(status), 0);

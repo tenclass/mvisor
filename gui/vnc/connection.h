@@ -40,6 +40,7 @@ class VncConnection {
   VncConnectionState  state_ = kVncVersion;
   VncServer*          server_;
   int                 fd_;
+  uint8_t             challenge_[16];
   bool                shared_ = false;
   PixelFormat         pixel_format_;
   std::vector<int32_t>client_encodings_;
@@ -70,6 +71,7 @@ class VncConnection {
   std::list<DisplayUpdateListener>::iterator      display_update_listener_;
   std::list<ClipboardListener>::iterator          clipboard_listener_;
 
+  bool CheckClientAuth(const char* buffer, ssize_t length);
   void CreateFrameBuffer();
   void SendServerInit();
   void LookupDevices();
