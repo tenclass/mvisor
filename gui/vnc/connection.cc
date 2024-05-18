@@ -137,11 +137,8 @@ bool VncConnection::CheckClientAuth(const char* buffer, ssize_t length) {
 
   uint8_t encrypted[16], key[8];
   auto password = server_->password();
-  for (size_t i = 0; i < sizeof(password); i++) {
-    key[i] = i < password.size() ? password[i] : 0;
-  }
   for (size_t i = 0; i < sizeof(key); i++) {
-    uint8_t r = key[i];
+    uint8_t r = i < password.size() ? password[i] : 0;
     r = (r & 0xf0) >> 4 | (r & 0x0f) << 4;
     r = (r & 0xcc) >> 2 | (r & 0x33) << 2;
     r = (r & 0xaa) >> 1 | (r & 0x55) << 1;
