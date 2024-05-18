@@ -156,12 +156,10 @@ bool VncConnection::CheckClientAuth(const char* buffer, ssize_t length) {
   // Encrypt chanllenge with password
   int outlen = 0;
   if (EVP_CipherUpdate(ctx, encrypted, &outlen, challenge_, sizeof(challenge_)) == 0) {
-    MV_WARN("EVP_CipherUpdate failed %s", ERR_error_string(ERR_get_error(), nullptr));
     EVP_CIPHER_CTX_free(ctx);
     return false;
   }
   if (EVP_CipherFinal_ex(ctx, encrypted + outlen, &outlen) == 0) {
-    MV_WARN("EVP_CipherFinal_ex failed %s", ERR_error_string(ERR_get_error(), nullptr));
     EVP_CIPHER_CTX_free(ctx);
     return false;
   }
