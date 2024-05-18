@@ -55,6 +55,11 @@ void VncServer::Close() {
   }
 }
 
+void VncServer::SetPassword(const std::string& password) {
+  security_type_ = kVncSecurityVncAuth;
+  password_ = password;
+}
+
 void VncServer::MainLoop() {
   SetThreadName("mvisor-vnc-server");
 

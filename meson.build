@@ -30,8 +30,14 @@ proto_sources = []
 mvisor_include = [include_directories('include')]
 mvisor_sources = ['main.cc']
 
+openssl_dep = dependency('openssl', required : false)
+if openssl_dep.found()
+  mvisor_version_data.set('HAS_OPENSSL', true)
+endif
+
 mvisor_deps = [
-  dependency('threads')
+  dependency('threads'),
+  openssl_dep
 ]
 
 subdir('core')

@@ -20,6 +20,8 @@
 #include <string>
 #include <unistd.h>
 #include <getopt.h>
+#include <signal.h>
+#include <thread>
 
 #include <filesystem>
 
@@ -44,6 +46,9 @@ static Viewer*      viewer = nullptr;
 static std::thread  viewer_thread;
 #endif
 
+#ifdef HAS_OPENSSL
+#include <openssl/provider.h>
+#endif
 
 /* For vfio mdev, -uuid xxx is necessary */
 static void IntializeArguments(int argc, char* argv[]) {
@@ -89,6 +94,7 @@ static void PrintHelp() {
   printf("  -u, --uuid            Specified mvisor uuid information.\n");
   printf("  -v, --version         Display mvisor version information.\n");
   printf("  -vnc [port]           Start a VNC server at specified port.\n");
+  printf("  -vnc_password [pass]  Set VNC password.\n");
 }
 
 static void PrintVersion() {
@@ -110,6 +116,7 @@ static struct option long_options[] = {
   {"uuid", required_argument, 0, 'u'},
   {"version", no_argument, 0, 'V'},
   {"vnc", required_argument, 0, 'v'},
+  {"vnc_password", required_argument, 0, 'w'},
   {NULL, 0, 0, 0}
 };
 
@@ -124,6 +131,7 @@ int main(int argc, char* argv[]) {
   std::string load_path;
   std::string migration_port;
   uint16_t vnc_port = 0;
+  std::string vnc_password;
 
   int c, option_index = 0;
   while ((c = getopt_long_only(argc, argv, "hVc:u:n:s:p:l:", long_options, &option_index)) != -1) {
@@ -155,6 +163,9 @@ int main(int argc, char* argv[]) {
       break;
     case 'v':
       vnc_port = atoi(optarg);
+      break;
+    case 'w':
+      vnc_password = optarg;
       break;
     case 'V':
       PrintVersion();
@@ -232,6 +243,17 @@ int main(int argc, char* argv[]) {
 
   if (vnc_port) {
     vnc_server = new VncServer(machine, vnc_port);
+    if (!vnc_password.empty()) {
+      vnc_server->SetPassword(vnc_password);
+#ifdef HAS_OPENSSL
+      OSSL_PROVIDER *provider = OSSL_PROVIDER_load(NULL, "legacy");
+      if (!provider) {
+        MV_ERROR("Failed to load OpenSSL provider");
+      }
+#else
+      MV_PANIC("VNC password is not supported in this build");
+#endif
+    }
     vnc_server_thread = std::thread([]() {
       vnc_server->MainLoop();
     });
