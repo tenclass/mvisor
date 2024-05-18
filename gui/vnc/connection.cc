@@ -166,12 +166,6 @@ bool VncConnection::CheckClientAuth(const char* buffer, ssize_t length) {
   EVP_CIPHER_CTX_free(ctx);
 
   if (memcmp(encrypted, buffer, sizeof(encrypted)) != 0) {
-    MV_WARN("VNC auth failed");
-    const char failed_string[] = "Authentication failed";
-    *(uint32_t*)&buffer[0] = htonl(1);
-    *(uint32_t*)&buffer[4] = htonl(sizeof(failed_string));
-    send(fd_, buffer, 8, 0);
-    send(fd_, failed_string, sizeof(failed_string), 0);
     return false;
   }
   return true;
@@ -252,6 +246,12 @@ bool VncConnection::OnReceive() {
   }
   case kVncAuth: {
     if (!CheckClientAuth(buf, n)) {
+      MV_WARN("VNC auth failed");
+      const char failed_string[] = "Authentication failed";
+      *(uint32_t*)&buf[0] = htonl(1);
+      *(uint32_t*)&buf[4] = htonl(sizeof(failed_string));
+      send(fd_, buf, 8, 0);
+      send(fd_, failed_string, sizeof(failed_string), 0);
       return false;
     }
     state_ = kVNcInit;
