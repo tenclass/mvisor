@@ -472,6 +472,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
         keyboard_->QueueKeyboardEvent(transcoded, 0);
         // run the shortcut in a detached thread
         std::thread(it->second).detach();
+        return;
       }
     }
     // fall through
