@@ -84,7 +84,7 @@ const uint16_t qemu_input_map_x11_to_qcode[65536] = {
   [0x5c] = Q_KEY_CODE_LESS, /* x11:92 (XK_backslash) -> linux:86 (KEY_102ND) -> qcode:Q_KEY_CODE_LESS (less) */
   [0x5d] = Q_KEY_CODE_BRACKET_RIGHT, /* x11:93 (XK_braceright) -> linux:27 (KEY_RIGHTBRACE) -> qcode:Q_KEY_CODE_BRACKET_RIGHT (bracket_right) */
   [0x5e] = Q_KEY_CODE_6, /* x11:94 (XK_asciicircum) -> linux:7 (KEY_6) -> qcode:Q_KEY_CODE_6 (6) */
-  [0x5f] = Q_KEY_CODE_RO, /* x11:95 (XK_underscore) -> linux:89 (KEY_RO) -> qcode:Q_KEY_CODE_RO (ro) */
+  [0x5f] = Q_KEY_CODE_MINUS, /* x11:95 (XK_underscore) -> linux:89 (KEY_RO) -> qcode:Q_KEY_CODE_RO (ro) */
   [0x60] = Q_KEY_CODE_GRAVE_ACCENT, /* x11:96 (XK_asciitilde) -> linux:41 (KEY_GRAVE) -> qcode:Q_KEY_CODE_GRAVE_ACCENT (grave_accent) */
   [0x61] = Q_KEY_CODE_A, /* x11:97 (XK_a) -> linux:30 (KEY_A) -> qcode:Q_KEY_CODE_A (a) */
   [0x62] = Q_KEY_CODE_B, /* x11:98 (XK_b) -> linux:48 (KEY_B) -> qcode:Q_KEY_CODE_B (b) */
@@ -140,6 +140,7 @@ const uint16_t qemu_input_map_x11_to_qcode[65536] = {
   [0xff57] = Q_KEY_CODE_END, /* x11:65367 (XK_End) -> linux:107 (KEY_END) -> qcode:Q_KEY_CODE_END (end) */
   [0xff60] = Q_KEY_CODE_UNMAPPED, /* x11:65376 (XK_Select) -> linux:353 (KEY_SELECT) -> qcode:Q_KEY_CODE_UNMAPPED (unnamed) */
   [0xff63] = Q_KEY_CODE_INSERT, /* x11:65379 (XK_Insert) -> linux:110 (KEY_INSERT) -> qcode:Q_KEY_CODE_INSERT (insert) */
+  [0xff67] = Q_KEY_CODE_COMPOSE, /* x11:65383 (XK_Multi_key) -> linux:127 (KEY_COMPOSE) -> qcode:Q_KEY_CODE_COMPOSE (compose) */
   [0xff6a] = Q_KEY_CODE_HELP, /* x11:65386 (XK_Help) -> linux:138 (KEY_HELP) -> qcode:Q_KEY_CODE_HELP (help) */
   [0xff7f] = Q_KEY_CODE_NUM_LOCK, /* x11:65407 (XK_Num_Lock) -> linux:69 (KEY_NUMLOCK) -> qcode:Q_KEY_CODE_NUM_LOCK (num_lock) */
   [0xff8d] = Q_KEY_CODE_KP_ENTER, /* x11:65421 (XK_KP_Enter) -> linux:96 (KEY_KPENTER) -> qcode:Q_KEY_CODE_KP_ENTER (kp_enter) */
@@ -180,6 +181,8 @@ const uint16_t qemu_input_map_x11_to_qcode[65536] = {
   [0xffe8] = Q_KEY_CODE_META_R, /* x11:65512 (XK_Meta_R) -> linux:126 (KEY_RIGHTMETA) -> qcode:Q_KEY_CODE_META_R (meta_r) */
   [0xffe9] = Q_KEY_CODE_ALT, /* x11:65513 (XK_Alt_L) -> linux:56 (KEY_LEFTALT) -> qcode:Q_KEY_CODE_ALT (alt) */
   [0xffea] = Q_KEY_CODE_ALT_R, /* x11:65514 (XK_Alt_R) -> linux:100 (KEY_RIGHTALT) -> qcode:Q_KEY_CODE_ALT_R (alt_r) */
+  [0xffeb] = Q_KEY_CODE_META_L, /* x11:65515 (XK_Super_L) -> linux:125 (KEY_LEFTMETA) -> qcode:Q_KEY_CODE_META_L (meta_l) */
+  [0xffec] = Q_KEY_CODE_META_R, /* x11:65516 (XK_Super_R) -> linux:126 (KEY_RIGHTMETA) -> qcode:Q_KEY_CODE_META_R (meta_r) */
   [0xffff] = Q_KEY_CODE_DELETE, /* x11:65535 (XK_Delete) -> linux:111 (KEY_DELETE) -> qcode:Q_KEY_CODE_DELETE (delete) */
 };
 const size_t qemu_input_map_x11_to_qcode_len = sizeof(qemu_input_map_x11_to_qcode) / sizeof(qemu_input_map_x11_to_qcode[0]);
@@ -514,7 +517,7 @@ const size_t qemu_input_map_qcode_to_atset1_len = sizeof(qemu_input_map_qcode_to
  */
 uint16_t ScancodeFromUsb(uint16_t scancode) {
   if (scancode >= qemu_input_map_usb_to_qcode_len) {
-    return 0;
+    return Q_KEY_CODE_UNMAPPED;
   }
   uint16_t qcode = qemu_input_map_usb_to_qcode[scancode];
   return qcode;
@@ -522,7 +525,7 @@ uint16_t ScancodeFromUsb(uint16_t scancode) {
 
 uint16_t ScancodeFromX11(uint16_t keycode) {
   if (keycode >= qemu_input_map_x11_to_qcode_len) {
-    return 0;
+    return Q_KEY_CODE_UNMAPPED;
   }
   uint16_t qcode = qemu_input_map_x11_to_qcode[keycode];
   return qcode;
