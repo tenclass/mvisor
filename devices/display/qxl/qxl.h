@@ -94,6 +94,7 @@ class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
   virtual bool Resize(int width, int height);
 
  private:
+  virtual void NotifyDisplayModeChange();
   virtual void NotifyDisplayUpdate();
   virtual bool ActivatePciBar(uint index);
   virtual bool DeactivatePciBar(uint index);

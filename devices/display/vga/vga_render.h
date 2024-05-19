@@ -65,6 +65,7 @@ class VgaRender {
   int         height_;
   int         bpp_;
   int         stride_;
+  bool        redraw_ = false;
 
   /* VGA mode */
   int         rows_;
@@ -77,6 +78,7 @@ class VgaRender {
   bool        mode_changed_;
 
   std::string vga_surface_;
+  std::string vga_display_buffer_;
 
   bool IsVbeEnabled();
   void UpdateDisplayMode();
@@ -102,6 +104,7 @@ class VgaRender {
   void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
   bool IsModeChanged();
   bool GetDisplayUpdate(DisplayUpdate& update);
+  void Redraw();
 };
 
 

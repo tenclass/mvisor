@@ -216,8 +216,9 @@ IoTimer* IoThread::AddTimer(Device* device, int64_t interval_ns, bool permanent,
   return timer;
 }
 
-void IoThread::RemoveTimer(IoTimer* timer) {
-  timer->removed = true;
+void IoThread::RemoveTimer(IoTimer** timer) {
+  (*timer)->removed = true;
+  *timer = nullptr;
 }
 
 void IoThread::ModifyTimer(IoTimer* timer, int64_t interval_ns) {

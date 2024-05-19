@@ -73,6 +73,7 @@ class VncConnection {
 
   bool CheckClientAuth(const char* buffer, ssize_t length);
   void CreateFrameBuffer();
+  void DestroyFrameBuffer();
   void SendServerInit();
   void LookupDevices();
   void ResizeFrameBuffer();

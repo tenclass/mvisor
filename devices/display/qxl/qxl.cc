@@ -32,6 +32,7 @@
 #include "qxl.pb.h"
 #include "logger.h"
 
+#define VGA_REFRESH_FREQUENCY 30
 
 Qxl::Qxl() {
   /* PCI config */
@@ -130,11 +131,6 @@ void Qxl::Connect() {
   MV_ASSERT(qxl_render_ == nullptr);
   qxl_render_ = new QxlRender(this);
   vga_render_ = new VgaRender(this, vram_base_, vram_size_);
-  vga_refresh_timer_ = AddTimer(NS_PER_SECOND / 10, true, [this]() {
-    if (!primary_surface_.active) {
-      NotifyDisplayUpdate();
-    }
-  });
 
   /* Push all free resources to the ring before saving VM */
   auto machine = manager_->machine();
@@ -149,8 +145,7 @@ void Qxl::Disconnect() {
   manager_->machine()->UnregisterStateChangeListener(state_change_listener_);
 
   if (vga_refresh_timer_) {
-    RemoveTimer(vga_refresh_timer_);
-    vga_refresh_timer_ = nullptr;
+    RemoveTimer(&vga_refresh_timer_);
   }
 
   delete vga_render_;
@@ -414,8 +409,10 @@ void Qxl::Refresh() {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   if (display_mode_ == kDisplayModeQxl) {
     qxl_render_->Redraw();
-    NotifyDisplayUpdate();
+  } else {
+    vga_render_->Redraw();
   }
+  NotifyDisplayUpdate();
 }
 
 bool Qxl::Resize(int width, int height) {
@@ -772,9 +769,28 @@ void Qxl::ReleaseGuestResource(QXLReleaseInfo* info) {
   }
 }
 
+void Qxl::NotifyDisplayModeChange() {
+  if (display_mode_ == kDisplayModeVga) {
+    if (vga_refresh_timer_ == nullptr) {
+      vga_refresh_timer_ = AddTimer(NS_PER_SECOND / VGA_REFRESH_FREQUENCY, true,
+        std::bind(&Qxl::NotifyDisplayUpdate, this));
+    }
+  } else {
+    if (vga_refresh_timer_) {
+      RemoveTimer(&vga_refresh_timer_);
+    }
+  }
+
+  Display::NotifyDisplayModeChange();
+}
+
 /* Lock the drawables and translate to display partial bitmaps */
 void Qxl::NotifyDisplayUpdate() {
+  std::lock_guard<std::recursive_mutex> lock(display_mutex_);
   if (display_mode_ == kDisplayModeUnknown) {
+    return;
+  }
+  if (display_update_listeners_.empty()) {
     return;
   }
 
@@ -786,7 +802,6 @@ void Qxl::NotifyDisplayUpdate() {
     update.cursor = current_cursor_;
   }
 
-  std::lock_guard<std::recursive_mutex> lock(display_mutex_);
   for (auto& listener : display_update_listeners_) {
     listener(update);
   }

@@ -339,10 +339,7 @@ bool VncConnection::OnSetPixelFormat() {
   pixel_format_.green_shift = pixel_format[11];
   pixel_format_.blue_shift = pixel_format[12];
 
-  if (frame_buffer_ != nullptr) {
-    pixman_image_unref(frame_buffer_);
-    frame_buffer_ = nullptr;
-  }
+  DestroyFrameBuffer();
   return true;
 }
 
@@ -490,12 +487,7 @@ void VncConnection::ResizeFrameBuffer() {
   frame_buffer_width_ = w;
   frame_buffer_height_ = h;
 
-  if (frame_buffer_) {
-    pixman_image_unref(frame_buffer_);
-    frame_buffer_ = nullptr;
-  }
-
-  dirty_rects_.clear();
+  DestroyFrameBuffer();
   if (state_ == kVncRunning) {
     SendDesktopSize();
   }
@@ -522,6 +514,14 @@ pixman_format_code_t VncConnection::GetPixelFormat(int bpp) {
     return PIXMAN_b8g8r8;
   default:
     return PIXMAN_a8b8g8r8;
+  }
+}
+
+void VncConnection::DestroyFrameBuffer() {
+  if (frame_buffer_) {
+    pixman_image_unref(frame_buffer_);
+    frame_buffer_ = nullptr;
+    dirty_rects_.clear();
   }
 }
 

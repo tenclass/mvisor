@@ -33,6 +33,7 @@
 #include "vbe.h"
 #include "machine.h"
 
+#define VGA_REFRESH_FREQUENCY 30
 
 Vga::Vga() {
   default_rom_path_ = "../share/vgabios-stdvga.bin";
@@ -127,13 +128,13 @@ void Vga::Connect() {
   PciDevice::Connect();
 
   vga_render_ = new VgaRender(this, vram_base_, vram_size_);
-  refresh_timer_ = AddTimer(NS_PER_SECOND / 30, true, std::bind(&Vga::NotifyDisplayUpdate, this));
+  refresh_timer_ = AddTimer(NS_PER_SECOND / VGA_REFRESH_FREQUENCY, true,
+    std::bind(&Vga::NotifyDisplayUpdate, this));
 }
 
 void Vga::Disconnect() {
   if (refresh_timer_) {
-    RemoveTimer(refresh_timer_);
-    refresh_timer_ = nullptr;
+    RemoveTimer(&refresh_timer_);
   }
 
   delete vga_render_;
@@ -213,11 +214,15 @@ void Vga::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
 }
 
 void Vga::NotifyDisplayUpdate() {
+  std::lock_guard<std::recursive_mutex> lock(display_mutex_);
+  if (display_update_listeners_.empty()) {
+    return;
+  }
+
   if (display_mode_ == kDisplayModeVga) {
     DisplayUpdate update;
     vga_render_->GetDisplayUpdate(update);
 
-    std::lock_guard<std::recursive_mutex> lock(display_mutex_);
     for (auto &listener : display_update_listeners_) {
       listener(update);
     }
@@ -225,7 +230,11 @@ void Vga::NotifyDisplayUpdate() {
 }
 
 void Vga::Refresh() {
-  // Do nothing because the VGA is always updating the whole surface
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  if (display_mode_ == kDisplayModeVga) {
+    vga_render_->Redraw();
+    NotifyDisplayUpdate();
+  }
 }
 
 DECLARE_DEVICE(Vga);

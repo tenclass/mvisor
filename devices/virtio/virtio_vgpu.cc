@@ -107,8 +107,7 @@ class VirtioVgpu : public VirtioPci {
     VirtioPci::Disconnect();
 
     if (fence_poll_timer_) {
-      RemoveTimer(fence_poll_timer_);
-      fence_poll_timer_ = nullptr;
+      RemoveTimer(&fence_poll_timer_);
     }
     
     // FIXME: virgl cleanup may cause crash when the guest didn't destroy all virgl contexts in AMD gpu
