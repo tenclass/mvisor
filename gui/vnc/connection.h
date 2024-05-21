@@ -44,6 +44,7 @@ class VncConnection {
   bool                shared_ = false;
   PixelFormat         pixel_format_;
   std::vector<int32_t>client_encodings_;
+  int                 preferred_encoding_ = 0;
   int                 frame_buffer_width_ = 0;
   int                 frame_buffer_height_ = 0;
   pixman_image_t*     frame_buffer_ = nullptr;
@@ -52,6 +53,7 @@ class VncConnection {
   int                 cursor_hotspot_x_ = 0;
   int                 cursor_hotspot_y_ = 0;
   bool                frame_buffer_update_requested_ = false;
+  bool                frame_buffer_resize_requested_ = false;
   bool                cursor_update_requested_ = false;
   std::vector<VncRect>dirty_rects_;
   uint8_t             modifiers_ = 0;
@@ -77,9 +79,9 @@ class VncConnection {
   void SendServerInit();
   void LookupDevices();
   void ResizeFrameBuffer();
-  void SendDesktopSize();
-  void SendCursorUpdate();
-  void SendFrameBufferUpdate(int x, int y, int width, int height);
+  bool SendDesktopSize();
+  bool SendCursorUpdate();
+  bool SendFrameBufferUpdate(int x, int y, int width, int height);
   void AddDirtyRectInternal(int top, int left, int bottom, int right);
   void AddDirtyRect(int top, int left, int bottom, int right);
   void UpdateLoop();

@@ -19,8 +19,7 @@ VncConnection::VncConnection(VncServer* server, int fd) : server_(server), fd_(f
   LookupDevices();
 
   // Send VNC version
-  send(fd_, &vnc_version[0], 1, 0);
-  send(fd_, &vnc_version[1], strlen(vnc_version) - 1, 0);
+  send(fd_, vnc_version, strlen(vnc_version), 0);
 
   // z_stream initialization
   zstream_.zalloc = Z_NULL;
@@ -319,6 +318,7 @@ void VncConnection::SendServerInit() {
   if (server_->machine()->IsPaused()) {
     server_->machine()->Resume();
   }
+  display_->Refresh();
 }
 
 bool VncConnection::OnSetPixelFormat() {
@@ -326,6 +326,9 @@ bool VncConnection::OnSetPixelFormat() {
 
   uint8_t pixel_format[16];
   ReadData(pixel_format, sizeof(pixel_format));
+  if (memcmp(&pixel_format_, pixel_format, sizeof(pixel_format)) == 0) {
+    return true;
+  }
 
   std::lock_guard<std::recursive_mutex> lock(update_mutex_);
   pixel_format_.bits_per_pixel = pixel_format[0];
@@ -340,6 +343,7 @@ bool VncConnection::OnSetPixelFormat() {
   pixel_format_.blue_shift = pixel_format[12];
 
   DestroyFrameBuffer();
+  display_->Refresh();
   return true;
 }
 
@@ -353,6 +357,14 @@ bool VncConnection::OnSetEncodings() {
   for (int i = 0; i < n_encodings; i++) {
     auto encoding = (int32_t)ReadUInt32();
     client_encodings_.push_back(encoding);
+  }
+
+  // Set preferred encoding
+  for (auto encoding : client_encodings_) {
+    if (encoding == 6 || encoding == 0) {
+      preferred_encoding_ = encoding;
+      break;
+    }
   }
 
   // Encoding RAW must be supported
@@ -386,7 +398,7 @@ bool VncConnection::OnFrameBufferUpdateRequest() {
   req.h = ntohs(req.h);
 
   if (req.incremental == 0) {
-    display_->Refresh();
+    AddDirtyRect(req.y, req.x, req.y + req.h, req.x + req.w);
   }
   frame_buffer_update_requested_ = true;
   update_cv_.notify_one();
@@ -488,20 +500,7 @@ void VncConnection::ResizeFrameBuffer() {
   frame_buffer_height_ = h;
 
   DestroyFrameBuffer();
-  if (state_ == kVncRunning) {
-    SendDesktopSize();
-  }
-}
-
-void VncConnection::SendDesktopSize() {
-  if (IsEncodingSupported(-223)) {
-    uint8_t buf[16] = {0};
-    *(uint16_t*)&buf[2] = htons(1);  // number of rectangles
-    *(uint16_t*)&buf[8] = htons(frame_buffer_width_);
-    *(uint16_t*)&buf[10] = htons(frame_buffer_height_);
-    *(uint32_t*)&buf[12] = htonl(-223); // DesktopSize pseudo-encoding
-    send(fd_, buf, sizeof(buf), 0);
-  }
+  frame_buffer_resize_requested_ = true;
 }
 
 pixman_format_code_t VncConnection::GetPixelFormat(int bpp) {
@@ -672,10 +671,24 @@ void VncConnection::Render(const DisplayUpdate& update) {
   }
 }
 
-void VncConnection::SendCursorUpdate() {
+bool VncConnection::SendDesktopSize() {
+  if (!IsEncodingSupported(-223)) {
+    MV_WARN("DesktopSize pseudo-encoding not supported");
+    return false;
+  }
+  uint8_t buf[16] = {0};
+  *(uint16_t*)&buf[2] = htons(1);  // number of rectangles
+  *(uint16_t*)&buf[8] = htons(frame_buffer_width_);
+  *(uint16_t*)&buf[10] = htons(frame_buffer_height_);
+  *(uint32_t*)&buf[12] = htonl(-223); // DesktopSize pseudo-encoding
+  send(fd_, buf, sizeof(buf), 0);
+  return true;
+}
+
+bool VncConnection::SendCursorUpdate() {
   std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   if (!cursor_buffer_ || !IsEncodingSupported(-314)) {
-    return;
+    return false;
   }
 
   int height = pixman_image_get_height(cursor_buffer_);
@@ -693,13 +706,14 @@ void VncConnection::SendCursorUpdate() {
   auto stride = pixman_image_get_stride(cursor_buffer_);
   auto data = (uint8_t*)pixman_image_get_data(cursor_buffer_);
   send(fd_, data, height * stride, 0);
+  return true;
 }
 
-void VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
+bool VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
   std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   if (frame_buffer_ == nullptr) {
     // Frame buffer is destroyed if client set pixel format
-    return;
+    return false;
   }
 
   MV_ASSERT(width > 0 && height > 0);
@@ -754,6 +768,7 @@ void VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
       dst += stride;
     }
   }
+  return true;
 }
 
 void VncConnection::UpdateLoop() {
@@ -762,7 +777,9 @@ void VncConnection::UpdateLoop() {
   while (fd_ != -1) {
     std::unique_lock<std::mutex> lock(server_->mutex());
     update_cv_.wait(lock, [this]() {
-      return fd_ == -1 || (frame_buffer_update_requested_ && !dirty_rects_.empty()) || cursor_update_requested_;
+      return fd_ == -1 || (frame_buffer_update_requested_ && (
+              !dirty_rects_.empty() || cursor_update_requested_ || frame_buffer_resize_requested_
+      ));
     });
     if (fd_ == -1) {
       break;
@@ -771,20 +788,27 @@ void VncConnection::UpdateLoop() {
       continue;
     }
     
+    frame_buffer_update_requested_ = false;
+    bool updated = false;
     // Send large data to client will block the thread 
-    // until the data is sent, so we should unlock the mutex
-    if (frame_buffer_update_requested_ && !dirty_rects_.empty()) {
-      VncRect rect = dirty_rects_.back();
-      dirty_rects_.pop_back();
-      if (dirty_rects_.empty()) {
-        frame_buffer_update_requested_ = false;
-      }
+    // until the data is sent, so we should unlock the mutex before sending data
+    if (frame_buffer_resize_requested_) {
+      frame_buffer_resize_requested_ = false;
       lock.unlock();
-      SendFrameBufferUpdate(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+      updated = SendDesktopSize();
     } else if (cursor_update_requested_) {
       cursor_update_requested_ = false;
       lock.unlock();
-      SendCursorUpdate();
+      updated = SendCursorUpdate();
+    } else if (!dirty_rects_.empty()) {
+      VncRect rect = dirty_rects_.back();
+      dirty_rects_.pop_back();
+      lock.unlock();
+      updated = SendFrameBufferUpdate(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+    }
+    // If no update sent, keep the request
+    if (!updated) {
+      frame_buffer_update_requested_ = true;
     }
   }
 }
