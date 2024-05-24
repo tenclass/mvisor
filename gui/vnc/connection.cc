@@ -16,24 +16,15 @@
 static char vnc_version[] = "RFB 003.008\n";
 
 VncConnection::VncConnection(VncServer* server, int fd) : server_(server), fd_(fd) {
-  LookupDevices();
-
   // Send VNC version
   send(fd_, vnc_version, strlen(vnc_version), 0);
-
-  // z_stream initialization
-  zstream_.zalloc = Z_NULL;
-  zstream_.zfree = Z_NULL;
-  zstream_.opaque = Z_NULL;
-  MV_ASSERT(deflateInit2(&zstream_, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-    MAX_WBITS, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) == Z_OK);
 }
 
 VncConnection::~VncConnection() {
   safe_close(&fd_);
 
-  update_cv_.notify_all();
   if (update_thread_.joinable()) {
+    update_cv_.notify_all();
     update_thread_.join();
   }
 
@@ -77,14 +68,14 @@ void VncConnection::LookupDevices() {
   if (display_) {
     display_mode_listener_ = display_->RegisterDisplayModeChangeListener([this]() {
       server_->Schedule([this]() {
-        ResizeFrameBuffer();
+        OnDisplayModeChange();
       });
     });
 
     display_update_listener_ = display_->RegisterDisplayUpdateListener([this](const DisplayUpdate& update) {
       server_->Schedule([this, update=std::move(update)]() {
         if (state_ == kVncRunning) {
-          Render(update);
+          OnDisplayUpdate(update);
         }
       });
     });
@@ -237,7 +228,7 @@ bool VncConnection::OnReceive() {
       send(fd_, challenge_, sizeof(challenge_), 0);
       state_ = kVncAuth;
     } else {
-      state_ = kVNcInit;
+      state_ = kVncInit;
       uint32_t status = 0;
       send(fd_, &status, sizeof(status), 0);
     }
@@ -253,14 +244,15 @@ bool VncConnection::OnReceive() {
       send(fd_, failed_string, sizeof(failed_string), 0);
       return false;
     }
-    state_ = kVNcInit;
+    state_ = kVncInit;
     uint32_t status = 0;
     send(fd_, &status, sizeof(status), 0);
     break;
   }
-  case kVNcInit: {
+  case kVncInit: {
     shared_ = buf[0] == 1;
     state_ = kVncRunning;
+    LookupDevices();
     if (display_ == nullptr) {
       return false;
     }
@@ -285,14 +277,20 @@ struct ServerInitMessage {
 } __attribute__((packed));
 
 void VncConnection::SendServerInit() {
-  int w, h, bpp;
-  display_->GetDisplayMode(&w, &h, &bpp, nullptr);
-  frame_buffer_width_ = w;
-  frame_buffer_height_ = h;
+  int bpp;
+  display_->GetDisplayMode(&frame_buffer_width_, &frame_buffer_height_, &bpp, nullptr);
+  ResetFrameBuffer();
+
+  // z_stream initialization
+  zstream_.zalloc = Z_NULL;
+  zstream_.zfree = Z_NULL;
+  zstream_.opaque = Z_NULL;
+  MV_ASSERT(deflateInit2(&zstream_, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+    MAX_WBITS, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) == Z_OK);
 
   ServerInitMessage msg = {
-    .framebuffer_width = htons(w),
-    .framebuffer_height = htons(h),
+    .framebuffer_width = htons(frame_buffer_width_),
+    .framebuffer_height = htons(frame_buffer_height_),
   };
   bzero(&pixel_format_, sizeof(pixel_format_));
   pixel_format_.bits_per_pixel = 32;
@@ -342,7 +340,7 @@ bool VncConnection::OnSetPixelFormat() {
   pixel_format_.green_shift = pixel_format[11];
   pixel_format_.blue_shift = pixel_format[12];
 
-  DestroyFrameBuffer();
+  ResetFrameBuffer();
   display_->Refresh();
   return true;
 }
@@ -492,15 +490,16 @@ PointerInputInterface* VncConnection::GetActivePointer() {
   return nullptr;
 }
 
-void VncConnection::ResizeFrameBuffer() {
+void VncConnection::OnDisplayModeChange() {
   std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   int w, h, bpp;
   display_->GetDisplayMode(&w, &h, &bpp, nullptr);
   frame_buffer_width_ = w;
   frame_buffer_height_ = h;
 
-  DestroyFrameBuffer();
+  ResetFrameBuffer();
   frame_buffer_resize_requested_ = true;
+  update_cv_.notify_one();
 }
 
 pixman_format_code_t VncConnection::GetPixelFormat(int bpp) {
@@ -516,30 +515,24 @@ pixman_format_code_t VncConnection::GetPixelFormat(int bpp) {
   }
 }
 
-void VncConnection::DestroyFrameBuffer() {
+void VncConnection::ResetFrameBuffer() {
   if (frame_buffer_) {
     pixman_image_unref(frame_buffer_);
     frame_buffer_ = nullptr;
     dirty_rects_.clear();
   }
-}
 
-void VncConnection::CreateFrameBuffer() {
-  if (frame_buffer_ == nullptr) {
-    auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
-    auto code = GetPixelFormat(pixel_format_.bits_per_pixel);
-    auto stride_bytes = frame_buffer_width_ * bytes_per_pixel;
-    frame_buffer_ = pixman_image_create_bits(code, frame_buffer_width_, frame_buffer_height_, nullptr, stride_bytes);
-    MV_ASSERT(frame_buffer_);
-  }
+  auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
+  auto code = GetPixelFormat(pixel_format_.bits_per_pixel);
+  auto stride_bytes = frame_buffer_width_ * bytes_per_pixel;
+  frame_buffer_ = pixman_image_create_bits(code, frame_buffer_width_, frame_buffer_height_, nullptr, stride_bytes);
+  MV_ASSERT(frame_buffer_);
+  /* After reset frame buffer, a full screen update is required */
+  AddDirtyRect(0, 0, frame_buffer_height_, frame_buffer_width_);
 }
 
 void VncConnection::RenderSurface(const DisplayPartialBitmap* partial) {
   auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
-  if (frame_buffer_ == nullptr) {
-    CreateFrameBuffer();
-  }
-
   auto src = partial->data;
   auto src_stride = partial->stride;
   auto dst_x = partial->x;
@@ -660,13 +653,13 @@ void VncConnection::RenderCursor(const DisplayMouseCursor* cursor_update) {
   }
 }
 
-void VncConnection::Render(const DisplayUpdate& update) {
+void VncConnection::OnDisplayUpdate(const DisplayUpdate& update) {
   for (auto& partial : update.partials) {
     RenderSurface(&partial);
   }
   RenderCursor(&update.cursor);
 
-  if ((frame_buffer_update_requested_ && !dirty_rects_.empty()) || cursor_update_requested_) {
+  if (frame_buffer_update_requested_ && (!dirty_rects_.empty() || cursor_update_requested_)) {
     update_cv_.notify_one();
   }
 }

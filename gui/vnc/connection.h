@@ -9,7 +9,7 @@ enum VncConnectionState {
   kVncVersion,
   kVncSecurity,
   kVncAuth,
-  kVNcInit,
+  kVncInit,
   kVncRunning,
   kVncClosed,
 };
@@ -74,11 +74,9 @@ class VncConnection {
   std::list<ClipboardListener>::iterator          clipboard_listener_;
 
   bool CheckClientAuth(const char* buffer, ssize_t length);
-  void CreateFrameBuffer();
-  void DestroyFrameBuffer();
+  void ResetFrameBuffer();
   void SendServerInit();
   void LookupDevices();
-  void ResizeFrameBuffer();
   bool SendDesktopSize();
   bool SendCursorUpdate();
   bool SendFrameBufferUpdate(int x, int y, int width, int height);
@@ -101,7 +99,8 @@ class VncConnection {
   bool IsEncodingSupported(int32_t encoding);
 
   void OnClipboardFromGuest(const ClipboardData& clipboard_data);
-  void Render(const DisplayUpdate& update);
+  void OnDisplayModeChange();
+  void OnDisplayUpdate(const DisplayUpdate& update);
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   PointerInputInterface* GetActivePointer();
