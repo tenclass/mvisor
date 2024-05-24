@@ -33,7 +33,6 @@
 #include "vbe.h"
 #include "machine.h"
 
-#define VGA_REFRESH_FREQUENCY 30
 
 Vga::Vga() {
   default_rom_path_ = "../share/vgabios-stdvga.bin";

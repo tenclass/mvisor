@@ -118,4 +118,7 @@ class VgaRender {
 #define VGA_MMIO_BASE   0x000A0000
 #define VGA_MMIO_SIZE   0x00020000
 
+#define VGA_REFRESH_FREQUENCY 30
+
+
 #endif // _MVISOR_DEVICES_VGA_RENDER_H

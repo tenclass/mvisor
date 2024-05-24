@@ -32,7 +32,6 @@
 #include "qxl.pb.h"
 #include "logger.h"
 
-#define VGA_REFRESH_FREQUENCY 30
 
 Qxl::Qxl() {
   /* PCI config */
@@ -523,6 +522,7 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
       qxl_render_->DestroyPrimarySurface();
       primary_surface_.active = false;
       display_mode_ = kDisplayModeUnknown;
+      NotifyDisplayModeChange();
     }
     break;
   case QXL_IO_DESTROY_ALL_SURFACES:
