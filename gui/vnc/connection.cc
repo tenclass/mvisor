@@ -21,6 +21,7 @@ VncConnection::VncConnection(VncServer* server, int fd) : server_(server), fd_(f
 }
 
 VncConnection::~VncConnection() {
+  state_ = kVncClosed;
   safe_close(&fd_);
 
   if (update_thread_.joinable()) {
@@ -44,6 +45,11 @@ VncConnection::~VncConnection() {
   }
 
   deflateEnd(&zstream_);
+}
+
+void VncConnection::Close() {
+  state_ = kVncClosed;
+  safe_close(&fd_);
 }
 
 void VncConnection::LookupDevices() {
@@ -193,6 +199,8 @@ bool VncConnection::OnReceive() {
       MV_WARN("Unknown VNC message type %d", message_type);
     }
     return false;
+  } else if (state_ == kVncClosed) {
+    return false;
   }
 
   // Handle VNC handshake
@@ -251,16 +259,18 @@ bool VncConnection::OnReceive() {
   }
   case kVncInit: {
     shared_ = buf[0] == 1;
-    state_ = kVncRunning;
+    if (!shared_) {
+      server_->SetExclusiveConnnction(this);
+    }
+
     LookupDevices();
     if (display_ == nullptr) {
       return false;
     }
+    state_ = kVncRunning;
     SendServerInit();
     break;
   }
-  case kVncClosed:
-    return false;
   default:
     MV_WARN("Unknown VNC state %d", state_);
     return false;
@@ -765,20 +775,17 @@ bool VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
 }
 
 void VncConnection::UpdateLoop() {
-  SetThreadName("mvisor-vnc-connection");
+  SetThreadName("mvisor-vnc-conn");
 
-  while (fd_ != -1) {
+  while (state_ == kVncRunning) {
     std::unique_lock<std::mutex> lock(server_->mutex());
     update_cv_.wait(lock, [this]() {
-      return fd_ == -1 || (frame_buffer_update_requested_ && (
-              !dirty_rects_.empty() || cursor_update_requested_ || frame_buffer_resize_requested_
+      return state_ != kVncRunning || (frame_buffer_update_requested_ && (
+             !dirty_rects_.empty() || cursor_update_requested_ || frame_buffer_resize_requested_
       ));
     });
-    if (fd_ == -1) {
-      break;
-    }
     if (state_ != kVncRunning) {
-      continue;
+      break;
     }
     
     frame_buffer_update_requested_ = false;

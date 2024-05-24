@@ -109,6 +109,7 @@ class VncConnection {
   VncConnection(VncServer* server, int fd);
   ~VncConnection();
   bool OnReceive();
+  void Close();
 
   int fd() { return fd_; }
 };

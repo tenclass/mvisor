@@ -38,6 +38,7 @@ class VncServer {
   void Close();
   void SetPassword(const std::string& password);
   void Schedule(VoidCallback callback);
+  void SetExclusiveConnnction(VncConnection* conn);
 
   inline Machine* machine() { return machine_; }
   inline std::mutex& mutex() { return mutex_; }
