@@ -589,31 +589,27 @@ bool VgaRender::IsModeChanged() {
   return false;
 }
 
-bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
-  DisplayPartialBitmap partial;
-  partial.stride = stride_;
-  partial.bpp = bpp_;
-  partial.width = width_;
-  partial.height = height_;
-  partial.x = 0;
-  partial.y = 0;
-  partial.palette = vga_.palette;
+void VgaRender::Redraw() {
+  redraw_ = true;
+}
 
+bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
+  uint8_t* canvas_pixels;
   if (IsVbeEnabled()) {
     size_t offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
     offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
-    partial.data = vram_base_ + offset;
+    canvas_pixels = vram_base_ + offset;
   } else {
     size_t data_size = stride_ * height_;
     if (vga_surface_.size() != data_size) {
       vga_surface_.resize(data_size);
     }
-    partial.data = (uint8_t*)vga_surface_.data();
+    canvas_pixels = (uint8_t*)vga_surface_.data();
 
     /* FIXME: Should unlock the device but crashed when display mode was changing */
     // lock.unlock();
     if (text_mode_) {
-      DrawText(partial.data);
+      DrawText(canvas_pixels);
 
       /* blink cursor */
       auto now = std::chrono::steady_clock::now();
@@ -622,16 +618,62 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
         cursor_visible_ = !cursor_visible_;
       }
       if (cursor_visible_) {
-        DrawTextCursor(partial.data);
+        DrawTextCursor(canvas_pixels);
       }
     } else {
-      DrawGraphic(partial.data);
+      DrawGraphic(canvas_pixels);
     }
   }
 
-  update.partials.emplace_back(std::move(partial));
+  if (vga_display_buffer_.size() != size_t(stride_ * height_)) {
+    vga_display_buffer_.resize(stride_ * height_);
+    redraw_ = true;
+  }
+
+  DisplayPartialBitmap partial;
+  partial.stride = stride_;
+  partial.bpp = bpp_;
+  partial.x = 0;
+  partial.width = width_;
+  partial.palette = vga_.palette;
+
+  if (redraw_) {
+    redraw_ = false;
+    memcpy(vga_display_buffer_.data(), canvas_pixels, stride_ * height_);
+    partial.y = 0;
+    partial.height = height_;
+    partial.data = (uint8_t*)vga_display_buffer_.data();
+    update.partials.emplace_back(std::move(partial));
+  } else {
+    partial.height = 0;
+    // Compare src & dst line by line, and copy if different
+    uint8_t* src = canvas_pixels;
+    uint8_t* dst = (uint8_t*)vga_display_buffer_.data();
+    for (int y = 0; y < height_; y++) {
+      if (memcmp(src, dst, stride_) == 0) {
+        if (partial.height > 0) {
+          update.partials.push_back(partial);
+          partial.height = 0;
+        }
+      } else {
+        memcpy(dst, src, stride_);
+        if (partial.height == 0) {
+          partial.y = y;
+          partial.data = dst;
+        }
+        partial.height++;
+      }
+      src += stride_;
+      dst += stride_;
+    }
+    
+    if (partial.height > 0) {
+      update.partials.push_back(partial);
+    }
+  }
+
   update.cursor.visible = false;
-  return true;
+  return !update.partials.empty();
 }
 
 void VgaRender::DrawGraphic(uint8_t* buffer) {

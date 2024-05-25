@@ -82,6 +82,9 @@ void Tap::Initialize(NetworkDeviceInterface* device, MacAddress& mac) {
 }
 
 Tap::~Tap() {
+  if (tap_fd_ != -1) {
+    real_device_->StopPolling(tap_fd_);
+  }
   safe_close(&tap_fd_);
 }
 

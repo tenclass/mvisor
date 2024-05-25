@@ -65,6 +65,7 @@ class VgaRender {
   int         height_;
   int         bpp_;
   int         stride_;
+  bool        redraw_ = false;
 
   /* VGA mode */
   int         rows_;
@@ -77,6 +78,7 @@ class VgaRender {
   bool        mode_changed_;
 
   std::string vga_surface_;
+  std::string vga_display_buffer_;
 
   bool IsVbeEnabled();
   void UpdateDisplayMode();
@@ -102,6 +104,7 @@ class VgaRender {
   void GetPalette(const uint8_t** palette, int* count, bool* dac_8bit);
   bool IsModeChanged();
   bool GetDisplayUpdate(DisplayUpdate& update);
+  void Redraw();
 };
 
 
@@ -114,5 +117,8 @@ class VgaRender {
 // When LFB mode disabled, the tradition VGA video memory address is used
 #define VGA_MMIO_BASE   0x000A0000
 #define VGA_MMIO_SIZE   0x00020000
+
+#define VGA_REFRESH_FREQUENCY 30
+
 
 #endif // _MVISOR_DEVICES_VGA_RENDER_H

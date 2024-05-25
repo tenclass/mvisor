@@ -155,3 +155,10 @@ void VncServer::RemoveConnection(VncConnection* conn) {
   delete conn;
 }
 
+void VncServer::SetExclusiveConnnction(VncConnection* conn) {
+  for (auto c : connections_) {
+    if (c != conn) {
+      c->Close();
+    }
+  }
+}

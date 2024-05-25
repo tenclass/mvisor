@@ -83,7 +83,7 @@ class IoThread {
 
   /* Timer events handled by IO thread */
   IoTimer* AddTimer(Device* device, int64_t interval_ns, bool permanent, VoidCallback callback);
-  void RemoveTimer(IoTimer* timer);
+  void RemoveTimer(IoTimer** timer);
   void ModifyTimer(IoTimer* timer, int64_t interval_ns);
   void Schedule(Device* device, VoidCallback callback);
 

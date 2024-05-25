@@ -196,7 +196,8 @@ void Device::ModifyTimer(IoTimer* timer, int64_t interval_ns) {
   manager_->io()->ModifyTimer(timer, interval_ns);
 }
 
-void Device::RemoveTimer(IoTimer* timer) {
+void Device::RemoveTimer(IoTimer** timer) {
+  MV_ASSERT(*timer != nullptr);
   manager_->io()->RemoveTimer(timer);
 }
 

@@ -65,7 +65,7 @@ Uip::Uip() {
 
 Uip::~Uip() {
   if (timer_) {
-    real_device_->RemoveTimer(timer_);
+    real_device_->RemoveTimer(&timer_);
   }
   for (auto fd : map_fds_) {
     real_device_->StopPolling(fd);

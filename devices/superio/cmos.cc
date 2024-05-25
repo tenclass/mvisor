@@ -124,8 +124,7 @@ class Cmos : public Device, public CmosDataInterface {
 
   void DisableTimer(IoTimer** timer) {
     if (*timer) {
-      RemoveTimer(*timer);
-      *timer = nullptr;
+      RemoveTimer(timer);
     }
   }
 

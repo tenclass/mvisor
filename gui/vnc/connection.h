@@ -9,7 +9,7 @@ enum VncConnectionState {
   kVncVersion,
   kVncSecurity,
   kVncAuth,
-  kVNcInit,
+  kVncInit,
   kVncRunning,
   kVncClosed,
 };
@@ -44,6 +44,7 @@ class VncConnection {
   bool                shared_ = false;
   PixelFormat         pixel_format_;
   std::vector<int32_t>client_encodings_;
+  int                 preferred_encoding_ = 0;
   int                 frame_buffer_width_ = 0;
   int                 frame_buffer_height_ = 0;
   pixman_image_t*     frame_buffer_ = nullptr;
@@ -52,6 +53,7 @@ class VncConnection {
   int                 cursor_hotspot_x_ = 0;
   int                 cursor_hotspot_y_ = 0;
   bool                frame_buffer_update_requested_ = false;
+  bool                frame_buffer_resize_requested_ = false;
   bool                cursor_update_requested_ = false;
   std::vector<VncRect>dirty_rects_;
   uint8_t             modifiers_ = 0;
@@ -72,13 +74,12 @@ class VncConnection {
   std::list<ClipboardListener>::iterator          clipboard_listener_;
 
   bool CheckClientAuth(const char* buffer, ssize_t length);
-  void CreateFrameBuffer();
+  void ResetFrameBuffer();
   void SendServerInit();
   void LookupDevices();
-  void ResizeFrameBuffer();
-  void SendDesktopSize();
-  void SendCursorUpdate();
-  void SendFrameBufferUpdate(int x, int y, int width, int height);
+  bool SendDesktopSize();
+  bool SendCursorUpdate();
+  bool SendFrameBufferUpdate(int x, int y, int width, int height);
   void AddDirtyRectInternal(int top, int left, int bottom, int right);
   void AddDirtyRect(int top, int left, int bottom, int right);
   void UpdateLoop();
@@ -98,7 +99,8 @@ class VncConnection {
   bool IsEncodingSupported(int32_t encoding);
 
   void OnClipboardFromGuest(const ClipboardData& clipboard_data);
-  void Render(const DisplayUpdate& update);
+  void OnDisplayModeChange();
+  void OnDisplayUpdate(const DisplayUpdate& update);
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   PointerInputInterface* GetActivePointer();
@@ -107,6 +109,7 @@ class VncConnection {
   VncConnection(VncServer* server, int fd);
   ~VncConnection();
   bool OnReceive();
+  void Close();
 
   int fd() { return fd_; }
 };

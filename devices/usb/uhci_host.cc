@@ -192,8 +192,7 @@ void UhciHost::Run() {
 
 void UhciHost::Halt() {
   if (frame_timer_) {
-    RemoveTimer(frame_timer_);
-    frame_timer_ = nullptr;
+    RemoveTimer(&frame_timer_);
   }
 
   /* Cleanup queues */

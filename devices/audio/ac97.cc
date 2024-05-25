@@ -349,9 +349,7 @@ class Ac97 : public PciDevice, public PlaybackInterface {
         OnStreamTimer(stream);
       });
     } else {
-      MV_ASSERT(stream->timer);
-      RemoveTimer(stream->timer);
-      stream->timer = nullptr;
+      RemoveTimer(&stream->timer);
 
       if (stream->output) {
         NotifyPlayback(kPlaybackStop, nullptr, 0);

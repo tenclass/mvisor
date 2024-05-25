@@ -174,8 +174,7 @@ class UsbWacom : public UsbHid, public WacomInputInterface {
   virtual void Reset() {
     // remove status report timer
     if (status_report_timer_) {
-      RemoveTimer(status_report_timer_);
-      status_report_timer_ = nullptr;
+      RemoveTimer(&status_report_timer_);
     }
     
     UsbHid::Reset();

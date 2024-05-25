@@ -73,7 +73,7 @@ class Device : public Object {
   /* Map to IoThread methods, and you don't need to pass the device object */
   IoTimer* AddTimer(int64_t interval_ns, bool permanent, VoidCallback callback);
   void ModifyTimer(IoTimer* timer, int64_t interval_ns);
-  void RemoveTimer(IoTimer* timer);
+  void RemoveTimer(IoTimer** timer);
   void Schedule(VoidCallback callback);
   void StartPolling(int fd, uint poll_mask, IoCallback callback);
   void StopPolling(int fd);

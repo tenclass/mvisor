@@ -464,9 +464,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
         OnStreamTimer(stream);
       });
     } else {
-      MV_ASSERT(stream->timer);
-      hda_host_->RemoveTimer(stream->timer);
-      stream->timer = nullptr;
+      hda_host_->RemoveTimer(&stream->timer);
       stream->transfer_callback = nullptr;
       if (stream->output) {
         NotifyPlayback(kPlaybackStop, nullptr, 0);
