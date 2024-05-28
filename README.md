@@ -69,28 +69,42 @@ What's supported now:
 2. VFIO migration ✅
 3. Migration to sparse files ✅
 4. Hyper-V enlightenments ✅
-
+5. Live migration ✅
 
 ## Compile & Run
 
-For RockyLinux 9.3,
+### For RockyLinux 9.3,
 
 ```bash
-dnf install epel-release gdb cmake
-
-dnf --enablerepo=devel install -y gcc-c++ glib2-devel pixman-devel yaml-cpp-devel protobuf-devel protobuf-compiler libzstd-devel zlib-devel
+dnf install epel-release gdb cmake gcc-c++
+dnf --enablerepo=devel install -y protobuf-compiler protobuf-devel glib2-devel yaml-cpp-devel pixman-devel libzstd-devel zlib-devel
 
 # If SDL enabled
 dnf --enablerepo=devel install -y SDL2-devel alsa-lib-devel
+```
 
-meson setup build
+### For Debian 12,
+
+```bash
+apt install meson gdb cmake build-essential g++
+apt install protobuf-compiler libprotobuf-dev libglib2.0-dev libyaml-cpp-dev libpixman-1-dev libzstd-dev zlib1g-dev
+
+# If SDL enabled
+apt install libsdl2-dev libasound2-dev
+```
+
+### Compile and Run
+
+```bash
+meson setup build -Dsdl=true # SDL is disabled by default
 meson compile -C build
 
 ./build/mvisor -c config/sample.yaml -vnc 5900
 ```
 
-An ISO image file is needed to install OS. Modify config/default.yaml to configure image path.
+## Paravirtualized Drivers
+An ISO image file is needed to install OS. Edit YAML file to configure image path.
 
-Virtio is recommended:
+Virtio is recommended for Windows guests:
 
 <a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Download Virtio Guest Tools</a>

@@ -19,14 +19,14 @@ objects:
 
   - class: qxl
   - class: spice-agent
-  - class: qemu-guest-agent
   - class: usb-tablet
 
   - class: virtio-network
     mac: 00:50:00:11:22:33
     map: tcp:0.0.0.0:8022-:22
-    # Using big packet may cause error in windows guest
-    # mtu: 1518
+    # If you have configured the tap interface, you can uncomment the following lines
+    # backend: tap
+    # ifname: tap0
 
   - class: ata-cdrom 
     image: /data/ubuntu-21.10-desktop-amd64.iso
