@@ -367,8 +367,12 @@ class I82078Fdc : public Device {
     main_status_ &= ~MSR_READY;
     isa_dma_->WaitForChannel(false, 2, [=](auto iov) {
       MV_ASSERT(iov.iov_len >= count * 4);
-      uint8_t buffer[SECTOR_SIZE];
+      auto buffer = new uint8_t[SECTOR_SIZE];
       memset(buffer, fill_byte, SECTOR_SIZE);
+      auto vec = iovec {
+        .iov_base = buffer,
+        .iov_len = SECTOR_SIZE
+      };
 
       std::vector<ImageIoRequest> requests;
 
@@ -382,15 +386,13 @@ class I82078Fdc : public Device {
           .position = drive->GetLba() * SECTOR_SIZE,
           .length = SECTOR_SIZE,
         };
-        request.vector.push_back(iovec {
-          .iov_base = buffer,
-          .iov_len = SECTOR_SIZE
-        });
+        request.vector.push_back(vec);
         requests.push_back(request);
       }
 
 
-      image->QueueMultipleIoRequests(requests, [this, drive](auto ret) {
+      image->QueueMultipleIoRequests(requests, [this, drive, buffer](auto ret) {
+        delete[] buffer;
         if (ret < 0) {
           MV_PANIC("not implemented IO error");
           return;
