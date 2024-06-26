@@ -153,8 +153,10 @@ void MemoryManager::LoadBiosFile() {
   bios_data_ = valloc(bios_size_);
   memcpy(bios_data_, bios_backup_, bios_size_);
   // Map BIOS file to memory
-  Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
   Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
+  // Map the BIOS to the end of 1MB, no more than 128KB
+  size_t isa_bios_size = std::min(bios_size_, (size_t)128 * 1024);
+  Map(0x100000 - isa_bios_size, isa_bios_size, (uint8_t*)bios_data_ + bios_size_ - isa_bios_size, kMemoryTypeRam, "SeaBIOS");
 }
 
 void MemoryManager::Reset() {
