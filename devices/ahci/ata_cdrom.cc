@@ -316,7 +316,7 @@ AtaCdrom::AtaCdrom()
     if (task_file_->feature0 & 1) {
       WaitForDma([this]() { Atapi_ReadSectors(io_.lba_count); });
     } else {
-      Atapi_ReadSectors(1);
+      Atapi_ReadSectors(io_.lba_count);
     }
   };
   
