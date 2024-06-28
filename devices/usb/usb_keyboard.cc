@@ -212,8 +212,15 @@ class UsbKeyboard : public UsbHid, public KeyboardInputInterface {
       }
     }
 
-    uint8_t key = keycode & 0x7f;
+    uint8_t key = keycode & 0x7F;
+    if ((keycode & 0xFF00) == 0xE000) {
+      key |= 0x80;
+    }
     uint8_t hid_code = hid_usage_keys[key];
+    if (debug_) {
+      MV_LOG("key %04x -> %02x", keycode, hid_code);
+    }
+  
     if (keycode & 0x80) { // key release
       for (int i = keys_ - 1; i >= 0; i--) {
         if (key_[i] == hid_code) {

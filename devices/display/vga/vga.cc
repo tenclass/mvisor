@@ -32,6 +32,7 @@
 #include "logger.h"
 #include "vbe.h"
 #include "machine.h"
+#include "edid.h"
 
 
 Vga::Vga() {
@@ -45,8 +46,8 @@ Vga::Vga() {
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
 
-  /* Bar 0: 16MB VRAM */
-  vram_size_ = _MB(32);
+  /* Bar 0: 64MB VRAM */
+  vram_size_ = _MB(64);
   SetupPciBar(0, vram_size_, kIoResourceTypeRam);
 
   /* Bar 2: MMIO BAR */
@@ -172,20 +173,21 @@ bool Vga::GetScreenshot(DisplayUpdate& update) {
 }
 
 void Vga::ReadMmio(uint64_t offset, uint8_t* data, uint32_t size) {
-  if (offset >= 0x500 && offset < 0x500 + 36) {
+  if (offset >= 0x500 && offset + size <= 0x500 + 36) {
     MV_ASSERT(size == 2);
     uint16_t index = (offset - 0x500 ) / 2;
     vga_render_->VbeWritePort(VBE_PIO_BASE, index);
     vga_render_->VbeReadPort(VBE_PIO_BASE + 1, (uint16_t*)data);
-  } else if (offset >= 0x400 && offset < 0x500) {
+  } else if (offset >= 0x400 && offset + size <= 0x500) {
     offset -= 0x400;
     vga_render_->VgaReadPort(VGA_PIO_BASE + offset, &data[0]);
     for (size_t i = 1; i < size; i++) {
       vga_render_->VgaReadPort(VGA_PIO_BASE + offset + 1, &data[i]);
     }
+  } else if (offset + size <= 0x100) {
+    memcpy(data, edid_bin + offset, size);
   } else {
-    bzero(data, size);
-    MV_ERROR("VGA MMIO read offset=0x%lx size=%d not implemented", offset, size);
+    MV_PANIC("VGA MMIO read offset=0x%lx size=%d not implemented", offset, size);
   }
 }
 
