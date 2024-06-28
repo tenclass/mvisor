@@ -193,23 +193,18 @@ void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_LOG("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    bzero(data, length);
+    MV_WARN("%s failed read config space at 0x%lx length=%d", name_, offset, length);
     return;
   }
   memcpy(data, pci_header_.data + offset, length);
-  // if (debug_) {
-  //   MV_LOG("%s read pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
-  // }
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_LOG("%s failed write config space at 0x%lx length=%d", name_, offset, length);
+    MV_WARN("%s failed write config space at 0x%lx length=%d", name_, offset, length);
     return;
   }
-  // if (debug_) {
-  //   MV_LOG("%s write pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
-  // }
 
   if (offset == PCI_COMMAND) {
     if (length == 4) {
