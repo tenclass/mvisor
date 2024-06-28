@@ -194,12 +194,12 @@ void Vga::ReadMmio(uint64_t offset, uint8_t* data, uint32_t size) {
 void Vga::WriteMmio(uint64_t offset, uint8_t* data, uint32_t size) {
   uint64_t value = 0;
   memcpy(&value, data, size);
-  if (offset >= 0x500 && offset < 0x500 + 36) {
+  if (offset >= 0x500 && offset + size <= 0x500 + 36) {
     MV_ASSERT(size == 2);
     uint16_t index = (offset - 0x500 ) / 2;
     vga_render_->VbeWritePort(VBE_PIO_BASE, index);
     vga_render_->VbeWritePort(VBE_PIO_BASE + 1, value);
-  } else if (offset >= 0x400 && offset < 0x500) {
+  } else if (offset >= 0x400 && offset + size <= 0x500) {
     offset -= 0x400;
     vga_render_->VgaWritePort(VGA_PIO_BASE + offset, data[0]);
     for (size_t i = 1; i < size; i++) {
