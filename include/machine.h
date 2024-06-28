@@ -112,7 +112,10 @@ class Machine {
   
   uint64_t ram_size_ = 0;
   int num_vcpus_ = 0;
+  int num_cores_ = 0;
+  int num_threads_ = 0;
   int vcpu_priority_ = 1;
+  std::string vcpu_vendor_;
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;

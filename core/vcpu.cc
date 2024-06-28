@@ -103,8 +103,17 @@ void Vcpu::SetupCpuid() {
     switch (entry->function)
     {
     case 0x0: // CPUID Signature
-      entry->eax = 0xD; // Max input value for basic information
+    case 0x80000000: // Extended CPUID Information
+    {
+      if (!machine_->vcpu_vendor_.empty()) {
+        char vendor[13];
+        strncpy(vendor, machine_->vcpu_vendor_.c_str(), 12);
+        memcpy(&entry->ebx, &vendor[0], 4);
+        memcpy(&entry->edx, &vendor[4], 4);
+        memcpy(&entry->ecx, &vendor[8], 4);
+      }
       break;
+    }
     case 0x1: { // ACPI ID & Features
       entry->eax = CPU_VERSION(15, 1, 0);
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
@@ -120,13 +129,6 @@ void Vcpu::SetupCpuid() {
       break;
     }
     case 0x2: // Cache and TLB Information
-      break;
-    case 0x4: // Deterministic Cache Parameters Leaf
-      entry->eax &= ~0xFC000000;
-      if ((entry->eax & 0x1F) && machine_->num_vcpus_ >= 4) {
-        int cores = machine_->num_vcpus_ / 2;
-        entry->eax |= (cores - 1) << 26;
-      }
       break;
     case 0x7: // Extended CPU features 7
       if (entry->index == 0) {
@@ -152,13 +154,11 @@ void Vcpu::SetupCpuid() {
         entry->eax &= 0x2E7; // MPX is disabled in CPU features 7
       }
       break;
-    case 0x80000000: // Extended CPUID Information
-      break;
     case 0x80000001:
       entry->ecx &= ~(1U << 22); // Disable Topology Extensions
       break;
     case 0x80000002 ... 0x80000004: { // CPU Model String
-      static const char cpu_model[48] = "AMD Compatible Processor";
+      static const char cpu_model[48] = "Intel Compatible Processor";
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
@@ -187,6 +187,25 @@ void Vcpu::SetupCpuid() {
       --i;
       --cpuid->nent;
       continue;
+    }
+  }
+
+  /* Add Cache Parameters Leaf to Intel CPU */
+  kvm_cpuid_entry2 cache_entries[5] = {
+    { 0x4, 0, 1, 0x121, 0x1C0003F, 0x003F, 1 },
+    { 0x4, 1, 1, 0x122, 0x1C0003F, 0x003F, 1 },
+    { 0x4, 2, 1, 0x143, 0x3C0003F, 0x0FFF, 1 },
+    { 0x4, 3, 1, 0x163, 0x3C0003F, 0x3FFF, 6 },
+    { 0x4, 4, 1, 0, 0, 0, 0 }
+  };
+  for (int index = 0; index < 5; index++) {
+    auto entry = &cpuid->entries[cpuid->nent++];
+    *entry = cache_entries[index];
+    entry->eax |= (machine_->num_cores_ - 1) << 26;
+    if (index == 2) {
+      entry->eax |= (machine_->num_threads_ - 1) << 14;
+    } else if (index == 3) {
+      entry->eax |= (machine_->num_vcpus_ - 1) << 14;
     }
   }
 
@@ -221,8 +240,7 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     {
     case 0x40000000: // HV_CPUID_VENDOR_AND_MAX_FUNCTIONS
       entry->eax = HV_CPUID_IMPLEMENT_LIMITS;
-      // entry->ebx defaults to "Linux KVM Hv"
-      // memcpy(&entry->ebx, "Microsoft Hv", 12);
+      memcpy(&entry->ebx, "Microsoft Hv", 12);
       break;
     case 0x40000001: // HV_CPUID_INTERFACE
       memcpy(&entry->eax, "Hv#1\0\0\0\0\0\0\0\0\0\0\0\0", 16);
