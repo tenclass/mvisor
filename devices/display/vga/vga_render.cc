@@ -150,6 +150,8 @@ void VgaRender::VbeReadPort(uint64_t port, uint16_t* data) {
         *data = vbe_.registers[vbe_.index];
       }
     }
+  } else {
+    MV_PANIC("not implemented VBE port=0x%lX", port);
   }
 }
 
@@ -187,6 +189,8 @@ void VgaRender::VbeWritePort(uint64_t port, uint16_t value) {
       UpdateVRamMemoryMap();
       break;
     }
+  } else {
+    MV_PANIC("not implemented VBE port=0x%lX data=0x%04X", port, value);
   }
 }
 
@@ -473,8 +477,8 @@ write_value:
 void VgaRender::UpdateVRamMemoryMap() {
   uint8_t* map_memory = nullptr;
   if (IsVbeEnabled()) {
-    vram_map_addr_ = VGA_MMIO_BASE;
-    vram_map_size_ = VGA_MMIO_SIZE;
+    vram_map_addr_ = VGA_MEMORY_BASE;
+    vram_map_size_ = VGA_MEMORY_SIZE;
   
     map_memory = vram_base_ + (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16);
   } else {

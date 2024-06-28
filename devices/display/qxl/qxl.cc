@@ -70,7 +70,7 @@ Qxl::Qxl() {
   /* VGA registers */
   AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
   AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "VBE IO");
-  AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO",
+  AddIoResource(kIoResourceTypeMmio, VGA_MEMORY_BASE, VGA_MEMORY_SIZE, "VGA MEMORY",
     nullptr, kIoResourceFlagCoalescingMmio);
 }
 
@@ -558,7 +558,7 @@ void Qxl::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint3
 
   /* VGA registers */
   uint64_t port = resource->base + offset;
-  if (resource->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MEMORY_BASE) {
     for (size_t i = 0; i < size; i++) {
       vga_render_->VgaReadMemory(port + i, &data[i]);
     }
@@ -605,7 +605,7 @@ void Qxl::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
 
   /* VGA registers */
   uint64_t port = resource->base + offset;
-  if (resource->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MEMORY_BASE) {
     for (size_t i = 0; i < size; i++) {
       vga_render_->VgaWriteMemory(port + i, data[i]);
     }

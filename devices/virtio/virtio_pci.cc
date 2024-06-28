@@ -32,7 +32,7 @@ VirtioPci::VirtioPci() {
     pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
     pci_header_.irq_pin = 1;
 
-    SetupPciBar(0, 0x40, kIoResourceTypePio);
+    SetupPciBar(0, 0x80, kIoResourceTypePio);
     SetupPciBar(4, 0x4000, kIoResourceTypeMmio);
 
     uint8_t cap_common_config[] = {
@@ -507,8 +507,10 @@ void VirtioPci::ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) 
 }
 
 void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("%s not implemented write device offset=0x%lx data=0x%lx size=%d",
-    name_, offset, *(uint64_t*)data, size);
+  if (debug_) {
+    MV_ERROR("%s not implemented write device offset=0x%lx data=0x%lx size=%d",
+      name_, offset, *(uint64_t*)data, size);
+  }
 }
 
 void VirtioPci::HandleQueueCallback(uint16_t queue_index) {

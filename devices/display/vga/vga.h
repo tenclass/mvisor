@@ -35,6 +35,8 @@ class Vga : public PciDevice, public Display {
   IoTimer*    refresh_timer_ = nullptr;
 
   virtual void NotifyDisplayUpdate();
+  void ReadMmio(uint64_t offset, uint8_t* data, uint32_t size);
+  void WriteMmio(uint64_t offset, uint8_t* data, uint32_t size);
 
  public:
   Vga();
