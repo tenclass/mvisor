@@ -505,9 +505,12 @@ void XhciHost::WriteOperationalUsbCommand(uint32_t command) {
   if (command & USBCMD_CRS) { // Restore state
     operational_regs_.usb_status |= USBSTS_SRE;
   }
-  operational_regs_.usb_command = command & 0xC0F;
+
   // mfwrap_timer is not supported yet
+  command &= ~USBCMD_EWE;
   MV_ASSERT((command & (USBCMD_RS | USBCMD_EWE)) != (USBCMD_RS | USBCMD_EWE));
+  operational_regs_.usb_command = command & 0xC0F;
+
   if (command & USBCMD_HCRST) {
     Reset();
   }
@@ -1504,6 +1507,9 @@ void XhciHost::ProcessCommands() {
       if (GetSlot(event, trb, slot_id)) {
         code = ResetSlot(slot_id);
       }
+      break;
+    case CR_NOOP:
+      code = CC_SUCCESS;
       break;
     default:
       MV_ERROR("unhandled TRB type=%d", type);

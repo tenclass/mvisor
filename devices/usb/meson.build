@@ -10,6 +10,7 @@ mvisor_sources += files(
   'usb_hid.h',
   'usb_midi.cc',
   'usb_tablet.cc',
+  'usb_keyboard.cc',
   'usb_wacom.cc',
   'usb.h',
   'xhci_host.cc',
