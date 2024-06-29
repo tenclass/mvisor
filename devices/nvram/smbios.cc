@@ -123,7 +123,7 @@ void Smbios::BuildType17() {
   texts.push_back("DIMM 0");
   type_17.device_locator_str = 1;
   type_17.bank_locator_str = 0;
-  type_17.memory_type = 0x1A; // Memory Type: 0x1A = DDR4
+  type_17.memory_type = 0x18; // Memory Type: 0x18 = DDR3
   type_17.type_detail = 0x80; // Type Detail: 0x80 = Synchronous
   type_17.speed = 2133; // Speed: 2133 MHz
   texts.push_back("MVISOR");
@@ -136,7 +136,7 @@ void Smbios::BuildType17() {
   type_17.part_number_str = 5;
 
   type_17.attributes = 0; // Unknown
-  type_17.configured_clock_speed = 4000; // Configured Clock Speed: 4000 MHz
+  type_17.configured_clock_speed = type_17.speed;
 
   BuildStructure(17, &type_17, sizeof(type_17), texts);
 }
