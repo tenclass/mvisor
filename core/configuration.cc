@@ -234,6 +234,9 @@ void Configuration::LoadMachine(const YAML::Node& node) {
     if (cpuid["vendor"]) {
       machine_->vcpu_vendor_ = cpuid["vendor"].as<std::string>();
     }
+    if (cpuid["model"]) {
+      machine_->vcpu_model_ = cpuid["model"].as<std::string>();
+    }
   }
   if (node["priority"]) {
     machine_->vcpu_priority_ = node["priority"].as<uint64_t>();

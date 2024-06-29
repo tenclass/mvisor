@@ -74,6 +74,8 @@ class Machine {
   inline VfioManager* vfio_manager() { return vfio_manager_; }
   inline const Configuration* configuration() { return config_; }
   inline int num_vcpus() { return num_vcpus_; }
+  inline int num_cores() { return num_cores_; }
+  inline int num_threads() { return num_threads_; }
   inline uint64_t ram_size() { return ram_size_; }
   inline bool debug() { return debug_; }
   inline bool hypervisor() { return hypervisor_; }
@@ -116,6 +118,7 @@ class Machine {
   int num_threads_ = 0;
   int vcpu_priority_ = 1;
   std::string vcpu_vendor_;
+  std::string vcpu_model_;
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;

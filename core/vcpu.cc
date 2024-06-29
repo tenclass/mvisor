@@ -91,6 +91,13 @@ void Vcpu::Reset() {
   (((family & 0xF) << 8) | (((model >> 4) & 0xF) << 16) | ((model & 0xF) << 4) | (stepping & 0xF))
 
 void Vcpu::SetupCpuid() {
+  cpuid_version_ = CPU_VERSION(15, 1, 0);
+  if (!machine_->vcpu_model_.empty()) {
+    cpuid_model_ = machine_->vcpu_model_;
+  } else {
+    cpuid_model_ = "Intel Compatible Processor";
+  }
+
   auto cpuid = (kvm_cpuid2*)new uint8_t[sizeof(kvm_cpuid2) + MAX_KVM_CPUID_ENTRIES * sizeof(kvm_cpuid_entry2)]();
   cpuid->nent = MAX_KVM_CPUID_ENTRIES;
 
@@ -115,7 +122,7 @@ void Vcpu::SetupCpuid() {
       break;
     }
     case 0x1: { // ACPI ID & Features
-      entry->eax = CPU_VERSION(15, 1, 0);
+      entry->eax = cpuid_version_;
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
 
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
@@ -158,7 +165,8 @@ void Vcpu::SetupCpuid() {
       entry->ecx &= ~(1U << 22); // Disable Topology Extensions
       break;
     case 0x80000002 ... 0x80000004: { // CPU Model String
-      static const char cpu_model[48] = "Intel Compatible Processor";
+      char cpu_model[51] = {};
+      strncpy(cpu_model, cpuid_model_.c_str(), 50);
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
