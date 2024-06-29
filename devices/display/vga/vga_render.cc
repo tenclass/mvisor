@@ -634,7 +634,8 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
     vga_display_buffer_size_ = stride_ * height_;
     redraw_ = true;
   }
-  auto vga_display_buffer = vram_base_ + vram_size_ - vga_display_buffer_size_;
+  uint32_t reserved_size = 0x10000; // do not overwrite the QXL ram header
+  auto vga_display_buffer = vram_base_ + vram_size_ - vga_display_buffer_size_ - reserved_size;
 
   DisplayPartialBitmap partial;
   partial.stride = stride_;
