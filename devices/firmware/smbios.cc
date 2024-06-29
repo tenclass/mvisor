@@ -231,8 +231,8 @@ void Smbios::BuildType17() {
   smbios_type_17 type_17 = {};
   type_17.physical_memory_array_handle = 0x1000;
   type_17.memory_error_information_handle = 0xFFFE;
-  type_17.total_width = 0xFFFF;
-  type_17.data_width = 0xFFFF;
+  type_17.total_width = 64;
+  type_17.data_width = 64;
 
   auto ram_size_mb = machine_->ram_size() / 1024 / 1024;
   if (ram_size_mb <= 0x7FFF) {

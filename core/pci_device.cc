@@ -204,7 +204,9 @@ void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t leng
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_WARN("%s failed write config space at 0x%lx length=%d", name_, offset, length);
+    if (debug_) {
+      MV_WARN("%s failed write config space at 0x%lx length=%d data=0x%x", name_, offset, length, *(uint32_t*)data);
+    }
     return;
   }
 

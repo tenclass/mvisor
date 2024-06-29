@@ -152,6 +152,19 @@ class FirmwareConfig : public Device {
     InitializeFileDir();
   }
 
+  void LoadFile(std::string path, std::string target) {
+    FILE* fp = fopen(path.c_str(), "rb");
+    MV_ASSERT(fp);
+    fseek(fp, 0, SEEK_END);
+    size_t size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    uint8_t* buf = new uint8_t[size];
+    fread(buf, size, 1, fp);
+    fclose(fp);
+    AddConfigFile(target, buf, size);
+    delete buf;
+  }
+
   void InitializeFiles () {
     /* disable S3 S4 (suspend / hibernate) */
     bool disable_s3 = true, disable_s4 = true;
@@ -170,13 +183,18 @@ class FirmwareConfig : public Device {
 
     /* ACPI DSDT */
     auto machine = manager_->machine();
-    if (machine->LookupObjectByClass("I440fxHost")) {
-      AddConfigFile("acpi/dsdt", acpi_dsdt_aml_code, sizeof(acpi_dsdt_aml_code));
-    } else if (machine->LookupObjectByClass("Q35Host")) {
-      AddConfigFile("acpi/dsdt", q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
-    } else {
-      MV_WARN("Unknown motherboard. ACPI might not work.");
-    }
+    // if (machine->LookupObjectByClass("I440fxHost")) {
+    //   AddConfigFile("acpi/dsdt", acpi_dsdt_aml_code, sizeof(acpi_dsdt_aml_code));
+    // } else if (machine->LookupObjectByClass("Q35Host")) {
+    //   AddConfigFile("acpi/dsdt", q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
+    // } else {
+    //   MV_WARN("Unknown motherboard. ACPI might not work.");
+    // }
+    LoadFile("/tmp/fwcfg/0x23", "etc/acpi/tables");
+    LoadFile("/tmp/fwcfg/0x22", "etc/acpi/rsdp");
+    LoadFile("/tmp/fwcfg/0x2c", "etc/table-loader");
+    // LoadFile("/tmp/fwcfg/0x26", "etc/smbios/smbios-anchor");
+    // LoadFile("/tmp/fwcfg/0x27", "etc/smbios/smbios-tables");
 
     auto pvpanic = machine->LookupObjectByClass("Pvpanic");
     if (pvpanic) {

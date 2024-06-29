@@ -1,12 +1,12 @@
 # Order by alphabet
 
-subdir('acpi')
+subdir('chipset')
 subdir('agents')
 subdir('ahci')
 subdir('audio')
 subdir('display')
 subdir('kvm')
-subdir('nvram')
+subdir('firmware')
 subdir('pci')
 subdir('superio')
 subdir('usb')
