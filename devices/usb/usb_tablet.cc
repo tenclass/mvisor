@@ -138,6 +138,7 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
   std::deque<PointerEvent> queue_;
   uint idle_ = 0;
   uint max_queue_size_ = 16;
+  PointerEvent last_event_;
 
  public:
   UsbTablet() {
@@ -196,6 +197,12 @@ class UsbTablet : public UsbHid, public PointerInputInterface {
     event.buttons = ((event.buttons & 2) ? 1 : 0) | ((event.buttons & 4) ? 4 : 0) | ((event.buttons & 8) ? 2 : 0);
     event.x = event.x * 0x8000 / event.screen_width;
     event.y = event.y * 0x8000 / event.screen_height;
+    // Check if the event is the same as the last event
+    if (event.x == last_event_.x && event.y == last_event_.y && event.z == last_event_.z && event.buttons == last_event_.buttons) {
+      return true;
+    }
+    last_event_ = event;
+
     queue_.push_back(event);
     while (queue_.size() > max_queue_size_) {
       queue_.pop_front();
