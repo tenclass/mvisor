@@ -53,33 +53,36 @@ class FirmwareConfig : public Device {
     fw_cfg_dma_access* dma = (fw_cfg_dma_access*)manager_->TranslateGuestMemory(dma_address_);
     dma_address_ = 0;
 
-    dma->control = be32toh(dma->control);
-    dma->address = be64toh(dma->address);
-    dma->length = be32toh(dma->length);
+    uint32_t control = be32toh(dma->control);
+    uint64_t buffer_address = be64toh(dma->address);
+    uint32_t buffer_length = be32toh(dma->length);
     
-    if (dma->control & FW_CFG_DMA_CTL_SELECT) {
-      current_index_ = dma->control >> 16;
+    if (control & FW_CFG_DMA_CTL_SELECT) {
+      current_index_ = control >> 16;
       current_offset_ = 0;
     }
 
+    uint8_t* buffer = (uint8_t*)manager_->TranslateGuestMemory(buffer_address);
     auto it = config_.find(current_index_);
     if (it == config_.end()) {
-      dma->control = be32toh(FW_CFG_DMA_CTL_ERROR);
       if (current_index_ & 0x8000) {
+        dma->control = be32toh(FW_CFG_DMA_CTL_ERROR);
         /* Skip ARCH_LOCAL entries like ACPI, SMBIOS */
         return;
+      } else {
+        bzero(buffer, buffer_length);
+        dma->control = 0;
+        return;
       }
-      MV_PANIC("config entry not found 0x%x", current_index_);
     }
 
-    uint8_t* data = (uint8_t*)manager_->TranslateGuestMemory(dma->address);
-    if (dma->control & FW_CFG_DMA_CTL_READ) {
+    if (control & FW_CFG_DMA_CTL_READ) {
       uint32_t size = it->second.size() - current_offset_;
-      if (size > dma->length)
-        size = dma->length;
-      memcpy(data, it->second.data() + current_offset_, size);
+      if (size > buffer_length)
+        size = buffer_length;
+      memcpy(buffer, it->second.data() + current_offset_, size);
       current_offset_ += size;
-    } else if (dma->control & FW_CFG_DMA_CTL_WRITE) {
+    } else if (control & FW_CFG_DMA_CTL_WRITE) {
       MV_PANIC("not supported");
     }
     dma->control = 0;
@@ -135,7 +138,13 @@ class FirmwareConfig : public Device {
     SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
     SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
     SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
-    SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
+
+    /* show menu if more than 1 drives */
+    if (manager_->io()->GetDiskImageCount() > 1) {
+      SetConfigUInt16(FW_CFG_BOOT_MENU, 2);
+    } else {
+      SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
+    }
 
     InitializeE820Table();
 
@@ -150,6 +159,14 @@ class FirmwareConfig : public Device {
     suspend[3] = 1 | (uint(!disable_s3) << 7);
     suspend[4] = 2 | (uint(!disable_s4) << 7);
     AddConfigFile("etc/system-states", suspend, sizeof(suspend));
+
+    /* check VMX after vcpu started */
+    auto vcpu = manager_->machine()->first_vcpu();
+    MV_ASSERT(vcpu);
+    if (vcpu->cpuid_features() & (1U << 5)) {
+      uint64_t feature_control = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
+      AddConfigFile("etc/msr_feature_control", &feature_control, sizeof(feature_control));
+    }
 
     /* ACPI DSDT */
     auto machine = manager_->machine();
@@ -170,8 +187,6 @@ class FirmwareConfig : public Device {
     std::string smbios_anchor, smbios_table;
     Smbios smbios(manager_->machine());
     smbios.GetTables(smbios_anchor, smbios_table);
-
-    // FIXME: Not implemented yet. Uncommenting these lines would cause windows BSOD 0x7B
     AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
     AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
   }
@@ -229,29 +244,10 @@ class FirmwareConfig : public Device {
     AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "Config DMA");
   }
 
-  void Connect() {
-    Device::Connect();
-    InitializeConfig();
-  }
-
-  void Reset() {
+  void Reset() override {
     Device::Reset();
 
-    /* show menu if more than 1 drives */
-    if (manager_->io()->GetDiskImageCount() > 1) {
-      SetConfigUInt16(FW_CFG_BOOT_MENU, 2);
-    } else {
-      SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
-    }
-
-    /* check VMX after vcpu started */
-    auto vcpu = manager_->machine()->first_vcpu();
-    MV_ASSERT(vcpu);
-    if (vcpu->cpuid_features() & (1U << 5)) {
-      uint64_t feature_control = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
-      AddConfigFile("etc/msr_feature_control", &feature_control, sizeof(feature_control));
-    }
-
+    InitializeConfig();
   }
 
   bool SaveState(MigrationWriter* writer) {
@@ -311,7 +307,8 @@ class FirmwareConfig : public Device {
         }
       }
     } else {
-      MV_PANIC("not implemented Read for %s offset=0x%lx size=%d", name_, offset, size);
+      bzero(data, size);
+      MV_ERROR("%s not implemented Read offset=0x%lx size=%d", name_, offset, size);
     }
   }
 };

@@ -284,14 +284,25 @@ class Smbios {
   void GetTables(std::string& anchor, std::string& tables);
 
  private:
-  void BuildStructure(uint8_t type, void* data, size_t size, std::vector<std::string>& texts);
+  void BuildStructure(uint8_t type, void* data, size_t size, std::vector<std::string>& texts, uint16_t handle=0);
+  void BuildType1();
+  void BuildType2();
+  void BuildType3();
+  void BuildType4();
   void BuildType16();
   void BuildType17();
+  void BuildType19();
+  void BuildType32();
   void SetupEntryPoint();
   Machine* machine_;
 
   smbios_21_entry_point entry_point_;
-  std::map<uint8_t, std::string> tables_;
+  std::vector<std::string> tables_entries_;
+
+  std::string default_manufacturer_;
+  std::string default_product_name_;
+  std::string default_version_;
+  std::string default_serial_number_;
 };
 
 #endif // _MVISOR_DEVICES_SMBIOS_H

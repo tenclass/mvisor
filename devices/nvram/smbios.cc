@@ -22,30 +22,46 @@
 #include "smbios.h"
 #include <cstring>
 
+#include "version.h"
 #include "logger.h"
 #include "machine.h"
 
 
 Smbios::Smbios(Machine* machine) : machine_(machine) {
+  default_manufacturer_ = "Tenclass";
+  default_product_name_ = "mvisor";
+  default_version_ = VERSION;
+  if (machine_->vm_uuid().empty()) {
+    default_serial_number_ = "00000000";
+  } else {
+    default_serial_number_ = machine_->vm_uuid();
+  }
   SetupEntryPoint();
 }
 
 void Smbios::GetTables(std::string& anchor, std::string& tables) {
+  tables_entries_.clear();
+  BuildType1();
+  BuildType2();
+  BuildType3();
+  BuildType4();
   BuildType16();
   BuildType17();
+  BuildType19();
+  BuildType32();
+  // Add the end of table marker
+  tables_entries_.push_back(std::string("\x7F\x04\x00\x7F\x00\x00", 6));
 
   tables.clear();
-  for (auto& it : tables_) {
-    tables.append(it.second);
-    if (it.second.size() > entry_point_.max_structure_size) {
-      entry_point_.max_structure_size = it.second.size();
+  for (auto& entry : tables_entries_) {
+    tables.append(entry);
+    if (entry.size() > entry_point_.max_structure_size) {
+      entry_point_.max_structure_size = entry.size();
     }
   }
 
-  // Add the end of table marker
-  tables.append(std::string("\x7F\x04\x00\x7F\x00\x00", 6));
   entry_point_.structure_table_length = tables.length();
-  entry_point_.number_of_structures = tables_.size() + 1;
+  entry_point_.number_of_structures = tables_entries_.size() + 1;
   anchor = std::string((char*)&entry_point_, sizeof(entry_point_));
 }
 
@@ -62,11 +78,14 @@ void Smbios::SetupEntryPoint() {
   entry_point_.smbios_bcd_revision = 0x28;
 }
 
-void Smbios::BuildStructure(uint8_t type, void* data, size_t size, std::vector<std::string>& texts) {
+void Smbios::BuildStructure(uint8_t type, void* data, size_t size, std::vector<std::string>& texts, uint16_t handle) {
   auto header = (smbios_structure_header*)data;
   header->type = type;
   header->length = size;
-  header->handle = type << 8;
+  header->handle = handle;
+  if (handle == 0) {
+    header->handle = type << 8;
+  }
 
   std::string entry;
   entry.append((char*)data, size);
@@ -79,7 +98,113 @@ void Smbios::BuildStructure(uint8_t type, void* data, size_t size, std::vector<s
     }
     entry.append("\0", 1);
   }
-  tables_[type] = entry;
+  tables_entries_.push_back(entry);
+}
+
+void Smbios::BuildType1() {
+  // System Information
+  std::vector<std::string> texts;
+  smbios_type_1 type_1 = {};
+
+  texts.push_back(default_manufacturer_);
+  type_1.manufacturer_str = 1;
+  texts.push_back(default_product_name_);
+  type_1.product_name_str = 2;
+  texts.push_back(default_version_);
+  type_1.version_str = 3;
+  texts.push_back(default_serial_number_);
+  type_1.serial_number_str = 4;
+
+  type_1.wake_up_type = 0x06; // Power Switch
+  if (!machine_->vm_name().empty()) {
+    texts.push_back(machine_->vm_name());
+    type_1.sku_number_str = 4;
+  }
+
+  texts.push_back("Q35");
+  type_1.family_str = 5;
+
+  BuildStructure(1, &type_1, sizeof(type_1), texts);
+}
+
+void Smbios::BuildType2() {
+  // Baseboard Information
+  std::vector<std::string> texts;
+  smbios_type_2 type_2 = {};
+
+  texts.push_back(default_manufacturer_);
+  type_2.manufacturer_str = 1;
+  texts.push_back(default_product_name_);
+  type_2.product_str = 2;
+  texts.push_back(default_version_);
+  type_2.version_str = 3;
+  texts.push_back(default_serial_number_);
+  type_2.serial_number_str = 4;
+
+  type_2.feature_flags = 0x01; // Motherboard
+  type_2.chassis_handle = 0x0300; // Type 3 handle
+  type_2.board_type = 0x0A; // Motherboard
+
+  BuildStructure(2, &type_2, sizeof(type_2), texts);
+}
+
+void Smbios::BuildType3() {
+  // System Enclosure
+  std::vector<std::string> texts;
+  smbios_type_3 type_3 = {};
+  type_3.type = 0x01; // Other
+  texts.push_back(default_manufacturer_);
+  type_3.manufacturer_str = 1;
+  texts.push_back(default_version_);
+  type_3.version_str = 2;
+
+  type_3.boot_up_state = 0x03; // Safe
+  type_3.power_supply_state = 0x03; // Safe
+  type_3.thermal_state = 0x03; // Safe
+  type_3.security_status = 0x02; // Unknown
+
+  if (!machine_->vm_name().empty()) {
+    texts.push_back(machine_->vm_name());
+    type_3.sku_number_str = 4;
+  }
+
+  BuildStructure(3, &type_3, sizeof(type_3), texts);
+}
+
+void Smbios::BuildType4() {
+  // Processor Information
+  std::vector<std::string> texts;
+  smbios_type_4 type_4 = {};
+  texts.push_back("CPU0");
+  type_4.socket_designation_str = 1;
+  type_4.processor_type = 3; // CPU
+  type_4.processor_family = 0xD6; // Multi-core Intel Xeon
+  texts.push_back("Intel");
+  type_4.processor_manufacturer_str = 2;
+
+  auto first_vcpu = machine_->first_vcpu();
+  type_4.processor_id[0] = first_vcpu->cpuid_version();
+  type_4.processor_id[1] = first_vcpu->cpuid_features() >> 32;
+  texts.push_back(first_vcpu->cpuid_model());
+  type_4.processor_version_str = 3;
+
+  type_4.voltage = 0;
+  type_4.max_speed = 2000; // 2 GHz
+  type_4.current_speed = 2000; // 2 GHz
+  type_4.status = 0x41; // Enabled, Populated
+  type_4.l1_cache_handle = 0xFFFF;
+  type_4.l2_cache_handle = 0xFFFF;
+  type_4.l3_cache_handle = 0xFFFF;
+
+  uint cores_per_socket = machine_->num_cores();
+  uint threads_per_socket = machine_->num_threads() * cores_per_socket;
+  type_4.core_count = cores_per_socket > 0xFF ? 0xFF : cores_per_socket;
+  type_4.core_enabled = type_4.core_count;
+  type_4.thread_count = threads_per_socket > 0xFF ? 0xFF : threads_per_socket;
+  type_4.processor_characteristics = 0x00FC; // 64-bit capable, Multi-core, Hardware Thread
+  type_4.processor_family2 = type_4.processor_family;
+
+  BuildStructure(4, &type_4, sizeof(type_4), texts);
 }
 
 void Smbios::BuildType16() {
@@ -126,17 +251,47 @@ void Smbios::BuildType17() {
   type_17.memory_type = 0x18; // Memory Type: 0x18 = DDR3
   type_17.type_detail = 0x80; // Type Detail: 0x80 = Synchronous
   type_17.speed = 2133; // Speed: 2133 MHz
-  texts.push_back("MVISOR");
+  texts.push_back(default_manufacturer_);
   type_17.manufacturer_str = 2;
-  texts.push_back("00000000");
+  texts.push_back(default_serial_number_);
   type_17.serial_number_str = 3;
-  texts.push_back("9876543210");
-  type_17.asset_tag_number_str = 4;
+  type_17.asset_tag_number_str = 0;
   texts.push_back("TC00000000");
-  type_17.part_number_str = 5;
+  type_17.part_number_str = 4;
 
   type_17.attributes = 0; // Unknown
   type_17.configured_clock_speed = type_17.speed;
 
   BuildStructure(17, &type_17, sizeof(type_17), texts);
+}
+
+void Smbios::BuildType19() {
+  // Memory Array Mapped Address
+  auto mm = machine_->memory_manager();
+  uint16_t handle = 19 << 8;
+  for (auto region: mm->regions()) {
+    if (region->type == kMemoryTypeRam && std::string("System") == region->name) {
+      std::vector<std::string> texts;
+      auto start_kb = region->gpa / 1024;
+      auto end_kb = (region->gpa + region->size - 1) / 1024;
+      smbios_type_19 type_19 = {};
+      type_19.starting_address = start_kb;
+      type_19.ending_address = end_kb;
+      type_19.extended_ending_address = 0;
+
+      type_19.memory_array_handle = 0x1000; // Type 16 handle
+      type_19.partition_width = 1; // One device per partition
+
+      BuildStructure(19, &type_19, sizeof(type_19), texts, handle++);
+    }
+  }
+}
+
+void Smbios::BuildType32() {
+  // System Boot Information
+  std::vector<std::string> texts;
+  smbios_type_32 type_32 = {};
+  type_32.boot_status = 0; // No errors
+
+  BuildStructure(32, &type_32, sizeof(type_32), texts);
 }
