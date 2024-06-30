@@ -52,7 +52,7 @@ DefinitionBlock (
             Name(_HID, EisaId("PNP0A08"))
             Name(_CID, EisaId("PNP0A03"))
             Name(_ADR, 0x00)
-            Name(_UID, 1)
+            Name(_UID, Zero)
 
             // _OSC: based on sample of ACPI3.0b spec
             Name(SUPP, 0) // PCI _OSC Support Field value
@@ -111,7 +111,7 @@ DefinitionBlock (
         }
     }
 
-#include "acpi-dsdt-pci-crs.dsl"
+#include "acpi-dsdt-pci-crs2.dsl"
 #include "acpi-dsdt-hpet.dsl"
 
 
@@ -403,7 +403,7 @@ DefinitionBlock (
     }
 
 #include "acpi-dsdt-cpu-hotplug.dsl"
-
+#include "acpi-dsdt-cpu.dsl"
 
 /****************************************************************
  * General purpose events

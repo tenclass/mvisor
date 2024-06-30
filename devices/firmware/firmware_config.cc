@@ -26,8 +26,7 @@
 #include "machine.h"
 #include "smbios.h"
 #include "firmware_config.pb.h"
-#include "acpi_dsdt/acpi_dsdt.hex.h"
-#include "acpi_dsdt/q35_acpi_dsdt.hex.h"
+#include "acpi_builder.h"
 
 
 #define FW_CFG_ACPI_DEVICE_ID "QEMU0002"
@@ -40,14 +39,25 @@
 #define FEATURE_CONTROL_LMCE                      (1<<20)
 
 
+struct ConfigEntry {
+  uint16_t      index;
+  std::string   data;
+  std::string   filename;
+  VoidCallback  select_callback;
+};
+
 class FirmwareConfig : public Device {
  private:
   uint16_t current_index_ = 0;
   uint32_t current_offset_ = 0;
   uint64_t dma_address_ = 0;
-  std::map<uint16_t, std::string> config_;
-  std::map<std::string, std::string> files_;
+  AcpiBuilder* acpi_builder_ = nullptr;
+  std::vector<ConfigEntry> config_entries_;
 
+  std::vector<ConfigEntry>::iterator GetConfigEntry(uint16_t index) {
+    return std::find_if(config_entries_.begin(), config_entries_.end(),
+      [index](const ConfigEntry& entry) { return entry.index == index; });
+  }
 
   void DmaTransfer() {
     fw_cfg_dma_access* dma = (fw_cfg_dma_access*)manager_->TranslateGuestMemory(dma_address_);
@@ -58,13 +68,12 @@ class FirmwareConfig : public Device {
     uint32_t buffer_length = be32toh(dma->length);
     
     if (control & FW_CFG_DMA_CTL_SELECT) {
-      current_index_ = control >> 16;
-      current_offset_ = 0;
+      SelectCurrentEntry(control >> 16);
     }
 
     uint8_t* buffer = (uint8_t*)manager_->TranslateGuestMemory(buffer_address);
-    auto it = config_.find(current_index_);
-    if (it == config_.end()) {
+    auto it = GetConfigEntry(current_index_);
+    if (it == config_entries_.end()) {
       if (current_index_ & 0x8000) {
         dma->control = be32toh(FW_CFG_DMA_CTL_ERROR);
         /* Skip ARCH_LOCAL entries like ACPI, SMBIOS */
@@ -72,15 +81,16 @@ class FirmwareConfig : public Device {
       } else {
         bzero(buffer, buffer_length);
         dma->control = 0;
+        if (debug_) {
+          MV_WARN("config entry 0x%x not found", current_index_);
+        }
         return;
       }
     }
 
     if (control & FW_CFG_DMA_CTL_READ) {
-      uint32_t size = it->second.size() - current_offset_;
-      if (size > buffer_length)
-        size = buffer_length;
-      memcpy(buffer, it->second.data() + current_offset_, size);
+      uint32_t size = std::min((uint32_t)it->data.size() - current_offset_, buffer_length);
+      memcpy(buffer, it->data.data() + current_offset_, size);
       current_offset_ += size;
     } else if (control & FW_CFG_DMA_CTL_WRITE) {
       MV_PANIC("not supported");
@@ -88,26 +98,45 @@ class FirmwareConfig : public Device {
     dma->control = 0;
   }
 
-  void SetConfigBytes(uint16_t index, std::string bytes) {
-    config_[index] = bytes;
+  void AddConfigBytes(uint16_t index, std::string bytes) {
+    config_entries_.emplace_back(ConfigEntry{index, bytes});
   }
 
-  void SetConfigUInt32(uint16_t index, uint32_t value) {
-    config_[index] = std::string((const char*)&value, sizeof(value));
+  void AddConfigUInt32(uint16_t index, uint32_t value) {
+    config_entries_.emplace_back(ConfigEntry{index, std::string((const char*)&value, sizeof(value))});
   }
 
-  void SetConfigUInt16(uint16_t index, uint16_t value) {
-    config_[index] = std::string((const char*)&value, sizeof(value));
+  void AddConfigUInt16(uint16_t index, uint16_t value) {
+    config_entries_.emplace_back(ConfigEntry{index, std::string((const char*)&value, sizeof(value))});
   }
 
-  void AddConfigFile(std::string path, void* data, size_t size) {
-    files_[path] = std::string((const char*)data, size);
-    if (debug_) {
-      MV_HEXDUMP(path.c_str(), files_[path].data(), files_[path].size());
+  void AddConfigFile(std::string path, std::string data) {
+    config_entries_.emplace_back(ConfigEntry{0, std::move(data), path});
+  }
+
+  void AddConfigFile(std::string path, std::string data, VoidCallback select_callback) {
+    config_entries_.emplace_back(ConfigEntry{0, std::move(data), path, select_callback});
+  }
+
+  void SelectCurrentEntry(uint16_t index) {
+    current_index_ = index;
+    current_offset_ = 0;
+    auto it = GetConfigEntry(current_index_);
+    if (it != config_entries_.end() && it->select_callback) {
+      it->select_callback();
     }
   }
 
-  void AddConfigFile(std::string path, std::string local_path) {
+  void UpdateConfigFile(std::string path, std::string data) {
+    auto it = std::find_if(config_entries_.begin(), config_entries_.end(),
+      [path](const ConfigEntry& entry) { return entry.filename == path; });
+    if (it == config_entries_.end()) {
+      MV_PANIC("config file %s not found", path.c_str());
+    }
+    it->data = data;
+  }
+
+  void AddConfigFileFromLocal(std::string path, std::string local_path) {
     FILE *fp = fopen(local_path.c_str(), "rb");
     if (fp == NULL) {
       MV_PANIC("failed to locate file %s", local_path.c_str());
@@ -120,30 +149,32 @@ class FirmwareConfig : public Device {
     fread(buf, file_size, 1, fp);
     fclose(fp);
 
-    AddConfigFile(path, buf, file_size);
-    delete buf;
+    AddConfigFile(path, std::string((const char*)buf, file_size));
+    delete[] buf;
   }
 
   void InitializeConfig() {
-    SetConfigBytes(FW_CFG_SIGNATURE, "QEMU");
+    // Clear all config entries
+    config_entries_.clear();
+
+    AddConfigBytes(FW_CFG_SIGNATURE, "QEMU");
     uint32_t version = FW_CFG_VERSION | FW_CFG_VERSION_DMA;
-    SetConfigUInt32(FW_CFG_ID, version);
-    SetConfigUInt32(FW_CFG_FILE_DIR, 0);
+    AddConfigUInt32(FW_CFG_ID, version);
 
     auto machine = manager_->machine();
     int num_vcpus = machine->num_vcpus();
-    SetConfigUInt16(FW_CFG_NB_CPUS, num_vcpus);
-    SetConfigUInt16(FW_CFG_MAX_CPUS, num_vcpus);
+    AddConfigUInt16(FW_CFG_NB_CPUS, num_vcpus);
+    AddConfigUInt16(FW_CFG_MAX_CPUS, num_vcpus);
     uint64_t numa_cfg[num_vcpus + 1] = { 0 };
-    SetConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
-    SetConfigUInt16(FW_CFG_NOGRAPHIC, 0);
-    SetConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
+    AddConfigBytes(FW_CFG_NUMA, std::string((const char*)numa_cfg, sizeof(numa_cfg)));
+    AddConfigUInt16(FW_CFG_NOGRAPHIC, 0);
+    AddConfigUInt32(FW_CFG_IRQ0_OVERRIDE, 1);
 
     /* show menu if more than 1 drives */
     if (manager_->io()->GetDiskImageCount() > 1) {
-      SetConfigUInt16(FW_CFG_BOOT_MENU, 2);
+      AddConfigUInt16(FW_CFG_BOOT_MENU, 2);
     } else {
-      SetConfigUInt16(FW_CFG_BOOT_MENU, 0);
+      AddConfigUInt16(FW_CFG_BOOT_MENU, 0);
     }
 
     InitializeE820Table();
@@ -152,82 +183,71 @@ class FirmwareConfig : public Device {
     InitializeFileDir();
   }
 
-  void LoadFile(std::string path, std::string target) {
-    FILE* fp = fopen(path.c_str(), "rb");
-    MV_ASSERT(fp);
-    fseek(fp, 0, SEEK_END);
-    size_t size = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-    uint8_t* buf = new uint8_t[size];
-    fread(buf, size, 1, fp);
-    fclose(fp);
-    AddConfigFile(target, buf, size);
-    delete buf;
-  }
-
   void InitializeFiles () {
     /* disable S3 S4 (suspend / hibernate) */
     bool disable_s3 = true, disable_s4 = true;
     uint8_t suspend[6] = {128, 0, 0, 129, 128, 128};
     suspend[3] = 1 | (uint(!disable_s3) << 7);
     suspend[4] = 2 | (uint(!disable_s4) << 7);
-    AddConfigFile("etc/system-states", suspend, sizeof(suspend));
+    AddConfigFile("etc/system-states", std::string((char*)suspend, sizeof(suspend)));
 
     /* check VMX after vcpu started */
     auto vcpu = manager_->machine()->first_vcpu();
     MV_ASSERT(vcpu);
     if (vcpu->cpuid_features() & (1U << 5)) {
       uint64_t feature_control = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
-      AddConfigFile("etc/msr_feature_control", &feature_control, sizeof(feature_control));
+      AddConfigFile("etc/msr_feature_control", std::string((char*)&feature_control, sizeof(feature_control)));
     }
 
     /* ACPI DSDT */
     auto machine = manager_->machine();
-    // if (machine->LookupObjectByClass("I440fxHost")) {
-    //   AddConfigFile("acpi/dsdt", acpi_dsdt_aml_code, sizeof(acpi_dsdt_aml_code));
-    // } else if (machine->LookupObjectByClass("Q35Host")) {
-    //   AddConfigFile("acpi/dsdt", q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
-    // } else {
-    //   MV_WARN("Unknown motherboard. ACPI might not work.");
-    // }
-    LoadFile("/tmp/fwcfg/0x23", "etc/acpi/tables");
-    LoadFile("/tmp/fwcfg/0x22", "etc/acpi/rsdp");
-    LoadFile("/tmp/fwcfg/0x2c", "etc/table-loader");
-    // LoadFile("/tmp/fwcfg/0x26", "etc/smbios/smbios-anchor");
-    // LoadFile("/tmp/fwcfg/0x27", "etc/smbios/smbios-tables");
+    if (acpi_builder_ == nullptr) {
+      acpi_builder_ = new AcpiBuilder(machine);
+    }
+    for (auto file: acpi_builder_->GetFileNames()) {
+      std::string data = acpi_builder_->GetTable(file);
+      if (data.empty()) {
+        continue;
+      }
+      AddConfigFile(file, data, [this, file]() {
+        UpdateConfigFile(file, acpi_builder_->GetTable(file));
+      });
+    }
 
     auto pvpanic = machine->LookupObjectByClass("Pvpanic");
     if (pvpanic) {
       uint16_t port = 0x505;
-      AddConfigFile("etc/pvpanic-port", &port, sizeof(port));
+      AddConfigFile("etc/pvpanic-port", std::string((char*)&port, sizeof(port)));
     }
 
     std::string smbios_anchor, smbios_table;
     Smbios smbios(manager_->machine());
     smbios.GetTables(smbios_anchor, smbios_table);
-    AddConfigFile("etc/smbios/smbios-tables", smbios_table.data(), smbios_table.size());
-    AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor.data(), smbios_anchor.size());
+    AddConfigFile("etc/smbios/smbios-tables", smbios_table);
+    AddConfigFile("etc/smbios/smbios-anchor", smbios_anchor);
   }
 
   void InitializeFileDir() {
     fw_cfg_files dir;
     int index = 0;
-    for (auto &item : files_) {
+    for (auto &entry : config_entries_) {
+      if (entry.filename.empty()) {
+        continue;
+      }
       auto cfg_file = &dir.files[index];
-      strncpy(cfg_file->name, item.first.c_str(), sizeof(cfg_file->name));
-      cfg_file->size = htobe32(item.second.size());
-      cfg_file->select = htobe16(FW_CFG_FILE_FIRST + index);
+      entry.index = FW_CFG_FILE_FIRST + index;
+      strncpy(cfg_file->name, entry.filename.c_str(), sizeof(cfg_file->name));
+      cfg_file->size = htobe32(entry.data.size());
+      cfg_file->select = htobe16(entry.index);
       cfg_file->reserved = 0;
-      SetConfigBytes(FW_CFG_FILE_FIRST + index, item.second);
-
       if (++index >= FW_CFG_MAX_FILES) {
         break;
       }
     }
+  
     dir.count = htobe32(index);
-
-    std::string data((const char*)&dir, sizeof(dir.count) + index * sizeof(dir.files[0]));
-    SetConfigBytes(FW_CFG_FILE_DIR, std::move(data));
+    auto dir_size = sizeof(dir.count) + index * sizeof(dir.files[0]);
+    AddConfigBytes(FW_CFG_FILE_DIR, std::string((const char*)&dir, dir_size));
   }
 
   void InitializeE820Table() {
@@ -250,7 +270,7 @@ class FirmwareConfig : public Device {
       entries.emplace_back(std::move(entry));
     }
 
-    AddConfigFile("etc/e820", entries.data(), sizeof(e820_entry) * entries.size());
+    AddConfigFile("etc/e820", std::string((char*)entries.data(), sizeof(e820_entry) * entries.size()));
   }
 
 
@@ -260,6 +280,12 @@ class FirmwareConfig : public Device {
 
     AddIoResource(kIoResourceTypePio, FW_CFG_IO_BASE, 2, "Config IO");
     AddIoResource(kIoResourceTypePio, FW_CFG_DMA_IO_BASE, 8, "Config DMA");
+  }
+
+  ~FirmwareConfig() {
+    if (acpi_builder_) {
+      delete acpi_builder_;
+    }
   }
 
   void Reset() override {
@@ -290,8 +316,7 @@ class FirmwareConfig : public Device {
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == FW_CFG_IO_BASE && size == 2) {
-      current_index_ = *(uint16_t*)data;
-      current_offset_ = 0;
+      SelectCurrentEntry(*(uint16_t*)data);
     } else if (resource->base == FW_CFG_DMA_IO_BASE) {
       if (size == 4) {
         if (offset == 0) { // High 32bit address
@@ -313,13 +338,13 @@ class FirmwareConfig : public Device {
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == FW_CFG_IO_BASE && offset == 1) {
-      auto it = config_.find(current_index_);
-      if (it == config_.end()) {
+      auto it = GetConfigEntry(current_index_);
+      if (it == config_entries_.end()) {
         MV_PANIC("config entry %d not found", current_index_);
       }
       while (size--) {
-        if (current_offset_ < it->second.size()) {
-          *data++ = it->second[current_offset_++];
+        if (current_offset_ < it->data.size()) {
+          *data++ = it->data[current_offset_++];
         } else {
           *data++ = 0;
         }

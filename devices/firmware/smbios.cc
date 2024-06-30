@@ -39,8 +39,8 @@ Smbios::Smbios(Machine* machine) : machine_(machine) {
   SetupEntryPoint();
 }
 
-void Smbios::GetTables(std::string& anchor, std::string& tables) {
-  tables_entries_.clear();
+void Smbios::GetTables(std::string& anchor, std::string& table) {
+  table_entries_.clear();
   BuildType1();
   BuildType2();
   BuildType3();
@@ -50,18 +50,18 @@ void Smbios::GetTables(std::string& anchor, std::string& tables) {
   BuildType19();
   BuildType32();
   // Add the end of table marker
-  tables_entries_.push_back(std::string("\x7F\x04\x00\x7F\x00\x00", 6));
+  table_entries_.push_back(std::string("\x7F\x04\x00\x7F\x00\x00", 6));
 
-  tables.clear();
-  for (auto& entry : tables_entries_) {
-    tables.append(entry);
+  table.clear();
+  for (auto& entry : table_entries_) {
+    table.append(entry);
     if (entry.size() > entry_point_.max_structure_size) {
       entry_point_.max_structure_size = entry.size();
     }
   }
 
-  entry_point_.structure_table_length = tables.length();
-  entry_point_.number_of_structures = tables_entries_.size() + 1;
+  entry_point_.structure_table_length = table.length();
+  entry_point_.number_of_structures = table_entries_.size() + 1;
   anchor = std::string((char*)&entry_point_, sizeof(entry_point_));
 }
 
@@ -98,11 +98,11 @@ void Smbios::BuildStructure(uint8_t type, void* data, size_t size, std::vector<s
     }
     entry.append("\0", 1);
   }
-  tables_entries_.push_back(entry);
+  table_entries_.push_back(entry);
 }
 
+// System Information
 void Smbios::BuildType1() {
-  // System Information
   std::vector<std::string> texts;
   smbios_type_1 type_1 = {};
 
@@ -127,8 +127,8 @@ void Smbios::BuildType1() {
   BuildStructure(1, &type_1, sizeof(type_1), texts);
 }
 
+// Baseboard Information
 void Smbios::BuildType2() {
-  // Baseboard Information
   std::vector<std::string> texts;
   smbios_type_2 type_2 = {};
 
@@ -148,8 +148,8 @@ void Smbios::BuildType2() {
   BuildStructure(2, &type_2, sizeof(type_2), texts);
 }
 
+// System Enclosure
 void Smbios::BuildType3() {
-  // System Enclosure
   std::vector<std::string> texts;
   smbios_type_3 type_3 = {};
   type_3.type = 0x01; // Other
@@ -207,9 +207,9 @@ void Smbios::BuildType4() {
   BuildStructure(4, &type_4, sizeof(type_4), texts);
 }
 
+// Physical Memory Array
 void Smbios::BuildType16() {
   std::vector<std::string> texts;
-  // Physical Memory Array
   smbios_type_16 type_16 = {};
   type_16.location = 3; // Memory Array Location: 3 = System Board or Motherboard
   type_16.use = 3; // Memory Use: 3 = System Memory
@@ -225,8 +225,8 @@ void Smbios::BuildType16() {
   BuildStructure(16, &type_16, sizeof(type_16), texts);
 }
 
+// Memory Device
 void Smbios::BuildType17() {
-  // Memory Device
   std::vector<std::string> texts;
   smbios_type_17 type_17 = {};
   type_17.physical_memory_array_handle = 0x1000;
@@ -265,8 +265,8 @@ void Smbios::BuildType17() {
   BuildStructure(17, &type_17, sizeof(type_17), texts);
 }
 
+// Memory Array Mapped Address
 void Smbios::BuildType19() {
-  // Memory Array Mapped Address
   auto mm = machine_->memory_manager();
   uint16_t handle = 19 << 8;
   for (auto region: mm->regions()) {
@@ -287,8 +287,8 @@ void Smbios::BuildType19() {
   }
 }
 
+// System Boot Information
 void Smbios::BuildType32() {
-  // System Boot Information
   std::vector<std::string> texts;
   smbios_type_32 type_32 = {};
   type_32.boot_status = 0; // No errors

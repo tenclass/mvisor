@@ -281,7 +281,7 @@ class Machine;
 class Smbios {
  public:
   Smbios(Machine* machine);
-  void GetTables(std::string& anchor, std::string& tables);
+  void GetTables(std::string& anchor, std::string& table);
 
  private:
   void BuildStructure(uint8_t type, void* data, size_t size, std::vector<std::string>& texts, uint16_t handle=0);
@@ -297,7 +297,7 @@ class Smbios {
   Machine* machine_;
 
   smbios_21_entry_point entry_point_;
-  std::vector<std::string> tables_entries_;
+  std::vector<std::string> table_entries_;
 
   std::string default_manufacturer_;
   std::string default_product_name_;

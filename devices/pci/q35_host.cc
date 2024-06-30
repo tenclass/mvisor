@@ -21,7 +21,7 @@
 #include "device_manager.h"
 #include "pci_host.h"
 
-#define MCH_PCIE_XBAR                0x60
+#define MCH_PCIE_XBAR_OFFSET         0x60
 #define MCH_PCIE_XBAR_SIZE           0x04
 
 class Q35Host : public PciHost {
@@ -46,7 +46,7 @@ class Q35Host : public PciHost {
   }
 
   void MchUpdatePcieXBar() {
-    uint32_t xbar = *(uint32_t*)(pci_header_.data + MCH_PCIE_XBAR);
+    uint32_t xbar = *(uint32_t*)(pci_header_.data + MCH_PCIE_XBAR_OFFSET);
     int enabled = xbar & 1;
 
     if (!!enabled != !!pcie_xbar_base_) {
@@ -108,7 +108,7 @@ class Q35Host : public PciHost {
   void WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
     PciHost::WritePciConfigSpace(offset, data, length);
 
-    if (ranges_overlap(offset, length, MCH_PCIE_XBAR, MCH_PCIE_XBAR_SIZE)) {
+    if (ranges_overlap(offset, length, MCH_PCIE_XBAR_OFFSET, MCH_PCIE_XBAR_SIZE)) {
       MchUpdatePcieXBar();
     } else if (ranges_overlap(offset, length, 0x9D, 2)) {
       MV_PANIC("SMRAM not supported yet");
