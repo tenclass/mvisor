@@ -14,6 +14,7 @@ class AcpiBuilder {
   Machine*  machine_;
   std::map<std::string, std::string>  tables_;
   AcpiLoader loader_;
+  bool IsQ35();
 
   void BuildRsdp();
   void BuildRsdt();

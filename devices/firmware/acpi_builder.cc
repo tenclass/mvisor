@@ -8,6 +8,10 @@
 AcpiBuilder::AcpiBuilder(Machine* machine) : machine_(machine) {
 }
 
+bool AcpiBuilder::IsQ35() {
+  return machine_->LookupObjectByClass("Q35Host") != nullptr;
+}
+
 std::vector<std::string> AcpiBuilder::GetFileNames() {
   std::vector<std::string> file_names;
   file_names.push_back("etc/acpi/rsdp");
@@ -15,7 +19,9 @@ std::vector<std::string> AcpiBuilder::GetFileNames() {
   file_names.push_back("etc/acpi/facp");
   file_names.push_back("etc/acpi/facs");
   file_names.push_back("etc/acpi/apic");
-  file_names.push_back("etc/acpi/mcfg");
+  if (IsQ35()) {
+    file_names.push_back("etc/acpi/mcfg");
+  }
   file_names.push_back("etc/acpi/waet");
   file_names.push_back("etc/acpi/dsdt");
   file_names.push_back("etc/table-loader");
@@ -94,22 +100,28 @@ void AcpiBuilder::BuildAcpiTableHeader(const std::string table_name, void* data,
 
 // Build Root System Descriptor Table
 void AcpiBuilder::BuildRsdt() {
-  uint num_entries = 4;
-  size_t size = sizeof(acpi_table_header) + num_entries * sizeof(uint32_t);
+  std::vector<std::string> table_names = {
+    "etc/acpi/facp",
+    "etc/acpi/apic",
+    "etc/acpi/waet"
+  };
+  if (IsQ35()) {
+    table_names.push_back("etc/acpi/mcfg");
+  }
+
+  size_t size = sizeof(acpi_table_header) + table_names.size() * sizeof(uint32_t);
   auto rsdt = (acpi_rsdt_table*)malloc(size);
   bzero(rsdt, size);
   BuildAcpiTableHeader("RSDT", rsdt, size);
   tables_["etc/acpi/rsdt"] = std::string((char*)rsdt, size);
   free(rsdt);
 
-  // Add pointer modification commands
-  // 4
   loader_.AddAllocateCommand("etc/acpi/rsdt", 16, ALLOC_ZONE_HIGH);
   off_t offset = sizeof(acpi_table_header);
-  loader_.AddAddPointerCommand("etc/acpi/rsdt", "etc/acpi/facp", offset, 4); offset += 4;
-  loader_.AddAddPointerCommand("etc/acpi/rsdt", "etc/acpi/apic", offset, 4); offset += 4;
-  loader_.AddAddPointerCommand("etc/acpi/rsdt", "etc/acpi/mcfg", offset, 4); offset += 4;
-  loader_.AddAddPointerCommand("etc/acpi/rsdt", "etc/acpi/waet", offset, 4); offset += 4;
+  for (auto& table_name : table_names) {
+    loader_.AddAddPointerCommand("etc/acpi/rsdt", table_name.c_str(), offset, 4);
+    offset += 4;
+  }
   loader_.AddChecksumCommand("etc/acpi/rsdt", 9, 0, size);
 }
 
