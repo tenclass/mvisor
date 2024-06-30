@@ -270,10 +270,17 @@ void AcpiBuilder::BuildWaet() {
 
 // Build Differentiated System Description Table
 void AcpiBuilder::BuildDsdt() {
-  tables_["etc/acpi/dsdt"] = std::string((char*)q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
+  if (IsQ35()) {
+    tables_["etc/acpi/dsdt"] = std::string((char*)q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
+    loader_.AddAllocateCommand("etc/acpi/dsdt", 16, ALLOC_ZONE_HIGH);
+    loader_.AddChecksumCommand("etc/acpi/dsdt", 9, 0, sizeof(q35_acpi_dsdt_aml_code));
+  } else {
+    tables_["etc/acpi/dsdt"] = std::string((char*)acpi_dsdt_aml_code, sizeof(acpi_dsdt_aml_code));
+    loader_.AddAllocateCommand("etc/acpi/dsdt", 16, ALLOC_ZONE_HIGH);
+    loader_.AddChecksumCommand("etc/acpi/dsdt", 9, 0, sizeof(acpi_dsdt_aml_code));
+  
+  }
   auto checksum_ptr = (uint8_t*)&tables_["etc/acpi/dsdt"].data()[9];
   *checksum_ptr = 0;
-  loader_.AddAllocateCommand("etc/acpi/dsdt", 16, ALLOC_ZONE_HIGH);
-  loader_.AddChecksumCommand("etc/acpi/dsdt", 9, 0, sizeof(q35_acpi_dsdt_aml_code));
 }
 

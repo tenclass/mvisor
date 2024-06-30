@@ -353,8 +353,10 @@ Scope (_SB)
     }
 }
 
-
-Method (\_GPE._E02, 0, NotSerialized)  // _Exx: Edge-Triggered GPE, xx=0x00-0xFF
+Scope (\_GPE)
 {
-    \_SB.CPUS.CSCN ()
+    Method (\_E02, 0, NotSerialized)  // _Exx: Edge-Triggered GPE, xx=0x00-0xFF
+    {
+        \_SB.CPUS.CSCN ()
+    }
 }

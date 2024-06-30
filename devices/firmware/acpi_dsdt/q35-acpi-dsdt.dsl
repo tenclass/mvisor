@@ -447,4 +447,27 @@ DefinitionBlock (
         Method(_L0F) {
         }
     }
+
+/****************************************************************
+ * Apple SMC
+ ****************************************************************/
+ 
+    Scope(\_SB) {
+        Device (SMC)
+        {
+            Name (_HID, EisaId ("APP0001"))  // _HID: Hardware ID
+            Name (_STA, 0x0B)  // _STA: Status
+            Name (_CRS, ResourceTemplate ()  // _CRS: Current Resource Settings
+            {
+                IO (Decode16,
+                    0x0300,             // Range Minimum
+                    0x0300,             // Range Maximum
+                    0x01,               // Alignment
+                    0x20,               // Length
+                    )
+                IRQNoFlags ()
+                    {6}
+            })
+        }
+    }
 }
