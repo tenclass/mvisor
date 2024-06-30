@@ -79,6 +79,7 @@ class VgaRender {
 
   std::string vga_surface_;
   size_t      vga_display_buffer_size_ = 0;
+  std::string vga_display_buffer_;
 
   bool IsVbeEnabled();
   void UpdateDisplayMode();

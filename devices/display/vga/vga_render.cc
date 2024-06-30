@@ -26,6 +26,8 @@ VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
   cursor_visible_ = false;
   text_mode_ = false;
   mode_changed_ = false;
+  // Maximum resolution is defined in EDID data, 3840x2160x32
+  vga_display_buffer_.resize(3840 * 2160 * 4);
 }
 
 
@@ -632,10 +634,10 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
 
   if (vga_display_buffer_size_ != size_t(stride_ * height_)) {
     vga_display_buffer_size_ = stride_ * height_;
+    MV_ASSERT(vga_display_buffer_size_ <= vga_display_buffer_.size());
     redraw_ = true;
   }
-  uint32_t reserved_size = 0x10000; // do not overwrite the QXL ram header
-  auto vga_display_buffer = vram_base_ + vram_size_ - vga_display_buffer_size_ - reserved_size;
+  auto buffer = (uint8_t*)vga_display_buffer_.data();
 
   DisplayPartialBitmap partial;
   partial.stride = stride_;
@@ -646,16 +648,16 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
 
   if (redraw_) {
     redraw_ = false;
-    memcpy(vga_display_buffer, canvas_pixels, stride_ * height_);
+    memcpy(buffer, canvas_pixels, stride_ * height_);
     partial.y = 0;
     partial.height = height_;
-    partial.data = vga_display_buffer;
+    partial.data = buffer;
     update.partials.emplace_back(std::move(partial));
   } else {
     partial.height = 0;
     // Compare src & dst line by line, and copy if different
     uint8_t* src = canvas_pixels;
-    uint8_t* dst = vga_display_buffer;
+    uint8_t* dst = buffer;
     for (int y = 0; y < height_; y++) {
       if (memcmp(src, dst, stride_) == 0) {
         if (partial.height > 0) {
