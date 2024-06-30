@@ -320,10 +320,9 @@ class FirmwareConfig : public Device {
     } else if (resource->base == FW_CFG_DMA_IO_BASE) {
       if (size == 4) {
         if (offset == 0) { // High 32bit address
-          dma_address_ = be32toh(*(uint32_t*)data);
-          dma_address_ <<= 32;
+          dma_address_ = (dma_address_ & 0xffffffff) | (uint64_t(be32toh(*(uint32_t*)data)) << 32);
         } else if (offset == 4) { // Low 32bit address
-          dma_address_ |= be32toh(*(uint32_t*)data);
+          dma_address_ = (dma_address_ & 0xffffffff00000000) | be32toh(*(uint32_t*)data);
           DmaTransfer();
         }
       } else if (size == 8) {
@@ -349,6 +348,9 @@ class FirmwareConfig : public Device {
           *data++ = 0;
         }
       }
+    } else if (resource->base == FW_CFG_DMA_IO_BASE) {
+      uint64_t signature = htobe64(FW_CFG_DMA_SIGNATURE);
+      memcpy(data, (uint8_t*)&signature + offset, size);
     } else {
       bzero(data, size);
       MV_ERROR("%s not implemented Read offset=0x%lx size=%d", name_, offset, size);
