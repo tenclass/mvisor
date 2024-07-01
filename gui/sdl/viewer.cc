@@ -451,13 +451,13 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   switch (event.type)
   {
   case SDL_USEREVENT: {
-    std::unique_lock<std::mutex> lock(mutex_);
-    while (!tasks_.empty()) {
-      auto& task = tasks_.front();
-      lock.unlock();
+    std::deque<VoidCallback> tasks_copy;
+    {
+      std::unique_lock<std::mutex> lock(mutex_);
+      tasks_copy.swap(tasks_);
+    }
+    for (auto& task : tasks_copy) {
       task();
-      lock.lock();
-      tasks_.pop_front();
     }
     break;
   }

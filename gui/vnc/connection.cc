@@ -74,6 +74,7 @@ void VncConnection::LookupDevices() {
   if (display_) {
     display_mode_listener_ = display_->RegisterDisplayModeChangeListener([this]() {
       server_->Schedule([this]() {
+        std::lock_guard<std::mutex> lock(update_mutex_);
         OnDisplayModeChange();
       });
     });
@@ -81,6 +82,7 @@ void VncConnection::LookupDevices() {
     display_update_listener_ = display_->RegisterDisplayUpdateListener([this](const DisplayUpdate& update) {
       server_->Schedule([this, update=std::move(update)]() {
         if (state_ == kVncRunning) {
+          std::lock_guard<std::mutex> lock(update_mutex_);
           OnDisplayUpdate(update);
         }
       });
@@ -91,6 +93,7 @@ void VncConnection::LookupDevices() {
     clipboard_listener_ = clipboard_->RegisterClipboardListener([this](const ClipboardData clipboard_data) {
       /* std::move don't copy data, but replace data reference */
       server_->Schedule([this, clipboard_data = std::move(clipboard_data)] () {
+        std::lock_guard<std::mutex> lock(update_mutex_);
         OnClipboardFromGuest(clipboard_data);
       });
     });
@@ -181,6 +184,7 @@ bool VncConnection::OnReceive() {
       return false;
     }
 
+    std::lock_guard<std::mutex> lock(update_mutex_);
     switch (message_type)
     {
     case 0: // SetPixelFormat
@@ -338,7 +342,6 @@ bool VncConnection::OnSetPixelFormat() {
     return true;
   }
 
-  std::lock_guard<std::recursive_mutex> lock(update_mutex_);
   pixel_format_.bits_per_pixel = pixel_format[0];
   pixel_format_.depth = pixel_format[1];
   pixel_format_.big_endian = pixel_format[2];
@@ -359,7 +362,6 @@ bool VncConnection::OnSetPixelFormat() {
 bool VncConnection::OnSetEncodings() {
   ReadSkip(1); // padding
 
-  std::lock_guard<std::recursive_mutex> lock(update_mutex_);
   client_encodings_.clear();
   auto n_encodings = ReadUInt16();
   for (int i = 0; i < n_encodings; i++) {
@@ -384,7 +386,6 @@ bool VncConnection::OnSetEncodings() {
 }
 
 bool VncConnection::IsEncodingSupported(int32_t encoding) {
-  std::lock_guard<std::recursive_mutex> lock(update_mutex_);
   return std::find(client_encodings_.begin(), client_encodings_.end(), encoding) != client_encodings_.end();
 }
 
@@ -501,7 +502,6 @@ PointerInputInterface* VncConnection::GetActivePointer() {
 }
 
 void VncConnection::OnDisplayModeChange() {
-  std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   int w, h, bpp;
   display_->GetDisplayMode(&w, &h, &bpp, nullptr);
   frame_buffer_width_ = w;
@@ -593,7 +593,6 @@ void VncConnection::RenderCursor(const DisplayMouseCursor* cursor_update) {
   if (cursor_update->visible == 0) {
     if (cursor_shape_id_ != 0) {
       // Create a blank cursor if the cursor is hidden
-      std::lock_guard<std::recursive_mutex> lock(update_mutex_);
       if (cursor_buffer_) {
         pixman_image_unref(cursor_buffer_);
       }
@@ -610,7 +609,6 @@ void VncConnection::RenderCursor(const DisplayMouseCursor* cursor_update) {
       return;
     }
 
-    std::lock_guard<std::recursive_mutex> lock(update_mutex_);
     if (cursor_buffer_) {
       pixman_image_unref(cursor_buffer_);
       cursor_buffer_ = nullptr;
@@ -689,7 +687,6 @@ bool VncConnection::SendDesktopSize() {
 }
 
 bool VncConnection::SendCursorUpdate() {
-  std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   if (!cursor_buffer_ || !IsEncodingSupported(-314)) {
     return false;
   }
@@ -713,7 +710,6 @@ bool VncConnection::SendCursorUpdate() {
 }
 
 bool VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
-  std::unique_lock<std::recursive_mutex> lock(update_mutex_);
   if (frame_buffer_ == nullptr) {
     // Frame buffer is destroyed if client set pixel format
     return false;
@@ -778,7 +774,7 @@ void VncConnection::UpdateLoop() {
   SetThreadName("mvisor-vnc-conn");
 
   while (state_ == kVncRunning) {
-    std::unique_lock<std::mutex> lock(server_->mutex());
+    std::unique_lock<std::mutex> lock(update_mutex_);
     update_cv_.wait(lock, [this]() {
       return state_ != kVncRunning || (frame_buffer_update_requested_ && (
              !dirty_rects_.empty() || cursor_update_requested_ || frame_buffer_resize_requested_
@@ -794,16 +790,13 @@ void VncConnection::UpdateLoop() {
     // until the data is sent, so we should unlock the mutex before sending data
     if (frame_buffer_resize_requested_) {
       frame_buffer_resize_requested_ = false;
-      lock.unlock();
       updated = SendDesktopSize();
     } else if (cursor_update_requested_) {
       cursor_update_requested_ = false;
-      lock.unlock();
       updated = SendCursorUpdate();
     } else if (!dirty_rects_.empty()) {
       VncRect rect = dirty_rects_.back();
       dirty_rects_.pop_back();
-      lock.unlock();
       updated = SendFrameBufferUpdate(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
     }
     // If no update sent, keep the request

@@ -232,7 +232,12 @@ void Machine::Pause() {
     return;
 
   /* Mark paused state and wait for vCPU threads */
-  wait_count_ = num_vcpus_;
+  wait_count_ = 0;
+  for (auto vcpu: vcpus_) {
+    if (vcpu->running()) {
+      wait_count_++;
+    }
+  }
   pausing_ = true;
   paused_ = true;
 
@@ -251,7 +256,7 @@ void Machine::Pause() {
   /* Wait for IO thread to stop */
   io_thread_->FlushDiskImages();
 
-  wait_count_ = 1;
+  wait_count_ = io_thread_->running() ? 1 : 0;
   pausing_ = false;
   io_thread_->Kick();
 

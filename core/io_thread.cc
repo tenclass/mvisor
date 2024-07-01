@@ -107,54 +107,61 @@ void IoThread::RunLoop() {
 
   struct epoll_event events[MAX_ENTRIES];
 
+  running_ = true;
   while (true) {
-    /* Execute timer events and calculate the next timeout */
-    int64_t next_timeout_ns;
-    do {
-      next_timeout_ns = CheckTimers();
-    } while (next_timeout_ns <= 0);
+    try {
+      /* Execute timer events and calculate the next timeout */
+      int64_t next_timeout_ns;
+      do {
+        next_timeout_ns = CheckTimers();
+      } while (next_timeout_ns <= 0);
 
-    /* Check paused state before sleep */
-    while(machine_->IsPaused() && CanPauseNow()) {
-      machine_->WaitToResume();
-    }
-    if (!machine_->IsValid()) {
-      break;
-    }
-
-    /* epoll_wait limits to 1ms at least. epoll_pwait2 is only available after kernel 5.11 */
-    int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, std::max(1LL, next_timeout_ns / 1000000LL));
-    if (nfds < 0 && errno != EINTR) {
-      MV_PANIC("nfds=%d", nfds);
-      break;
-    }
-    
-    for (int i = 0; i < nfds; i++) {
-      auto event_it = epoll_events_.find(events[i].data.fd);
-      if (event_it == epoll_events_.end()) {
-        /* Maybe the fd is deleted just now */
-        continue;
+      /* Check paused state before sleep */
+      while(machine_->IsPaused() && CanPauseNow()) {
+        machine_->WaitToResume();
       }
-      auto event = event_it->second;
-      auto start_time = std::chrono::steady_clock::now();
-      if (event->device) {
-        std::lock_guard<std::recursive_mutex> device_lock(event->device->mutex_);
-        event->callback(events[i].events);
-      } else {
-        event->callback(events[i].events);
+      if (!machine_->IsValid()) {
+        break;
       }
 
-      if (machine_->debug()) {
-        auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::steady_clock::now() - start_time).count();
-        if (cost_us >= 50000) {
-          MV_LOG("%s SLOW fd=%d events=%d cost=%.3lfms", event->callback.target_type().name(),
-            event->fd, events[i].events, double(cost_us) / 1000.0);
+      /* epoll_wait limits to 1ms at least. epoll_pwait2 is only available after kernel 5.11 */
+      int nfds = epoll_wait(epoll_fd_, events, MAX_ENTRIES, std::max(1LL, next_timeout_ns / 1000000LL));
+      if (nfds < 0 && errno != EINTR) {
+        MV_PANIC("nfds=%d", nfds);
+        break;
+      }
+      
+      for (int i = 0; i < nfds; i++) {
+        auto event_it = epoll_events_.find(events[i].data.fd);
+        if (event_it == epoll_events_.end()) {
+          /* Maybe the fd is deleted just now */
+          continue;
+        }
+        auto event = event_it->second;
+        auto start_time = std::chrono::steady_clock::now();
+        if (event->device) {
+          std::lock_guard<std::recursive_mutex> device_lock(event->device->mutex_);
+          event->callback(events[i].events);
+        } else {
+          event->callback(events[i].events);
+        }
+
+        if (machine_->debug()) {
+          auto cost_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - start_time).count();
+          if (cost_us >= 50000) {
+            MV_LOG("%s SLOW fd=%d events=%d cost=%.3lfms", event->callback.target_type().name(),
+              event->fd, events[i].events, double(cost_us) / 1000.0);
+          }
         }
       }
+    } catch (const std::exception& e) {
+      MV_LOG("iothread exception: %s", e.what());
+      break;
     }
   }
 
+  running_ = false;
   if (machine_->debug()) MV_LOG("mvisor-iothread ended");
 }
 
@@ -231,27 +238,27 @@ int64_t IoThread::CheckTimers() {
   int64_t min_timeout_ns = 100 * NS_PER_SECOND;
 
   std::vector<IoTimer*> triggered;
-
-  mutex_.lock();
-  for (auto it = timers_.begin(); it != timers_.end();) {
-    auto timer = *it;
-    if (timer->removed) {
-      it = timers_.erase(it);
-      delete timer;
-    } else {
-      auto delta_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(timer->next_timepoint - now).count();
-      if (delta_ns <= 0) {
-        triggered.push_back(timer);
-        timer->next_timepoint = now + std::chrono::nanoseconds(timer->interval_ns);
-        delta_ns = timer->interval_ns;
+  {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    for (auto it = timers_.begin(); it != timers_.end();) {
+      auto timer = *it;
+      if (timer->removed) {
+        it = timers_.erase(it);
+        delete timer;
+      } else {
+        auto delta_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(timer->next_timepoint - now).count();
+        if (delta_ns <= 0) {
+          triggered.push_back(timer);
+          timer->next_timepoint = now + std::chrono::nanoseconds(timer->interval_ns);
+          delta_ns = timer->interval_ns;
+        }
+        if (delta_ns < min_timeout_ns) {
+          min_timeout_ns = delta_ns;
+        }
+        ++it;
       }
-      if (delta_ns < min_timeout_ns) {
-        min_timeout_ns = delta_ns;
-      }
-      ++it;
     }
   }
-  mutex_.unlock();
   
   for (auto timer : triggered) {
     std::lock_guard<std::recursive_mutex> device_lock(timer->device->mutex_);

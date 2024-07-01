@@ -532,6 +532,7 @@ void Vcpu::Process() {
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 
+  running_ = true;
   while (true) {
     while (machine_->IsPaused()) {
       machine_->WaitToResume();
@@ -547,45 +548,51 @@ void Vcpu::Process() {
       MV_LOG("KVM_RUN failed vcpu=%d ret=%d errno=%d", vcpu_id_, ret, errno);
     }
 
-    switch (kvm_run_->exit_reason)
-    {
-    case KVM_EXIT_MMIO:
-      ProcessMmio();
-      break;
-    case KVM_EXIT_IO:
-      ProcessIo();
-      break;
-    case KVM_EXIT_HYPERV:
-      ProcessHyperV();
-      break;
-    case KVM_EXIT_INTR:
-      /* User interrupt */
-      break;
-    case KVM_EXIT_UNKNOWN:
-      MV_PANIC("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
-      break;
-    case KVM_EXIT_SHUTDOWN:
-      /* A hard reset request reached here */
-      MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
-      machine_->Reset();
-      break;
-    case KVM_EXIT_HLT:
-      MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);
-      goto quit;
-    case KVM_EXIT_DEBUG:
-      PrintRegisters();
-      getchar();
-      break;
-    default:
-      MV_PANIC("vcpu %d exit reason %d, expected KVM_EXIT_HLT(%d)", vcpu_id_,
-        kvm_run_->exit_reason, KVM_EXIT_HLT);
-    }
+    try {
+      switch (kvm_run_->exit_reason)
+      {
+      case KVM_EXIT_MMIO:
+        ProcessMmio();
+        break;
+      case KVM_EXIT_IO:
+        ProcessIo();
+        break;
+      case KVM_EXIT_HYPERV:
+        ProcessHyperV();
+        break;
+      case KVM_EXIT_INTR:
+        /* User interrupt */
+        break;
+      case KVM_EXIT_UNKNOWN:
+        MV_PANIC("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
+        break;
+      case KVM_EXIT_SHUTDOWN:
+        /* A hard reset request reached here */
+        MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
+        machine_->Reset();
+        break;
+      case KVM_EXIT_HLT:
+        MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);
+        goto quit;
+      case KVM_EXIT_DEBUG:
+        PrintRegisters();
+        getchar();
+        break;
+      default:
+        MV_PANIC("vcpu %d exit reason %d, expected KVM_EXIT_HLT(%d)", vcpu_id_,
+          kvm_run_->exit_reason, KVM_EXIT_HLT);
+      }
 
-    /* Execute tasks after processing IO/MMIO */
-    ExecuteTasks();
+      /* Execute tasks after processing IO/MMIO */
+      ExecuteTasks();
+    } catch (const std::exception& e) {
+      MV_LOG("vcpu %d exception: %s", vcpu_id_, e.what());
+      break;
+    }
   }
 
 quit:
+  running_ = false;
   if (machine_->debug_) MV_LOG("%s ended", name_);
 }
 
@@ -604,13 +611,18 @@ void Vcpu::Schedule(VoidCallback callback) {
 }
 
 void Vcpu::ExecuteTasks() {
-  while (!tasks_.empty()) {
-    VcpuTask task = tasks_.front();
-    task.callback();
-  
-    mutex_.lock();
-    tasks_.pop_front();
-    mutex_.unlock();
+  while (true) {
+    std::deque<VcpuTask> tasks_copy;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (tasks_.empty()) {
+        break;
+      }
+      tasks_copy.swap(tasks_);
+    }
+    for (auto& task : tasks_copy) {
+      task.callback();
+    }
   }
 }
 
