@@ -138,21 +138,17 @@ class AppleSmc : public Device {
     command_ = 0;
     pos_ = 0;
 
-    std::string osk = std::string("This is a dummy key!", 64);
+    char osk[100] = "This is a dummy key!";
     if (has_key("osk")) {
-      osk = std::get<std::string>(key_values_["osk"]);
+      strncpy(osk, std::get<std::string>(key_values_["osk"]).c_str(), 64);
     }
 
     smc_data_["NATJ"] = std::string("\0", 1);
     smc_data_["MSSP"] = std::string("\0", 1);
     smc_data_["MSSD"] = std::string("\0x3", 1);
     smc_data_["REV "] = std::string("\x01\x13\x0f\x00\x00\x03", 6);
-    smc_data_["OSK0"] = osk.substr(0, 32);
-    if (osk.size() > 32) {
-      smc_data_["OSK1"] = osk.substr(32, 32);
-    } else {
-      smc_data_["OSK1"] = std::string("\0", 1);
-    }
+    smc_data_["OSK0"] = std::string(osk, 32);
+    smc_data_["OSK1"] = std::string(osk + 32, 32);
   }
 
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) override {
