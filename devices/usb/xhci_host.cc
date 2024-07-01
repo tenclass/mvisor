@@ -1324,6 +1324,7 @@ void XhciHost::CompleteTransfer(XhciTransfer* transfer) {
   }
 
   if (transfer->status != CC_SUCCESS) {
+    MV_WARN("transfer failed status=%d", transfer->status);
     StallEndpoint(transfer);
   } else {
     // Update ring dequeue to context
