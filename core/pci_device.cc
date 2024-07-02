@@ -319,6 +319,10 @@ void PciDevice::UpdatePciBarAddress(uint index, uint32_t address) {
 void PciDevice::UpdateRomBarAddress(uint32_t address) {
   pci_header_.rom_bar = address;
 
+  if (!(pci_header_.command & PCI_COMMAND_MEMORY)) {
+    return;
+  }
+
   auto mm = manager_->machine()->memory_manager();
   if (pci_rom_.mapped_region) {
     if (pci_rom_.mapped_region->gpa == address) {
@@ -358,6 +362,17 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
         ActivatePciBar(i);
       else
         DeactivatePciBar(i);
+    }
+  }
+
+  /* Handle ROM BAR */
+  if (new_command & PCI_COMMAND_MEMORY) {
+    if (pci_header_.rom_bar) {
+      UpdateRomBarAddress(pci_header_.rom_bar);
+    }
+  } else {
+    if (pci_rom_.mapped_region) {
+      manager_->machine()->memory_manager()->Unmap(&pci_rom_.mapped_region);
     }
   }
 

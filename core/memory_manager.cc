@@ -153,7 +153,7 @@ void MemoryManager::LoadBiosFile() {
   bios_data_ = valloc(bios_size_);
   memcpy(bios_data_, bios_backup_, bios_size_);
   // Map BIOS file to memory
-  Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
+  bios_region_ = Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
   // Map the BIOS to the end of 1MB, no more than 256KB (SeaBIOS is 256KB)
   size_t isa_bios_size = std::min(bios_size_, (size_t)256 * 1024);
   Map(0x100000 - isa_bios_size, isa_bios_size, (uint8_t*)bios_data_ + bios_size_ - isa_bios_size, kMemoryTypeRam, "SeaBIOS");
@@ -164,6 +164,10 @@ void MemoryManager::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
   /* Reset 64KB low memory, or Windows 11 complains about some data at 0x6D80 when reboots */
   bzero(ram_host_, 0x10000);
+
+  // Remap the BIOS
+  Unmap(&bios_region_);
+  bios_region_ = Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
 }
 
 /* The number of KVM slots is limited, try not to use out */

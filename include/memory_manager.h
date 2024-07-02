@@ -43,6 +43,7 @@ struct MemoryRegion {
   uint32_t      flags;
   MemoryType    type;
   char          name[20];
+  std::string   dirty_bitmap;
 };
 
 struct MemorySlot {
@@ -136,6 +137,7 @@ class MemoryManager {
   size_t                          bios_size_;
   void*                           bios_data_ = nullptr;
   void*                           bios_backup_ = nullptr;
+  const MemoryRegion*             bios_region_ = nullptr;
 
   bool                                 track_dirty_memory_ = false;
   std::mutex                           dirty_memory_region_mutex_;
