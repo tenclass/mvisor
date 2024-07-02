@@ -1,5 +1,19 @@
 /* Common legacy ISA style devices. */
 Scope(\_SB.PCI0.ISA) {
+    Device (FWCF)
+    {
+        Name (_HID, "QEMU0002")  // _HID: Hardware ID
+        Name (_STA, 0x0B)  // _STA: Status
+        Name (_CRS, ResourceTemplate ()  // _CRS: Current Resource Settings
+        {
+            IO (Decode16,
+                0x0510,             // Range Minimum
+                0x0510,             // Range Maximum
+                0x01,               // Alignment
+                0x0C,               // Length
+                )
+        })
+    }
 
     Device(RTC) {
         Name(_HID, EisaId("PNP0B00"))

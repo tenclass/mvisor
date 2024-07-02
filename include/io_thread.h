@@ -76,6 +76,7 @@ class IoThread {
   void Stop();
   void Kick();
   bool IsCurrentThread();
+  bool running() { return running_; }
 
   /* Async event polling */
   EpollEvent* StartPolling(Device* device, int fd, uint poll_mask, IoCallback callback);
@@ -108,6 +109,7 @@ class IoThread {
   std::recursive_mutex  mutex_;
   int                   event_fd_;
   int                   epoll_fd_;
+  bool                  running_ = false;
   std::list<IoTimer*>   timers_;
   std::list<DiskImage*>  disk_images_;
   std::unordered_map<Qcow2Image*, std::queue<std::string>> qcow2_image_backing_files_;

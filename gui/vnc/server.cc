@@ -118,13 +118,13 @@ void VncServer::OnEvent() {
   uint64_t tmp;
   read(event_fd_, &tmp, sizeof(tmp));
   
-  std::unique_lock<std::mutex> lock(mutex_);
-  while (!tasks_.empty()) {
-    auto& task = tasks_.front();
-    lock.unlock();
+  std::list<VoidCallback> tasks_copy;
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    tasks_copy.swap(tasks_);
+  }
+  for (auto& task : tasks_copy) {
     task();
-    lock.lock();
-    tasks_.pop_front();
   }
 }
 

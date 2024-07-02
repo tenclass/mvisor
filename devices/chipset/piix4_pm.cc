@@ -164,10 +164,10 @@ class Piix4Pm : public Pmio {
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
     if (resource->base == 0xB2) { // APM IO
       if (offset == 0) {
-        apm_.control = data[0] & 1;
-        if (apm_.control == 1) { // Enable ACPI
+        apm_.control = data[0];
+        if (apm_.control == 2) { // Enable ACPI
           pm1_.control |= PMIO_PM1_CTRL_SMI_EN;
-        } else if (apm_.control == 0) { // Disable ACPI
+        } else if (apm_.control == 3) { // Disable ACPI
           pm1_.control &= ~PMIO_PM1_CTRL_SMI_EN;
         } else {
           MV_PANIC("unknown apm control=0x%x", *data);

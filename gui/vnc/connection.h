@@ -59,7 +59,7 @@ class VncConnection {
   uint8_t             modifiers_ = 0;
 
   std::thread               update_thread_;
-  std::recursive_mutex      update_mutex_;
+  std::mutex                update_mutex_;
   std::condition_variable   update_cv_;
   z_stream                  zstream_ = {};
 

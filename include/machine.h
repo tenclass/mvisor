@@ -43,7 +43,7 @@
  * such as startup, quit, pause, resume */
 class Machine {
  public:
-  Machine(std::string config_path);
+  Machine(std::string config_path, std::string vm_name, std::string vm_uuid);
   ~Machine();
 
   void Quit();
@@ -74,6 +74,8 @@ class Machine {
   inline VfioManager* vfio_manager() { return vfio_manager_; }
   inline const Configuration* configuration() { return config_; }
   inline int num_vcpus() { return num_vcpus_; }
+  inline int num_cores() { return num_cores_; }
+  inline int num_threads() { return num_threads_; }
   inline uint64_t ram_size() { return ram_size_; }
   inline bool debug() { return debug_; }
   inline bool hypervisor() { return hypervisor_; }
@@ -81,8 +83,6 @@ class Machine {
   inline const std::string& vm_name() const { return vm_name_; }
   inline const std::string& vm_uuid() const { return vm_uuid_; }
   inline void set_guest_os(std::string os) { guest_os_ = os; }
-  inline void set_vm_name(std::string name) { vm_name_ = name; }
-  inline void set_vm_uuid(std::string uuid) { vm_uuid_ = uuid; }
 
   inline Vcpu* first_vcpu() { return vcpus_.size() ? vcpus_[0] : nullptr; }
   inline std::vector<Vcpu*> vcpus() { return vcpus_; }
@@ -112,7 +112,11 @@ class Machine {
   
   uint64_t ram_size_ = 0;
   int num_vcpus_ = 0;
+  int num_cores_ = 0;
+  int num_threads_ = 0;
   int vcpu_priority_ = 1;
+  std::string vcpu_vendor_;
+  std::string vcpu_model_;
   std::vector<Vcpu*> vcpus_;
   MemoryManager* memory_manager_;
   DeviceManager* device_manager_;

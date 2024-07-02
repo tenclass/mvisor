@@ -121,7 +121,7 @@ class DeviceManager {
 
  private:
   void SetupIrqChip();
-  void SetupGsiRoutingTable();
+  void ResetGsiRoutingTable();
   void UpdateGsiRoutingTable();
 
  private:

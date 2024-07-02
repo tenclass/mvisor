@@ -240,7 +240,7 @@ int UsbDevice::OnControl(uint request, uint value, uint index, uint8_t* data, in
     return GetMicrosoftOsDescriptor(index, data, length);
   }
 
-  MV_ERROR("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
+  MV_WARN("not implemented request=0x%x value=0x%x index=0x%x", request, value, index);
   return USB_RET_STALL;
 }
 
@@ -251,21 +251,16 @@ void UsbDevice::SetupDescriptor(const UsbDeviceDescriptor* device_desc,
 }
 
 int UsbDevice::CopyStringsDescriptor(uint index, uint8_t* data, int length) {
-  if (length < 4) {
-    return USB_RET_IOERROR;
-  }
-  
   if (index == 0) {
-    data[0] = 4;
-    data[1] = USB_DT_STRING;
-    data[2] = 9;
-    data[3] = 4;
-    return 4;
+    uint8_t temp[] = { 4, USB_DT_STRING, 0x09, 0x04 };
+    length = std::min((int)sizeof(temp), length);
+    memcpy(data, &temp, length);
+    return length;
   }
 
   const char* str = (*strings_descriptor_)[index];
   if (str == nullptr) {
-    MV_LOG("invalid string index=0x%x length=%d", index, length);
+    MV_WARN("invalid string index=0x%x length=%d", index, length);
     return USB_RET_STALL;
   }
   int bLength = strlen(str) * 2 + 2;
@@ -283,6 +278,7 @@ int UsbDevice::CopyDeviceQualifier(uint8_t* data, int length) {
   uint8_t bLength = 0x0A;
 
   if (length < bLength) {
+    MV_PANIC("invalid length=%d", length);
     return USB_RET_IOERROR;
   }
 
@@ -302,6 +298,7 @@ int UsbDevice::CopyDeviceQualifier(uint8_t* data, int length) {
 
 int UsbDevice::CopyConfigurationDescriptor(uint index, uint8_t* data, int length) {
   if (index >= device_descriptor_->bNumConfigurations) {
+    MV_PANIC("invalid index=%d", index);
     return USB_RET_IOERROR;
   }
 

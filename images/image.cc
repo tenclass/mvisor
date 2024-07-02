@@ -96,19 +96,18 @@ void DiskImage::WorkerProcess() {
 
 
 void DiskImage::QueueIoRequest(ImageIoRequest request, IoCallback callback) {
-  worker_mutex_.lock();
+  std::lock_guard<std::mutex> lock(worker_mutex_);
   worker_queue_.emplace_back([this, request = std::move(request), callback = std::move(callback)]() {
     auto ret = HandleIoRequest(std::move(request));
     std::lock_guard<std::recursive_mutex> device_lock(host_device_->mutex());
     callback(ret);
   });
 
-  worker_mutex_.unlock();
   worker_cv_.notify_all();
 }
 
 void DiskImage::QueueMultipleIoRequests(std::vector<ImageIoRequest> requests, IoCallback callback) {
-  worker_mutex_.lock();
+  std::lock_guard<std::mutex> lock(worker_mutex_);
   worker_queue_.emplace_back([this, requests = std::move(requests), callback = std::move(callback)]() {
     long ret, total = 0;
     for (auto &req: requests) {
@@ -124,7 +123,6 @@ void DiskImage::QueueMultipleIoRequests(std::vector<ImageIoRequest> requests, Io
     callback(total);
   });
 
-  worker_mutex_.unlock();
   worker_cv_.notify_all();
 }
 

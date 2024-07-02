@@ -127,11 +127,14 @@ class VirtioPci : public PciDevice {
  private:
   void ReadIndirectDescriptorTable(VirtElement& element, VRingDescriptor* table);
   void AddDescriptorToElement(VirtElement& element,  VRingDescriptor* descriptor);
+  void ReadLegacyCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
+  void WriteLegacyCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void ReadCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size);
   void WriteNotification(uint64_t offset, uint8_t* data, uint32_t size);
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
+  void HandleQueueCallback(uint16_t queue_index);
 
  protected: 
   void PrintQueue(VirtQueue& vq);

@@ -8,6 +8,11 @@ machine:
 objects:
 # Use the old name pci-host instead of i440fx-host for compatibility
   - class: i440fx-host
+  - class: kvm-irqchip
+  - class: kvm-clock
+  - class: firmware-config
+  - class: debug-console
+  - class: dummy-device
 
 # PCI devices connected to PCI Host.
 # The PIIX3 must be put first because it must use PCI slot 1
@@ -19,11 +24,6 @@ objects:
 
 # I/O devices connected to PIIX3
   - class: cmos
-  - class: debug-console
-  - class: dummy-device
-  - class: firmware-config
-  - class: kvm-clock
   - class: ps2
   - class: i8257-dma
   - class: i82078-fdc
-

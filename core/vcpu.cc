@@ -91,6 +91,13 @@ void Vcpu::Reset() {
   (((family & 0xF) << 8) | (((model >> 4) & 0xF) << 16) | ((model & 0xF) << 4) | (stepping & 0xF))
 
 void Vcpu::SetupCpuid() {
+  cpuid_version_ = CPU_VERSION(15, 1, 0);
+  if (!machine_->vcpu_model_.empty()) {
+    cpuid_model_ = machine_->vcpu_model_;
+  } else {
+    cpuid_model_ = "Intel Compatible Processor";
+  }
+
   auto cpuid = (kvm_cpuid2*)new uint8_t[sizeof(kvm_cpuid2) + MAX_KVM_CPUID_ENTRIES * sizeof(kvm_cpuid_entry2)]();
   cpuid->nent = MAX_KVM_CPUID_ENTRIES;
 
@@ -103,10 +110,19 @@ void Vcpu::SetupCpuid() {
     switch (entry->function)
     {
     case 0x0: // CPUID Signature
-      entry->eax = 0xD; // Max input value for basic information
+    case 0x80000000: // Extended CPUID Information
+    {
+      if (!machine_->vcpu_vendor_.empty()) {
+        char vendor[13];
+        strncpy(vendor, machine_->vcpu_vendor_.c_str(), 12);
+        memcpy(&entry->ebx, &vendor[0], 4);
+        memcpy(&entry->edx, &vendor[4], 4);
+        memcpy(&entry->ecx, &vendor[8], 4);
+      }
       break;
+    }
     case 0x1: { // ACPI ID & Features
-      entry->eax = CPU_VERSION(15, 1, 0);
+      entry->eax = cpuid_version_;
       entry->ebx = (vcpu_id_ << 24) | (machine_->num_vcpus_ << 16) | (entry->ebx & 0xFFFF);
 
       bool tsc_deadline = ioctl(machine_->kvm_fd_, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
@@ -120,13 +136,6 @@ void Vcpu::SetupCpuid() {
       break;
     }
     case 0x2: // Cache and TLB Information
-      break;
-    case 0x4: // Deterministic Cache Parameters Leaf
-      entry->eax &= ~0xFC000000;
-      if ((entry->eax & 0x1F) && machine_->num_vcpus_ >= 4) {
-        int cores = machine_->num_vcpus_ / 2;
-        entry->eax |= (cores - 1) << 26;
-      }
       break;
     case 0x7: // Extended CPU features 7
       if (entry->index == 0) {
@@ -152,13 +161,12 @@ void Vcpu::SetupCpuid() {
         entry->eax &= 0x2E7; // MPX is disabled in CPU features 7
       }
       break;
-    case 0x80000000: // Extended CPUID Information
-      break;
     case 0x80000001:
       entry->ecx &= ~(1U << 22); // Disable Topology Extensions
       break;
     case 0x80000002 ... 0x80000004: { // CPU Model String
-      static const char cpu_model[48] = "AMD Compatible Processor";
+      char cpu_model[51] = {};
+      strncpy(cpu_model, cpuid_model_.c_str(), 50);
       uint32_t offset = (entry->function - 0x80000002) * 16;
       memcpy(&entry->eax, cpu_model + offset, 16);
       break;
@@ -187,6 +195,25 @@ void Vcpu::SetupCpuid() {
       --i;
       --cpuid->nent;
       continue;
+    }
+  }
+
+  /* Add Cache Parameters Leaf to Intel CPU */
+  kvm_cpuid_entry2 cache_entries[5] = {
+    { 0x4, 0, 1, 0x121, 0x1C0003F, 0x003F, 1 },
+    { 0x4, 1, 1, 0x122, 0x1C0003F, 0x003F, 1 },
+    { 0x4, 2, 1, 0x143, 0x3C0003F, 0x0FFF, 1 },
+    { 0x4, 3, 1, 0x163, 0x3C0003F, 0x3FFF, 6 },
+    { 0x4, 4, 1, 0, 0, 0, 0 }
+  };
+  for (int index = 0; index < 5; index++) {
+    auto entry = &cpuid->entries[cpuid->nent++];
+    *entry = cache_entries[index];
+    entry->eax |= (machine_->num_cores_ - 1) << 26;
+    if (index == 2) {
+      entry->eax |= (machine_->num_threads_ - 1) << 14;
+    } else if (index == 3) {
+      entry->eax |= (machine_->num_vcpus_ - 1) << 14;
     }
   }
 
@@ -221,8 +248,7 @@ void Vcpu::SetupHyperV(kvm_cpuid2* cpuid) {
     {
     case 0x40000000: // HV_CPUID_VENDOR_AND_MAX_FUNCTIONS
       entry->eax = HV_CPUID_IMPLEMENT_LIMITS;
-      // entry->ebx defaults to "Linux KVM Hv"
-      // memcpy(&entry->ebx, "Microsoft Hv", 12);
+      memcpy(&entry->ebx, "Microsoft Hv", 12);
       break;
     case 0x40000001: // HV_CPUID_INTERFACE
       memcpy(&entry->eax, "Hv#1\0\0\0\0\0\0\0\0\0\0\0\0", 16);
@@ -346,6 +372,20 @@ void Vcpu::SetupMsrIndices() {
     for (uint i = 0; i < HV_STIMER_COUNT; i++) {
       msr_indices_.insert(HV_X64_MSR_STIMER0_CONFIG + i * 2);
       msr_indices_.insert(HV_X64_MSR_STIMER0_COUNT + i * 2);
+    }
+  }
+
+  if (cpuid_features_ & (1ULL << (12 + 32))) {
+    uint32_t mtrr_indices[] = {
+      0x2FF, // MSR_IA32_MTRR_DEF_TYPE
+      0x250, // MSR_IA32_MTRR_FIX64K_00000
+      0x258, 0x259, // MSR_IA32_MTRR_FIX16K_80000, MSR_IA32_MTRR_FIX16K_A0000
+      0x268, 0x269, 0x26A, 0x26B, 0x26C, 0x26D, 0x26E, 0x26F, // MSR_IA32_MTRR_FIX4K_C0000 .. MSR_IA32_MTRR_FIX4K_F8000
+      0x200, 0x201, 0x202, 0x203, 0x204, 0x205, 0x206, 0x207,
+      0x208, 0x209, 0x20A, 0x20B, 0x20C, 0x20D, 0x20E, 0x20F, // MSR_IA32_MTRR_PHYSBASE0 .. MSR_IA32_MTRR_PHYSMASK0
+    };
+    for (auto index : mtrr_indices) {
+      msr_indices_.insert(index);
     }
   }
 }
@@ -506,6 +546,7 @@ void Vcpu::Process() {
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 
+  running_ = true;
   while (true) {
     while (machine_->IsPaused()) {
       machine_->WaitToResume();
@@ -521,45 +562,51 @@ void Vcpu::Process() {
       MV_LOG("KVM_RUN failed vcpu=%d ret=%d errno=%d", vcpu_id_, ret, errno);
     }
 
-    switch (kvm_run_->exit_reason)
-    {
-    case KVM_EXIT_MMIO:
-      ProcessMmio();
-      break;
-    case KVM_EXIT_IO:
-      ProcessIo();
-      break;
-    case KVM_EXIT_HYPERV:
-      ProcessHyperV();
-      break;
-    case KVM_EXIT_INTR:
-      /* User interrupt */
-      break;
-    case KVM_EXIT_UNKNOWN:
-      MV_PANIC("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
-      break;
-    case KVM_EXIT_SHUTDOWN:
-      /* A hard reset request reached here */
-      MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
-      machine_->Reset();
-      break;
-    case KVM_EXIT_HLT:
-      MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);
-      goto quit;
-    case KVM_EXIT_DEBUG:
-      PrintRegisters();
-      getchar();
-      break;
-    default:
-      MV_PANIC("vcpu %d exit reason %d, expected KVM_EXIT_HLT(%d)", vcpu_id_,
-        kvm_run_->exit_reason, KVM_EXIT_HLT);
-    }
+    try {
+      switch (kvm_run_->exit_reason)
+      {
+      case KVM_EXIT_MMIO:
+        ProcessMmio();
+        break;
+      case KVM_EXIT_IO:
+        ProcessIo();
+        break;
+      case KVM_EXIT_HYPERV:
+        ProcessHyperV();
+        break;
+      case KVM_EXIT_INTR:
+        /* User interrupt */
+        break;
+      case KVM_EXIT_UNKNOWN:
+        MV_PANIC("KVM_EXIT_UNKNOWN vcpu=%d", vcpu_id_);
+        break;
+      case KVM_EXIT_SHUTDOWN:
+        /* A hard reset request reached here */
+        MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
+        goto quit;
+        break;
+      case KVM_EXIT_HLT:
+        MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);
+        goto quit;
+      case KVM_EXIT_DEBUG:
+        PrintRegisters();
+        getchar();
+        break;
+      default:
+        MV_PANIC("vcpu %d exit reason %d, expected KVM_EXIT_HLT(%d)", vcpu_id_,
+          kvm_run_->exit_reason, KVM_EXIT_HLT);
+      }
 
-    /* Execute tasks after processing IO/MMIO */
-    ExecuteTasks();
+      /* Execute tasks after processing IO/MMIO */
+      ExecuteTasks();
+    } catch (const std::exception& e) {
+      MV_LOG("vcpu %d exception: %s", vcpu_id_, e.what());
+      break;
+    }
   }
 
 quit:
+  running_ = false;
   if (machine_->debug_) MV_LOG("%s ended", name_);
 }
 
@@ -578,13 +625,18 @@ void Vcpu::Schedule(VoidCallback callback) {
 }
 
 void Vcpu::ExecuteTasks() {
-  while (!tasks_.empty()) {
-    VcpuTask task = tasks_.front();
-    task.callback();
-  
-    mutex_.lock();
-    tasks_.pop_front();
-    mutex_.unlock();
+  while (true) {
+    std::deque<VcpuTask> tasks_copy;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (tasks_.empty()) {
+        break;
+      }
+      tasks_copy.swap(tasks_);
+    }
+    for (auto& task : tasks_copy) {
+      task.callback();
+    }
   }
 }
 

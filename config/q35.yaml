@@ -8,6 +8,11 @@ machine:
 objects:
 # Use the old name pci-host instead of q35-host for compatibility
   - class: q35-host
+  - class: kvm-irqchip
+  - class: kvm-clock
+  - class: firmware-config
+  - class: debug-console
+  - class: dummy-device
 
 # PCI devices connected to PCI Host
   - class: ich9-hda
@@ -16,10 +21,6 @@ objects:
 
 # I/O devices connected to ICH9 LPC
   - class: cmos
-  - class: debug-console
-  - class: dummy-device
-  - class: firmware-config
-  - class: kvm-clock
   - class: ps2
 
 # codec device connected to ICH9 HDA

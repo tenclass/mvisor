@@ -78,6 +78,9 @@ class Vcpu {
   static Vcpu* current_vcpu() { return current_vcpu_; }
   const char* name() { return name_; }
   uint64_t cpuid_features() { return cpuid_features_; }
+  uint32_t cpuid_version() { return cpuid_version_; }
+  const std::string& cpuid_model() { return cpuid_model_; }
+  bool running() { return running_; }
 
  private:
   static void SignalHandler(int signum);
@@ -105,6 +108,7 @@ class Vcpu {
   int                       vcpu_id_ = -1;
   int                       fd_ = -1;
   char                      name_[16];
+  bool                      running_ = false;
   kvm_run*                  kvm_run_ = nullptr;
   kvm_coalesced_mmio_ring*  mmio_ring_ = nullptr;
   std::thread               thread_;
@@ -115,6 +119,8 @@ class Vcpu {
   std::set<uint32_t>        msr_indices_;
   uint32_t                  hyperv_features_ = 0;
   uint64_t                  cpuid_features_ = 0;
+  uint32_t                  cpuid_version_ = 0;
+  std::string               cpuid_model_;
   HyperVSynic               hyperv_synic_;
 };
 

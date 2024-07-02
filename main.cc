@@ -183,9 +183,7 @@ int main(int argc, char* argv[]) {
     fclose(fp);
   }
 
-  machine = new Machine(config_path);
-  machine->set_vm_uuid(vm_uuid);
-  machine->set_vm_name(vm_name.empty() ? vm_uuid : vm_name);
+  machine = new Machine(config_path, vm_name.empty() ? vm_uuid : vm_name, vm_uuid);
 
   /* Register CTRL+C signal handler */
   auto quit_callback = [](int signum) {

@@ -48,6 +48,13 @@ PciDevice::~PciDevice() {
   }
 }
 
+void PciDevice::Connect() {
+  Device::Connect();
+
+  // Save default command and status
+  default_pci_header_ = pci_header_;
+}
+
 void PciDevice::Disconnect() {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (pci_bars_[i].active) {
@@ -55,6 +62,12 @@ void PciDevice::Disconnect() {
     }
   }
   Device::Disconnect();
+}
+
+void PciDevice::Reset() {
+  Device::Reset();
+
+  // TODO: Restore default command ???
 }
 
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */
@@ -193,23 +206,22 @@ void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_LOG("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    bzero(data, length);
+    if (debug_) {
+      MV_WARN("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    }
     return;
   }
   memcpy(data, pci_header_.data + offset, length);
-  // if (debug_) {
-  //   MV_LOG("%s read pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
-  // }
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_LOG("%s failed write config space at 0x%lx length=%d", name_, offset, length);
+    if (debug_) {
+      MV_WARN("%s failed write config space at 0x%lx length=%d data=0x%x", name_, offset, length, *(uint32_t*)data);
+    }
     return;
   }
-  // if (debug_) {
-  //   MV_LOG("%s write pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
-  // }
 
   if (offset == PCI_COMMAND) {
     if (length == 4) {

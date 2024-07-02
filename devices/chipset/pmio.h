@@ -27,6 +27,9 @@
 
 
 class Pmio : public PciDevice, public PowerDownInterface {
+ public:
+  uint32_t pmio_base() const { return pmio_base_; }
+
  protected:
   struct {
     uint16_t status;

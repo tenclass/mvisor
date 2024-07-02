@@ -7,7 +7,8 @@ mvisor_sources += files(
   'i82078_fdc.cc',
   'ps2.cc',
   'uart.cc',
-  'pvpanic.cc'
+  'pvpanic.cc',
+  'apple_smc.cc',
 )
 
 proto_sources += proto_gen.process(

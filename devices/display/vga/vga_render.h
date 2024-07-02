@@ -78,6 +78,7 @@ class VgaRender {
   bool        mode_changed_;
 
   std::string vga_surface_;
+  size_t      vga_display_buffer_size_ = 0;
   std::string vga_display_buffer_;
 
   bool IsVbeEnabled();
@@ -111,12 +112,12 @@ class VgaRender {
 #define VGA_PIO_BASE    0x3C0
 #define VGA_PIO_SIZE    0x20
 #define VBE_PIO_BASE    0x1CE
-#define VBE_PIO_SIZE    2
+#define VBE_PIO_SIZE    3
 #define VBE_LINEAR_FRAMEBUFFER_BASE 0xE0000000
 
 // When LFB mode disabled, the tradition VGA video memory address is used
-#define VGA_MMIO_BASE   0x000A0000
-#define VGA_MMIO_SIZE   0x00020000
+#define VGA_MEMORY_BASE   0x000A0000
+#define VGA_MEMORY_SIZE   0x00020000
 
 #define VGA_REFRESH_FREQUENCY 30
 

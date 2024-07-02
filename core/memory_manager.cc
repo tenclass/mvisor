@@ -153,8 +153,10 @@ void MemoryManager::LoadBiosFile() {
   bios_data_ = valloc(bios_size_);
   memcpy(bios_data_, bios_backup_, bios_size_);
   // Map BIOS file to memory
-  Map(0x100000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
   Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
+  // Map the BIOS to the end of 1MB, no more than 256KB (SeaBIOS is 256KB)
+  size_t isa_bios_size = std::min(bios_size_, (size_t)256 * 1024);
+  Map(0x100000 - isa_bios_size, isa_bios_size, (uint8_t*)bios_data_ + bios_size_ - isa_bios_size, kMemoryTypeRam, "SeaBIOS");
 }
 
 void MemoryManager::Reset() {
@@ -182,6 +184,10 @@ void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
     .userspace_addr = slot->hva
   };
 
+  if (machine_->debug_) {
+    MV_LOG("UpdateKvmSlot slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%x",
+      mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
+  }
   if (ioctl(machine_->vm_fd_, KVM_SET_USER_MEMORY_REGION, &mr) < 0) {
     MV_PANIC("failed to set user memory region slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%d",
       mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
