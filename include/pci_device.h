@@ -188,7 +188,9 @@ class PciDevice : public Device {
  public:
   PciDevice();
   virtual ~PciDevice();
-  virtual void Disconnect();
+  virtual void Connect() override;
+  virtual void Disconnect() override;
+  virtual void Reset() override;
 
   inline uint8_t bus() { return bus_; }
   inline uint8_t slot() { return slot_; }
@@ -229,6 +231,7 @@ class PciDevice : public Device {
   uint8_t           slot_;
   uint8_t           function_;
   PciConfigHeader   pci_header_;
+  PciConfigHeader   default_pci_header_;
   PciBarInfo        pci_bars_[PCI_BAR_NUMS];
   PciRomBarInfo     pci_rom_;
   PciMsiConfig      msi_config_;

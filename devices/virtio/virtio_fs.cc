@@ -62,8 +62,6 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
   }
 
   virtual void Disconnect() {
-    Reset();
-
     // free dir handle
     ClearDirectoryPointerSet();
 

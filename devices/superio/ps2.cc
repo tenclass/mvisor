@@ -418,7 +418,9 @@ class Ps2 : public Device, public KeyboardInputInterface {
         if (debug_) {
           MV_LOG("system reset");
         }
-        manager_->machine()->Reset();
+        std::thread([this]() {
+          manager_->machine()->Reset();
+        }).detach();
       }
       break;
     default:
@@ -526,7 +528,9 @@ class Ps2 : public Device, public KeyboardInputInterface {
       if (a20_gate_ & 1) {
         if (debug_) {
           MV_LOG("system reset");
-          manager_->machine()->Reset();
+          std::thread([this]() {
+            manager_->machine()->Reset();
+          }).detach();
         }
       }
     }

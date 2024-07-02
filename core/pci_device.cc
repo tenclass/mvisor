@@ -48,6 +48,13 @@ PciDevice::~PciDevice() {
   }
 }
 
+void PciDevice::Connect() {
+  Device::Connect();
+
+  // Save default command and status
+  default_pci_header_ = pci_header_;
+}
+
 void PciDevice::Disconnect() {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (pci_bars_[i].active) {
@@ -55,6 +62,12 @@ void PciDevice::Disconnect() {
     }
   }
   Device::Disconnect();
+}
+
+void PciDevice::Reset() {
+  Device::Reset();
+
+  // TODO: Restore default command ???
 }
 
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */

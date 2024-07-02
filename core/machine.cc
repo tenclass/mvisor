@@ -34,7 +34,8 @@
 #include "migration.h"
 
 
-Machine::Machine(std::string config_path) {
+Machine::Machine(std::string config_path, std::string vm_name, std::string vm_uuid) :
+  vm_name_(vm_name), vm_uuid_(vm_uuid) {
   /* Load the configuration and set values of num_vcpus & ram_size */
   config_ = new Configuration(this);
   if (!config_->Load(config_path)) {
@@ -153,17 +154,25 @@ void Machine::Quit() {
 
 /* Recover BIOS data and reset all vCPU */
 void Machine::Reset() {
-  if (!valid_)
+  if (!valid_) {
+    MV_WARN("machine is invalid, reset is ignored");
     return;
+  }
+  auto previous_paused = paused_;
+  if (!paused_) {
+    Pause();
+  }
+
   memory_manager_->Reset();
   device_manager_->ResetDevices();
 
   MV_LOG("Resettings vCPUs");
-
   for (auto vcpu : vcpus_) {
-    vcpu->Schedule([vcpu]() {
-      vcpu->Reset();
-    });
+    vcpu->Reset();
+  }
+
+  if (!previous_paused) {
+    Resume();
   }
 }
 

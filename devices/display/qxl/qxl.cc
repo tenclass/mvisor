@@ -156,6 +156,8 @@ void Qxl::Disconnect() {
 }
 
 void Qxl::Reset() {
+  PciDevice::Reset();
+
   IntializeQxlRom();
   IntializeQxlRam();
 

@@ -43,7 +43,7 @@
  * such as startup, quit, pause, resume */
 class Machine {
  public:
-  Machine(std::string config_path);
+  Machine(std::string config_path, std::string vm_name, std::string vm_uuid);
   ~Machine();
 
   void Quit();
@@ -83,8 +83,6 @@ class Machine {
   inline const std::string& vm_name() const { return vm_name_; }
   inline const std::string& vm_uuid() const { return vm_uuid_; }
   inline void set_guest_os(std::string os) { guest_os_ = os; }
-  inline void set_vm_name(std::string name) { vm_name_ = name; }
-  inline void set_vm_uuid(std::string uuid) { vm_uuid_ = uuid; }
 
   inline Vcpu* first_vcpu() { return vcpus_.size() ? vcpus_[0] : nullptr; }
   inline std::vector<Vcpu*> vcpus() { return vcpus_; }

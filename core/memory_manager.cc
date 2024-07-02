@@ -184,6 +184,10 @@ void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
     .userspace_addr = slot->hva
   };
 
+  if (machine_->debug_) {
+    MV_LOG("UpdateKvmSlot slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%x",
+      mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
+  }
   if (ioctl(machine_->vm_fd_, KVM_SET_USER_MEMORY_REGION, &mr) < 0) {
     MV_PANIC("failed to set user memory region slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%d",
       mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
