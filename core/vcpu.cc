@@ -374,6 +374,20 @@ void Vcpu::SetupMsrIndices() {
       msr_indices_.insert(HV_X64_MSR_STIMER0_COUNT + i * 2);
     }
   }
+
+  if (cpuid_features_ & (1ULL << (12 + 32))) {
+    uint32_t mtrr_indices[] = {
+      0x2FF, // MSR_IA32_MTRR_DEF_TYPE
+      0x250, // MSR_IA32_MTRR_FIX64K_00000
+      0x258, 0x259, // MSR_IA32_MTRR_FIX16K_80000, MSR_IA32_MTRR_FIX16K_A0000
+      0x268, 0x269, 0x26A, 0x26B, 0x26C, 0x26D, 0x26E, 0x26F, // MSR_IA32_MTRR_FIX4K_C0000 .. MSR_IA32_MTRR_FIX4K_F8000
+      0x200, 0x201, 0x202, 0x203, 0x204, 0x205, 0x206, 0x207,
+      0x208, 0x209, 0x20A, 0x20B, 0x20C, 0x20D, 0x20E, 0x20F, // MSR_IA32_MTRR_PHYSBASE0 .. MSR_IA32_MTRR_PHYSMASK0
+    };
+    for (auto index : mtrr_indices) {
+      msr_indices_.insert(index);
+    }
+  }
 }
 
 void Vcpu::SetupModelSpecificRegisters() {
