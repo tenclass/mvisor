@@ -569,7 +569,7 @@ void Vcpu::Process() {
       case KVM_EXIT_SHUTDOWN:
         /* A hard reset request reached here */
         MV_LOG("KVM_EXIT_SHUTDOWN vcpu=%d", vcpu_id_);
-        machine_->Reset();
+        goto quit;
         break;
       case KVM_EXIT_HLT:
         MV_LOG("KVM_EXIT_HLT vcpu=%d", vcpu_id_);

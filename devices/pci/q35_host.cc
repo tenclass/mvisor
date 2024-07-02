@@ -26,7 +26,7 @@
 
 class Q35Host : public PciHost {
  private:
-  uint64_t  pcie_xbar_base_ = 0;
+  uint64_t  pcie_mmcfg_base_ = 0;
 
  public:
   Q35Host() {
@@ -49,22 +49,22 @@ class Q35Host : public PciHost {
     uint32_t xbar = *(uint32_t*)(pci_header_.data + MCH_PCIE_XBAR_OFFSET);
     int enabled = xbar & 1;
 
-    if (!!enabled != !!pcie_xbar_base_) {
+    if (!!enabled != !!pcie_mmcfg_base_) {
       uint32_t base = xbar & Q35_MASK(64, 35, 28);
       uint64_t length = (1LL << 20) * 256;
-      if (pcie_xbar_base_) {
-        RemoveIoResource(kIoResourceTypeMmio, pcie_xbar_base_);
-        pcie_xbar_base_ = 0;
+      if (pcie_mmcfg_base_) {
+        RemoveIoResource(kIoResourceTypeMmio, pcie_mmcfg_base_);
+        pcie_mmcfg_base_ = 0;
       }
       if (enabled) {
-        AddIoResource(kIoResourceTypeMmio, base, length, "PCIE XBAR");
-        pcie_xbar_base_ = base;
+        AddIoResource(kIoResourceTypeMmio, base, length, "Q35 MMCFG");
+        pcie_mmcfg_base_ = base;
       }
     }
   }
 
   void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
+    if (pcie_mmcfg_base_ && resource->base == pcie_mmcfg_base_) {
       /*
       * PCI express ECAM (Enhanced Configuration Address Mapping) format.
       * AKA mmcfg address
@@ -89,7 +89,7 @@ class Q35Host : public PciHost {
   }
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
-    if (pcie_xbar_base_ && resource->base == pcie_xbar_base_) {
+    if (pcie_mmcfg_base_ && resource->base == pcie_mmcfg_base_) {
       uint32_t addr = offset;
       uint16_t bus = (addr >> 20) & 0x1FF;
       uint8_t slot = (addr >> 15) & 0x1F;
