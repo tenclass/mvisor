@@ -1,5 +1,6 @@
 
-mvisor_sources += files(
-  'acpi_dsdt.hex.h',
-  'q35_acpi_dsdt.hex.h'
+iasl_sources += iasl_gen.process(
+  'i440fx.asl',
+  'q35.asl',
+  'cpu_container.asl'
 )

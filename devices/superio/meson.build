@@ -17,3 +17,7 @@ proto_sources += proto_gen.process(
   'i82078_fdc.proto',
   'ps2.proto'
 )
+
+iasl_sources += iasl_gen.process(
+  'apple_smc.asl'
+)

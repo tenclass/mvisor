@@ -113,7 +113,6 @@ class VgaRender {
 #define VGA_PIO_SIZE    0x20
 #define VBE_PIO_BASE    0x1CE
 #define VBE_PIO_SIZE    3
-#define VBE_LINEAR_FRAMEBUFFER_BASE 0xE0000000
 
 // When LFB mode disabled, the tradition VGA video memory address is used
 #define VGA_MEMORY_BASE   0x000A0000

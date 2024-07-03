@@ -26,6 +26,7 @@
 #include "machine.h"
 #include "smbios.h"
 #include "firmware_config.pb.h"
+#include "firmware_config.hex"
 #include "acpi_builder.h"
 
 
@@ -46,7 +47,7 @@ struct ConfigEntry {
   VoidCallback  select_callback;
 };
 
-class FirmwareConfig : public Device {
+class FirmwareConfig : public Device, public AcpiTableInterface {
  private:
   uint16_t current_index_ = 0;
   uint32_t current_offset_ = 0;
@@ -204,7 +205,7 @@ class FirmwareConfig : public Device {
     if (acpi_builder_ == nullptr) {
       acpi_builder_ = new AcpiBuilder(machine);
     }
-    for (auto file: acpi_builder_->GetFileNames()) {
+    for (auto file: acpi_builder_->GetTableNames()) {
       std::string data = acpi_builder_->GetTable(file);
       if (data.empty()) {
         continue;
@@ -213,6 +214,7 @@ class FirmwareConfig : public Device {
         UpdateConfigFile(file, acpi_builder_->GetTable(file));
       });
     }
+    AddConfigFile("etc/table-loader", acpi_builder_->GetTableLoader());
 
     auto pvpanic = machine->LookupObjectByClass("Pvpanic");
     if (pvpanic) {
@@ -355,6 +357,10 @@ class FirmwareConfig : public Device {
       bzero(data, size);
       MV_ERROR("%s not implemented Read offset=0x%lx size=%d", name_, offset, size);
     }
+  }
+
+  virtual std::string GetAcpiTable() override {
+    return std::string((const char*)firmware_config_aml_code, sizeof(firmware_config_aml_code));
   }
 };
 

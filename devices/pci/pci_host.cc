@@ -85,7 +85,9 @@ void PciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data, 
       config_.reg_offset = offset;
       pci->WritePciConfigSpace(config_.value & 0xFF, data, size);
     } else {
-      MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
+      if (debug_) {
+        MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
+      }
     }
   } else {
     PciDevice::Write(resource, offset, data, size);

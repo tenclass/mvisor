@@ -234,11 +234,11 @@ struct acpi_facs_table
 /* PCI fw r3.0 MCFG table. */
 /* Subtable */
 struct acpi_mcfg_allocation {
-  uint8_t  address;                /* Base address, processor-relative */
-  uint16_t pci_segment;            /* PCI segment group number */
-  uint8_t  start_bus_number;       /* Starting PCI Bus number */
-  uint8_t  end_bus_number;         /* Final PCI Bus number */
-  uint32_t reserved;
+  uint64_t  address;                /* Base address, processor-relative */
+  uint16_t  pci_segment;            /* PCI segment group number */
+  uint8_t   start_bus_number;       /* Starting PCI Bus number */
+  uint8_t   end_bus_number;         /* Final PCI Bus number */
+  uint32_t  reserved;
 } __attribute__((packed));
 
 #define MCFG_SIGNATURE 0x4746434d       // MCFG

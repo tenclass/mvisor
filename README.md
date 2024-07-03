@@ -76,7 +76,7 @@ What's supported now:
 ### For RockyLinux 9.3,
 
 ```bash
-dnf install epel-release gdb cmake gcc-c++
+dnf install epel-release gdb cmake gcc-c++ acpica-tools
 dnf --enablerepo=devel install -y protobuf-compiler protobuf-devel glib2-devel yaml-cpp-devel pixman-devel libzstd-devel zlib-devel
 
 # If SDL enabled
@@ -86,7 +86,7 @@ dnf --enablerepo=devel install -y SDL2-devel alsa-lib-devel
 ### For Debian 12,
 
 ```bash
-apt install meson gdb cmake build-essential g++
+apt install meson gdb cmake build-essential g++ acpica-tools
 apt install protobuf-compiler libprotobuf-dev libglib2.0-dev libyaml-cpp-dev libpixman-1-dev libzstd-dev zlib1g-dev
 
 # If SDL enabled

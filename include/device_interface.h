@@ -288,4 +288,10 @@ class CmosDataInterface {
   virtual void SetData(uint8_t index, uint8_t data) = 0;
 };
 
+class AcpiTableInterface {
+ public:
+  virtual ~AcpiTableInterface() = default;
+  virtual std::string GetAcpiTable() = 0;
+};
+
 #endif // _MVISOR_DEVICE_INTERFACES_H

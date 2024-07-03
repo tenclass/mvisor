@@ -1,5 +1,7 @@
 #include "device.h"
+#include "device_interface.h"
 #include "logger.h"
+#include "apple_smc.hex"
 
 #define APPLESMC_DEFAULT_IOBASE        0x300
 #define APPLESMC_MAX_DATA_LENGTH       32
@@ -42,7 +44,7 @@ enum {
 #define ERROR_PORT (APPLESMC_DEFAULT_IOBASE + APPLESMC_ERR_PORT)
 
 
-class AppleSmc : public Device {
+class AppleSmc : public Device, public AcpiTableInterface {
  private:
   uint8_t status_;
   uint8_t status_1e_;
@@ -175,6 +177,10 @@ class AppleSmc : public Device {
     } else {
       Device::Write(resource, offset, data, size);
     }
+  }
+
+  virtual std::string GetAcpiTable() override {
+    return std::string((const char*)apple_smc_aml_code, sizeof(apple_smc_aml_code));
   }
 };
 

@@ -1,8 +1,9 @@
 #include "acpi_builder.h"
 #include "logger.h"
 #include "machine.h"
-#include "acpi_dsdt/acpi_dsdt.hex.h"
-#include "acpi_dsdt/q35_acpi_dsdt.hex.h"
+#include "i440fx.hex"
+#include "q35.hex"
+#include "cpu_container.hex"
 #include "../chipset/pmio.h"
 
 AcpiBuilder::AcpiBuilder(Machine* machine) : machine_(machine) {
@@ -12,77 +13,88 @@ bool AcpiBuilder::IsQ35() {
   return machine_->LookupObjectByClass("Q35Host") != nullptr;
 }
 
-std::vector<std::string> AcpiBuilder::GetFileNames() {
-  std::vector<std::string> file_names;
-  file_names.push_back("etc/acpi/rsdp");
-  file_names.push_back("etc/acpi/rsdt");
-  file_names.push_back("etc/acpi/facp");
-  file_names.push_back("etc/acpi/facs");
-  file_names.push_back("etc/acpi/apic");
+std::string AcpiBuilder::GetTableLoader() {
+  return loader_.GetCommands();
+}
+
+std::vector<std::string> AcpiBuilder::GetTableNames() {
+  std::vector<std::string> table_names;
+  table_names.push_back("etc/acpi/rsdp");
+  table_names.push_back("etc/acpi/rsdt");
+  table_names.push_back("etc/acpi/facp");
+  table_names.push_back("etc/acpi/facs");
+  table_names.push_back("etc/acpi/apic");
   if (IsQ35()) {
-    file_names.push_back("etc/acpi/mcfg");
+    table_names.push_back("etc/acpi/mcfg");
   }
-  file_names.push_back("etc/acpi/waet");
-  file_names.push_back("etc/acpi/dsdt");
-  file_names.push_back("etc/table-loader");
-  return file_names;
+  table_names.push_back("etc/acpi/waet");
+  table_names.push_back("etc/acpi/dsdt");
+  table_names.push_back("etc/acpi/cpus");
+
+  // Look for class specific tables
+  auto objects = machine_->LookupObjects([](auto obj) {
+    return dynamic_cast<AcpiTableInterface*>(obj) != nullptr;
+  });
+  for (auto obj : objects) {
+    char name[200];
+    sprintf(name, "etc/acpi/%s", obj->name());
+    tables_[name] = dynamic_cast<AcpiTableInterface*>(obj);
+    table_names.push_back(name);
+  }
+  return table_names;
 }
 
 std::string AcpiBuilder::GetTable(const std::string table_name) {
   if (table_name == "etc/acpi/rsdp") {
-    BuildRsdp();
+    return BuildRsdp();
   } else if (table_name == "etc/acpi/rsdt") {
-    BuildRsdt();
+    return BuildRsdt();
   } else if (table_name == "etc/acpi/facp") {
-    BuildFacp();
+    return BuildFacp();
   } else if (table_name == "etc/acpi/facs") {
-    BuildFacs();
+    return BuildFacs();
   } else if (table_name == "etc/acpi/apic") {
-    BuildApic();
+    return BuildApic();
   } else if (table_name == "etc/acpi/mcfg") {
-    BuildMcfg();
+    return BuildMcfg();
   } else if (table_name == "etc/acpi/waet") {
-    BuildWaet();
+    return BuildWaet();
   } else if (table_name == "etc/acpi/dsdt") {
-    BuildDsdt();
-  } else if (table_name == "etc/table-loader") {
-    BuildTableLoader();
+    return BuildDsdt();
+  } else if (table_name == "etc/acpi/cpus") {
+    return BuildCpuSsdt();
   } else {
-    MV_ERROR("Unknown table name: %s\n", table_name.c_str());
+    auto it = tables_.find(table_name);
+    if (it != tables_.end()) {
+      loader_.AddAllocateCommand(it->first.c_str(), 16, ALLOC_ZONE_HIGH);
+      return it->second->GetAcpiTable();
+    }
   }
-
-  auto it = tables_.find(table_name);
-  if (it == tables_.end()) {
-    return "";
-  }
-  return it->second;
-}
-
-void AcpiBuilder::BuildTableLoader() {
-  tables_["etc/table-loader"] = loader_.GetCommands();
+  MV_PANIC("Unknown table name: %s\n", table_name.c_str());
+  return "";
 }
 
 // Build Root System Descriptor Pointer
-void AcpiBuilder::BuildRsdp() {
+std::string AcpiBuilder::BuildRsdp() {
   acpi_rdsp_table rsdp = {};
   memcpy(rsdp.signature, "RSD PTR ", 8);
   memcpy(rsdp.oem_id, "TENCLS", 6);
-  tables_["etc/acpi/rsdp"] = std::string((char*)&rsdp, sizeof(rsdp));
 
   loader_.AddAllocateCommand("etc/acpi/rsdp", 16, ALLOC_ZONE_FSEG);
   loader_.AddAddPointerCommand("etc/acpi/rsdp", "etc/acpi/rsdt", 16, 4);
   loader_.AddChecksumCommand("etc/acpi/rsdp", 8, 0, 20);
+  return std::string((char*)&rsdp, sizeof(rsdp));
 }
 
 // Build Firmware ACPI Control Structure
-void AcpiBuilder::BuildFacs() {
+std::string AcpiBuilder::BuildFacs() {
   acpi_facs_table facs = {};
   facs.signature = *(uint32_t*)"FACS";
   facs.length = sizeof(acpi_facs_table);
   facs.hardware_signature = 0;
 
-  tables_["etc/acpi/facs"] = std::string((char*)&facs, sizeof(facs));
   loader_.AddAllocateCommand("etc/acpi/facs", 64, ALLOC_ZONE_HIGH);
+  return std::string((char*)&facs, sizeof(facs));
 }
 
 // Build common ACPI table header
@@ -99,34 +111,36 @@ void AcpiBuilder::BuildAcpiTableHeader(const std::string table_name, void* data,
 }
 
 // Build Root System Descriptor Table
-void AcpiBuilder::BuildRsdt() {
+std::string AcpiBuilder::BuildRsdt() {
   std::vector<std::string> table_names = {
     "etc/acpi/facp",
     "etc/acpi/apic",
-    "etc/acpi/waet"
+    "etc/acpi/waet",
+    "etc/acpi/cpus"
   };
   if (IsQ35()) {
     table_names.push_back("etc/acpi/mcfg");
   }
+  for(auto& table : tables_) {
+    table_names.push_back(table.first);
+  }
 
-  size_t size = sizeof(acpi_table_header) + table_names.size() * sizeof(uint32_t);
-  auto rsdt = (acpi_rsdt_table*)malloc(size);
-  bzero(rsdt, size);
-  BuildAcpiTableHeader("RSDT", rsdt, size);
-  tables_["etc/acpi/rsdt"] = std::string((char*)rsdt, size);
-  free(rsdt);
+  std::string rsdt;
+  acpi_table_header header = {};
+  BuildAcpiTableHeader("RSDT", &header, sizeof(header));
+  rsdt.append((char*)&header, sizeof(header));
 
   loader_.AddAllocateCommand("etc/acpi/rsdt", 16, ALLOC_ZONE_HIGH);
-  off_t offset = sizeof(acpi_table_header);
   for (auto& table_name : table_names) {
-    loader_.AddAddPointerCommand("etc/acpi/rsdt", table_name.c_str(), offset, 4);
-    offset += 4;
+    loader_.AddAddPointerCommand("etc/acpi/rsdt", table_name.c_str(), rsdt.size(), 4);
+    rsdt.append("\x00\x00\x00\x00", 4);
   }
-  loader_.AddChecksumCommand("etc/acpi/rsdt", 9, 0, size);
+  loader_.AddChecksumCommand("etc/acpi/rsdt", 9, 0, rsdt.size());
+  return rsdt;
 }
 
 // Build Fixed ACPI Description Table
-void AcpiBuilder::BuildFacp() {
+std::string AcpiBuilder::BuildFacp() {
   // find Pmio class object
   auto objects = machine_->LookupObjects([](auto obj) {
     return dynamic_cast<Pmio*>(obj) != nullptr;
@@ -162,16 +176,16 @@ void AcpiBuilder::BuildFacp() {
 
   // Currently we use the version 3.0 of the FADT table
   BuildAcpiTableHeader("FACP", &facp, sizeof(facp), 3);
-  tables_["etc/acpi/facp"] = std::string((char*)&facp, sizeof(facp));
 
   loader_.AddAllocateCommand("etc/acpi/facp", 16, ALLOC_ZONE_HIGH);
   loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/facs", 0x24, 4);
   loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/dsdt", 0x28, 4);
   loader_.AddChecksumCommand("etc/acpi/facp", 9, 0, sizeof(facp));
+  return std::string((char*)&facp, sizeof(facp));
 }
 
 // Build Multiple APIC Description Table
-void AcpiBuilder::BuildApic() {
+std::string AcpiBuilder::BuildApic() {
   std::string buffer;
   struct multiple_apic_table madt = {};
   madt.local_apic_address = 0xFEE00000; // Local APIC address
@@ -229,16 +243,16 @@ void AcpiBuilder::BuildApic() {
 
   // fix length
   *(uint32_t*)&buffer.data()[4] = buffer.size();
-  tables_["etc/acpi/apic"] = buffer;
   loader_.AddAllocateCommand("etc/acpi/apic", 16, ALLOC_ZONE_HIGH);
   loader_.AddChecksumCommand("etc/acpi/apic", 9, 0, buffer.size());
+  return buffer;
 }
 
 // Build PCI MMCFG Base Address Description Table
-void AcpiBuilder::BuildMcfg() {
+std::string AcpiBuilder::BuildMcfg() {
   auto object = machine_->LookupObjectByClass("Q35Host");
   if (object == nullptr) {
-    return;
+    return "";
   }
   auto q35 = dynamic_cast<PciDevice*>(object);
 
@@ -253,34 +267,55 @@ void AcpiBuilder::BuildMcfg() {
   mcfg.allocation[0].start_bus_number = 0;
   mcfg.allocation[0].end_bus_number = 0xFF;
   BuildAcpiTableHeader("MCFG", &mcfg, sizeof(mcfg));
-  tables_["etc/acpi/mcfg"] = std::string((char*)&mcfg, sizeof(mcfg));
   loader_.AddAllocateCommand("etc/acpi/mcfg", 16, ALLOC_ZONE_HIGH);
   loader_.AddChecksumCommand("etc/acpi/mcfg", 9, 0, sizeof(mcfg));
+  return std::string((char*)&mcfg, sizeof(mcfg));
 }
 
 // Build Windows ACPI Emulated Timer
-void AcpiBuilder::BuildWaet() {
+std::string AcpiBuilder::BuildWaet() {
   acpi_waet_table waet = {};
   waet.emulated_device_flags = 1 << 1; /* ACPI PM timer good */
   BuildAcpiTableHeader("WAET", &waet, sizeof(waet));
-  tables_["etc/acpi/waet"] = std::string((char*)&waet, sizeof(waet));
   loader_.AddAllocateCommand("etc/acpi/waet", 16, ALLOC_ZONE_HIGH);
   loader_.AddChecksumCommand("etc/acpi/waet", 9, 0, sizeof(waet));
+  return std::string((char*)&waet, sizeof(waet));
 }
 
 // Build Differentiated System Description Table
-void AcpiBuilder::BuildDsdt() {
+std::string AcpiBuilder::BuildDsdt() {
+  std::string dsdt;
   if (IsQ35()) {
-    tables_["etc/acpi/dsdt"] = std::string((char*)q35_acpi_dsdt_aml_code, sizeof(q35_acpi_dsdt_aml_code));
-    loader_.AddAllocateCommand("etc/acpi/dsdt", 16, ALLOC_ZONE_HIGH);
-    loader_.AddChecksumCommand("etc/acpi/dsdt", 9, 0, sizeof(q35_acpi_dsdt_aml_code));
+    dsdt = std::string((char*)q35_aml_code, sizeof(q35_aml_code));
   } else {
-    tables_["etc/acpi/dsdt"] = std::string((char*)acpi_dsdt_aml_code, sizeof(acpi_dsdt_aml_code));
-    loader_.AddAllocateCommand("etc/acpi/dsdt", 16, ALLOC_ZONE_HIGH);
-    loader_.AddChecksumCommand("etc/acpi/dsdt", 9, 0, sizeof(acpi_dsdt_aml_code));
-  
+    dsdt = std::string((char*)i440fx_aml_code, sizeof(i440fx_aml_code));
   }
-  auto checksum_ptr = (uint8_t*)&tables_["etc/acpi/dsdt"].data()[9];
-  *checksum_ptr = 0;
+  dsdt[9] = 0; // reset checksum
+  loader_.AddAllocateCommand("etc/acpi/dsdt", 16, ALLOC_ZONE_HIGH);
+  loader_.AddChecksumCommand("etc/acpi/dsdt", 9, 0, dsdt.size());
+  return dsdt;
 }
 
+std::string AcpiBuilder::BuildCpuSsdt() {
+  std::string ssdt = std::string((char*)cpu_container_aml_code, sizeof(cpu_container_aml_code));
+  if (machine_->num_vcpus() > 0xFF) {
+    MV_ERROR("Too many CPUs: %d\n", machine_->num_vcpus());
+    return "";
+  }
+  
+  // Add ProcessorOp
+  for (auto vcpu : machine_->vcpus()) {
+    char name[5];
+    snprintf(name, sizeof(name), "C0%02X", vcpu->vcpu_id());
+    ssdt.append("\x5B\x83\x0B", 3);
+    ssdt.append(name, 4);
+    ssdt.push_back(vcpu->vcpu_id());
+    ssdt.append("\x00\x00\x00\x00", 4);
+    ssdt.append("\x00", 1);
+  }
+  *(uint32_t*)&ssdt[4] = ssdt.size();
+  ssdt[9] = 0; // reset checksum
+  loader_.AddAllocateCommand("etc/acpi/cpus", 16, ALLOC_ZONE_HIGH);
+  loader_.AddChecksumCommand("etc/acpi/cpus", 9, 0, ssdt.size());
+  return ssdt;
+}

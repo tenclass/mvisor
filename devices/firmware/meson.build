@@ -14,4 +14,8 @@ proto_sources += proto_gen.process(
   'firmware_config.proto'
 )
 
+iasl_sources += iasl_gen.process(
+  'firmware_config.asl'
+)
+
 subdir('acpi_dsdt')
