@@ -32,7 +32,7 @@ What's supported now:
 ### Basic functions
 
 1. 440FX ✅ / Q35 Chipset ✅
-2. SeaBIOS ✅
+2. SeaBIOS ✅ OVMF ✅
 3. Memory Region Management ✅
 4. IOPort Management ✅
 5. Devices Management ✅
@@ -47,7 +47,7 @@ What's supported now:
 14. VGA / VBE ✅
 15. Option Roms ✅ / SMBIOS ✅ / ACPI Table ✅
 16. Boot DOS ✅
-17. Boot OS (Win98 to Win11 / DOS / Ubuntu) ✅
+17. Boot OS (Win98 to Win11 / DOS / Ubuntu / macOS Sonoma) ✅
 18. QCOW2 ✅
 
 ### Multimedia & Networking
@@ -61,7 +61,7 @@ What's supported now:
 7. User network ✅
 8. VFIO (mdev & passthrough) ✅
 9. Samba
-10. USB 1.0 UHCI ✅ / USB 3.0 XHCI ✅ / USB Tablet ✅ / USB Midi ✅ / USB Wacom ✅
+10. USB 1.0 UHCI ✅ / USB 3.0 XHCI ✅ / USB Tablet ✅ / USB Keyboard ✅ / USB Midi ✅ / USB Wacom ✅
 
 ### Hyper-V & Migration
 
