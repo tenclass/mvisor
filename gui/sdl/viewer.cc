@@ -439,13 +439,8 @@ void Viewer::SetupKeyboardShortcuts() {
   };
 
   keyboard_shortcuts_[SDLK_F12] = [this]() {
-    if (machine_->IsPaused()) {
-      MV_LOG("Reset");
-      machine_->Reset();
-    } else {
-      MV_LOG("Shutdown");
-      machine_->Shutdown();
-    }
+    MV_LOG("Reset");
+    machine_->Reset();
   };
 }
 

@@ -50,6 +50,8 @@ class Machine {
   void Reset();
   void Pause();
   void Resume();
+  void EnterCritical();
+  void LeaveCritical();
   void Shutdown();
   bool IsValid() { return valid_; }
   bool IsPaused() { return valid_ && paused_; }

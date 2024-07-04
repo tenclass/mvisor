@@ -24,6 +24,7 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <condition_variable>
 
 #include "hyperv/hyperv.h"
 #include "migration.h"
@@ -80,7 +81,7 @@ class Vcpu {
   uint64_t cpuid_features() { return cpuid_features_; }
   uint32_t cpuid_version() { return cpuid_version_; }
   const std::string& cpuid_model() { return cpuid_model_; }
-  bool running() { return running_; }
+  bool running() { return kvm_running_; }
 
  private:
   static void SignalHandler(int signum);
@@ -104,15 +105,19 @@ class Vcpu {
 
   static __thread Vcpu*     current_vcpu_;
 
+  friend class              Machine;
   Machine*                  machine_;
   int                       vcpu_id_ = -1;
   int                       fd_ = -1;
   char                      name_[16];
-  bool                      running_ = false;
+  bool                      kvm_running_ = false;
   kvm_run*                  kvm_run_ = nullptr;
   kvm_coalesced_mmio_ring*  mmio_ring_ = nullptr;
   std::thread               thread_;
   bool                      single_step_ = false;
+  int                       wait_count_ = 0;
+  std::condition_variable   wait_to_resume_;
+  std::condition_variable   wait_for_paused_;
   VcpuState                 default_state_;
   std::deque<VcpuTask>      tasks_;
   std::mutex                mutex_;

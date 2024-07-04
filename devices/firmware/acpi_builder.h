@@ -4,7 +4,6 @@
 #include <map>
 #include <vector>
 #include <string>
-#include <functional>
 
 #include "device_interface.h"
 #include "acpi.h"

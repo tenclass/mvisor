@@ -546,15 +546,22 @@ void Vcpu::Process() {
 
   if (machine_->debug()) MV_LOG("%s started", name_);
 
-  running_ = true;
   while (true) {
-    while (machine_->IsPaused()) {
-      machine_->WaitToResume();
-    }
-    if (!machine_->IsValid()) {
-      break;
+    {
+      std::unique_lock<std::mutex> lock(mutex_);
+      if (wait_count_ > 0) {
+        wait_for_paused_.notify_all();
+        wait_to_resume_.wait(lock, [this]() {
+          return !machine_->IsValid() || wait_count_ == 0;
+        });
+        if (!machine_->IsValid()) {
+          break;
+        }
+      }
+      kvm_running_ = true;
     }
     int ret = ioctl(fd_, KVM_RUN, 0);
+    kvm_running_ = false;
     if (ret < 0 && errno != EINTR) {
       if (errno == EAGAIN) {
         continue;
@@ -606,7 +613,6 @@ void Vcpu::Process() {
   }
 
 quit:
-  running_ = false;
   if (machine_->debug_) MV_LOG("%s ended", name_);
 }
 

@@ -36,7 +36,7 @@
 static const char* type_strings[] = { "Reserved", "RAM", "Device", "ROM", "Unknown" };
 
 
-MemoryManager::MemoryManager(const Machine* machine)
+MemoryManager::MemoryManager(Machine* machine)
     : machine_(machine) {
   
   /* Get the number of slots we can allocate */
@@ -164,10 +164,6 @@ void MemoryManager::Reset() {
   memcpy(bios_data_, bios_backup_, bios_size_);
   /* Reset 64KB low memory, or Windows 11 complains about some data at 0x6D80 when reboots */
   bzero(ram_host_, 0x10000);
-
-  // Remap the BIOS
-  Unmap(&bios_region_);
-  bios_region_ = Map(0x100000000 - bios_size_, bios_size_, bios_data_, kMemoryTypeRam, "SeaBIOS");
 }
 
 /* The number of KVM slots is limited, try not to use out */
@@ -198,79 +194,88 @@ void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
   }
 }
 
-/* Don't call this funciton, use Map and Unmap */
-void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
-  std::unordered_set<MemorySlot*> pending_add;
-  std::unordered_set<MemorySlot*> pending_remove;
-  
-  /* Lock the global mutex while handling insert or remove */
-  std::unique_lock lock(mutex_);
+/* Assuming the mutex is locked */
+void MemoryManager::CommitMemoryRegionChanges() {
+  std::set<uint64_t> points;
+  for (const auto& region : regions_) {
+    points.insert(region->gpa);
+    points.insert(region->gpa + region->size);
+  }
 
-  MemorySlot* slot = new MemorySlot;
-  slot->id = AllocateSlotId();
-  slot->region = region;
-  slot->type = region->type;
-  slot->begin = region->gpa;
-  slot->end = region->gpa + region->size;
-  slot->hva = reinterpret_cast<uint64_t>(region->host);
-  slot->flags = region->flags;
-  pending_add.insert(slot);
-
-  // Find all overlapped slots, split them, remove the old ones (resizing is not supported by KVM)
-  // Maybe later we should support region priorities
-  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end() && it->second->begin < slot->end; ) {
-    if (it->second->begin < slot->end && slot->begin < it->second->end) {
-      MemorySlot *hit = it->second;
-      MemorySlot *left = nullptr, *right = nullptr;
-  
-      // Collision found, split the slot
-      if (hit->begin < slot->begin) {
-        // Left collision
-        left = new MemorySlot(*hit);
-        left->end = slot->begin;
-        left->id = AllocateSlotId();
-      }
-      if (slot->end < hit->end) {
-        // Right collision
-        right = new MemorySlot(*hit);
-        right->begin = slot->end;
-        right->hva = reinterpret_cast<uint64_t>(right->region->host) + (right->begin - right->region->gpa);
-        right->id = AllocateSlotId();
-      }
-      // Move the iterator before we change kvm_slots
-      if (!left && !right) {
-        it = kvm_slots_.erase(it);
-      } else {
-        ++it;
-        // Replace the hit slot with left and right
-        if (left) {
-          pending_add.insert(left);
-          kvm_slots_[left->begin] = left;
+  // Create a new flat view of the memory slots
+  std::map<uint64_t, MemoryRegion*> visible_regions;
+  for (const auto& point : points) {
+    for (auto it = regions_.rbegin(); it != regions_.rend(); ++it) {
+      if ((*it)->gpa <= point && point < (*it)->gpa + (*it)->size) {
+        // If same with last one, skip
+        if (visible_regions.rbegin() != visible_regions.rend() && visible_regions.rbegin()->second == *it) {
+          continue;
         }
-        if (right) {
-          pending_add.insert(right);
-          kvm_slots_[right->begin] = right;
-        }
+        visible_regions[point] = *it;
+        break;
       }
-      
-      if (pending_add.find(hit) != pending_add.end()) {
-        // Second collision happened, just remove the previous created
-        pending_add.erase(hit);
-        delete hit;
-      } else {
-        pending_remove.insert(hit);
-      }
-    } else {
-      ++it;
     }
   }
 
-  // Finally add the new slot
-  kvm_slots_[slot->begin] = slot;
-  regions_.insert(region);
+  // Compare the visible regions with kvm_slots_ and update the kvm_slots_
+  std::unordered_set<MemorySlot*> pending_add;
+  std::unordered_set<MemorySlot*> pending_remove;
+  auto it_new = visible_regions.begin();
+  auto it_old = kvm_slots_.begin();
+  while (it_new != visible_regions.end()) {
+    auto it_new_next = std::next(it_new);
+    if (it_old == kvm_slots_.end() || it_new->first < it_old->first) {
+      MemorySlot* slot = new MemorySlot;
+      slot->id = AllocateSlotId();
+      slot->region = it_new->second;
+      slot->type = it_new->second->type;
+      slot->begin = it_new->first;
+      slot->end = it_new->first + it_new->second->size;
+      if (it_new_next != visible_regions.end() && it_new_next->first < slot->end) {
+        slot->end = it_new_next->first;
+      }
+      slot->hva = reinterpret_cast<uint64_t>(it_new->second->host) + slot->begin - it_new->second->gpa;
+      slot->flags = it_new->second->flags;
+      pending_add.insert(slot);
+      ++it_new;
+    } else if (it_new->first == it_old->first) {
+      if (it_new->second != it_old->second->region) {
+        // Region changed, remove the old one
+        pending_remove.insert(it_old->second);
+        ++it_old;
+      } else {
+        // Same region, check the slot size
+        auto it_new_next = std::next(it_new);
+        auto it_old_next = std::next(it_old);
+        if (it_new_next == visible_regions.end() && it_old_next == kvm_slots_.end()) {
+          // Last slot, skip
+          ++it_new;
+          ++it_old;
+        } else if (it_new_next != visible_regions.end() && it_old_next != kvm_slots_.end() &&
+            it_new_next->first == it_old_next->first) {
+          // Same slot size, skip
+          ++it_new;
+          ++it_old;
+        } else {
+          // Slot size changed, remove the old one
+          pending_remove.insert(it_old->second);
+          ++it_old;
+        }
+      }
+    } else {
+      pending_remove.insert(it_old->second);
+      ++it_old;
+    }
+  }
+
+  bool critical = !pending_remove.empty();
+  if (critical) {
+    machine_->EnterCritical();
+  }
 
   // Commit the pending slots to KVM
   for (auto slot : pending_remove) {
+    kvm_slots_.erase(slot->begin);
     if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
       UpdateKvmSlot(slot, true);
       free_slots_.insert(slot->id);
@@ -282,6 +287,7 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
     delete slot;
   }
   for (auto slot : pending_add) {
+    kvm_slots_[slot->begin] = slot;
     if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
       UpdateKvmSlot(slot, false);
     }
@@ -290,10 +296,15 @@ void MemoryManager::AddMemoryRegion(MemoryRegion* region) {
       listener->callback(slot, false);
     }
   }
+
+  if (critical) {
+    machine_->LeaveCritical();
+  }
 }
 
 /* Mapping a memory region in the guest address space */
 const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name) {
+  MV_ASSERT(size > 0);
   MemoryRegion* region = new MemoryRegion;
   region->gpa = gpa;
   region->host = host;
@@ -310,8 +321,10 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
       region->gpa, region->size, type_strings[region->type]);
   }
 
-  MV_ASSERT(size > 0);
-  AddMemoryRegion(region);
+  /* Lock the global mutex while handling insert or remove */
+  std::unique_lock lock(mutex_);
+  regions_.push_back(region);
+  CommitMemoryRegionChanges();
   return region;
 }
 
@@ -324,30 +337,13 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
   }
 
   std::unique_lock lock(mutex_);
-  // Remove KVM slots
-  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ) {
-    auto slot = it->second;
-    if (slot->region == region) {
-      if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
-        UpdateKvmSlot(slot, true);
-        free_slots_.insert(slot->id);
-      }
-      // tell listeners we removed a slot
-      for (auto listener : memory_listeners_) {
-        listener->callback(slot, true);
-      }
-      delete slot;
-      it = kvm_slots_.erase(it);
-    } else {
-      ++it;
-    }
-  }
-
   // Remove region
-  if (regions_.erase(region)) {
-    delete region;
-    *pregion = nullptr;
-  }
+  auto it = std::find(regions_.begin(), regions_.end(), region);
+  MV_ASSERT(it != regions_.end());
+  regions_.erase(it);
+  CommitMemoryRegionChanges();
+  delete region;
+  *pregion = nullptr;
 }
 
 /* StartTrackingDirtyMemory must be called in paused state to 

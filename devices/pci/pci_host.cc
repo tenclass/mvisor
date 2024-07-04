@@ -73,9 +73,7 @@ void PciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data, 
       if (debug_) {
         MV_LOG("system reset");
       }
-      std::thread([this]() {
-        manager_->machine()->Reset();
-      }).detach();
+      manager_->machine()->Reset();
       return;
     }
     memcpy(config_.data + offset, data, size);

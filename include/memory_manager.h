@@ -83,7 +83,7 @@ typedef std::function<bool (size_t offset)> DirtyBitmapCallback;
 class Machine;
 class MemoryManager {
  public:
-  MemoryManager(const Machine* machine);
+  MemoryManager(Machine* machine);
   ~MemoryManager();
 
   const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
@@ -111,22 +111,22 @@ class MemoryManager {
   const MemoryListener* RegisterMemoryListener(MemoryListenerCallback callback);
   void UnregisterMemoryListener(const MemoryListener** plistener);
 
-  const std::set<MemoryRegion*>& regions() const { return regions_; }
+  const std::vector<MemoryRegion*>& regions() const { return regions_; }
 
  private:
   void InitializeSystemRam();
   void InitializeReservedMemory();
   void LoadBiosFile();
-  void AddMemoryRegion(MemoryRegion* region);
+  void CommitMemoryRegionChanges();
   void UpdateKvmSlot(MemorySlot* slot, bool remove);
   uint AllocateSlotId();
   bool GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap);
   std::vector<MemorySlot> GetSlotsByNames(std::unordered_set<std::string> names);
   bool HandleBitmap(const char* bitmap, size_t size, DirtyBitmapCallback callback);
 
-  const Machine*                  machine_;
+  Machine*                        machine_;
   void*                           ram_host_;
-  std::set<MemoryRegion*>         regions_;
+  std::vector<MemoryRegion*>      regions_;
   std::map<uint64_t, MemorySlot*> kvm_slots_;
   std::set<const MemoryListener*> memory_listeners_;
   std::set<uint>                  free_slots_;
