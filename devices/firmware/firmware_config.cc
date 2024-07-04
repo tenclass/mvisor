@@ -185,13 +185,6 @@ class FirmwareConfig : public Device, public AcpiTableInterface {
   }
 
   void InitializeFiles () {
-    /* disable S3 S4 (suspend / hibernate) */
-    bool disable_s3 = true, disable_s4 = true;
-    uint8_t suspend[6] = {128, 0, 0, 129, 128, 128};
-    suspend[3] = 1 | (uint(!disable_s3) << 7);
-    suspend[4] = 2 | (uint(!disable_s4) << 7);
-    AddConfigFile("etc/system-states", std::string((char*)suspend, sizeof(suspend)));
-
     /* check VMX after vcpu started */
     auto vcpu = manager_->machine()->first_vcpu();
     MV_ASSERT(vcpu);
@@ -215,12 +208,6 @@ class FirmwareConfig : public Device, public AcpiTableInterface {
       });
     }
     AddConfigFile("etc/table-loader", acpi_builder_->GetTableLoader());
-
-    auto pvpanic = machine->LookupObjectByClass("Pvpanic");
-    if (pvpanic) {
-      uint16_t port = 0x505;
-      AddConfigFile("etc/pvpanic-port", std::string((char*)&port, sizeof(port)));
-    }
 
     std::string smbios_anchor, smbios_table;
     Smbios smbios(manager_->machine());
