@@ -59,7 +59,6 @@ class Ich9Hda : public PciDevice {
     pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
     pci_header_.subsys_vendor_id = 0x1AF4;
     pci_header_.subsys_id = 0x1100;
-    pci_header_.command = PCI_COMMAND_MEMORY;
     pci_header_.irq_pin = 1;
 
     /* HDCTL off 0x40 bit 0 selects signaling mode (1-HDA, 0 - Ac97) 18.1.19 */
