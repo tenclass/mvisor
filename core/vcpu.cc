@@ -551,15 +551,17 @@ void Vcpu::Process() {
       std::unique_lock<std::mutex> lock(mutex_);
       if (wait_count_ > 0) {
         wait_for_paused_.notify_all();
-        wait_to_resume_.wait(lock, [this]() {
-          return !machine_->IsValid() || wait_count_ == 0;
-        });
-        if (!machine_->IsValid()) {
-          break;
-        }
+      }
+      wait_to_resume_.wait(lock, [this]() {
+        bool should_wait = machine_->IsValid() && (machine_->IsPaused() || wait_count_ > 0);
+        return !should_wait;
+      });
+      if (!machine_->IsValid()) {
+        break;
       }
       kvm_running_ = true;
     }
+
     int ret = ioctl(fd_, KVM_RUN, 0);
     kvm_running_ = false;
     if (ret < 0 && errno != EINTR) {
@@ -617,6 +619,7 @@ quit:
 }
 
 void Vcpu::Kick() {
+  wait_to_resume_.notify_all();
   if (thread_.joinable()) {
     pthread_kill(thread_.native_handle(), SIG_USER_INTERRUPT);
   }

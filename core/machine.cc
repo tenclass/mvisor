@@ -69,7 +69,6 @@ Machine::Machine(std::string config_path, std::string vm_name, std::string vm_uu
   wait_count_ = 1;
   paused_ = true;
 
-  EnterCritical();
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }
@@ -142,9 +141,11 @@ void Machine::Quit() {
   valid_ = false;
 
   /* If paused, threads are waiting to resume */
-  LeaveCritical();
   wait_to_resume_.notify_all();
   io_thread_->Stop();
+  for (auto vcpu: vcpus_) {
+    vcpu->Kick();
+  }
 
   /* Safe to quit main thread now */
   wait_to_quit_condition_.notify_all();
@@ -213,34 +214,6 @@ void Machine::Shutdown() {
   }
 }
 
-void Machine::EnterCritical() {
-  /* Pause all vCPU threads */
-  for (auto vcpu: vcpus_) {
-    std::unique_lock<std::mutex> lock(vcpu->mutex_);
-    vcpu->wait_count_++;
-    if (vcpu->kvm_running_) {
-      vcpu->Kick();
-    }
-  }
-  for (auto vcpu: vcpus_) {
-    std::unique_lock<std::mutex> lock(vcpu->mutex_);
-    vcpu->wait_for_paused_.wait(lock, [vcpu]() {
-      return !vcpu->kvm_running_;
-    });
-  }
-}
-
-void Machine::LeaveCritical() {
-  /* Resume threads */
-  for (auto vcpu: vcpus_) {
-    std::unique_lock<std::mutex> lock(vcpu->mutex_);
-    vcpu->wait_count_--;
-    if (vcpu->wait_count_ == 0) {
-      vcpu->wait_to_resume_.notify_all();
-    }
-  }
-}
-
 /* Resume from paused state */
 void Machine::Resume() {
   std::unique_lock<std::mutex> lock(mutex_);
@@ -258,7 +231,9 @@ void Machine::Resume() {
   
   /* Resume threads */
   wait_to_resume_.notify_all();
-  LeaveCritical();
+  for (auto vcpu : vcpus_) {
+    vcpu->Kick();
+  }
 }
 
 /* Currently this method can only be called from UI threads */
@@ -269,7 +244,8 @@ void Machine::Pause() {
 
   pausing_ = true;
   paused_ = true;
-  EnterCritical();
+  /* Make sure no vCPU thread is running now */
+  VcpuRunLockGuard guard(vcpus_);
 
   /* Here all the threads are stopped, broadcast messages */
   for (auto& listener : state_change_listeners_) {

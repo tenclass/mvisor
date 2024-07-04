@@ -24,6 +24,7 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <vector>
 #include <condition_variable>
 
 #include "hyperv/hyperv.h"
@@ -105,7 +106,6 @@ class Vcpu {
 
   static __thread Vcpu*     current_vcpu_;
 
-  friend class              Machine;
   Machine*                  machine_;
   int                       vcpu_id_ = -1;
   int                       fd_ = -1;
@@ -127,6 +127,56 @@ class Vcpu {
   uint32_t                  cpuid_version_ = 0;
   std::string               cpuid_model_;
   HyperVSynic               hyperv_synic_;
+  
+  friend class              VcpuRunLockGuard;
+};
+
+
+// Pause vCPU threads
+class VcpuRunLockGuard {
+ private:
+  std::vector<Vcpu*> vcpus_;
+
+ public:
+  VcpuRunLockGuard(Vcpu* vcpu) {
+    vcpus_.push_back(vcpu);
+    PauseAll();
+  }
+  VcpuRunLockGuard(const std::vector<Vcpu*>& vcpus) {
+    vcpus_ = vcpus;
+    PauseAll();
+  }
+  ~VcpuRunLockGuard() {
+    ResumeAll();
+  }
+
+  void PauseAll() {
+    /* Pause all vCPU threads */
+    for (auto vcpu: vcpus_) {
+      std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      vcpu->wait_count_++;
+      if (vcpu->kvm_running_) {
+        vcpu->Kick();
+      }
+    }
+    for (auto vcpu: vcpus_) {
+      std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      vcpu->wait_for_paused_.wait(lock, [vcpu]() {
+        return !vcpu->kvm_running_;
+      });
+    }
+  }
+
+  void ResumeAll() {
+    /* Resume all vCPU threads */
+    for (auto vcpu: vcpus_) {
+      std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      vcpu->wait_count_--;
+      if (vcpu->wait_count_ == 0) {
+        vcpu->wait_to_resume_.notify_all();
+      }
+    }
+  }
 };
 
 #endif // _MVISOR_VCPU_H

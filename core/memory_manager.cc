@@ -268,10 +268,7 @@ void MemoryManager::CommitMemoryRegionChanges() {
     }
   }
 
-  bool critical = !pending_remove.empty();
-  if (critical) {
-    machine_->EnterCritical();
-  }
+  VcpuRunLockGuard guard(pending_remove.empty() ? std::vector<Vcpu*>() : machine_->vcpus_);
 
   // Commit the pending slots to KVM
   for (auto slot : pending_remove) {
@@ -295,10 +292,6 @@ void MemoryManager::CommitMemoryRegionChanges() {
     for (auto listener : memory_listeners_) {
       listener->callback(slot, false);
     }
-  }
-
-  if (critical) {
-    machine_->LeaveCritical();
   }
 }
 
