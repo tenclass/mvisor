@@ -26,7 +26,6 @@
 
 #include "utilities.h"
 #include "object.h"
-#include "vcpu.h"
 #include "io_thread.h"
 #include "migration.h"
 

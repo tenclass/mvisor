@@ -86,7 +86,6 @@ class Vcpu {
 
  private:
   static void SignalHandler(int signum);
-  void PrepareX86Vcpu();
   void SetupSignalHandler();
   void SetupCpuid();
   void SetupMsrIndices();
@@ -96,10 +95,12 @@ class Vcpu {
   void SetupModelSpecificRegisters();
   uint64_t GetSupportedMsrFeature(uint index);
   void SaveDefaultRegisters();
+  bool PreRun();
+  void PostRun();
   void Process();
-  void ProcessIo();
-  void ProcessMmio();
-  void ProcessHyperV();
+  void HandleIo();
+  void HandleMmio();
+  void HandleHyperV();
   void ExecuteTasks();
   void SaveStateTo(VcpuState& state);
   void LoadStateFrom(VcpuState& state, bool load_cpuid);
@@ -151,7 +152,6 @@ class VcpuRunLockGuard {
   }
 
   void PauseAll() {
-    /* Pause all vCPU threads */
     for (auto vcpu: vcpus_) {
       std::unique_lock<std::mutex> lock(vcpu->mutex_);
       vcpu->wait_count_++;
@@ -168,7 +168,6 @@ class VcpuRunLockGuard {
   }
 
   void ResumeAll() {
-    /* Resume all vCPU threads */
     for (auto vcpu: vcpus_) {
       std::unique_lock<std::mutex> lock(vcpu->mutex_);
       vcpu->wait_count_--;

@@ -57,7 +57,15 @@ Vcpu::Vcpu(Machine* machine, int vcpu_id)
     machine_->device_manager()->SetupCoalescingMmioRing(ring);
   }
 
-  PrepareX86Vcpu();
+  SetupCpuid();
+  SetupMsrIndices();
+  SetupModelSpecificRegisters();
+
+  /* Setup MCE for booting Linux */
+  SetupMachineCheckException();
+
+  /* Save default registers for system reset */
+  SaveStateTo(default_state_);
 }
 
 Vcpu::~Vcpu() {
@@ -430,7 +438,7 @@ void Vcpu::EnableSingleStep() {
 }
 
 /* Memory trapped IO */
-void Vcpu::ProcessMmio() {
+void Vcpu::HandleMmio() {
   auto dm = machine_->device_manager();
   dm->FlushCoalescingMmioBuffer();
 
@@ -441,7 +449,7 @@ void Vcpu::ProcessMmio() {
 }
 
 /* Traditional IN, OUT operations */
-void Vcpu::ProcessIo() {
+void Vcpu::HandleIo() {
   auto dm = machine_->device_manager();
   dm->FlushCoalescingMmioBuffer();
 
@@ -451,7 +459,7 @@ void Vcpu::ProcessIo() {
 }
 
 /* Hyper-V SynIc / Hypercalls */
-void Vcpu::ProcessHyperV() {
+void Vcpu::HandleHyperV() {
   auto& hyperv_exit = kvm_run_->hyperv;
   switch (hyperv_exit.type)
   {
@@ -512,18 +520,6 @@ void Vcpu::SetupSignalHandler() {
   signal(SIG_USER_INTERRUPT, Vcpu::SignalHandler);
 }
 
-void Vcpu::PrepareX86Vcpu() {
-  SetupCpuid();
-  SetupMsrIndices();
-  SetupModelSpecificRegisters();
-
-  /* Setup MCE for booting Linux */
-  SetupMachineCheckException();
-
-  /* Save default registers for system reset */
-  SaveStateTo(default_state_);
-}
-
 /* Set the lowest priority to vcpu thread */
 void Vcpu::SetupSchedPriority(int priority) {
   // https://man7.org/linux/man-pages/man7/sched.7.html
@@ -533,6 +529,27 @@ void Vcpu::SetupSchedPriority(int priority) {
   }
   MV_ASSERT(priority >= MIN_NICE && priority <= MAX_NICE);
   MV_ASSERT(nice(priority));
+}
+
+bool Vcpu::PreRun() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  wait_to_resume_.wait(lock, [this]() {
+    bool should_wait = machine_->IsValid() && (machine_->IsPaused() || wait_count_ > 0);
+    return !should_wait;
+  });
+  if (!machine_->IsValid()) {
+    return false;
+  }
+  kvm_running_ = true;
+  return true;
+}
+
+void Vcpu::PostRun() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  kvm_running_ = false;
+  if (wait_count_ > 0) {
+    wait_for_paused_.notify_all();
+  }
 }
 
 /* Initialize and executing a vCPU thread */
@@ -547,23 +564,12 @@ void Vcpu::Process() {
   if (machine_->debug()) MV_LOG("%s started", name_);
 
   while (true) {
-    {
-      std::unique_lock<std::mutex> lock(mutex_);
-      if (wait_count_ > 0) {
-        wait_for_paused_.notify_all();
-      }
-      wait_to_resume_.wait(lock, [this]() {
-        bool should_wait = machine_->IsValid() && (machine_->IsPaused() || wait_count_ > 0);
-        return !should_wait;
-      });
-      if (!machine_->IsValid()) {
-        break;
-      }
-      kvm_running_ = true;
+    if (!PreRun()) {
+      break;
     }
-
     int ret = ioctl(fd_, KVM_RUN, 0);
-    kvm_running_ = false;
+    PostRun();
+
     if (ret < 0 && errno != EINTR) {
       if (errno == EAGAIN) {
         continue;
@@ -575,13 +581,13 @@ void Vcpu::Process() {
       switch (kvm_run_->exit_reason)
       {
       case KVM_EXIT_MMIO:
-        ProcessMmio();
+        HandleMmio();
         break;
       case KVM_EXIT_IO:
-        ProcessIo();
+        HandleIo();
         break;
       case KVM_EXIT_HYPERV:
-        ProcessHyperV();
+        HandleHyperV();
         break;
       case KVM_EXIT_INTR:
         /* User interrupt */

@@ -19,12 +19,14 @@
 #ifndef _MVISOR_DEVICE_MANAGER_H
 #define _MVISOR_DEVICE_MANAGER_H
 
+#include <linux/kvm.h>
 #include <set>
 #include <string>
 #include <deque>
 #include <mutex>
 #include <vector>
 #include <thread>
+
 #include "pci_device.h"
 #include "device.h"
 #include "io_thread.h"
