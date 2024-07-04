@@ -121,6 +121,7 @@ class VirtioPci : public PciDevice {
   VirtioPci();
   virtual void Disconnect();
   virtual void Reset();
+  virtual void SoftReset();
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
 

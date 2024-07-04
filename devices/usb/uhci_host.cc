@@ -133,7 +133,10 @@ bool UhciHost::LoadState(MigrationReader* reader) {
 
 void UhciHost::Reset() {
   PciDevice::Reset();
-  
+  SoftReset();
+}
+
+void UhciHost::SoftReset() {
   bzero(&uhci_, sizeof(uhci_));
   uhci_.frame_timing = 64;
   Halt();
@@ -543,7 +546,7 @@ void UhciHost::WriteUsbCommand(uint16_t value) {
     Halt();
   }
   if ((value & UHCI_CMD_GRESET) | (value & UHCI_CMD_HCRESET)) {
-    Reset();
+    SoftReset();
     return;
   }
 

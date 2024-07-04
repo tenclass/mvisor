@@ -95,7 +95,11 @@
         "config.h": "c",
         "__hash_table": "cpp",
         "__tree": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "__locale": "cpp",
+        "__string": "cpp",
+        "*.hex": "cpp",
+        "__mutex_base": "cpp"
     },
     "C_Cpp.default.cppStandard": "c++17",
     "C_Cpp.default.includePath": [

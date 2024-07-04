@@ -83,6 +83,10 @@ void AhciHost::Disconnect() {
 
 void AhciHost::Reset() {
   PciDevice::Reset();
+  SoftReset();
+}
+
+void AhciHost::SoftReset() {
   bzero(&host_control_, sizeof(host_control_));
   host_control_.global_host_control = HOST_CONTROL_AHCI_ENABLE;
   host_control_.capabilities = (num_ports_ > 0 ? num_ports_ - 1 : 0) |
@@ -151,7 +155,7 @@ void AhciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data,
       break;
     case kAhciHostRegControl:
       if (value & HOST_CONTROL_RESET) {
-        Reset();
+        SoftReset();
       } else {
         host_control_.global_host_control = (value & 3) | HOST_CONTROL_AHCI_ENABLE;
         // Maybe irq is enabled now, so call check

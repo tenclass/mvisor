@@ -201,7 +201,10 @@ bool XhciHost::LoadState(MigrationReader* reader) {
 
 void XhciHost::Reset() {
   PciDevice::Reset();
+  SoftReset();
+}
 
+void XhciHost::SoftReset() {
   MV_ASSERT(sizeof(capability_regs_) == 0x40);
   bzero(&capability_regs_, sizeof(capability_regs_));
   bzero(&operational_regs_, sizeof(operational_regs_));
@@ -512,7 +515,7 @@ void XhciHost::WriteOperationalUsbCommand(uint32_t command) {
   operational_regs_.usb_command = command & 0xC0F;
 
   if (command & USBCMD_HCRST) {
-    Reset();
+    SoftReset();
   }
   CheckInterrupt(0);
 }

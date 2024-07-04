@@ -29,7 +29,6 @@
 VirtioPci::VirtioPci() {
     pci_header_.vendor_id = 0x1AF4;
     pci_header_.subsys_vendor_id = 0x1AF4;
-    pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
     pci_header_.irq_pin = 1;
 
     SetupPciBar(0, 0x80, kIoResourceTypePio);
@@ -87,6 +86,10 @@ void VirtioPci::Disconnect() {
 
 void VirtioPci::Reset() {
   PciDevice::Reset();
+  SoftReset();
+}
+
+void VirtioPci::SoftReset() {
   isr_status_ = 0;
   for (uint index = 0; index < queues_.size(); index++) {
     queues_[index].index = index;
@@ -335,7 +338,7 @@ void VirtioPci::WriteLegacyCommonConfig(uint64_t offset, uint8_t* data, uint32_t
     break;
   case VIRTIO_PCI_QUEUE_PFN: {
     if (value == 0) {
-      Reset();
+      SoftReset();
     }
     auto &vq = queues_[common_config_.queue_select];
     vq.descriptor_table_address = value << VIRTIO_PCI_QUEUE_ADDR_SHIFT;
@@ -353,7 +356,7 @@ void VirtioPci::WriteLegacyCommonConfig(uint64_t offset, uint8_t* data, uint32_t
   case VIRTIO_PCI_STATUS:
     common_config_.device_status = value;
     if (!common_config_.device_status) {
-      Reset();
+      SoftReset();
     }
     break;
   case VIRTIO_MSI_CONFIG_VECTOR:
@@ -411,7 +414,7 @@ void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size)
   {
   case VIRTIO_PCI_COMMON_STATUS:
     if (!common_config_.device_status) {
-      Reset();
+      SoftReset();
     }
     break;
   case VIRTIO_PCI_COMMON_GF:

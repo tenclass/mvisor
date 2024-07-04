@@ -129,9 +129,9 @@ class VirtioFs : public VirtioPci, public VirtioFsInterface {
     }
   }
 
-  void Reset() {
+  void SoftReset() {
     /* Reset all queues */
-    VirtioPci::Reset();
+    VirtioPci::SoftReset();
 
     for (uint32_t i = 0; i < 1 + fs_config_.num_request_queues; ++i) {
       AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioFs::OnOutput, this, i));

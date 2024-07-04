@@ -157,7 +157,10 @@ void Qxl::Disconnect() {
 
 void Qxl::Reset() {
   PciDevice::Reset();
+  SoftReset();
+}
 
+void Qxl::SoftReset() {
   IntializeQxlRom();
   IntializeQxlRam();
 
@@ -496,7 +499,7 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
     FlushCommandsAndResources();
     break;
   case QXL_IO_RESET:
-    Reset();
+    SoftReset();
     UpdateIrqLevel();
     break;
   case QXL_IO_LOG:

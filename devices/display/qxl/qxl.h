@@ -81,6 +81,7 @@ class Qxl : public PciDevice, public Display, public DisplayResizeInterface {
   virtual void Connect();
   virtual void Disconnect();
   virtual void Reset();
+  virtual void SoftReset();
   virtual bool SaveState(MigrationWriter* writer);
   virtual bool LoadState(MigrationReader* reader);
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);

@@ -113,9 +113,9 @@ class VirtioBlock : public VirtioPci {
     block_config_.write_zeroes_may_unmap = 1;
   }
 
-  void Reset() {
+  void SoftReset() {
     /* Reset all queues */
-    VirtioPci::Reset();
+    VirtioPci::SoftReset();
   
     for (int i = 0; i < block_config_.num_queues; ++i) {
       AddQueue(DEFAULT_QUEUE_SIZE, std::bind(&VirtioBlock::OnOutput, this, i));

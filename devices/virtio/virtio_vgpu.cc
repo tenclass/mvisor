@@ -187,8 +187,8 @@ class VirtioVgpu : public VirtioPci {
     return fd;
   }
 
-  void Reset() {
-    VirtioPci::Reset();
+  void SoftReset() {
+    VirtioPci::SoftReset();
 
     for (uint32_t i = 0; i < vgpu_config_.num_queues; ++i) {
       // mesa->virglrederer need a large queue to produce/consume commands 

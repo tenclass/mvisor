@@ -58,6 +58,7 @@ class UhciHost : public UsbHost {
   UhciHost();
 
   virtual void Reset();
+  virtual void SoftReset();
   virtual void Connect();
   virtual void Disconnect();
   virtual bool SaveState(MigrationWriter* writer);

@@ -63,14 +63,14 @@ class VirtioConsole : public VirtioPci, public SerialDeviceInterface {
     }
   }
 
-  void Reset() {
+  void SoftReset() {
     /* stop console port activities */
     for (auto &port: console_ports_) {
       port->set_ready(false);
     }
   
     /* Reset all queues */
-    VirtioPci::Reset();
+    VirtioPci::SoftReset();
   
     CreateQueuesForPorts();
   }

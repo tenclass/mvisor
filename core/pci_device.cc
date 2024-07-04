@@ -67,7 +67,8 @@ void PciDevice::Disconnect() {
 void PciDevice::Reset() {
   Device::Reset();
 
-  // TODO: Restore default command ???
+  pci_header_.status = default_pci_header_.status;
+  WritePciCommand(default_pci_header_.command);
 }
 
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */

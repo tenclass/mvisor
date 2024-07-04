@@ -98,7 +98,10 @@ class Ich9Hda : public PciDevice {
 
   virtual void Reset() {
     PciDevice::Reset();
+    SoftReset();
+  }
 
+  virtual void SoftReset() {
     MV_ASSERT(sizeof(regs_) == 0x180);
     rirb_counter_ = 0;
     wall_clock_base_ = steady_clock::now();
@@ -239,7 +242,7 @@ class Ich9Hda : public PciDevice {
     case offsetof(Ich9HdaRegisters, global_control):
       regs_.global_control = (*(uint32_t*)data) & 0x103;
       if ((regs_.global_control & ICH6_GCTL_RESET) == 0) {
-        Reset();
+        SoftReset();
       }
       break;
     case offsetof(Ich9HdaRegisters, state_change_status): {

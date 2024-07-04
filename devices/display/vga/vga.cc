@@ -95,6 +95,7 @@ bool Vga::LoadState(MigrationReader* reader) {
   display_mode_ = kDisplayModeVga;
   Schedule([this]() {
     NotifyDisplayModeChange();
+    vga_render_->Redraw();
   });
   return true;
 }

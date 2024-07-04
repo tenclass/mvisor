@@ -175,6 +175,7 @@ class XhciHost : public UsbHost {
   XhciHost();
 
   virtual void Reset();
+  virtual void SoftReset();
   virtual void Connect();
   virtual void Disconnect();
   virtual bool SaveState(MigrationWriter* writer);
