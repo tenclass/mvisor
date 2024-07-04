@@ -19,5 +19,6 @@ proto_sources += proto_gen.process(
 )
 
 iasl_sources += iasl_gen.process(
-  'apple_smc.asl'
+  'apple_smc.asl',
+  'pvpanic.asl'
 )

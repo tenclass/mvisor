@@ -1,7 +1,7 @@
 // SSDT for Apple SMC
 DefinitionBlock("apple_smc.aml", "SSDT", 1, "TENCLS", "MVPC", 1) {
-  External(\_SB.PCI0, DeviceObj)
-  Scope(\_SB.PCI0) {
+  External(\_SB.PCI0.ISA, DeviceObj)
+  Scope(\_SB.PCI0.ISA) {
     Device (SMC)
     {
       Name (_HID, EisaId ("APP0001"))  // _HID: Hardware ID
