@@ -147,7 +147,7 @@ void MemoryManager::LoadBiosFile() {
 
   bios_size_ = st.st_size;
   bios_backup_ = malloc(bios_size_);
-  read(fd, bios_backup_, bios_size_);
+  MV_ASSERT(read(fd, bios_backup_, bios_size_) == (ssize_t)bios_size_);
   safe_close(&fd);
 
   bios_data_ = valloc(bios_size_);
@@ -184,10 +184,6 @@ void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
     .userspace_addr = slot->hva
   };
 
-  if (machine_->debug_) {
-    MV_LOG("UpdateKvmSlot slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%x",
-      mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
-  }
   if (ioctl(machine_->vm_fd_, KVM_SET_USER_MEMORY_REGION, &mr) < 0) {
     MV_PANIC("failed to set user memory region slot=%d gpa=%016lx size=%016lx hva=%016lx flags=%d",
       mr.slot, mr.guest_phys_addr, mr.memory_size, mr.userspace_addr, mr.flags);
@@ -225,7 +221,7 @@ void MemoryManager::CommitMemoryRegionChanges() {
   while (it_new != visible_regions.end()) {
     auto it_new_next = std::next(it_new);
     if (it_old == kvm_slots_.end() || it_new->first < it_old->first) {
-      MemorySlot* slot = new MemorySlot;
+      auto slot = new MemorySlot;
       slot->id = AllocateSlotId();
       slot->region = it_new->second;
       slot->type = it_new->second->type;
@@ -234,6 +230,7 @@ void MemoryManager::CommitMemoryRegionChanges() {
       if (it_new_next != visible_regions.end() && it_new_next->first < slot->end) {
         slot->end = it_new_next->first;
       }
+      slot->size = slot->end - slot->begin;
       slot->hva = reinterpret_cast<uint64_t>(it_new->second->host) + slot->begin - it_new->second->gpa;
       slot->flags = it_new->second->flags;
       pending_add.insert(slot);
@@ -277,10 +274,7 @@ void MemoryManager::CommitMemoryRegionChanges() {
       UpdateKvmSlot(slot, true);
       free_slots_.insert(slot->id);
     }
-    // tell listeners we removed a slot
-    for (auto listener : memory_listeners_) {
-      listener->callback(slot, true);
-    }
+    NotifySlotChange(slot, true);
     delete slot;
   }
   for (auto slot : pending_add) {
@@ -288,10 +282,13 @@ void MemoryManager::CommitMemoryRegionChanges() {
     if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
       UpdateKvmSlot(slot, false);
     }
-    // tell listeners we have new slots
-    for (auto listener : memory_listeners_) {
-      listener->callback(slot, false);
-    }
+    NotifySlotChange(slot, false);
+  }
+}
+
+void MemoryManager::NotifySlotChange(const MemorySlot* slot, bool unmap) {
+  for (auto listener : memory_listeners_) {
+    listener->callback(*slot, unmap);
   }
 }
 
@@ -307,7 +304,7 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   if (type == kMemoryTypeRam && trace_slot_names_.find(name) != trace_slot_names_.end()) {
     region->flags |= KVM_MEM_LOG_DIRTY_PAGES;
   }
-  strncpy(region->name, name, 20 - 1);
+  region->name = name;
 
   if (machine_->debug_)  {
     MV_LOG("map region %s gpa=0x%lx size=0x%lx type=%s", region->name,
@@ -608,11 +605,11 @@ void MemoryManager::PrintMemoryScope() {
 }
 
 /* Used to build E820 table */
-std::vector<const MemorySlot*> MemoryManager::GetMemoryFlatView() {
-  std::vector<const MemorySlot*> slots;
+std::vector<MemorySlot> MemoryManager::GetMemoryFlatView() {
+  std::vector<MemorySlot> slots;
   std::shared_lock lock(mutex_);
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
-    slots.push_back(it->second);
+    slots.push_back(*it->second);
   }
   return slots;
 }
@@ -679,14 +676,24 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
     return false;
   }
 
-  // TODO: Unmap DMA pages
+  // We have to notify the slot change to VFIO devices
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
+    if (it->second->type == kMemoryTypeRam && it->second->region->name == "System") {
+      NotifySlotChange(it->second, true);
+    }
+  }
 
   /* Map the RAM file as copy on write memory */
   if (!reader->ReadMemoryPages("RAM", &ram_host_, machine_->ram_size_)) {
     return false;
   }
 
-  // TODO: Map DMA pages
+  // Remap system slots
+  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
+    if (it->second->type == kMemoryTypeRam && it->second->region->name == "System") {
+      NotifySlotChange(it->second, false);
+    }
+  }
 
   return true;
 }

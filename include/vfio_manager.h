@@ -40,15 +40,14 @@ class VfioManager {
   int                                 kvm_device_fd_ = -1;
   int                                 container_fd_ = -1;
   std::map<int, IommuGroup*>          iommu_groups_;
-  const DirtyMemoryListener*                            dirty_memory_listener_ = nullptr;
-  const MemoryListener*                                 memory_listener_ = nullptr;
-  std::map<const MemorySlot*, vfio_iommu_type1_dma_map> iommu_dma_maps_;
+  const DirtyMemoryListener*          dirty_memory_listener_ = nullptr;
+  const MemoryListener*               memory_listener_ = nullptr;
 
   IommuGroup* GetIommuGroup(std::string sysfs_path);
   void FreeIommuGroup(IommuGroup* group);
   void SetupDmaMaps();
-  void MapDmaPages(const MemorySlot* slot);
-  void UnmapDmaPages(const MemorySlot* slot);
+  void MapDmaPages(const MemorySlot& slot);
+  void UnmapDmaPages(const MemorySlot& slot);
  public:
   VfioManager(Machine* machine);
   ~VfioManager();

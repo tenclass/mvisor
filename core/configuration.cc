@@ -36,8 +36,9 @@ Configuration::Configuration(Machine* machine) : machine_(machine) {
 void Configuration::InitializePaths() {
   char temp[1024];
   bzero(temp, sizeof(temp));
-  getcwd(temp, sizeof(temp) - 1);
-  directories_.insert(temp);
+  if (getcwd(temp, sizeof(temp) - 1) != nullptr) {
+    directories_.insert(temp);
+  }
 
   bzero(temp, sizeof(temp));
   if (readlink("/proc/self/exe", temp, sizeof(temp) - 1) > 0) {

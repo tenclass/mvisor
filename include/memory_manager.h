@@ -42,7 +42,7 @@ struct MemoryRegion {
   uint64_t      size;
   uint32_t      flags;
   MemoryType    type;
-  char          name[20];
+  std::string   name;
   std::string   dirty_bitmap;
 };
 
@@ -50,13 +50,14 @@ struct MemorySlot {
   MemoryType    type;
   uint64_t      begin;
   uint64_t      end;
-  uint32_t      id;
+  uint64_t      size;
   uint64_t      hva;
+  uint32_t      id;
   uint32_t      flags;
   MemoryRegion* region;
 };
 
-typedef std::function<void (const MemorySlot* slot, bool unmap)> MemoryListenerCallback;
+typedef std::function<void (const MemorySlot slot, bool unmap)> MemoryListenerCallback;
 struct MemoryListener {
   MemoryListenerCallback callback;
 };
@@ -107,7 +108,7 @@ class MemoryManager {
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
   uint64_t HostToGuestAddress(void* host);
-  std::vector<const MemorySlot*> GetMemoryFlatView();
+  std::vector<MemorySlot> GetMemoryFlatView();
   const MemoryListener* RegisterMemoryListener(MemoryListenerCallback callback);
   void UnregisterMemoryListener(const MemoryListener** plistener);
 
@@ -118,6 +119,7 @@ class MemoryManager {
   void InitializeReservedMemory();
   void LoadBiosFile();
   void CommitMemoryRegionChanges();
+  void NotifySlotChange(const MemorySlot* slot, bool unmap);
   void UpdateKvmSlot(MemorySlot* slot, bool remove);
   uint AllocateSlotId();
   bool GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap);
