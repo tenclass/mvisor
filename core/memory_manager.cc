@@ -679,23 +679,14 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
     return false;
   }
 
-  // get all system memory region from kvm_slots_
-  auto system_slots = GetSlotsByNames({"System"});
-
-  // unmap all system memory region
-  for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
-    Unmap((const MemoryRegion **)&it->region);
-  }
+  // TODO: Unmap DMA pages
 
   /* Map the RAM file as copy on write memory */
   if (!reader->ReadMemoryPages("RAM", &ram_host_, machine_->ram_size_)) {
     return false;
   }
 
-  // reset system memory region
-  for (auto it = system_slots.begin(); it != system_slots.end(); ++it) {
-    Map(it->begin, it->end - it->begin, (void*)it->hva, kMemoryTypeRam, "System");
-  }
+  // TODO: Map DMA pages
 
   return true;
 }
