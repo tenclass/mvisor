@@ -136,6 +136,7 @@ std::string AcpiBuilder::BuildRsdt() {
     rsdt.append("\x00\x00\x00\x00", 4);
   }
   loader_.AddChecksumCommand("etc/acpi/rsdt", 9, 0, rsdt.size());
+  *(uint32_t*)&rsdt.data()[4] = rsdt.size();
   return rsdt;
 }
 
