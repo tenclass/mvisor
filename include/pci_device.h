@@ -157,12 +157,13 @@ struct PciBarInfo {
   uint64_t              address64;
   bool                  active;
   void*                 host_memory;
+  IoResource*           resource;
 };
 
 struct PciRomBarInfo {
   uint32_t size;
   void* data;
-  const MemoryRegion* mapped_region;
+  MemoryRegion*         mapped_region;
 };
 
 /* Get last byte of a range from offset + length.
@@ -188,7 +189,9 @@ class PciDevice : public Device {
  public:
   PciDevice();
   virtual ~PciDevice();
-  virtual void Disconnect();
+  virtual void Connect() override;
+  virtual void Disconnect() override;
+  virtual void Reset() override;
 
   inline uint8_t bus() { return bus_; }
   inline uint8_t slot() { return slot_; }
@@ -229,6 +232,7 @@ class PciDevice : public Device {
   uint8_t           slot_;
   uint8_t           function_;
   PciConfigHeader   pci_header_;
+  PciConfigHeader   default_pci_header_;
   PciBarInfo        pci_bars_[PCI_BAR_NUMS];
   PciRomBarInfo     pci_rom_;
   PciMsiConfig      msi_config_;

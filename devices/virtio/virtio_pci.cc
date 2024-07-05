@@ -21,6 +21,7 @@
 #include <cstring>
 #include <linux/virtio_config.h>
 
+#include "machine.h"
 #include "logger.h"
 #include "device_manager.h"
 #include "virtio_pci.pb.h"
@@ -28,10 +29,9 @@
 VirtioPci::VirtioPci() {
     pci_header_.vendor_id = 0x1AF4;
     pci_header_.subsys_vendor_id = 0x1AF4;
-    pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
     pci_header_.irq_pin = 1;
 
-    SetupPciBar(0, 0x40, kIoResourceTypePio);
+    SetupPciBar(0, 0x80, kIoResourceTypePio);
     SetupPciBar(4, 0x4000, kIoResourceTypeMmio);
 
     uint8_t cap_common_config[] = {
@@ -86,6 +86,10 @@ void VirtioPci::Disconnect() {
 
 void VirtioPci::Reset() {
   PciDevice::Reset();
+  SoftReset();
+}
+
+void VirtioPci::SoftReset() {
   isr_status_ = 0;
   for (uint index = 0; index < queues_.size(); index++) {
     queues_[index].index = index;
@@ -324,6 +328,85 @@ void VirtioPci::EnableQueue(uint16_t queue_index) {
   vq.enabled = true;
 }
 
+void VirtioPci::WriteLegacyCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) {
+  uint64_t value = 0;
+  memcpy(&value, data, size);
+  switch (offset)
+  {
+  case VIRTIO_PCI_GUEST_FEATURES:
+    driver_features_ = value;
+    break;
+  case VIRTIO_PCI_QUEUE_PFN: {
+    if (value == 0) {
+      SoftReset();
+    }
+    auto &vq = queues_[common_config_.queue_select];
+    vq.descriptor_table_address = value << VIRTIO_PCI_QUEUE_ADDR_SHIFT;
+    vq.available_ring_address = vq.descriptor_table_address + vq.size * sizeof(VRingDescriptor);
+    vq.used_ring_address = ALIGN(vq.available_ring_address + offsetof(VRingAvailable, items[vq.size]), PAGE_SIZE);
+    EnableQueue(common_config_.queue_select);
+    break;
+  }
+  case VIRTIO_PCI_QUEUE_SEL:
+    common_config_.queue_select = value;
+    break;
+  case VIRTIO_PCI_QUEUE_NOTIFY:
+    HandleQueueCallback(value);
+    break;
+  case VIRTIO_PCI_STATUS:
+    common_config_.device_status = value;
+    if (!common_config_.device_status) {
+      SoftReset();
+    }
+    break;
+  case VIRTIO_MSI_CONFIG_VECTOR:
+    common_config_.msix_config = value;
+    break;
+  case VIRTIO_MSI_QUEUE_VECTOR:
+    queues_[common_config_.queue_select].msix_vector = value;
+    break;
+  default:
+    MV_PANIC("unhandled write offset=0x%lx size=%d", offset, size);
+  }
+}
+
+void VirtioPci::ReadLegacyCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) {
+  uint64_t value = 0;
+  switch (offset)
+  {
+  case VIRTIO_PCI_HOST_FEATURES:
+    value = device_features_;
+    break;
+  case VIRTIO_PCI_GUEST_FEATURES:
+    value = driver_features_;
+    break;
+  case VIRTIO_PCI_QUEUE_PFN:
+    value = queues_[common_config_.queue_select].descriptor_table_address >> VIRTIO_PCI_QUEUE_ADDR_SHIFT;
+    break;
+  case VIRTIO_PCI_QUEUE_NUM:
+    value = queues_[common_config_.queue_select].size;
+    break;
+  case VIRTIO_PCI_QUEUE_SEL:
+    value = common_config_.queue_select;
+    break;
+  case VIRTIO_PCI_STATUS:
+    value = common_config_.device_status;
+    break;
+  case VIRTIO_PCI_ISR:
+    value = isr_status_;
+    isr_status_ = 0;
+    SetIrq(0);
+    break;
+  case VIRTIO_MSI_CONFIG_VECTOR:
+    value = common_config_.msix_config;
+    break;
+  case VIRTIO_MSI_QUEUE_VECTOR:
+    value = queues_[common_config_.queue_select].msix_vector;
+    break;
+  }
+  memcpy(data, &value, size);
+}
+
 void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size) {
   MV_ASSERT(offset + size <= sizeof(common_config_));
   memcpy((uint8_t*)&common_config_ + offset, data, size);
@@ -331,7 +414,7 @@ void VirtioPci::WriteCommonConfig(uint64_t offset, uint8_t* data, uint32_t size)
   {
   case VIRTIO_PCI_COMMON_STATUS:
     if (!common_config_.device_status) {
-      Reset();
+      SoftReset();
     }
     break;
   case VIRTIO_PCI_COMMON_GF:
@@ -427,17 +510,15 @@ void VirtioPci::ReadDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) 
 }
 
 void VirtioPci::WriteDeviceConfig(uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_PANIC("%s not implemented write device offset=0x%lx data=0x%lx size=%d",
-    name_, offset, *(uint64_t*)data, size);
+  if (debug_) {
+    MV_ERROR("%s not implemented write device offset=0x%lx data=0x%lx size=%d",
+      name_, offset, *(uint64_t*)data, size);
+  }
 }
 
-void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size) {
-  MV_UNUSED(data);
-  MV_UNUSED(size);
-
-  uint16_t queue = offset / 4;
-  MV_ASSERT(queue < queues_.size());
-  auto &vq = queues_[queue];
+void VirtioPci::HandleQueueCallback(uint16_t queue_index) {
+  MV_ASSERT(queue_index < queues_.size());
+  auto &vq = queues_[queue_index];
   if (vq.enabled) {
     if (use_ioevent_) {
       vq.notification_callback();
@@ -445,8 +526,16 @@ void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size)
       Schedule(vq.notification_callback);
     }
   } else {
-    MV_LOG("%s queue %u is not enabled", name_, queue);
+    MV_ERROR("%s queue %u is not enabled", name_, queue_index);
   }
+}
+
+void VirtioPci::WriteNotification(uint64_t offset, uint8_t* data, uint32_t size) {
+  MV_UNUSED(data);
+  MV_UNUSED(size);
+
+  uint16_t queue_index = offset / 4;
+  HandleQueueCallback(queue_index);
 }
 
 void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -461,6 +550,12 @@ void VirtioPci::Write(const IoResource* resource, uint64_t offset, uint8_t* data
     }
   } else if (resource->base == pci_bars_[0].address) {
     /* ignore legacy driver writes */
+    size_t common_config_size = msi_config_.enabled ? 24 : 20;
+    if (offset < common_config_size) {
+      WriteLegacyCommonConfig(offset, data, size);
+    } else {
+      WriteDeviceConfig(offset - common_config_size, data, size);
+    }
   } else {
     PciDevice::Write(resource, offset, data, size);
   }
@@ -479,8 +574,13 @@ void VirtioPci::Read(const IoResource* resource, uint64_t offset, uint8_t* data,
     } else if (offset < 0x4000) { /* Notification */
     }
   } else if (resource->base == pci_bars_[0].address) {
-    /* let legacy driver fail */
-    bzero(data, size);
+    /* legacy driver */
+    size_t common_config_size = msi_config_.enabled ? 24 : 20;
+    if (offset < common_config_size) {
+      ReadLegacyCommonConfig(offset, data, size);
+    } else {
+      ReadDeviceConfig(offset - common_config_size, data, size);
+    }
   } else {
     PciDevice::Read(resource, offset, data, size);
   }

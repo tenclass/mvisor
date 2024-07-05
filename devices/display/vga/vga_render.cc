@@ -3,6 +3,7 @@
 #include "vga_regs.h"
 #include "vbe.h"
 #include "logger.h"
+#include "machine.h"
 
 
 VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
@@ -13,6 +14,7 @@ VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
   bzero(&vbe_, sizeof(vbe_));
   bzero(&vga_, sizeof(vga_));
 
+  vbe_.registers[VBE_DISPI_INDEX_ID] = 0xB0C5; // Bochs VBE ID
   vram_map_addr_ = 0;
   vram_map_size_ = 0;
   width_ = 640;
@@ -25,16 +27,21 @@ VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
   cursor_visible_ = false;
   text_mode_ = false;
   mode_changed_ = false;
+
+  // Maximum resolution for VGA graphics
+  vga_display_buffer_.resize(800 * 600 * 4);
 }
 
-
 VgaRender::~VgaRender() {
-  if (vram_rw_mapped_) {
-    device_->RemoveIoResource(kIoResourceTypeRam, "VGA RAM");
-    vram_rw_mapped_ = nullptr;
+  if (vram_rw_resource_) {
+    device_->RemoveIoResource(vram_rw_resource_);
+    vram_rw_resource_ = nullptr;
   }
 }
 
+void VgaRender::SetMemoryRegion(MemoryRegion* region) {
+  region_ = region;
+}
 
 void VgaRender::SaveState(MigrationWriter* writer) {
   VgaState state;
@@ -133,7 +140,7 @@ void VgaRender::GetPalette(const uint8_t** palette, int* count, bool* dac_8bit) 
 void VgaRender::VbeReadPort(uint64_t port, uint16_t* data) {
   if (port == 0x1CE) {
     *data = vbe_.index;
-  } else if (port == 0x1CF) {
+  } else if (port == 0x1CF || port == 0x1D0) {
     MV_ASSERT(vbe_.index <= VBE_DISPI_INDEX_NB);
     if (vbe_.index == VBE_DISPI_INDEX_VIDEO_MEMORY_64K) {
       *data = vram_size_ >> 16;
@@ -149,6 +156,8 @@ void VgaRender::VbeReadPort(uint64_t port, uint16_t* data) {
         *data = vbe_.registers[vbe_.index];
       }
     }
+  } else {
+    MV_PANIC("not implemented VBE port=0x%lX", port);
   }
 }
 
@@ -156,7 +165,7 @@ void VgaRender::VbeWritePort(uint64_t port, uint16_t value) {
   if (port == 0x1CE) { // index
     MV_ASSERT(value <= VBE_DISPI_INDEX_NB);
     vbe_.index = value;
-  } else if (port == 0x1CF) { // data
+  } else if (port == 0x1CF || port == 0x1D0) { // data
     vbe_.registers[vbe_.index] = value;
     switch (vbe_.index)
     {
@@ -186,6 +195,8 @@ void VgaRender::VbeWritePort(uint64_t port, uint16_t value) {
       UpdateVRamMemoryMap();
       break;
     }
+  } else {
+    MV_PANIC("not implemented VBE port=0x%lX data=0x%04X", port, value);
   }
 }
 
@@ -472,8 +483,8 @@ write_value:
 void VgaRender::UpdateVRamMemoryMap() {
   uint8_t* map_memory = nullptr;
   if (IsVbeEnabled()) {
-    vram_map_addr_ = VGA_MMIO_BASE;
-    vram_map_size_ = VGA_MMIO_SIZE;
+    vram_map_addr_ = VGA_MEMORY_BASE;
+    vram_map_size_ = VGA_MEMORY_SIZE;
   
     map_memory = vram_base_ + (vbe_.registers[VBE_DISPI_INDEX_BANK] << 16);
   } else {
@@ -490,17 +501,16 @@ void VgaRender::UpdateVRamMemoryMap() {
   }
   
   /* Map / unmap the area as ram to accelerate */
-  if (vram_rw_mapped_ != map_memory) {
-    if (vram_rw_mapped_) {
-      device_->RemoveIoResource(kIoResourceTypeRam, "VGA RAM");
+  if (vram_rw_resource_ == nullptr || vram_rw_resource_->host_memory != map_memory) {
+    if (vram_rw_resource_) {
+      device_->RemoveIoResource(vram_rw_resource_);
+      vram_rw_resource_ = nullptr;
     }
     if (map_memory) {
-      device_->AddIoResource(kIoResourceTypeRam, vram_map_addr_, vram_map_size_, "VGA RAM", map_memory);
+      vram_rw_resource_ = device_->AddIoResource(kIoResourceTypeRam, vram_map_addr_, vram_map_size_, "VGA RAM", map_memory);
       if (device_->debug()) {
         MV_LOG("map plane addr=0x%08x[0x08%x] to 0x%016lx", vram_map_addr_, vram_map_size_, map_memory);
       }
-
-      vram_rw_mapped_ = map_memory;
     }
   }
 }
@@ -593,42 +603,82 @@ void VgaRender::Redraw() {
   redraw_ = true;
 }
 
-bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
-  uint8_t* canvas_pixels;
-  if (IsVbeEnabled()) {
-    size_t offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
-    offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
-    canvas_pixels = vram_base_ + offset;
-  } else {
-    size_t data_size = stride_ * height_;
-    if (vga_surface_.size() != data_size) {
-      vga_surface_.resize(data_size);
-    }
-    canvas_pixels = (uint8_t*)vga_surface_.data();
-
-    /* FIXME: Should unlock the device but crashed when display mode was changing */
-    // lock.unlock();
-    if (text_mode_) {
-      DrawText(canvas_pixels);
-
-      /* blink cursor */
-      auto now = std::chrono::steady_clock::now();
-      if (now >= cursor_blink_time_) {
-        cursor_blink_time_ = now + std::chrono::milliseconds(250);
-        cursor_visible_ = !cursor_visible_;
-      }
-      if (cursor_visible_) {
-        DrawTextCursor(canvas_pixels);
-      }
-    } else {
-      DrawGraphic(canvas_pixels);
-    }
+bool VgaRender::GetVbeDisplayUpdate(DisplayUpdate& update) {
+  size_t offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
+  offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
+  if (region_ == nullptr) {
+    return false;
   }
 
-  if (vga_display_buffer_.size() != size_t(stride_ * height_)) {
-    vga_display_buffer_.resize(stride_ * height_);
+  auto mm = device_->manager()->machine()->memory_manager();
+  mm->SynchronizeDirtyBitmap(region_);
+
+  auto buffer = vram_base_ + offset;
+
+  DisplayPartialBitmap partial;
+  partial.stride = stride_;
+  partial.bpp = bpp_;
+  partial.x = 0;
+  partial.width = width_;
+  partial.palette = vga_.palette;
+
+  partial.height = 0;
+
+  uint8_t* dst = buffer;
+  for (int y = 0; y < height_; y++) {
+    size_t partial_offset = offset + y * stride_;
+    if (region_->IsDirty(partial_offset, stride_)) {
+      if (partial.height == 0) {
+        partial.y = y;
+        partial.data = dst;
+      }
+      partial.height++;
+    } else {
+      if (partial.height > 0) {
+        update.partials.push_back(partial);
+        partial.height = 0;
+      }
+    }
+    dst += stride_;
+  }
+  
+  if (partial.height > 0) {
+    update.partials.push_back(partial);
+  }
+
+  return !update.partials.empty();
+}
+
+bool VgaRender::GetVgaDisplayUpdate(DisplayUpdate& update) {
+  uint8_t* canvas_pixels;
+  size_t data_size = stride_ * height_;
+  if (vga_surface_.size() != data_size) {
+    vga_surface_.resize(data_size);
+  }
+  canvas_pixels = (uint8_t*)vga_surface_.data();
+
+  if (text_mode_) {
+    DrawText(canvas_pixels);
+
+    /* blink cursor */
+    auto now = std::chrono::steady_clock::now();
+    if (now >= cursor_blink_time_) {
+      cursor_blink_time_ = now + std::chrono::milliseconds(250);
+      cursor_visible_ = !cursor_visible_;
+    }
+    if (cursor_visible_) {
+      DrawTextCursor(canvas_pixels);
+    }
+  } else {
+    DrawGraphic(canvas_pixels);
+  }
+
+  if (vga_display_buffer_size_ != size_t(stride_ * height_)) {
+    vga_display_buffer_size_ = stride_ * height_;
+    MV_ASSERT(vga_display_buffer_size_ <= vga_display_buffer_.size());
     redraw_ = true;
   }
+  auto buffer = (uint8_t*)vga_display_buffer_.data();
 
   DisplayPartialBitmap partial;
   partial.stride = stride_;
@@ -639,16 +689,16 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
 
   if (redraw_) {
     redraw_ = false;
-    memcpy(vga_display_buffer_.data(), canvas_pixels, stride_ * height_);
+    memcpy(buffer, canvas_pixels, stride_ * height_);
     partial.y = 0;
     partial.height = height_;
-    partial.data = (uint8_t*)vga_display_buffer_.data();
+    partial.data = buffer;
     update.partials.emplace_back(std::move(partial));
   } else {
     partial.height = 0;
     // Compare src & dst line by line, and copy if different
     uint8_t* src = canvas_pixels;
-    uint8_t* dst = (uint8_t*)vga_display_buffer_.data();
+    uint8_t* dst = buffer;
     for (int y = 0; y < height_; y++) {
       if (memcmp(src, dst, stride_) == 0) {
         if (partial.height > 0) {
@@ -672,8 +722,18 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
     }
   }
 
-  update.cursor.visible = false;
   return !update.partials.empty();
+}
+
+bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
+  // No cursor info in VGA mode
+  update.cursor.visible = false;
+
+  if (IsVbeEnabled()) {
+    return GetVbeDisplayUpdate(update);
+  } else {
+    return GetVgaDisplayUpdate(update);
+  }
 }
 
 void VgaRender::DrawGraphic(uint8_t* buffer) {

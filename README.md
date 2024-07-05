@@ -32,7 +32,7 @@ What's supported now:
 ### Basic functions
 
 1. 440FX ✅ / Q35 Chipset ✅
-2. SeaBIOS ✅
+2. SeaBIOS ✅ OVMF ✅
 3. Memory Region Management ✅
 4. IOPort Management ✅
 5. Devices Management ✅
@@ -47,7 +47,7 @@ What's supported now:
 14. VGA / VBE ✅
 15. Option Roms ✅ / SMBIOS ✅ / ACPI Table ✅
 16. Boot DOS ✅
-17. Boot OS (Win98 to Win11 / DOS / Ubuntu) ✅
+17. Boot OS (Win98 to Win11 / DOS / Ubuntu / macOS Sonoma) ✅
 18. QCOW2 ✅
 
 ### Multimedia & Networking
@@ -61,7 +61,7 @@ What's supported now:
 7. User network ✅
 8. VFIO (mdev & passthrough) ✅
 9. Samba
-10. USB 1.0 UHCI ✅ / USB 3.0 XHCI ✅ / USB Tablet ✅ / USB Midi ✅ / USB Wacom ✅
+10. USB 1.0 UHCI ✅ / USB 3.0 XHCI ✅ / USB Tablet ✅ / USB Keyboard ✅ / USB Midi ✅ / USB Wacom ✅
 
 ### Hyper-V & Migration
 
@@ -76,7 +76,7 @@ What's supported now:
 ### For RockyLinux 9.3,
 
 ```bash
-dnf install epel-release gdb cmake gcc-c++
+dnf install epel-release gdb cmake gcc-c++ acpica-tools
 dnf --enablerepo=devel install -y protobuf-compiler protobuf-devel glib2-devel yaml-cpp-devel pixman-devel libzstd-devel zlib-devel
 
 # If SDL enabled
@@ -86,7 +86,7 @@ dnf --enablerepo=devel install -y SDL2-devel alsa-lib-devel
 ### For Debian 12,
 
 ```bash
-apt install meson gdb cmake build-essential g++
+apt install meson gdb cmake build-essential g++ acpica-tools
 apt install protobuf-compiler libprotobuf-dev libglib2.0-dev libyaml-cpp-dev libpixman-1-dev libzstd-dev zlib1g-dev
 
 # If SDL enabled

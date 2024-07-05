@@ -423,6 +423,11 @@ void Viewer::SetupKeyboardShortcuts() {
     MV_ASSERT(machine_->PostSave());
   };
 
+  keyboard_shortcuts_[SDLK_F10] = [this]() {
+      MV_LOG("Print Memory");
+      machine_->memory_manager()->PrintMemoryScope();
+  };
+
   keyboard_shortcuts_[SDLK_F11] = [this]() {
     if (machine_->IsPaused()) {
       MV_LOG("Resume");
@@ -434,14 +439,8 @@ void Viewer::SetupKeyboardShortcuts() {
   };
 
   keyboard_shortcuts_[SDLK_F12] = [this]() {
-    if (machine_->IsPaused()) {
-      MV_LOG("Reset");
-      machine_->Resume();
-      machine_->Reset();
-    } else {
-      MV_LOG("Shutdown");
-      machine_->Shutdown();
-    }
+    MV_LOG("Reset");
+    machine_->Reset();
   };
 }
 
@@ -451,13 +450,13 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   switch (event.type)
   {
   case SDL_USEREVENT: {
-    std::unique_lock<std::mutex> lock(mutex_);
-    while (!tasks_.empty()) {
-      auto& task = tasks_.front();
-      lock.unlock();
+    std::deque<VoidCallback> tasks_copy;
+    {
+      std::unique_lock<std::mutex> lock(mutex_);
+      tasks_copy.swap(tasks_);
+    }
+    for (auto& task : tasks_copy) {
       task();
-      lock.lock();
-      tasks_.pop_front();
     }
     break;
   }

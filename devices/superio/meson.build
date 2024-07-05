@@ -7,7 +7,8 @@ mvisor_sources += files(
   'i82078_fdc.cc',
   'ps2.cc',
   'uart.cc',
-  'pvpanic.cc'
+  'pvpanic.cc',
+  'apple_smc.cc',
 )
 
 proto_sources += proto_gen.process(
@@ -15,4 +16,9 @@ proto_sources += proto_gen.process(
   'i8257_dma.proto',
   'i82078_fdc.proto',
   'ps2.proto'
+)
+
+iasl_sources += iasl_gen.process(
+  'apple_smc.asl',
+  'pvpanic.asl'
 )

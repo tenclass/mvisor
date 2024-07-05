@@ -56,7 +56,7 @@ DeviceManager::DeviceManager(Machine* machine, Device* root) :
   SetupIrqChip();
   
   /* Initialize GSI routing table */
-  SetupGsiRoutingTable();
+  ResetGsiRoutingTable();
 
   /* Call Connect() on all devices and do the initialization
    * 1. reset device status
@@ -76,6 +76,8 @@ DeviceManager::~DeviceManager() {
 
 /* Called when system start or reset */
 void DeviceManager::ResetDevices() {
+  ResetGsiRoutingTable();
+
   for (auto device : registered_devices_) {
     device->Reset();
   }
@@ -196,7 +198,7 @@ void DeviceManager::RegisterIoHandler(Device* device, const IoResource* resource
     });
   } else if (resource->type == kIoResourceTypeMmio) {
     // Map the memory to type Device. Accessing these regions will cause MMIO access fault
-    const MemoryRegion* region = machine_->memory_manager()->Map(resource->base, resource->length,
+    auto region = machine_->memory_manager()->Map(resource->base, resource->length,
       nullptr, kMemoryTypeDevice, resource->name);
 
     mmio_handlers_.push_back(new IoHandler {
@@ -277,7 +279,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
   };
   int ret = ioctl(machine_->vm_fd_, KVM_IOEVENTFD, &kvm_ioevent);
   if (ret < 0) {
-    MV_PANIC("failed to register io event, ret=%d", ret);
+    MV_PANIC("%s failed to register io event, ret=%d", device->name(), ret);
   }
   if (machine_->debug_) {
     MV_LOG("%s register IO event address=0x%lx length=%lu fd=%d", device->name(), address, length, event->fd);
@@ -494,9 +496,12 @@ void DeviceManager::HandleMmio(uint64_t addr, uint8_t* data, uint16_t size, int 
     }
   }
 
+  // Read from unhandled MMIO always returns 0
+  if (!is_write) {
+    bzero(data, size);
+  }
   if (machine_->debug()) {
-    machine_->memory_manager()->PrintMemoryScope();
-    MV_PANIC("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
+    MV_ERROR("unhandled mmio %s base: 0x%016lx size: %x data: %016lx",
       is_write ? "write" : "read", addr, size, *(uint64_t*)data);
   }
 }
@@ -623,7 +628,8 @@ void DeviceManager::SetupIrqChip() {
 }
 
 /* Although KVM has initialized GSI routing table, we still need to do it again */
-void DeviceManager::SetupGsiRoutingTable() {
+void DeviceManager::ResetGsiRoutingTable() {
+  gsi_routing_table_.clear();
   auto add_irq_routing = [this](uint gsi, uint chip, uint pin) {
     kvm_irq_routing_entry entry = {
       .gsi = gsi,
@@ -728,27 +734,7 @@ void DeviceManager::RemoveMsiNotifier(int gsi, int trigger_fd) {
   UpdateGsiRoutingTable();
 }
 
-
 bool DeviceManager::SaveState(MigrationWriter* writer) {
-  writer->SetPrefix("kvm-irqchip");
-  /* Save irq chip */
-  kvm_irqchip chip;
-  chip.chip_id = KVM_IRQCHIP_PIC_MASTER;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_IRQCHIP, &chip) == 0);
-  writer->WriteRaw("PIC_MASTER", &chip.chip.pic, sizeof(chip.chip.pic));
-
-  chip.chip_id = KVM_IRQCHIP_PIC_SLAVE;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_IRQCHIP, &chip) == 0);
-  writer->WriteRaw("PIC_SLAVE", &chip.chip.pic, sizeof(chip.chip.pic));
-
-  chip.chip_id = KVM_IRQCHIP_IOAPIC;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_IRQCHIP, &chip) == 0);
-  writer->WriteRaw("IOAPIC", &chip.chip.ioapic, sizeof(chip.chip.ioapic));
-
-  kvm_pit_state2 pit2;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_GET_PIT2, &pit2) == 0);
-  writer->WriteRaw("PIT2", &pit2, sizeof(pit2));
-  
   /* Save states of devices */
   for (auto device : registered_devices_) {
     writer->SetPrefix(device->name());
@@ -761,28 +747,7 @@ bool DeviceManager::SaveState(MigrationWriter* writer) {
 }
 
 bool DeviceManager::LoadState(MigrationReader* reader) {
-  reader->SetPrefix("kvm-irqchip");
-  /* Load irq chip */
-  kvm_irqchip chip;
-  chip.chip_id = KVM_IRQCHIP_PIC_MASTER;
-  if (!reader->ReadRaw("PIC_MASTER", &chip.chip.pic, sizeof(chip.chip.pic)))
-    return false;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_IRQCHIP, &chip) == 0);
-
-  chip.chip_id = KVM_IRQCHIP_PIC_SLAVE;
-  if (!reader->ReadRaw("PIC_SLAVE", &chip.chip.pic, sizeof(chip.chip.pic)))
-    return false;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_IRQCHIP, &chip) == 0);
-
-  chip.chip_id = KVM_IRQCHIP_IOAPIC;
-  if (!reader->ReadRaw("IOAPIC", &chip.chip.ioapic, sizeof(chip.chip.ioapic)))
-    return false;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_IRQCHIP, &chip) == 0);
-
-  kvm_pit_state2 pit2;
-  if (!reader->ReadRaw("PIT2", &pit2, sizeof(pit2)))
-    return false;
-  MV_ASSERT(ioctl(machine_->vm_fd_, KVM_SET_PIT2, &pit2) == 0);
+  ResetGsiRoutingTable();
 
   /* Load device states */
   for (auto device : registered_devices_) {

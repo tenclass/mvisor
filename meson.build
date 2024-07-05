@@ -27,6 +27,13 @@ proto_gen = generator(protoc,
 )
 proto_sources = []
 
+iasl = find_program('iasl', required: true)
+iasl_gen = generator(iasl,
+  output: ['@BASENAME@.hex', '@BASENAME@.aml'],
+  arguments: ['-tc', '-vi', '-p', '@BUILD_DIR@/@BASENAME@', '@INPUT@']
+)
+iasl_sources = []
+
 mvisor_include = [include_directories('include')]
 mvisor_sources = ['main.cc']
 
@@ -59,6 +66,12 @@ proto_interface = declare_dependency(
 )
 
 mvisor_deps += proto_interface
+
+iasl_interface = declare_dependency(
+  sources: iasl_sources
+)
+
+mvisor_deps += iasl_interface
 
 mvisor = executable('mvisor',
   sources: mvisor_sources,

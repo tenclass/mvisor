@@ -19,12 +19,14 @@
 #ifndef _MVISOR_DEVICE_MANAGER_H
 #define _MVISOR_DEVICE_MANAGER_H
 
+#include <linux/kvm.h>
 #include <set>
 #include <string>
 #include <deque>
 #include <mutex>
 #include <vector>
 #include <thread>
+
 #include "pci_device.h"
 #include "device.h"
 #include "io_thread.h"
@@ -33,7 +35,7 @@ struct MemoryRegion;
 struct IoHandler {
   const IoResource*   resource;
   Device*             device;
-  const MemoryRegion* memory_region;
+  MemoryRegion*       memory_region;
 };
 
 typedef std::function<void()> VoidCallback;
@@ -121,7 +123,7 @@ class DeviceManager {
 
  private:
   void SetupIrqChip();
-  void SetupGsiRoutingTable();
+  void ResetGsiRoutingTable();
   void UpdateGsiRoutingTable();
 
  private:

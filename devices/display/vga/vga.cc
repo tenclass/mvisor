@@ -32,6 +32,7 @@
 #include "logger.h"
 #include "vbe.h"
 #include "machine.h"
+#include "edid.h"
 
 
 Vga::Vga() {
@@ -45,14 +46,17 @@ Vga::Vga() {
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
 
-  /* Bar 0: 256MB VRAM */
-  vram_size_ = _MB(256);
+  /* Bar 0: 64MB VRAM */
+  vram_size_ = _MB(64);
   SetupPciBar(0, vram_size_, kIoResourceTypeRam);
+
+  /* Bar 2: MMIO BAR */
+  SetupPciBar(2, 0x1000, kIoResourceTypeMmio);
 
   /* VGA registers */
   AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
   AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "VBE IO");
-  AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO",
+  AddIoResource(kIoResourceTypeMmio, VGA_MEMORY_BASE, VGA_MEMORY_SIZE, "VGA MEMORY",
     nullptr, kIoResourceFlagCoalescingMmio);
 }
 
@@ -68,6 +72,27 @@ void Vga::Reset() {
   vga_render_ = new VgaRender(this, vram_base_, vram_size_);
 }
 
+
+bool Vga::ActivatePciBar(uint32_t bar_index) {
+  bool ret = PciDevice::ActivatePciBar(bar_index);
+
+  if (ret && bar_index == 0) {
+    auto region = pci_bars_[0].resource->mapped_region;
+    if (region) {
+      auto mm = manager_->machine()->memory_manager();
+      mm->SetLogDirtyBitmap(region, true);
+      vga_render_->SetMemoryRegion(region);
+    }
+  }
+  return ret;
+}
+
+bool Vga::DeactivatePciBar(uint32_t bar_index) {
+  if (bar_index == 0 && vga_render_) {
+    vga_render_->SetMemoryRegion(nullptr);
+  }
+  return PciDevice::DeactivatePciBar(bar_index);
+}
 
 bool Vga::SaveState(MigrationWriter* writer) {
   vga_render_->SaveState(writer);
@@ -91,6 +116,7 @@ bool Vga::LoadState(MigrationReader* reader) {
   display_mode_ = kDisplayModeVga;
   Schedule([this]() {
     NotifyDisplayModeChange();
+    vga_render_->Redraw();
   });
   return true;
 }
@@ -168,9 +194,47 @@ bool Vga::GetScreenshot(DisplayUpdate& update) {
   return false;
 }
 
+void Vga::ReadMmio(uint64_t offset, uint8_t* data, uint32_t size) {
+  if (offset >= 0x500 && offset + size <= 0x500 + 36) {
+    MV_ASSERT(size == 2);
+    uint16_t index = (offset - 0x500 ) / 2;
+    vga_render_->VbeWritePort(VBE_PIO_BASE, index);
+    vga_render_->VbeReadPort(VBE_PIO_BASE + 1, (uint16_t*)data);
+  } else if (offset >= 0x400 && offset + size <= 0x500) {
+    offset -= 0x400;
+    vga_render_->VgaReadPort(VGA_PIO_BASE + offset, &data[0]);
+    for (size_t i = 1; i < size; i++) {
+      vga_render_->VgaReadPort(VGA_PIO_BASE + offset + 1, &data[i]);
+    }
+  } else if (offset + size <= 0x100) {
+    memcpy(data, edid_bin + offset, size);
+  } else {
+    MV_PANIC("VGA MMIO read offset=0x%lx size=%d not implemented", offset, size);
+  }
+}
+
+void Vga::WriteMmio(uint64_t offset, uint8_t* data, uint32_t size) {
+  uint64_t value = 0;
+  memcpy(&value, data, size);
+  if (offset >= 0x500 && offset + size <= 0x500 + 36) {
+    MV_ASSERT(size == 2);
+    uint16_t index = (offset - 0x500 ) / 2;
+    vga_render_->VbeWritePort(VBE_PIO_BASE, index);
+    vga_render_->VbeWritePort(VBE_PIO_BASE + 1, value);
+  } else if (offset >= 0x400 && offset + size <= 0x500) {
+    offset -= 0x400;
+    vga_render_->VgaWritePort(VGA_PIO_BASE + offset, data[0]);
+    for (size_t i = 1; i < size; i++) {
+      vga_render_->VgaWritePort(VGA_PIO_BASE + offset + 1, data[i]);
+    }
+  } else {
+    MV_PANIC("VGA MMIO write offset=0x%lx size=%d data=0x%lx not implemented", offset, size, value);
+  }
+}
+
 void Vga::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   uint64_t port = resource->base + offset;
-  if (resource->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MEMORY_BASE) {
     for (size_t i = 0; i < size; i++) {
       vga_render_->VgaReadMemory(port + i, &data[i]);
     }
@@ -183,6 +247,8 @@ void Vga::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint3
     if (size == 2) {
       vga_render_->VbeReadPort(port, (uint16_t*)data);
     }
+  } else if (resource->base == pci_bars_[2].address) {
+    ReadMmio(offset, data, size);
   } else {
     PciDevice::Read(resource, offset, data, size);
   }
@@ -190,7 +256,7 @@ void Vga::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint3
 
 void Vga::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
   uint64_t port = resource->base + offset;
-  if (resource->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MEMORY_BASE) {
     for (size_t i = 0; i < size; i++) {
       vga_render_->VgaWriteMemory(port + i, data[i]);
     }
@@ -202,6 +268,8 @@ void Vga::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
   } else if (resource->base == VBE_PIO_BASE) {
     MV_ASSERT(size == 2);
     vga_render_->VbeWritePort(port, *(uint16_t*)data);
+  } else if (resource->base == pci_bars_[2].address) {
+    WriteMmio(offset, data, size);
   } else {
     PciDevice::Write(resource, offset, data, size);
   }

@@ -84,11 +84,11 @@ void Device::Disconnect() {
   manager_->UnregisterDevice(this);
 }
 
-void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name) {
-  AddIoResource(type, base, length, name, nullptr, kIoResourceFlagNone);
+IoResource* Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name) {
+  return AddIoResource(type, base, length, name, nullptr, kIoResourceFlagNone);
 }
 
-void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
+IoResource* Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags) {
   MV_ASSERT(length > 0);
   auto resource = new IoResource {
     .type = type,
@@ -100,42 +100,41 @@ void Device::AddIoResource(IoResourceType type, uint64_t base, uint64_t length, 
     .mapped_region = nullptr,
     .flags = flags
   };
-  io_resources_.push_back(resource);
+  io_resources_.insert(resource);
   if (connected_) {
     SetIoResourceEnabled(resource, true);
   }
+  return resource;
+}
+
+void Device::RemoveIoResource(IoResource* resource) {
+  if (connected_) {
+    SetIoResourceEnabled(resource, false);
+  }
+  io_resources_.erase(resource);
+  delete resource;
 }
 
 void Device::RemoveIoResource(IoResourceType type, const char* name) {
-  for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
-    auto resource = *it;
-    if (resource->type == type &&
-        (resource->name == name || (name && resource->name && strcmp(resource->name, name) == 0))
-      ) {
-      if (connected_) {
-        SetIoResourceEnabled(resource, false);
-      }
-      io_resources_.erase(it);
-      delete resource;
-      return;
-    }
+  auto it = std::find_if(io_resources_.begin(), io_resources_.end(), [type, name](IoResource* resource) {
+    return resource->type == type && (resource->name == name || (name && resource->name && strcmp(resource->name, name) == 0));
+  });
+  if (it == io_resources_.end()) {
+    MV_PANIC("%s not found type=%d name=%s", name_, type, name);
+    return;
   }
+  RemoveIoResource(*it);
 }
 
 void Device::RemoveIoResource(IoResourceType type, uint64_t base) {
-  for (auto it = io_resources_.begin(); it != io_resources_.end(); it++) {
-    auto resource = *it;
-    if (resource->type == type && resource->base == base) {
-      if (connected_) {
-        SetIoResourceEnabled(resource, false);
-      }
-      MV_ASSERT(!resource->enabled);
-      io_resources_.erase(it);
-      delete resource;
-      return;
-    }
+  auto it = std::find_if(io_resources_.begin(), io_resources_.end(), [type, base](IoResource* resource) {
+    return resource->type == type && resource->base == base;
+  });
+  if (it == io_resources_.end()) {
+    MV_PANIC("%s not found type=%d base=0x%lx", name_, type, base);
+    return;
   }
-  MV_PANIC("%s not found type=%d base=0x%lx", name_, type, base);
+  RemoveIoResource(*it);
 }
 
 void Device::SetIoResourceEnabled(IoResource* resource, bool enabled) {

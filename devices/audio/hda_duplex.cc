@@ -198,6 +198,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       AC_WCAP_FORMAT_OVRD | AC_WCAP_STEREO);
     dac.parameters[AC_PAR_PCM] = pcm_formats_;
     dac.parameters[AC_PAR_STREAM] = AC_SUPFMT_PCM;
+    dac.parameters[AC_PAR_FUNCTION_TYPE] = AC_GRP_AUDIO_FUNCTION;
     nodes_.push_back(dac);
 
     // out node
@@ -214,6 +215,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       AC_WCAP_CONN_LIST | AC_WCAP_STEREO;
     out.parameters[AC_PAR_PIN_CAP] = AC_PINCAP_OUT;
     out.parameters[AC_PAR_CONNLIST_LEN] = out.connection.size();
+    out.parameters[AC_PAR_FUNCTION_TYPE] = AC_GRP_AUDIO_FUNCTION;
     nodes_.push_back(out);
 
     // adc node
@@ -230,7 +232,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     adc.parameters[AC_PAR_CONNLIST_LEN] = adc.connection.size();
     adc.parameters[AC_PAR_PCM] = pcm_formats_;
     adc.parameters[AC_PAR_STREAM] = AC_SUPFMT_PCM;
-    adc.parameters[AC_PAR_AMP_OUT_CAP] = 0;
+    adc.parameters[AC_PAR_FUNCTION_TYPE] = AC_GRP_AUDIO_FUNCTION;
     nodes_.push_back(adc);
 
     // in
@@ -244,6 +246,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     in.pin_control = AC_PINCTL_IN_EN;
     in.parameters[AC_PAR_AUDIO_WIDGET_CAP] = (AC_WID_PIN << AC_WCAP_TYPE_SHIFT) | AC_WCAP_STEREO;
     in.parameters[AC_PAR_PIN_CAP] = AC_PINCAP_IN;
+    in.parameters[AC_PAR_FUNCTION_TYPE] = AC_GRP_AUDIO_FUNCTION;
     nodes_.push_back(in);
 
     // setup with default format
@@ -272,6 +275,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     {
     case AC_VERB_PARAMETERS:
       callback(FindNodeParameter(node, payload));
+      break;
+    case AC_VERB_GET_SUBSYSTEM_ID:
+      callback(subsystem_id_);
       break;
     case AC_VERB_GET_STREAM_FORMAT:
       MV_ASSERT(node.stream);
@@ -351,7 +357,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
       break;
     default:
       if (debug_) {
-        MV_LOG("unhandled verb 0x%x payload=0x%x", verb, payload);
+        MV_WARN("unhandled verb 0x%x payload=0x%x", verb, payload);
       }
       callback(0);
       break;
@@ -361,7 +367,9 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   uint32_t FindNodeParameter(const HdaNode& node, uint32_t id) {
     auto it = node.parameters.find(id);
     if (it == node.parameters.end()) {
-      MV_PANIC("failed to find node %s parameter 0x%x", node.name.c_str(), id);
+      if (debug_) {
+        MV_WARN("failed to find node %s parameter 0x%x", node.name.c_str(), id);
+      }
       return 0;
     }
     return it->second;
@@ -377,7 +385,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     }
     if ((stream->format & AC_FMT_BITS_MASK) != AC_FMT_BITS_16) {
       if (debug_) {
-        MV_LOG("not supported audio format 0x%x", stream->format);
+        MV_WARN("not supported audio format 0x%x", stream->format);
       }
       return;
     }
@@ -535,7 +543,7 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
   void WriteRecordDataToDevice(const std::string& record_data) {
     HdaStream* stream = FindStreamById(1, false);
     if(stream == nullptr) {
-      MV_ERROR("can't find stream by id");
+      MV_WARN("can't find stream by id");
       return;
     }
 

@@ -34,7 +34,8 @@
 #include "migration.h"
 
 
-Machine::Machine(std::string config_path) {
+Machine::Machine(std::string config_path, std::string vm_name, std::string vm_uuid) :
+  vm_name_(vm_name), vm_uuid_(vm_uuid) {
   /* Load the configuration and set values of num_vcpus & ram_size */
   config_ = new Configuration(this);
   if (!config_->Load(config_path)) {
@@ -65,7 +66,7 @@ Machine::Machine(std::string config_path) {
 
   /* Start threads and wait to resume */
   std::unique_lock<std::mutex> lock(mutex_);
-  wait_count_ = num_vcpus_ + 1;
+  wait_count_ = 1;
   paused_ = true;
 
   for (auto vcpu: vcpus_) {
@@ -141,11 +142,10 @@ void Machine::Quit() {
 
   /* If paused, threads are waiting to resume */
   wait_to_resume_.notify_all();
-
+  io_thread_->Stop();
   for (auto vcpu: vcpus_) {
     vcpu->Kick();
   }
-  io_thread_->Stop();
 
   /* Safe to quit main thread now */
   wait_to_quit_condition_.notify_all();
@@ -153,17 +153,25 @@ void Machine::Quit() {
 
 /* Recover BIOS data and reset all vCPU */
 void Machine::Reset() {
-  if (!valid_)
+  if (!valid_) {
+    MV_WARN("machine is invalid, reset is ignored");
     return;
+  }
+  auto previous_paused = paused_;
+  if (!paused_) {
+    Pause();
+  }
+
   memory_manager_->Reset();
   device_manager_->ResetDevices();
 
   MV_LOG("Resettings vCPUs");
-
   for (auto vcpu : vcpus_) {
-    vcpu->Schedule([vcpu]() {
-      vcpu->Reset();
-    });
+    vcpu->Reset();
+  }
+
+  if (!previous_paused) {
+    Resume();
   }
 }
 
@@ -223,6 +231,9 @@ void Machine::Resume() {
   
   /* Resume threads */
   wait_to_resume_.notify_all();
+  for (auto vcpu : vcpus_) {
+    vcpu->Kick();
+  }
 }
 
 /* Currently this method can only be called from UI threads */
@@ -231,17 +242,10 @@ void Machine::Pause() {
   if (!valid_ || paused_)
     return;
 
-  /* Mark paused state and wait for vCPU threads */
-  wait_count_ = num_vcpus_;
   pausing_ = true;
   paused_ = true;
-
-  for (auto vcpu : vcpus_) {
-    vcpu->Kick();
-  }
-  wait_to_pause_condition_.wait(lock, [this]() {
-    return wait_count_ == 0;
-  });
+  /* Make sure no vCPU thread is running now */
+  VcpuRunLockGuard guard(vcpus_);
 
   /* Here all the threads are stopped, broadcast messages */
   for (auto& listener : state_change_listeners_) {
@@ -251,7 +255,7 @@ void Machine::Pause() {
   /* Wait for IO thread to stop */
   io_thread_->FlushDiskImages();
 
-  wait_count_ = 1;
+  wait_count_ = io_thread_->running() ? 1 : 0;
   pausing_ = false;
   io_thread_->Kick();
 
@@ -265,7 +269,9 @@ void Machine::WaitToResume() {
   std::unique_lock<std::mutex> lock(mutex_);  
   MV_ASSERT(wait_count_ > 0);
   wait_count_--;
-  wait_to_pause_condition_.notify_all();
+  if (wait_count_ == 0) {
+    wait_to_pause_condition_.notify_all();
+  }
   wait_to_resume_.wait(lock, [this]() {
     return !IsPaused();
   });

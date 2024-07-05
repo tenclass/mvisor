@@ -316,7 +316,7 @@ AtaCdrom::AtaCdrom()
     if (task_file_->feature0 & 1) {
       WaitForDma([this]() { Atapi_ReadSectors(io_.lba_count); });
     } else {
-      Atapi_ReadSectors(1);
+      Atapi_ReadSectors(io_.lba_count);
     }
   };
   
@@ -497,7 +497,10 @@ void AtaCdrom::Atapi_ReadSectors(size_t sectors) {
     vec_index++;
   }
 
-  MV_ASSERT(request.length == geometry_.sector_size * sectors);
+  if (request.length < geometry_.sector_size * sectors) {
+    // This could happen when using the IDE controller
+    sectors = request.length / geometry_.sector_size;
+  }
   io_.transfer_bytes = request.length;
   io_.lba_count -= sectors;
   io_.lba_block += sectors;

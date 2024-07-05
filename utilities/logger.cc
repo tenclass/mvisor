@@ -28,6 +28,9 @@
 #include <linux/kvm.h>
 #include <sys/prctl.h>
 #include <csignal>
+#include <stdexcept>
+#include "vcpu.h"
+
 
 void Log(LogType type, const char* file, int line, const char* function, const char* format, ...) {
   char message[512];
@@ -64,8 +67,8 @@ void Log(LogType type, const char* file, int line, const char* function, const c
   }
 
   if (type == kLogTypePanic) {
-    std::raise(SIGINT);
-    exit(1);
+    // Use "throw" to exit thread and make sure mutex is unlocked
+    throw std::runtime_error("Panic");
   }
 }
 

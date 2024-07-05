@@ -25,6 +25,8 @@
 
 #include <cstdint>
 #include <string>
+#include <map>
+#include <vector>
 
 #define SMBIOS_MAX_TYPE 127
 
@@ -279,13 +281,28 @@ class Machine;
 class Smbios {
  public:
   Smbios(Machine* machine);
-  void GetTables(std::string& anchor, std::string& tables);
+  void GetTables(std::string& anchor, std::string& table);
 
  private:
+  void BuildStructure(uint8_t type, void* data, size_t size, std::vector<std::string>& texts, uint16_t handle=0);
+  void BuildType1();
+  void BuildType2();
+  void BuildType3();
+  void BuildType4();
+  void BuildType16();
+  void BuildType17();
+  void BuildType19();
+  void BuildType32();
   void SetupEntryPoint();
   Machine* machine_;
 
   smbios_21_entry_point entry_point_;
+  std::vector<std::string> table_entries_;
+
+  std::string default_manufacturer_;
+  std::string default_product_name_;
+  std::string default_version_;
+  std::string default_serial_number_;
 };
 
 #endif // _MVISOR_DEVICES_SMBIOS_H

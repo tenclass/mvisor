@@ -80,10 +80,13 @@ void PciHost::Write(const IoResource* resource, uint64_t offset, uint8_t* data, 
   } else if (resource->base == 0xCFC) {
     PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
     if (pci) {
+      std::lock_guard<std::recursive_mutex> lock(pci->mutex());
       config_.reg_offset = offset;
       pci->WritePciConfigSpace(config_.value & 0xFF, data, size);
     } else {
-      MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
+      if (debug_) {
+        MV_ERROR("failed to lookup pci %x:%x.%x", config_.bus, config_.slot, config_.function);
+      }
     }
   } else {
     PciDevice::Write(resource, offset, data, size);
@@ -97,6 +100,7 @@ void PciHost::Read(const IoResource* resource, uint64_t offset, uint8_t* data, u
   } else if (resource->base == 0xCFC) {
     PciDevice* pci = manager_->LookupPciDevice(config_.bus, config_.slot, config_.function);
     if (pci) {
+      std::lock_guard<std::recursive_mutex> lock(pci->mutex());
       config_.reg_offset = offset;
       pci->ReadPciConfigSpace(config_.value & 0xFF, data, size);
     } else {

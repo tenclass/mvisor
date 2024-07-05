@@ -28,11 +28,19 @@
 #include <sys/uio.h>
 #include <cstdint>
 
+#include "logger.h"
+
 class KeyboardInputInterface {
  public:
   virtual ~KeyboardInputInterface() = default;
   virtual bool QueueKeyboardEvent(uint8_t scancode[10], uint8_t modifiers) = 0;
-  virtual bool QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) = 0;
+  virtual bool QueueMouseEvent(uint button_state, int rel_x, int rel_y, int rel_z) {
+    MV_UNUSED(button_state);
+    MV_UNUSED(rel_x);
+    MV_UNUSED(rel_y);
+    MV_UNUSED(rel_z);
+    return false;
+  }
   virtual bool InputAcceptable() = 0;
 };
 
@@ -278,6 +286,12 @@ class CmosDataInterface {
  public:
   virtual ~CmosDataInterface() = default;
   virtual void SetData(uint8_t index, uint8_t data) = 0;
+};
+
+class AcpiTableInterface {
+ public:
+  virtual ~AcpiTableInterface() = default;
+  virtual std::string GetAcpiTable() = 0;
 };
 
 #endif // _MVISOR_DEVICE_INTERFACES_H

@@ -27,35 +27,10 @@
 #include <unordered_set>
 
 #include "migration.h"
+#include "memory_region.h"
 
 
-enum MemoryType {
-  kMemoryTypeReserved = 0,
-  kMemoryTypeRam = 1,
-  kMemoryTypeDevice = 2,
-  kMemoryTypeRom = 3
-};
-
-struct MemoryRegion {
-  uint64_t      gpa;
-  void*         host;
-  uint64_t      size;
-  uint32_t      flags;
-  MemoryType    type;
-  char          name[20];
-};
-
-struct MemorySlot {
-  MemoryType    type;
-  uint64_t      begin;
-  uint64_t      end;
-  uint32_t      id;
-  uint64_t      hva;
-  uint32_t      flags;
-  MemoryRegion* region;
-};
-
-typedef std::function<void (const MemorySlot* slot, bool unmap)> MemoryListenerCallback;
+typedef std::function<void (const MemorySlot slot, bool unmap)> MemoryListenerCallback;
 struct MemoryListener {
   MemoryListenerCallback callback;
 };
@@ -82,17 +57,19 @@ typedef std::function<bool (size_t offset)> DirtyBitmapCallback;
 class Machine;
 class MemoryManager {
  public:
-  MemoryManager(const Machine* machine);
+  MemoryManager(Machine* machine);
   ~MemoryManager();
 
-  const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
-  void Unmap(const MemoryRegion** region);
+  MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
+  void Unmap(MemoryRegion** region);
   void Reset();
 
   /* Used for migration */
   bool SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);
 
+  void SetLogDirtyBitmap(MemoryRegion* region, bool log);
+  void SynchronizeDirtyBitmap(MemoryRegion* region);
   void SetDirtyMemoryRegion(uint64_t gpa, size_t size);
   void StartTrackingDirtyMemory();
   void StopTrackingDirtyMemory();
@@ -106,26 +83,27 @@ class MemoryManager {
   void PrintMemoryScope();
   void* GuestToHostAddress(uint64_t gpa);
   uint64_t HostToGuestAddress(void* host);
-  std::vector<const MemorySlot*> GetMemoryFlatView();
+  std::vector<MemorySlot> GetMemoryFlatView();
   const MemoryListener* RegisterMemoryListener(MemoryListenerCallback callback);
   void UnregisterMemoryListener(const MemoryListener** plistener);
 
-  const std::set<MemoryRegion*>& regions() const { return regions_; }
+  const std::vector<MemoryRegion*>& regions() const { return regions_; }
 
  private:
   void InitializeSystemRam();
   void InitializeReservedMemory();
   void LoadBiosFile();
-  void AddMemoryRegion(MemoryRegion* region);
+  void CommitMemoryRegionChanges();
+  void NotifySlotChange(const MemorySlot* slot, bool unmap);
   void UpdateKvmSlot(MemorySlot* slot, bool remove);
   uint AllocateSlotId();
   bool GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap);
-  std::vector<MemorySlot> GetSlotsByNames(std::unordered_set<std::string> names);
   bool HandleBitmap(const char* bitmap, size_t size, DirtyBitmapCallback callback);
 
-  const Machine*                  machine_;
-  void*                           ram_host_;
-  std::set<MemoryRegion*>         regions_;
+  Machine*                        machine_;
+  void*                           system_ram_host_;
+  std::vector<MemoryRegion*>      system_regions_;
+  std::vector<MemoryRegion*>      regions_;
   std::map<uint64_t, MemorySlot*> kvm_slots_;
   std::set<const MemoryListener*> memory_listeners_;
   std::set<uint>                  free_slots_;
@@ -136,6 +114,7 @@ class MemoryManager {
   size_t                          bios_size_;
   void*                           bios_data_ = nullptr;
   void*                           bios_backup_ = nullptr;
+  const MemoryRegion*             bios_region_ = nullptr;
 
   bool                                 track_dirty_memory_ = false;
   std::mutex                           dirty_memory_region_mutex_;

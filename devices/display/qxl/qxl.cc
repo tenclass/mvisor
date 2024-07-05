@@ -70,7 +70,7 @@ Qxl::Qxl() {
   /* VGA registers */
   AddIoResource(kIoResourceTypePio, VGA_PIO_BASE, VGA_PIO_SIZE, "VGA IO");
   AddIoResource(kIoResourceTypePio, VBE_PIO_BASE, VBE_PIO_SIZE, "VBE IO");
-  AddIoResource(kIoResourceTypeMmio, VGA_MMIO_BASE, VGA_MMIO_SIZE, "VGA MMIO",
+  AddIoResource(kIoResourceTypeMmio, VGA_MEMORY_BASE, VGA_MEMORY_SIZE, "VGA MEMORY",
     nullptr, kIoResourceFlagCoalescingMmio);
 }
 
@@ -156,6 +156,11 @@ void Qxl::Disconnect() {
 }
 
 void Qxl::Reset() {
+  PciDevice::Reset();
+  SoftReset();
+}
+
+void Qxl::SoftReset() {
   IntializeQxlRom();
   IntializeQxlRam();
 
@@ -337,13 +342,27 @@ bool Qxl::ActivatePciBar(uint index) {
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
   }
-  return PciDevice::ActivatePciBar(index);
+
+  auto ret = PciDevice::ActivatePciBar(index);
+  if (ret && index == 0) {
+    auto region = pci_bars_[0].resource->mapped_region;
+    if (region) {
+      auto mm = manager_->machine()->memory_manager();
+      mm->SetLogDirtyBitmap(region, true);
+      vga_render_->SetMemoryRegion(region);
+    }
+  }
+  return ret;
 }
 
 bool Qxl::DeactivatePciBar(uint index) {
   if (index == 3) {
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
+  }
+
+  if (index == 0 && vga_render_) {
+    vga_render_->SetMemoryRegion(nullptr);
   }
   return PciDevice::DeactivatePciBar(index);
 }
@@ -494,7 +513,7 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
     FlushCommandsAndResources();
     break;
   case QXL_IO_RESET:
-    Reset();
+    SoftReset();
     UpdateIrqLevel();
     break;
   case QXL_IO_LOG:
@@ -558,7 +577,7 @@ void Qxl::Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint3
 
   /* VGA registers */
   uint64_t port = resource->base + offset;
-  if (resource->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MEMORY_BASE) {
     for (size_t i = 0; i < size; i++) {
       vga_render_->VgaReadMemory(port + i, &data[i]);
     }
@@ -605,7 +624,7 @@ void Qxl::Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint
 
   /* VGA registers */
   uint64_t port = resource->base + offset;
-  if (resource->base == VGA_MMIO_BASE) {
+  if (resource->base == VGA_MEMORY_BASE) {
     for (size_t i = 0; i < size; i++) {
       vga_render_->VgaWriteMemory(port + i, data[i]);
     }

@@ -18,20 +18,23 @@
 
 
 #include "device.h"
+#include "device_interface.h"
 #include "logger.h"
+#include "pvpanic.hex"
 
 #define PVPANIC_PANICKED	(1 << 0)
 #define PVPANIC_CRASH_LOADED	(1 << 1)
 
 
-class Pvpanic : public Device {
-  uint8_t supported_events = PVPANIC_PANICKED | PVPANIC_CRASH_LOADED;
+class Pvpanic : public Device, public AcpiTableInterface {
+  uint8_t   supported_events = PVPANIC_PANICKED | PVPANIC_CRASH_LOADED;
+  uint16_t  port = 0x505;
 
  public:
   Pvpanic() {
     set_default_parent_class("Ich9Lpc", "Piix3");
 
-    AddIoResource(kIoResourceTypePio, 0x505, 1, "PvPanic");
+    AddIoResource(kIoResourceTypePio, port, 1, "PvPanic");
   }
 
   void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size) {
@@ -56,6 +59,23 @@ class Pvpanic : public Device {
     } else {
       Device::Write(resource, offset, data, size);
     }
+  }
+
+  std::string GetAcpiTable() override {
+    auto data = std::string((const char*)pvpanic_aml_code, sizeof(pvpanic_aml_code));
+    // Patch port
+    auto it = data.find("\xFF\xFF");
+    if (it != std::string::npos) {
+      *(uint16_t*)&data[it] = port;
+    }
+    // Recalculate checksum
+    int checksum = 0;
+    data[9] = 0;
+    for (size_t i = 0; i < data.size(); i++) {
+      checksum += data[i];
+    }
+    data[9] = -checksum;
+    return data;
   }
 };
 

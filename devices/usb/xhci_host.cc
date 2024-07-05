@@ -39,7 +39,6 @@ XhciHost::XhciHost() {
   pci_header_.subsys_vendor_id = 0x1AF4;
   pci_header_.subsys_id = 0x1100;
   pci_header_.cacheline_size = 0x10;
-  pci_header_.command = PCI_COMMAND_IO | PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
   pci_header_.irq_pin = 1;
 
   /* Specification Release 3.0 */
@@ -201,7 +200,10 @@ bool XhciHost::LoadState(MigrationReader* reader) {
 
 void XhciHost::Reset() {
   PciDevice::Reset();
+  SoftReset();
+}
 
+void XhciHost::SoftReset() {
   MV_ASSERT(sizeof(capability_regs_) == 0x40);
   bzero(&capability_regs_, sizeof(capability_regs_));
   bzero(&operational_regs_, sizeof(operational_regs_));
@@ -505,11 +507,14 @@ void XhciHost::WriteOperationalUsbCommand(uint32_t command) {
   if (command & USBCMD_CRS) { // Restore state
     operational_regs_.usb_status |= USBSTS_SRE;
   }
-  operational_regs_.usb_command = command & 0xC0F;
+
   // mfwrap_timer is not supported yet
+  command &= ~USBCMD_EWE;
   MV_ASSERT((command & (USBCMD_RS | USBCMD_EWE)) != (USBCMD_RS | USBCMD_EWE));
+  operational_regs_.usb_command = command & 0xC0F;
+
   if (command & USBCMD_HCRST) {
-    Reset();
+    SoftReset();
   }
   CheckInterrupt(0);
 }
@@ -1321,6 +1326,7 @@ void XhciHost::CompleteTransfer(XhciTransfer* transfer) {
   }
 
   if (transfer->status != CC_SUCCESS) {
+    MV_WARN("transfer failed status=%d", transfer->status);
     StallEndpoint(transfer);
   } else {
     // Update ring dequeue to context
@@ -1504,6 +1510,9 @@ void XhciHost::ProcessCommands() {
       if (GetSlot(event, trb, slot_id)) {
         code = ResetSlot(slot_id);
       }
+      break;
+    case CR_NOOP:
+      code = CC_SUCCESS;
       break;
     default:
       MV_ERROR("unhandled TRB type=%d", type);

@@ -112,9 +112,9 @@ class VirtioNetwork : public VirtioPci, public NetworkDeviceInterface {
     }
   }
 
-  void Reset() {
+  void SoftReset() {
     /* Reset all queues */
-    VirtioPci::Reset();
+    VirtioPci::SoftReset();
   
     /* MQ is not supported yet */
     AddQueue(256, std::bind(&VirtioNetwork::OnReceive, this, 0));

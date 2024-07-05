@@ -161,50 +161,46 @@ void VfioManager::DetachDevice(int device_fd) {
   MV_ERROR("device fd %d not found", device_fd);
 }
 
-void VfioManager::MapDmaPages(const MemorySlot* slot) {
+void VfioManager::MapDmaPages(const MemorySlot& slot) {
   vfio_iommu_type1_dma_map dma_map = {
     .argsz = sizeof(dma_map),
     .flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE,
-    .vaddr = slot->hva,
-    .iova = slot->begin,
-    .size = slot->end - slot->begin
+    .vaddr = slot.hva,
+    .iova = slot.begin,
+    .size = slot.size
   };
 
   if (ioctl(container_fd_, VFIO_IOMMU_MAP_DMA, &dma_map) < 0) {
     MV_PANIC("failed to map vaddr=0x%lx size=0x%lx", dma_map.iova, dma_map.size);
   }
-
-  // record dma map for network migration
-  iommu_dma_maps_[slot] = dma_map;
 }
 
-void VfioManager::UnmapDmaPages(const MemorySlot* slot) {
+void VfioManager::UnmapDmaPages(const MemorySlot& slot) {
   vfio_iommu_type1_dma_unmap dma_ummap = {
     .argsz = sizeof(dma_ummap),
     .flags = 0,
-    .iova = slot->begin,
-    .size = slot->end - slot->begin
+    .iova = slot.begin,
+    .size = slot.size
   };
 
   if (ioctl(container_fd_, VFIO_IOMMU_UNMAP_DMA, &dma_ummap) < 0) {
     MV_PANIC("failed to unmap vaddr=0x%lx size=0x%lx", dma_ummap.iova, dma_ummap.size);
   }
-  iommu_dma_maps_.erase(slot);
 }
 
 void VfioManager::SetupDmaMaps() {
   auto mm = machine_->memory_manager();
 
   /* Map all current slots */
-  for (auto slot : mm->GetMemoryFlatView()) {
-    if (slot->type == kMemoryTypeRam && 0 == strcmp("System", slot->region->name)) {
+  for (const auto& slot : mm->GetMemoryFlatView()) {
+    if (slot.is_system()) {
       MapDmaPages(slot);
     }
   }
 
   /* Add memory listener to keep DMA maps synchronized */
   memory_listener_ = mm->RegisterMemoryListener([this](auto slot, bool unmap) {
-    if (slot->type == kMemoryTypeRam && 0 == strcmp("System", slot->region->name)) {
+    if (slot.is_system()) {
       if (unmap) {
         UnmapDmaPages(slot);
       } else {
@@ -227,13 +223,18 @@ void VfioManager::SetupDmaMaps() {
         dirty_bitmap->argsz = dirty_buffer_size;
         dirty_bitmap->flags = VFIO_IOMMU_DIRTY_PAGES_FLAG_GET_BITMAP;
 
-        for (auto it = iommu_dma_maps_.begin(); it != iommu_dma_maps_.end(); ++it) {
-          size_t bitmap_size = ALIGN(it->second.size / PAGE_SIZE, 64) / 8;
+        auto slots = machine_->memory_manager()->GetMemoryFlatView();
+        for (const auto& slot : slots) {
+          if (!slot.is_system()) {
+            continue;
+          }
+
+          size_t bitmap_size = ALIGN(slot.size / PAGE_SIZE, 64) / 8;
           std::string bitmap(bitmap_size, '\0');
 
-          // get dirty memory bitmap for this iommu region from vfio
-          dirty_bitmap_get->iova = it->second.iova;
-          dirty_bitmap_get->size = it->second.size;
+          // get dirty memory bitmap for this slot from vfio
+          dirty_bitmap_get->iova = slot.begin;
+          dirty_bitmap_get->size = slot.size;
           dirty_bitmap_get->bitmap = {
             .pgsize = PAGE_SIZE,
             .size = bitmap_size,
@@ -244,9 +245,9 @@ void VfioManager::SetupDmaMaps() {
           // save it to return for network migration
           bitmaps.push_back({
             .region = {
-              .hva = it->second.vaddr,
-              .begin = it->second.iova,
-              .end = it->second.iova + it->second.size
+              .hva = slot.hva,
+              .begin = slot.begin,
+              .end = slot.end
             },
             .data = std::move(bitmap)
           });

@@ -26,7 +26,6 @@
 
 #include "utilities.h"
 #include "object.h"
-#include "vcpu.h"
 #include "io_thread.h"
 #include "migration.h"
 
@@ -51,7 +50,7 @@ struct IoResource {
   const char*         name;
   bool                enabled;
   void*               host_memory;
-  const MemoryRegion* mapped_region;
+  MemoryRegion*       mapped_region;
   IoResourceFlag      flags;
 };
 
@@ -78,13 +77,14 @@ class Device : public Object {
   void StartPolling(int fd, uint poll_mask, IoCallback callback);
   void StopPolling(int fd);
 
-  void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
-  void AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags = kIoResourceFlagNone);
+  IoResource* AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name);
+  IoResource* AddIoResource(IoResourceType type, uint64_t base, uint64_t length, const char* name, void* host_memory, IoResourceFlag flags = kIoResourceFlagNone);
   void RemoveIoResource(IoResourceType type, const char* name);
   void RemoveIoResource(IoResourceType type, uint64_t base);
+  void RemoveIoResource(IoResource* resource);
   void SetIoResourceEnabled(IoResource* resource, bool enabled);
 
-  inline const std::list<IoResource*>& io_resources() const { return io_resources_; }
+  inline const std::set<IoResource*>& io_resources() const { return io_resources_; }
   inline DeviceManager* manager() { return manager_; }
   inline std::recursive_mutex& mutex() { return mutex_; }
 
@@ -94,7 +94,7 @@ class Device : public Object {
   DeviceManager* manager_;
 
   bool                    connected_ = false;
-  std::list<IoResource*>  io_resources_;
+  std::set<IoResource*>   io_resources_;
   std::recursive_mutex    mutex_;
 };
 

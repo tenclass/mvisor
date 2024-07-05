@@ -36,8 +36,9 @@ Configuration::Configuration(Machine* machine) : machine_(machine) {
 void Configuration::InitializePaths() {
   char temp[1024];
   bzero(temp, sizeof(temp));
-  getcwd(temp, sizeof(temp) - 1);
-  directories_.insert(temp);
+  if (getcwd(temp, sizeof(temp) - 1) != nullptr) {
+    directories_.insert(temp);
+  }
 
   bzero(temp, sizeof(temp));
   if (readlink("/proc/self/exe", temp, sizeof(temp) - 1) > 0) {
@@ -220,6 +221,23 @@ void Configuration::LoadMachine(const YAML::Node& node) {
   }
   if (node["vcpu"]) {
     machine_->num_vcpus_ = node["vcpu"].as<uint64_t>();
+    if (machine_->num_vcpus_ == 1) {
+      machine_->num_cores_ = 1;
+      machine_->num_threads_ = 1;
+    } else {
+      MV_ASSERT(machine_->num_vcpus_ % 2 == 0);
+      machine_->num_threads_ = 2;
+      machine_->num_cores_ = machine_->num_vcpus_ / machine_->num_threads_;
+    }
+  }
+  if (node["cpuid"]) {
+    auto &cpuid = node["cpuid"];
+    if (cpuid["vendor"]) {
+      machine_->vcpu_vendor_ = cpuid["vendor"].as<std::string>();
+    }
+    if (cpuid["model"]) {
+      machine_->vcpu_model_ = cpuid["model"].as<std::string>();
+    }
   }
   if (node["priority"]) {
     machine_->vcpu_priority_ = node["priority"].as<uint64_t>();

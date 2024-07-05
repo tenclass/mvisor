@@ -24,6 +24,8 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <vector>
+#include <condition_variable>
 
 #include "hyperv/hyperv.h"
 #include "migration.h"
@@ -78,10 +80,12 @@ class Vcpu {
   static Vcpu* current_vcpu() { return current_vcpu_; }
   const char* name() { return name_; }
   uint64_t cpuid_features() { return cpuid_features_; }
+  uint32_t cpuid_version() { return cpuid_version_; }
+  const std::string& cpuid_model() { return cpuid_model_; }
+  bool running() { return kvm_running_; }
 
  private:
   static void SignalHandler(int signum);
-  void PrepareX86Vcpu();
   void SetupSignalHandler();
   void SetupCpuid();
   void SetupMsrIndices();
@@ -91,10 +95,12 @@ class Vcpu {
   void SetupModelSpecificRegisters();
   uint64_t GetSupportedMsrFeature(uint index);
   void SaveDefaultRegisters();
+  bool PreRun();
+  void PostRun();
   void Process();
-  void ProcessIo();
-  void ProcessMmio();
-  void ProcessHyperV();
+  void HandleIo();
+  void HandleMmio();
+  void HandleHyperV();
   void ExecuteTasks();
   void SaveStateTo(VcpuState& state);
   void LoadStateFrom(VcpuState& state, bool load_cpuid);
@@ -105,17 +111,71 @@ class Vcpu {
   int                       vcpu_id_ = -1;
   int                       fd_ = -1;
   char                      name_[16];
+  bool                      kvm_running_ = false;
   kvm_run*                  kvm_run_ = nullptr;
   kvm_coalesced_mmio_ring*  mmio_ring_ = nullptr;
   std::thread               thread_;
   bool                      single_step_ = false;
+  int                       wait_count_ = 0;
+  std::condition_variable   wait_to_resume_;
+  std::condition_variable   wait_for_paused_;
   VcpuState                 default_state_;
   std::deque<VcpuTask>      tasks_;
   std::mutex                mutex_;
   std::set<uint32_t>        msr_indices_;
   uint32_t                  hyperv_features_ = 0;
   uint64_t                  cpuid_features_ = 0;
+  uint32_t                  cpuid_version_ = 0;
+  std::string               cpuid_model_;
   HyperVSynic               hyperv_synic_;
+  
+  friend class              VcpuRunLockGuard;
+};
+
+
+// Pause vCPU threads
+class VcpuRunLockGuard {
+ private:
+  std::vector<Vcpu*> vcpus_;
+
+ public:
+  VcpuRunLockGuard(Vcpu* vcpu) {
+    vcpus_.push_back(vcpu);
+    PauseAll();
+  }
+  VcpuRunLockGuard(const std::vector<Vcpu*>& vcpus) {
+    vcpus_ = vcpus;
+    PauseAll();
+  }
+  ~VcpuRunLockGuard() {
+    ResumeAll();
+  }
+
+  void PauseAll() {
+    for (auto vcpu: vcpus_) {
+      std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      vcpu->wait_count_++;
+      if (vcpu->kvm_running_) {
+        vcpu->Kick();
+      }
+    }
+    for (auto vcpu: vcpus_) {
+      std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      vcpu->wait_for_paused_.wait(lock, [vcpu]() {
+        return !vcpu->kvm_running_;
+      });
+    }
+  }
+
+  void ResumeAll() {
+    for (auto vcpu: vcpus_) {
+      std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      vcpu->wait_count_--;
+      if (vcpu->wait_count_ == 0) {
+        vcpu->wait_to_resume_.notify_all();
+      }
+    }
+  }
 };
 
 #endif // _MVISOR_VCPU_H

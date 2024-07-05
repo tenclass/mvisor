@@ -54,7 +54,7 @@ class VgaRender {
 
   uint32_t    vram_map_addr_;
   uint32_t    vram_map_size_;
-  uint8_t*    vram_rw_mapped_ = nullptr;
+  IoResource* vram_rw_resource_ = nullptr;
 
   uint8_t*    vram_base_ = nullptr;
   uint32_t    vram_size_;
@@ -78,7 +78,10 @@ class VgaRender {
   bool        mode_changed_;
 
   std::string vga_surface_;
+  size_t      vga_display_buffer_size_ = 0;
   std::string vga_display_buffer_;
+
+  MemoryRegion* region_ = nullptr;
 
   bool IsVbeEnabled();
   void UpdateDisplayMode();
@@ -88,9 +91,13 @@ class VgaRender {
   void DrawCharacter(uint8_t* dest, uint8_t* font, int character, int attribute);
   void DrawTextCursor(uint8_t* buffer);
   void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
+  bool GetVbeDisplayUpdate(DisplayUpdate& update);
+  bool GetVgaDisplayUpdate(DisplayUpdate& update);
+
  public:
   VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size);
   ~VgaRender();
+  void SetMemoryRegion(MemoryRegion* region);
 
   void SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);
@@ -111,12 +118,11 @@ class VgaRender {
 #define VGA_PIO_BASE    0x3C0
 #define VGA_PIO_SIZE    0x20
 #define VBE_PIO_BASE    0x1CE
-#define VBE_PIO_SIZE    2
-#define VBE_LINEAR_FRAMEBUFFER_BASE 0xE0000000
+#define VBE_PIO_SIZE    3
 
 // When LFB mode disabled, the tradition VGA video memory address is used
-#define VGA_MMIO_BASE   0x000A0000
-#define VGA_MMIO_SIZE   0x00020000
+#define VGA_MEMORY_BASE   0x000A0000
+#define VGA_MEMORY_SIZE   0x00020000
 
 #define VGA_REFRESH_FREQUENCY 30
 

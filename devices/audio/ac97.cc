@@ -139,7 +139,7 @@ class Ac97 : public PciDevice, public PlaybackInterface {
   }
 
   void Disconnect() {
-    Reset();
+    SoftReset();
     PciDevice::Disconnect();
   }
 
@@ -194,7 +194,10 @@ class Ac97 : public PciDevice, public PlaybackInterface {
 
   void Reset() {
     PciDevice::Reset();
+    SoftReset();
+  }
 
+  void SoftReset() {
     for (size_t i = 0; i < streams_.size(); i++) {
       if (streams_[i].running) {
         SetStreamRunning(i, false);
@@ -573,10 +576,7 @@ class Ac97 : public PciDevice, public PlaybackInterface {
       uint32_t value = *(uint32_t*)data;
       uint32_t valid_mask = (1 << 6) - 1;
       if (value & 2) {  // cold reset
-        Reset();
-        if (debug_) {
-          MV_LOG("cold reset");
-        }
+        SoftReset();
       } else if (value & 4) { // soft reset
         MV_ERROR("soft reset not supported yet");
       } else {

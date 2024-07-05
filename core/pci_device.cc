@@ -48,6 +48,13 @@ PciDevice::~PciDevice() {
   }
 }
 
+void PciDevice::Connect() {
+  Device::Connect();
+
+  // Save default command and status
+  default_pci_header_ = pci_header_;
+}
+
 void PciDevice::Disconnect() {
   for (int i = 0; i < PCI_BAR_NUMS; i++) {
     if (pci_bars_[i].active) {
@@ -55,6 +62,13 @@ void PciDevice::Disconnect() {
     }
   }
   Device::Disconnect();
+}
+
+void PciDevice::Reset() {
+  Device::Reset();
+
+  pci_header_.status = default_pci_header_.status;
+  WritePciCommand(default_pci_header_.command);
 }
 
 /* Some PCI device has ROM file, should we reset ROM data if system reset ??? */
@@ -193,23 +207,22 @@ void PciDevice::Write(const IoResource* resource, uint64_t offset, uint8_t* data
 
 void PciDevice::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_LOG("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    bzero(data, length);
+    if (debug_) {
+      MV_WARN("%s failed read config space at 0x%lx length=%d", name_, offset, length);
+    }
     return;
   }
   memcpy(data, pci_header_.data + offset, length);
-  // if (debug_) {
-  //   MV_LOG("%s read pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
-  // }
 }
 
 void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length) {
   if (offset + length > pci_config_size()) {
-    MV_LOG("%s failed write config space at 0x%lx length=%d", name_, offset, length);
+    if (debug_) {
+      MV_WARN("%s failed write config space at 0x%lx length=%d data=0x%x", name_, offset, length, *(uint32_t*)data);
+    }
     return;
   }
-  // if (debug_) {
-  //   MV_LOG("%s write pci config 0x%lx size=%u data=0x%x", name_, offset, length, *(uint32_t*)data);
-  // }
 
   if (offset == PCI_COMMAND) {
     if (length == 4) {
@@ -307,9 +320,13 @@ void PciDevice::UpdatePciBarAddress(uint index, uint32_t address) {
 void PciDevice::UpdateRomBarAddress(uint32_t address) {
   pci_header_.rom_bar = address;
 
+  if (!(pci_header_.command & PCI_COMMAND_MEMORY)) {
+    return;
+  }
+
   auto mm = manager_->machine()->memory_manager();
   if (pci_rom_.mapped_region) {
-    if (pci_rom_.mapped_region->gpa == address) {
+    if (pci_rom_.mapped_region->gpa() == address) {
       /* unchanged */
       return;
     }
@@ -346,6 +363,17 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
         ActivatePciBar(i);
       else
         DeactivatePciBar(i);
+    }
+  }
+
+  /* Handle ROM BAR */
+  if (new_command & PCI_COMMAND_MEMORY) {
+    if (pci_header_.rom_bar) {
+      UpdateRomBarAddress(pci_header_.rom_bar);
+    }
+  } else {
+    if (pci_rom_.mapped_region) {
+      manager_->machine()->memory_manager()->Unmap(&pci_rom_.mapped_region);
     }
   }
 
@@ -393,12 +421,12 @@ bool PciDevice::ActivatePciBar(uint index) {
   MV_ASSERT(bar.type);
 
   if (bar.type == kIoResourceTypePio) {
-    AddIoResource(kIoResourceTypePio, bar.address64, bar.size, "PCI BAR IO");
+    bar.resource = AddIoResource(kIoResourceTypePio, bar.address64, bar.size, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "PCI BAR MMIO");
+    bar.resource = AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "PCI BAR MMIO");
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr);
-    AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "PCI BAR RAM", bar.host_memory);
+    bar.resource = AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "PCI BAR RAM", bar.host_memory);
   }
   bar.active = true;
   return true;
@@ -410,12 +438,9 @@ bool PciDevice::DeactivatePciBar(uint index) {
   if (!bar.active)
     return true;
 
-  if (bar.type == kIoResourceTypePio) {
-    RemoveIoResource(kIoResourceTypePio, bar.address64);
-  } else if (bar.type == kIoResourceTypeMmio) {
-    RemoveIoResource(kIoResourceTypeMmio, bar.address64);
-  } else if (bar.type == kIoResourceTypeRam) {
-    RemoveIoResource(kIoResourceTypeRam, bar.address64);
+  if (bar.resource != nullptr) {
+    RemoveIoResource(bar.resource);
+    bar.resource = nullptr;
   }
   bar.active = false;
   return true;

@@ -54,6 +54,7 @@ class AhciHost : public PciDevice {
   virtual void Read(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Write(const IoResource* resource, uint64_t offset, uint8_t* data, uint32_t size);
   virtual void Reset();
+  virtual void SoftReset();
   void CheckIrq();
 
   bool SaveState(MigrationWriter* writer);
