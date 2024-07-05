@@ -326,7 +326,7 @@ void PciDevice::UpdateRomBarAddress(uint32_t address) {
 
   auto mm = manager_->machine()->memory_manager();
   if (pci_rom_.mapped_region) {
-    if (pci_rom_.mapped_region->gpa == address) {
+    if (pci_rom_.mapped_region->gpa() == address) {
       /* unchanged */
       return;
     }

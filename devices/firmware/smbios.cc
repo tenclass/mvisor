@@ -270,10 +270,10 @@ void Smbios::BuildType19() {
   auto mm = machine_->memory_manager();
   uint16_t handle = 19 << 8;
   for (auto region: mm->regions()) {
-    if (region->type == kMemoryTypeRam && std::string("System") == region->name) {
+    if (region->is_system()) {
       std::vector<std::string> texts;
-      auto start_kb = region->gpa / 1024;
-      auto end_kb = (region->gpa + region->size - 1) / 1024;
+      auto start_kb = region->gpa() / 1024;
+      auto end_kb = (region->gpa() + region->size() - 1) / 1024;
       smbios_type_19 type_19 = {};
       type_19.starting_address = start_kb;
       type_19.ending_address = end_kb;

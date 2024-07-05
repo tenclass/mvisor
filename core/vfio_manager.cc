@@ -193,14 +193,14 @@ void VfioManager::SetupDmaMaps() {
 
   /* Map all current slots */
   for (const auto& slot : mm->GetMemoryFlatView()) {
-    if (slot.type == kMemoryTypeRam && slot.region->name == "System") {
+    if (slot.is_system()) {
       MapDmaPages(slot);
     }
   }
 
   /* Add memory listener to keep DMA maps synchronized */
   memory_listener_ = mm->RegisterMemoryListener([this](auto slot, bool unmap) {
-    if (slot.type == kMemoryTypeRam && slot.region->name == "System") {
+    if (slot.is_system()) {
       if (unmap) {
         UnmapDmaPages(slot);
       } else {
@@ -225,7 +225,7 @@ void VfioManager::SetupDmaMaps() {
 
         auto slots = machine_->memory_manager()->GetMemoryFlatView();
         for (const auto& slot : slots) {
-          if (slot.type != kMemoryTypeRam || slot.region->name != "System") {
+          if (!slot.is_system()) {
             continue;
           }
 

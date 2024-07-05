@@ -27,35 +27,8 @@
 #include <unordered_set>
 
 #include "migration.h"
+#include "memory_region.h"
 
-
-enum MemoryType {
-  kMemoryTypeReserved = 0,
-  kMemoryTypeRam = 1,
-  kMemoryTypeDevice = 2,
-  kMemoryTypeRom = 3
-};
-
-struct MemoryRegion {
-  uint64_t      gpa;
-  void*         host;
-  uint64_t      size;
-  uint32_t      flags;
-  MemoryType    type;
-  std::string   name;
-  std::string   dirty_bitmap;
-};
-
-struct MemorySlot {
-  MemoryType    type;
-  uint64_t      begin;
-  uint64_t      end;
-  uint64_t      size;
-  uint64_t      hva;
-  uint32_t      id;
-  uint32_t      flags;
-  MemoryRegion* region;
-};
 
 typedef std::function<void (const MemorySlot slot, bool unmap)> MemoryListenerCallback;
 struct MemoryListener {
@@ -87,7 +60,7 @@ class MemoryManager {
   MemoryManager(Machine* machine);
   ~MemoryManager();
 
-  const MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
+  MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   void Unmap(const MemoryRegion** region);
   void Reset();
 
@@ -95,6 +68,8 @@ class MemoryManager {
   bool SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);
 
+  void SetLogDirtyBitmap(MemoryRegion* region, bool log);
+  void SynchronizeDirtyBitmap(MemoryRegion* region);
   void SetDirtyMemoryRegion(uint64_t gpa, size_t size);
   void StartTrackingDirtyMemory();
   void StopTrackingDirtyMemory();
@@ -127,7 +102,8 @@ class MemoryManager {
   bool HandleBitmap(const char* bitmap, size_t size, DirtyBitmapCallback callback);
 
   Machine*                        machine_;
-  void*                           ram_host_;
+  void*                           system_ram_host_;
+  std::vector<MemoryRegion*>      system_regions_;
   std::vector<MemoryRegion*>      regions_;
   std::map<uint64_t, MemorySlot*> kvm_slots_;
   std::set<const MemoryListener*> memory_listeners_;

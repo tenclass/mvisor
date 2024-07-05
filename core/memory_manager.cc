@@ -33,7 +33,6 @@
 
 
 #define X86_EPT_IDENTITY_BASE 0xFEFFC000
-static const char* type_strings[] = { "Reserved", "RAM", "Device", "ROM", "Unknown" };
 
 
 MemoryManager::MemoryManager(Machine* machine)
@@ -75,7 +74,7 @@ MemoryManager::~MemoryManager() {
   for (auto region : regions_) {
     delete region;
   }
-  munmap(ram_host_, machine_->ram_size_);
+  munmap(system_ram_host_, machine_->ram_size_);
   dirty_memory_regions_.clear();
   if (bios_data_)
     free(bios_data_);
@@ -88,25 +87,25 @@ void MemoryManager::InitializeSystemRam() {
   if (machine_->debug_)
     MV_LOG("RAM size: %lu MB", machine_->ram_size_ >> 20);
 
-  ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
+  system_ram_host_ = mmap(nullptr, machine_->ram_size_, PROT_READ | PROT_WRITE,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
-  MV_ASSERT(ram_host_ != MAP_FAILED);
+  MV_ASSERT(system_ram_host_ != MAP_FAILED);
 
   /* Make host RAM mergeable (for KSM) */
-  MV_ASSERT(madvise(ram_host_, machine_->ram_size_, MADV_MERGEABLE) == 0);
-  MV_ASSERT(madvise(ram_host_, machine_->ram_size_, MADV_DONTDUMP) == 0);
+  MV_ASSERT(madvise(system_ram_host_, machine_->ram_size_, MADV_MERGEABLE) == 0);
+  MV_ASSERT(madvise(system_ram_host_, machine_->ram_size_, MADV_DONTDUMP) == 0);
 
   /* Don't map MMIO region */
   const uint64_t low_ram_upper_bound = 2 * (1LL << 30);
   const uint64_t high_ram_lower_bound = 1LL << 32;
   if (machine_->ram_size_ <= low_ram_upper_bound) {
-    Map(0, machine_->ram_size_, ram_host_, kMemoryTypeRam, "System");
+    system_regions_.push_back(Map(0, machine_->ram_size_, system_ram_host_, kMemoryTypeRam, "System"));
   } else {
     // Split the ram to two segments leaving a hole in the GPA
-    Map(0, low_ram_upper_bound, ram_host_, kMemoryTypeRam, "System");
+    system_regions_.push_back(Map(0, low_ram_upper_bound, system_ram_host_, kMemoryTypeRam, "System"));
     // Skip the hole and map the rest
-    Map(high_ram_lower_bound, machine_->ram_size_ - low_ram_upper_bound,
-      (uint8_t*)ram_host_ + low_ram_upper_bound, kMemoryTypeRam, "System");
+    system_regions_.push_back(Map(high_ram_lower_bound, machine_->ram_size_ - low_ram_upper_bound,
+      (uint8_t*)system_ram_host_ + low_ram_upper_bound, kMemoryTypeRam, "System"));
   }
 }
 
@@ -163,7 +162,7 @@ void MemoryManager::Reset() {
   /* Reset BIOS data */
   memcpy(bios_data_, bios_backup_, bios_size_);
   /* Reset 64KB low memory, or Windows 11 complains about some data at 0x6D80 when reboots */
-  bzero(ram_host_, 0x10000);
+  bzero(system_ram_host_, 0x10000);
 }
 
 /* The number of KVM slots is limited, try not to use out */
@@ -194,15 +193,15 @@ void MemoryManager::UpdateKvmSlot(MemorySlot* slot, bool remove) {
 void MemoryManager::CommitMemoryRegionChanges() {
   std::set<uint64_t> points;
   for (const auto& region : regions_) {
-    points.insert(region->gpa);
-    points.insert(region->gpa + region->size);
+    points.insert(region->gpa_);
+    points.insert(region->gpa_ + region->size_);
   }
 
   // Create a new flat view of the memory slots
   std::map<uint64_t, MemoryRegion*> visible_regions;
   for (const auto& point : points) {
     for (auto it = regions_.rbegin(); it != regions_.rend(); ++it) {
-      if ((*it)->gpa <= point && point < (*it)->gpa + (*it)->size) {
+      if ((*it)->gpa_ <= point && point < (*it)->gpa_ + (*it)->size_) {
         // If same with last one, skip
         if (visible_regions.rbegin() != visible_regions.rend() && visible_regions.rbegin()->second == *it) {
           continue;
@@ -224,15 +223,15 @@ void MemoryManager::CommitMemoryRegionChanges() {
       auto slot = new MemorySlot;
       slot->id = AllocateSlotId();
       slot->region = it_new->second;
-      slot->type = it_new->second->type;
+      slot->type = it_new->second->type_;
       slot->begin = it_new->first;
-      slot->end = it_new->first + it_new->second->size;
+      slot->end = it_new->first + it_new->second->size_;
       if (it_new_next != visible_regions.end() && it_new_next->first < slot->end) {
         slot->end = it_new_next->first;
       }
       slot->size = slot->end - slot->begin;
-      slot->hva = reinterpret_cast<uint64_t>(it_new->second->host) + slot->begin - it_new->second->gpa;
-      slot->flags = it_new->second->flags;
+      slot->hva = reinterpret_cast<uint64_t>(it_new->second->host_) + slot->begin - it_new->second->gpa_;
+      slot->flags = it_new->second->flags_;
       pending_add.insert(slot);
       ++it_new;
     } else if (it_new->first == it_old->first) {
@@ -269,8 +268,9 @@ void MemoryManager::CommitMemoryRegionChanges() {
 
   // Commit the pending slots to KVM
   for (auto slot : pending_remove) {
+    slot->region->slots_.erase(slot);
     kvm_slots_.erase(slot->begin);
-    if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
+    if (slot->commitable()) {
       UpdateKvmSlot(slot, true);
       free_slots_.insert(slot->id);
     }
@@ -278,8 +278,9 @@ void MemoryManager::CommitMemoryRegionChanges() {
     delete slot;
   }
   for (auto slot : pending_add) {
+    slot->region->slots_.insert(slot);
     kvm_slots_[slot->begin] = slot;
-    if (slot->type == kMemoryTypeRam || slot->type == kMemoryTypeRom) {
+    if (slot->commitable()) {
       UpdateKvmSlot(slot, false);
     }
     NotifySlotChange(slot, false);
@@ -293,22 +294,13 @@ void MemoryManager::NotifySlotChange(const MemorySlot* slot, bool unmap) {
 }
 
 /* Mapping a memory region in the guest address space */
-const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name) {
+MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name) {
   MV_ASSERT(size > 0);
-  MemoryRegion* region = new MemoryRegion;
-  region->gpa = gpa;
-  region->host = host;
-  region->size = size;
-  region->type = type;
-  region->flags = type == kMemoryTypeRom ? KVM_MEM_READONLY : 0;
-  if (type == kMemoryTypeRam && trace_slot_names_.find(name) != trace_slot_names_.end()) {
-    region->flags |= KVM_MEM_LOG_DIRTY_PAGES;
-  }
-  region->name = name;
+  MemoryRegion* region = new MemoryRegion(gpa, size, host, type, name);
 
   if (machine_->debug_)  {
-    MV_LOG("map region %s gpa=0x%lx size=0x%lx type=%s", region->name,
-      region->gpa, region->size, type_strings[region->type]);
+    MV_LOG("map region %s gpa=0x%lx size=0x%lx type=%s", region->name_.c_str(),
+      region->gpa_, region->size_, region->type_name().c_str());
   }
 
   /* Lock the global mutex while handling insert or remove */
@@ -318,12 +310,12 @@ const MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, 
   return region;
 }
 
-/* TODO: should merge the slots after unmap */
+/* Unmapping a memory region and update the kvm slots */
 void MemoryManager::Unmap(const MemoryRegion** pregion) {
   auto region = (MemoryRegion*)*pregion;
   if (machine_->debug_) {
-    MV_LOG("unmap region %s gpa=0x%lx size=%lx type=%s", region->name,
-      region->gpa, region->size, type_strings[region->type]);
+    MV_LOG("unmap region %s gpa=0x%lx size=0x%lx type=%s", region->name_.c_str(),
+      region->gpa_, region->size_, region->type_name().c_str());
   }
 
   std::unique_lock lock(mutex_);
@@ -339,21 +331,9 @@ void MemoryManager::Unmap(const MemoryRegion** pregion) {
 /* StartTrackingDirtyMemory must be called in paused state to 
  * make sure that all dirty memory was updated completely */
 void MemoryManager::StartTrackingDirtyMemory() {
-  // flush dirty memory from kvm
-  for (auto& slot : GetSlotsByNames(trace_slot_names_)) {
-    size_t slot_size = slot.end - slot.begin;
-    size_t bitmap_size = ALIGN(slot_size / PAGE_SIZE, 64) / 8;
-    auto dirty_bitmap = new uint8_t[bitmap_size];
-    if (GetDirtyBitmapFromKvm(slot.id, dirty_bitmap)) {
-      kvm_clear_dirty_log clear_dirty = {
-        .slot = slot.id,
-        .num_pages = (uint32_t)(slot_size / PAGE_SIZE),
-        .first_page = 0,
-        .dirty_bitmap = dirty_bitmap
-      };
-      MV_ASSERT(ioctl(machine_->vm_fd_, KVM_CLEAR_DIRTY_LOG, &clear_dirty) == 0);
-    }
-    delete[] dirty_bitmap;
+  for (auto region: system_regions_) {
+    SetLogDirtyBitmap(region, true);
+    SynchronizeDirtyBitmap(region);
   }
 
   // tell listeners start tracking dirty memory
@@ -369,6 +349,10 @@ void MemoryManager::StartTrackingDirtyMemory() {
 }
 
 void MemoryManager::StopTrackingDirtyMemory() {
+  for (auto region: system_regions_) {
+    SetLogDirtyBitmap(region, false);
+  }
+
   // tell listeners stop tracking dirty memory
   for (auto listener : dirty_memory_listeners_) {
     listener->callback(kStopTrackingDirtyMemory);
@@ -440,6 +424,53 @@ uint64_t MemoryManager::HostToGuestAddress(void* host) {
   return 0;
 }
 
+void MemoryManager::SetLogDirtyBitmap(MemoryRegion* region, bool log) {
+  MV_ASSERT(region->type() == kMemoryTypeRam);
+  if (log) {
+    region->flags_ |= KVM_MEM_LOG_DIRTY_PAGES;
+  } else {
+    region->flags_ &= ~KVM_MEM_LOG_DIRTY_PAGES;
+  }
+
+  // Update the kvm slot
+  for (auto slot = kvm_slots_.begin(); slot != kvm_slots_.end(); slot++) {
+    if (slot->second->region == region) {
+      slot->second->flags = region->flags_;
+      UpdateKvmSlot(slot->second, false);
+    }
+  }
+}
+
+void MemoryManager::SynchronizeDirtyBitmap(MemoryRegion* region) {
+  if (region->dirty_bitmap_.empty()) {
+    // Create a new dirty bitmap filled with 0
+    size_t bitmap_size = ALIGN(region->size_ / PAGE_SIZE, 64) / 8;
+    region->dirty_bitmap_.resize(bitmap_size);
+  }
+  
+  // Call for every slot
+  for (auto slot: region->slots_) {
+    uint64_t offset = slot->begin - region->gpa_;
+    auto bitmap_ptr = region->dirty_bitmap_.data() + offset / PAGE_SIZE / 8;
+    auto bitmap_bytes = slot->size / PAGE_SIZE / 8;
+    bzero(bitmap_ptr, bitmap_bytes);
+
+    if (!GetDirtyBitmapFromKvm(slot->id, bitmap_ptr)) {
+      MV_ERROR("failed to get dirty bitmap from kvm");
+      continue;;
+    }
+
+    // Clear the dirty bitmap in kvm
+    kvm_clear_dirty_log clear_dirty = {
+      .slot = slot->id,
+      .num_pages = (uint32_t)(slot->size / PAGE_SIZE),
+      .first_page = 0,
+      .dirty_bitmap = bitmap_ptr
+    };
+    MV_ASSERT(ioctl(machine_->vm_fd_, KVM_CLEAR_DIRTY_LOG, &clear_dirty) == 0);
+  }
+}
+
 bool MemoryManager::GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap) {
   kvm_dirty_log dirty = {0};
   dirty.slot = slot;
@@ -484,24 +515,16 @@ bool MemoryManager::SaveDirtyMemory(MigrationNetworkWriter* writer, DirtyMemoryT
   switch (type) {
     case kDirtyMemoryTypeKvm: {
       memory_descriptor.set_size(PAGE_SIZE);
-      for (auto& slot : GetSlotsByNames(trace_slot_names_)) {
-        // kvm memory dirty bitmap is 64-page aligned
-        size_t bitmap_size = ALIGN((slot.end - slot.begin) / PAGE_SIZE, 64) / 8;
-        std::string dirty_bitmap(bitmap_size, '\0');
-        if (!GetDirtyBitmapFromKvm(slot.id, dirty_bitmap.data())) {
-          continue;
-        }
-
-        auto ret = HandleBitmap(dirty_bitmap.data(), bitmap_size, [&](auto offset) {
-          memory_descriptor.set_gpa(slot.begin + offset * PAGE_SIZE);
-          if (memory_descriptor.gpa() + memory_descriptor.size() > slot.end) {
-            MV_PANIC("Guest phyical address is out of current slot, gpa=0x%lx slot=%s", memory_descriptor.gpa(), slot.region->name);
-          }
+      for (auto region: system_regions_) {
+        SynchronizeDirtyBitmap(region);
+        
+        auto ret = region->ForeachDirtyPage([&](auto offset) {
+          memory_descriptor.set_gpa(region->gpa_ + offset * PAGE_SIZE);
           if (!writer->WriteProtobuf("DIRTY_MEMORY_DESCRIPTOR", memory_descriptor)) {
             return false;
           }
-          uint64_t hva = slot.hva + offset * PAGE_SIZE;
-          if (!writer->WriteRaw("DIRTY_MEMORY", reinterpret_cast<void*>(hva), memory_descriptor.size())) {
+          auto ptr = reinterpret_cast<uint8_t*>(region->host_) + offset * PAGE_SIZE;
+          if (!writer->WriteRaw("DIRTY_MEMORY", ptr, memory_descriptor.size())) {
             return false;
           }
           dirty_memory_size += memory_descriptor.size();
@@ -599,8 +622,8 @@ void MemoryManager::PrintMemoryScope() {
     MemorySlot* slot = it->second;
     MV_LOG("Slot%3d %016lx-%016lx hva=%016lx %-10s %-10s",
       slot->id, slot->begin, slot->end, slot->hva,
-      slot->region ? type_strings[slot->region->type] : "Unknown",
-      slot->region ? slot->region->name : "(nil)");
+      slot->region ? slot->region->type_name().c_str() : "Unknown",
+      slot->region ? slot->region->name().c_str() : "(nil)");
   }
 }
 
@@ -654,7 +677,7 @@ std::vector<MemorySlot> MemoryManager::GetSlotsByNames(std::unordered_set<std::s
   std::vector<MemorySlot> slots;
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ++it) {
     auto slot = it->second;
-    if (names.find(slot->region->name) != names.end()) {
+    if (names.find(slot->region->name_) != names.end()) {
       slots.push_back(*slot);
     }
   }
@@ -665,7 +688,7 @@ std::vector<MemorySlot> MemoryManager::GetSlotsByNames(std::unordered_set<std::s
 bool MemoryManager::SaveState(MigrationWriter* writer) {
   writer->SetPrefix("memory");
   writer->WriteRaw("BIOS", bios_data_, bios_size_);
-  writer->WriteMemoryPages("RAM", ram_host_, machine_->ram_size_);
+  writer->WriteMemoryPages("RAM", system_ram_host_, machine_->ram_size_);
   return true;
 }
 
@@ -677,21 +700,21 @@ bool MemoryManager::LoadState(MigrationReader* reader) {
   }
 
   // We have to notify the slot change to VFIO devices
-  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
-    if (it->second->type == kMemoryTypeRam && it->second->region->name == "System") {
-      NotifySlotChange(it->second, true);
+  for (auto region: system_regions_) {
+    for (auto slot: region->slots_) {
+      NotifySlotChange(slot, true);
     }
   }
 
   /* Map the RAM file as copy on write memory */
-  if (!reader->ReadMemoryPages("RAM", &ram_host_, machine_->ram_size_)) {
+  if (!reader->ReadMemoryPages("RAM", &system_ram_host_, machine_->ram_size_)) {
     return false;
   }
 
   // Remap system slots
-  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
-    if (it->second->type == kMemoryTypeRam && it->second->region->name == "System") {
-      NotifySlotChange(it->second, false);
+  for (auto region: system_regions_) {
+    for (auto slot: region->slots_) {
+      NotifySlotChange(slot, false);
     }
   }
 

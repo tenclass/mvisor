@@ -245,12 +245,12 @@ class FirmwareConfig : public Device, public AcpiTableInterface {
 
     for (auto region : mm->regions()) {
       e820_entry entry;
-      entry.address = region->gpa;
-      entry.length = region->size;
+      entry.address = region->gpa();
+      entry.length = region->size();
 
-      if (region->type == kMemoryTypeRam && std::string("System") == region->name) {
+      if (region->is_system()) {
         entry.type = E820_RAM;
-      } else if (region->type == kMemoryTypeReserved) {
+      } else if (region->type() == kMemoryTypeReserved) {
         entry.type = E820_RESERVED;
       } else {
         continue;

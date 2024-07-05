@@ -5,6 +5,7 @@ mvisor_sources += files(
   'io_thread.cc',
   'machine.cc',
   'memory_manager.cc',
+  'memory_region.cc',
   'object.cc',
   'pci_device.cc',
   'vcpu.cc',
