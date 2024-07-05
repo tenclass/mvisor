@@ -61,7 +61,7 @@ class MemoryManager {
   ~MemoryManager();
 
   MemoryRegion* Map(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
-  void Unmap(const MemoryRegion** region);
+  void Unmap(MemoryRegion** region);
   void Reset();
 
   /* Used for migration */

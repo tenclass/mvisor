@@ -421,12 +421,12 @@ bool PciDevice::ActivatePciBar(uint index) {
   MV_ASSERT(bar.type);
 
   if (bar.type == kIoResourceTypePio) {
-    AddIoResource(kIoResourceTypePio, bar.address64, bar.size, "PCI BAR IO");
+    bar.resource = AddIoResource(kIoResourceTypePio, bar.address64, bar.size, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "PCI BAR MMIO");
+    bar.resource = AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "PCI BAR MMIO");
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr);
-    AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "PCI BAR RAM", bar.host_memory);
+    bar.resource = AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "PCI BAR RAM", bar.host_memory);
   }
   bar.active = true;
   return true;
@@ -438,12 +438,9 @@ bool PciDevice::DeactivatePciBar(uint index) {
   if (!bar.active)
     return true;
 
-  if (bar.type == kIoResourceTypePio) {
-    RemoveIoResource(kIoResourceTypePio, bar.address64);
-  } else if (bar.type == kIoResourceTypeMmio) {
-    RemoveIoResource(kIoResourceTypeMmio, bar.address64);
-  } else if (bar.type == kIoResourceTypeRam) {
-    RemoveIoResource(kIoResourceTypeRam, bar.address64);
+  if (bar.resource != nullptr) {
+    RemoveIoResource(bar.resource);
+    bar.resource = nullptr;
   }
   bar.active = false;
   return true;

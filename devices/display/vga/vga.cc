@@ -73,6 +73,29 @@ void Vga::Reset() {
 }
 
 
+bool Vga::ActivatePciBar(uint32_t bar_index) {
+  bool ret = PciDevice::ActivatePciBar(bar_index);
+
+  if (ret && bar_index == 0) {
+    auto region = pci_bars_[0].resource->mapped_region;
+    if (region) {
+      auto mm = manager_->machine()->memory_manager();
+      mm->SetLogDirtyBitmap(region, true);
+      vga_render_->SetMemoryRegion(region);
+    }
+  }
+  return ret;
+}
+
+bool Vga::DeactivatePciBar(uint32_t bar_index) {
+  bool ret = PciDevice::DeactivatePciBar(bar_index);
+
+  if (ret && bar_index == 0 && vga_render_) {
+    vga_render_->SetMemoryRegion(nullptr);
+  }
+  return ret;
+}
+
 bool Vga::SaveState(MigrationWriter* writer) {
   vga_render_->SaveState(writer);
   writer->WriteMemoryPages("VRAM", vram_base_, vram_size_);

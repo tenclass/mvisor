@@ -35,7 +35,7 @@ struct MemoryRegion;
 struct IoHandler {
   const IoResource*   resource;
   Device*             device;
-  const MemoryRegion* memory_region;
+  MemoryRegion*       memory_region;
 };
 
 typedef std::function<void()> VoidCallback;

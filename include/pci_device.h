@@ -157,12 +157,13 @@ struct PciBarInfo {
   uint64_t              address64;
   bool                  active;
   void*                 host_memory;
+  IoResource*           resource;
 };
 
 struct PciRomBarInfo {
   uint32_t size;
   void* data;
-  const MemoryRegion* mapped_region;
+  MemoryRegion*         mapped_region;
 };
 
 /* Get last byte of a range from offset + length.

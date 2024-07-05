@@ -311,7 +311,7 @@ MemoryRegion* MemoryManager::Map(uint64_t gpa, uint64_t size, void* host, Memory
 }
 
 /* Unmapping a memory region and update the kvm slots */
-void MemoryManager::Unmap(const MemoryRegion** pregion) {
+void MemoryManager::Unmap(MemoryRegion** pregion) {
   auto region = (MemoryRegion*)*pregion;
   if (machine_->debug_) {
     MV_LOG("unmap region %s gpa=0x%lx size=0x%lx type=%s", region->name_.c_str(),

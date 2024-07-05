@@ -34,7 +34,7 @@ class MemoryRegion {
  public:
   MemoryRegion(uint64_t gpa, uint64_t size, void* host, MemoryType type, const char* name);
   bool ForeachDirtyPage(std::function<bool (uint64_t offset)> callback);
-  bool IsDirty(uint64_t offset);
+  bool IsDirty(uint64_t offset, uint64_t length);
 
   uint64_t gpa() const { return gpa_; }
   void* host() const { return host_; }

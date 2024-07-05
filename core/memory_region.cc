@@ -44,8 +44,20 @@ bool MemoryRegion::ForeachDirtyPage(std::function<bool (uint64_t offset)> callba
   return true;
 }
 
-bool MemoryRegion::IsDirty(uint64_t offset) {
-  auto i = (offset - gpa_) / PAGE_SIZE;
-  auto byte = dirty_bitmap_[i / 8];
-  return byte & (1 << (i % 8));
+bool MemoryRegion::IsDirty(uint64_t offset, uint64_t length) {
+  auto start_i = offset / PAGE_SIZE;
+  auto end_i = ALIGN(offset + length, PAGE_SIZE) / PAGE_SIZE;
+  for (uint64_t i = start_i; i < end_i; i++) {
+    auto byte = dirty_bitmap_[i / 8];
+    if (byte == 0) {
+      continue;
+    }
+    
+    for (uint64_t j = 0; j < 8; j++) {
+      if (byte & (1 << j)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

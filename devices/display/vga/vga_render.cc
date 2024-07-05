@@ -3,6 +3,7 @@
 #include "vga_regs.h"
 #include "vbe.h"
 #include "logger.h"
+#include "machine.h"
 
 
 VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
@@ -26,18 +27,21 @@ VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
   cursor_visible_ = false;
   text_mode_ = false;
   mode_changed_ = false;
-  // Maximum resolution is defined in EDID data, 3840x2160x32
-  vga_display_buffer_.resize(3840 * 2160 * 4);
+
+  // Maximum resolution for VGA graphics
+  vga_display_buffer_.resize(800 * 600 * 4);
 }
 
-
 VgaRender::~VgaRender() {
-  if (vram_rw_mapped_) {
-    device_->RemoveIoResource(kIoResourceTypeRam, "VGA RAM");
-    vram_rw_mapped_ = nullptr;
+  if (vram_rw_resource_) {
+    device_->RemoveIoResource(vram_rw_resource_);
+    vram_rw_resource_ = nullptr;
   }
 }
 
+void VgaRender::SetMemoryRegion(MemoryRegion* region) {
+  region_ = region;
+}
 
 void VgaRender::SaveState(MigrationWriter* writer) {
   VgaState state;
@@ -497,17 +501,16 @@ void VgaRender::UpdateVRamMemoryMap() {
   }
   
   /* Map / unmap the area as ram to accelerate */
-  if (vram_rw_mapped_ != map_memory) {
-    if (vram_rw_mapped_) {
-      device_->RemoveIoResource(kIoResourceTypeRam, "VGA RAM");
+  if (vram_rw_resource_ == nullptr || vram_rw_resource_->host_memory != map_memory) {
+    if (vram_rw_resource_) {
+      device_->RemoveIoResource(vram_rw_resource_);
+      vram_rw_resource_ = nullptr;
     }
     if (map_memory) {
-      device_->AddIoResource(kIoResourceTypeRam, vram_map_addr_, vram_map_size_, "VGA RAM", map_memory);
+      vram_rw_resource_ = device_->AddIoResource(kIoResourceTypeRam, vram_map_addr_, vram_map_size_, "VGA RAM", map_memory);
       if (device_->debug()) {
         MV_LOG("map plane addr=0x%08x[0x08%x] to 0x%016lx", vram_map_addr_, vram_map_size_, map_memory);
       }
-
-      vram_rw_mapped_ = map_memory;
     }
   }
 }
@@ -600,36 +603,74 @@ void VgaRender::Redraw() {
   redraw_ = true;
 }
 
-bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
-  uint8_t* canvas_pixels;
-  if (IsVbeEnabled()) {
-    size_t offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
-    offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
-    canvas_pixels = vram_base_ + offset;
-  } else {
-    size_t data_size = stride_ * height_;
-    if (vga_surface_.size() != data_size) {
-      vga_surface_.resize(data_size);
-    }
-    canvas_pixels = (uint8_t*)vga_surface_.data();
+bool VgaRender::GetVbeDisplayUpdate(DisplayUpdate& update) {
+  size_t offset = vbe_.registers[VBE_DISPI_INDEX_X_OFFSET] * bpp_ / 8;
+  offset += vbe_.registers[VBE_DISPI_INDEX_Y_OFFSET] * stride_;
+  if (region_ == nullptr) {
+    return false;
+  }
 
-    /* FIXME: Should unlock the device but crashed when display mode was changing */
-    // lock.unlock();
-    if (text_mode_) {
-      DrawText(canvas_pixels);
+  auto mm = device_->manager()->machine()->memory_manager();
+  mm->SynchronizeDirtyBitmap(region_);
 
-      /* blink cursor */
-      auto now = std::chrono::steady_clock::now();
-      if (now >= cursor_blink_time_) {
-        cursor_blink_time_ = now + std::chrono::milliseconds(250);
-        cursor_visible_ = !cursor_visible_;
+  auto buffer = vram_base_ + offset;
+
+  DisplayPartialBitmap partial;
+  partial.stride = stride_;
+  partial.bpp = bpp_;
+  partial.x = 0;
+  partial.width = width_;
+  partial.palette = vga_.palette;
+
+  partial.height = 0;
+
+  uint8_t* dst = buffer;
+  for (int y = 0; y < height_; y++) {
+    size_t partial_offset = offset + y * stride_;
+    if (region_->IsDirty(partial_offset, stride_)) {
+      if (partial.height == 0) {
+        partial.y = y;
+        partial.data = dst;
       }
-      if (cursor_visible_) {
-        DrawTextCursor(canvas_pixels);
-      }
+      partial.height++;
     } else {
-      DrawGraphic(canvas_pixels);
+      if (partial.height > 0) {
+        update.partials.push_back(partial);
+        partial.height = 0;
+      }
     }
+    dst += stride_;
+  }
+  
+  if (partial.height > 0) {
+    update.partials.push_back(partial);
+  }
+
+  return !update.partials.empty();
+}
+
+bool VgaRender::GetVgaDisplayUpdate(DisplayUpdate& update) {
+  uint8_t* canvas_pixels;
+  size_t data_size = stride_ * height_;
+  if (vga_surface_.size() != data_size) {
+    vga_surface_.resize(data_size);
+  }
+  canvas_pixels = (uint8_t*)vga_surface_.data();
+
+  if (text_mode_) {
+    DrawText(canvas_pixels);
+
+    /* blink cursor */
+    auto now = std::chrono::steady_clock::now();
+    if (now >= cursor_blink_time_) {
+      cursor_blink_time_ = now + std::chrono::milliseconds(250);
+      cursor_visible_ = !cursor_visible_;
+    }
+    if (cursor_visible_) {
+      DrawTextCursor(canvas_pixels);
+    }
+  } else {
+    DrawGraphic(canvas_pixels);
   }
 
   if (vga_display_buffer_size_ != size_t(stride_ * height_)) {
@@ -681,8 +722,18 @@ bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
     }
   }
 
-  update.cursor.visible = false;
   return !update.partials.empty();
+}
+
+bool VgaRender::GetDisplayUpdate(DisplayUpdate& update) {
+  // No cursor info in VGA mode
+  update.cursor.visible = false;
+
+  if (IsVbeEnabled()) {
+    return GetVbeDisplayUpdate(update);
+  } else {
+    return GetVgaDisplayUpdate(update);
+  }
 }
 
 void VgaRender::DrawGraphic(uint8_t* buffer) {

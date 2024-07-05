@@ -54,7 +54,7 @@ class VgaRender {
 
   uint32_t    vram_map_addr_;
   uint32_t    vram_map_size_;
-  uint8_t*    vram_rw_mapped_ = nullptr;
+  IoResource* vram_rw_resource_ = nullptr;
 
   uint8_t*    vram_base_ = nullptr;
   uint32_t    vram_size_;
@@ -81,6 +81,8 @@ class VgaRender {
   size_t      vga_display_buffer_size_ = 0;
   std::string vga_display_buffer_;
 
+  MemoryRegion* region_ = nullptr;
+
   bool IsVbeEnabled();
   void UpdateDisplayMode();
   void UpdateVRamMemoryMap();
@@ -89,9 +91,13 @@ class VgaRender {
   void DrawCharacter(uint8_t* dest, uint8_t* font, int character, int attribute);
   void DrawTextCursor(uint8_t* buffer);
   void GetCursorLocation(uint8_t* x, uint8_t* y, uint8_t* sel_start, uint8_t* sel_end);
+  bool GetVbeDisplayUpdate(DisplayUpdate& update);
+  bool GetVgaDisplayUpdate(DisplayUpdate& update);
+
  public:
   VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size);
   ~VgaRender();
+  void SetMemoryRegion(MemoryRegion* region);
 
   void SaveState(MigrationWriter* writer);
   bool LoadState(MigrationReader* reader);

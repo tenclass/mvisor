@@ -342,7 +342,17 @@ bool Qxl::ActivatePciBar(uint index) {
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->RegisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
   }
-  return PciDevice::ActivatePciBar(index);
+
+  auto ret = PciDevice::ActivatePciBar(index);
+  if (ret && index == 0) {
+    auto region = pci_bars_[0].resource->mapped_region;
+    if (region) {
+      auto mm = manager_->machine()->memory_manager();
+      mm->SetLogDirtyBitmap(region, true);
+      vga_render_->SetMemoryRegion(region);
+    }
+  }
+  return ret;
 }
 
 bool Qxl::DeactivatePciBar(uint index) {
@@ -350,7 +360,13 @@ bool Qxl::DeactivatePciBar(uint index) {
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CMD);
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
   }
-  return PciDevice::DeactivatePciBar(index);
+
+  bool ret = PciDevice::DeactivatePciBar(index);
+
+  if (ret && index == 0 && vga_render_) {
+    vga_render_->SetMemoryRegion(nullptr);
+  }
+  return ret;
 }
 
 void Qxl::SetInterrupt(uint32_t interrupt) {
