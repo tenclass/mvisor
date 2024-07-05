@@ -98,7 +98,6 @@ class MemoryManager {
   void UpdateKvmSlot(MemorySlot* slot, bool remove);
   uint AllocateSlotId();
   bool GetDirtyBitmapFromKvm(uint32_t slot, void* bitmap);
-  std::vector<MemorySlot> GetSlotsByNames(std::unordered_set<std::string> names);
   bool HandleBitmap(const char* bitmap, size_t size, DirtyBitmapCallback callback);
 
   Machine*                        machine_;

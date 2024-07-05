@@ -79,6 +79,7 @@ class Q35Host : public PciHost {
       uint8_t function = (addr >> 12) & 0x7;
       PciDevice* pci = manager_->LookupPciDevice(bus, slot, function);
       if (pci) {
+        std::lock_guard<std::recursive_mutex> lock(pci->mutex());
         pci->WritePciConfigSpace(addr & 0xFFF, data, size);
       } else {
         MV_ERROR("failed to lookup pci %x:%x.%x offset=0x%lx", bus, slot, function, offset);
@@ -96,6 +97,7 @@ class Q35Host : public PciHost {
       uint8_t function = (addr >> 12) & 0x7;
       PciDevice* pci = manager_->LookupPciDevice(bus, slot, function);
       if (pci) {
+        std::lock_guard<std::recursive_mutex> lock(pci->mutex());
         pci->ReadPciConfigSpace(addr & 0xFFF, data, size);
       } else {
         memset(data, 0xFF, size);

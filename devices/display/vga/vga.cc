@@ -88,12 +88,10 @@ bool Vga::ActivatePciBar(uint32_t bar_index) {
 }
 
 bool Vga::DeactivatePciBar(uint32_t bar_index) {
-  bool ret = PciDevice::DeactivatePciBar(bar_index);
-
-  if (ret && bar_index == 0 && vga_render_) {
+  if (bar_index == 0 && vga_render_) {
     vga_render_->SetMemoryRegion(nullptr);
   }
-  return ret;
+  return PciDevice::DeactivatePciBar(bar_index);
 }
 
 bool Vga::SaveState(MigrationWriter* writer) {

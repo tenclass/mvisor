@@ -361,12 +361,10 @@ bool Qxl::DeactivatePciBar(uint index) {
     manager_->UnregisterIoEvent(this, kIoResourceTypePio, pci_bars_[index].address + QXL_IO_NOTIFY_CURSOR);
   }
 
-  bool ret = PciDevice::DeactivatePciBar(index);
-
-  if (ret && index == 0 && vga_render_) {
+  if (index == 0 && vga_render_) {
     vga_render_->SetMemoryRegion(nullptr);
   }
-  return ret;
+  return PciDevice::DeactivatePciBar(index);
 }
 
 void Qxl::SetInterrupt(uint32_t interrupt) {

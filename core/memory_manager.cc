@@ -432,6 +432,7 @@ void MemoryManager::SetLogDirtyBitmap(MemoryRegion* region, bool log) {
     region->flags_ &= ~KVM_MEM_LOG_DIRTY_PAGES;
   }
 
+  std::shared_lock lock(mutex_);
   // Update the kvm slot
   for (auto slot = kvm_slots_.begin(); slot != kvm_slots_.end(); slot++) {
     if (slot->second->region == region) {
@@ -447,7 +448,10 @@ void MemoryManager::SynchronizeDirtyBitmap(MemoryRegion* region) {
     size_t bitmap_size = ALIGN(region->size_ / PAGE_SIZE, 64) / 8;
     region->dirty_bitmap_.resize(bitmap_size);
   }
-  
+
+  // We don't want the slots to be changed during the synchronization
+  std::shared_lock lock(mutex_);
+
   // Call for every slot
   for (auto slot: region->slots_) {
     uint64_t offset = slot->begin - region->gpa_;
@@ -457,17 +461,22 @@ void MemoryManager::SynchronizeDirtyBitmap(MemoryRegion* region) {
 
     if (!GetDirtyBitmapFromKvm(slot->id, bitmap_ptr)) {
       MV_ERROR("failed to get dirty bitmap from kvm");
-      continue;;
+      return;;
     }
-
+    
     // Clear the dirty bitmap in kvm
+    // num_pages must also be a multiple of 64 unless first_page + num_pages is the size of the memory slot.
+    uint32_t num_pages = (uint32_t)(slot->size / PAGE_SIZE);
     kvm_clear_dirty_log clear_dirty = {
       .slot = slot->id,
-      .num_pages = (uint32_t)(slot->size / PAGE_SIZE),
+      .num_pages = num_pages,
       .first_page = 0,
       .dirty_bitmap = bitmap_ptr
     };
-    MV_ASSERT(ioctl(machine_->vm_fd_, KVM_CLEAR_DIRTY_LOG, &clear_dirty) == 0);
+    if (ioctl(machine_->vm_fd_, KVM_CLEAR_DIRTY_LOG, &clear_dirty) < 0) {
+      MV_ERROR("failed to clear dirty bitmap from kvm");
+      return;
+    }
   }
 }
 
@@ -671,17 +680,6 @@ void MemoryManager::UnregisterDirtyMemoryListener(const DirtyMemoryListener** pl
     delete *plistener;
     *plistener = nullptr;
   }
-}
-
-std::vector<MemorySlot> MemoryManager::GetSlotsByNames(std::unordered_set<std::string> names) {
-  std::vector<MemorySlot> slots;
-  for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); ++it) {
-    auto slot = it->second;
-    if (names.find(slot->region->name_) != names.end()) {
-      slots.push_back(*slot);
-    }
-  }
-  return slots;
 }
 
 /* Save memory to migration */
