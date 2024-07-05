@@ -122,7 +122,7 @@ static struct option long_options[] = {
 
 int main(int argc, char* argv[]) {
   IntializeArguments(argc, argv);
-  SetThreadName("mvisor-main");
+  SetThreadName("mvisor");
 
   std::string config_path = "../config/default.yaml";
   std::string vm_uuid, vm_name;

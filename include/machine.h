@@ -53,7 +53,6 @@ class Machine {
   void Shutdown();
   bool IsValid() { return valid_; }
   bool IsPaused() { return valid_ && paused_; }
-  void WaitToResume();
   void WaitToQuit();
   void Save(const std::string path);
   void Load(const std::string path);
@@ -102,7 +101,6 @@ class Machine {
 
   bool valid_ = true;
   bool paused_ = true;
-  bool pausing_ = false;
   bool loading_ = false;
   bool saving_ = false;
 
@@ -133,10 +131,7 @@ class Machine {
   std::string vm_uuid_;
 
   std::mutex mutex_;
-  std::condition_variable wait_to_resume_;
-  std::condition_variable wait_to_pause_condition_;
   std::condition_variable wait_to_quit_condition_;
-  uint wait_count_ = 0;
   std::list<VoidCallback> state_change_listeners_;
 };
 

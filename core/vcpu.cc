@@ -507,8 +507,9 @@ void Vcpu::HandleHyperV() {
 
 /* To wake up a vcpu thread, the easist way is to send a signal */
 void Vcpu::SignalHandler(int signum) {
-  // Do nothing now ...
   MV_UNUSED(signum);
+  MV_ASSERT(current_vcpu_);
+  current_vcpu_->kvm_run_->immediate_exit = 1;
 }
 
 /* Vcpu thread only response to SIG_USER at the moment */
@@ -540,13 +541,13 @@ bool Vcpu::PreRun() {
   if (!machine_->IsValid()) {
     return false;
   }
-  kvm_running_ = true;
+  paused_ = false;
   return true;
 }
 
 void Vcpu::PostRun() {
   std::unique_lock<std::mutex> lock(mutex_);
-  kvm_running_ = false;
+  paused_ = true;
   if (wait_count_ > 0) {
     wait_for_paused_.notify_all();
   }
@@ -564,17 +565,22 @@ void Vcpu::Process() {
   if (machine_->debug()) MV_LOG("%s started", name_);
 
   while (true) {
+    /* Tasks are scheduled by other threads or inserted by the vcpu itself while handling IO / MMIO */
+    ExecuteTasks();
+  
     if (!PreRun()) {
       break;
     }
     int ret = ioctl(fd_, KVM_RUN, 0);
     PostRun();
 
-    if (ret < 0 && errno != EINTR) {
-      if (errno == EAGAIN) {
+    if (ret < 0) {
+      if (errno == EAGAIN || errno == EINTR) {
+        kvm_run_->immediate_exit = 0;
         continue;
       }
-      MV_LOG("KVM_RUN failed vcpu=%d ret=%d errno=%d", vcpu_id_, ret, errno);
+      MV_ERROR("KVM_RUN failed vcpu=%d ret=%d errno=%d", vcpu_id_, ret, errno);
+      break;
     }
 
     try {
@@ -611,9 +617,6 @@ void Vcpu::Process() {
         MV_PANIC("vcpu %d exit reason %d, expected KVM_EXIT_HLT(%d)", vcpu_id_,
           kvm_run_->exit_reason, KVM_EXIT_HLT);
       }
-
-      /* Execute tasks after processing IO/MMIO */
-      ExecuteTasks();
     } catch (const std::exception& e) {
       MV_LOG("vcpu %d exception: %s", vcpu_id_, e.what());
       break;

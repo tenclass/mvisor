@@ -82,7 +82,6 @@ class Vcpu {
   uint64_t cpuid_features() { return cpuid_features_; }
   uint32_t cpuid_version() { return cpuid_version_; }
   const std::string& cpuid_model() { return cpuid_model_; }
-  bool running() { return kvm_running_; }
 
  private:
   static void SignalHandler(int signum);
@@ -111,11 +110,11 @@ class Vcpu {
   int                       vcpu_id_ = -1;
   int                       fd_ = -1;
   char                      name_[16];
-  bool                      kvm_running_ = false;
   kvm_run*                  kvm_run_ = nullptr;
   kvm_coalesced_mmio_ring*  mmio_ring_ = nullptr;
   std::thread               thread_;
   bool                      single_step_ = false;
+  bool                      paused_ = true;
   int                       wait_count_ = 0;
   std::condition_variable   wait_to_resume_;
   std::condition_variable   wait_for_paused_;
@@ -155,14 +154,14 @@ class VcpuRunLockGuard {
     for (auto vcpu: vcpus_) {
       std::unique_lock<std::mutex> lock(vcpu->mutex_);
       vcpu->wait_count_++;
-      if (vcpu->kvm_running_) {
+      if (!vcpu->paused_) {
         vcpu->Kick();
       }
     }
     for (auto vcpu: vcpus_) {
       std::unique_lock<std::mutex> lock(vcpu->mutex_);
       vcpu->wait_for_paused_.wait(lock, [vcpu]() {
-        return !vcpu->kvm_running_;
+        return vcpu->paused_;
       });
     }
   }

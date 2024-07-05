@@ -47,12 +47,9 @@ IoThread::~IoThread() {
     thread_.join();
   }
 
-  if (event_fd_ > 0) {
-    safe_close(&event_fd_);
-  }
-  if (epoll_fd_ > 0) {
-    safe_close(&epoll_fd_);
-  }
+  safe_close(&event_fd_);
+  safe_close(&epoll_fd_);
+
   for (auto it = epoll_events_.begin(); it != epoll_events_.end(); it++) {
     delete it->second;
   }
@@ -84,21 +81,47 @@ void IoThread::Start() {
   });
 }
 
-void IoThread::Stop() {
-  /* Just wakeup the thread and found machine is stopped */
-  MV_ASSERT(!machine_->IsValid());
-  Kick();
-}
-
 void IoThread::Kick() {
   if (event_fd_ > 0) {
     uint64_t tmp = 1;
     write(event_fd_, &tmp, sizeof(tmp));
   }
+  wait_to_resume_.notify_all();
 }
 
-bool IoThread::IsCurrentThread() {
-  return std::this_thread::get_id() == thread_.get_id();
+/* Check paused state before epoll_wait */
+bool IoThread::PreRun() {
+  std::unique_lock<std::mutex> lock(mutex_);
+  if (wait_count_ > 0) {
+    // Someone wants me to pause, check if I can pause now
+    // Drain all disk
+    for (auto image : disk_images_) {
+      if (image->busy()) {
+        return true;
+      }
+    }
+
+    // Drain all IO schedule jobs
+    for (auto timer : timers_) {
+      if (timer->interval_ns == 0) {
+        return true;
+      }
+    }
+
+    // Can pause now
+    paused_ = true;
+    wait_for_paused_.notify_all();
+  }
+
+  wait_to_resume_.wait(lock, [this] {
+    bool should_wait = machine_->IsValid() && (machine_->IsPaused() || wait_count_ > 0);
+    return !should_wait;
+  });
+  if (!machine_->IsValid()) {
+    return false;
+  }
+  paused_ = false;
+  return true;
 }
 
 void IoThread::RunLoop() {
@@ -107,7 +130,6 @@ void IoThread::RunLoop() {
 
   struct epoll_event events[MAX_ENTRIES];
 
-  running_ = true;
   while (true) {
     try {
       /* Execute timer events and calculate the next timeout */
@@ -116,11 +138,7 @@ void IoThread::RunLoop() {
         next_timeout_ns = CheckTimers();
       } while (next_timeout_ns <= 0);
 
-      /* Check paused state before sleep */
-      while(machine_->IsPaused() && CanPauseNow()) {
-        machine_->WaitToResume();
-      }
-      if (!machine_->IsValid()) {
+      if (!PreRun()) {
         break;
       }
 
@@ -161,7 +179,6 @@ void IoThread::RunLoop() {
     }
   }
 
-  running_ = false;
   if (machine_->debug()) MV_LOG("mvisor-iothread ended");
 }
 
@@ -182,7 +199,7 @@ EpollEvent* IoThread::StartPolling(Device* device, int fd, uint poll_mask, IoCal
     MV_PANIC("failed to add epoll event, ret=%d", ret);
   }
 
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   if (epoll_events_.find(fd) != epoll_events_.end()) {
     MV_PANIC("repeated polling fd=%d, mask=0x%x, callback=%s",
       fd, poll_mask, callback.target_type().name());
@@ -192,7 +209,7 @@ EpollEvent* IoThread::StartPolling(Device* device, int fd, uint poll_mask, IoCal
 }
 
 void IoThread::StopPolling(int fd) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   auto it = epoll_events_.find(fd);
   MV_ASSERT(it != epoll_events_.end());
 
@@ -214,7 +231,7 @@ IoTimer* IoThread::AddTimer(Device* device, int64_t interval_ns, bool permanent,
   timer->removed = false;
   timer->next_timepoint = std::chrono::steady_clock::now() + std::chrono::nanoseconds(interval_ns);
 
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   timers_.push_back(timer);
 
   /* Wakeup io thread and recalculate the timeout */
@@ -239,7 +256,7 @@ int64_t IoThread::CheckTimers() {
 
   std::vector<IoTimer*> triggered;
   {
-    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(mutex_);
     for (auto it = timers_.begin(); it != timers_.end();) {
       auto timer = *it;
       if (timer->removed) {
@@ -281,17 +298,17 @@ void IoThread::Schedule(Device* device, VoidCallback callback) {
 }
 
 void IoThread::RegisterDiskImage(DiskImage* image) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   disk_images_.push_back(image);
 }
 
 void IoThread::UnregisterDiskImage(DiskImage* image) {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
   disk_images_.remove(image);
 }
 
 void IoThread::FlushDiskImages() {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(mutex_);
 
   for (auto image : disk_images_) {
     ImageIoRequest r = {
@@ -301,28 +318,6 @@ void IoThread::FlushDiskImages() {
       MV_UNUSED(ret);
     });
   }
-}
-
-bool IoThread::CanPauseNow() {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  if (machine_->pausing_)
-    return false;
-
-  /* Drain all disk IO */
-  for (auto image : disk_images_) {
-    if (image->busy()) {
-      return false;
-    }
-  }
-
-  /* Drain all IO schedule jobs */
-  for (auto timer : timers_) {
-    if (timer->interval_ns == 0) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 /* Make sure call Flush() before save disk images */

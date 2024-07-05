@@ -65,18 +65,11 @@ Machine::Machine(std::string config_path, std::string vm_name, std::string vm_uu
   }
 
   /* Start threads and wait to resume */
-  std::unique_lock<std::mutex> lock(mutex_);
-  wait_count_ = 1;
   paused_ = true;
-
   for (auto vcpu: vcpus_) {
     vcpu->Start();
   }
   io_thread_->Start();
-  /* Wait for all threads ready */
-  wait_to_pause_condition_.wait(lock, [this]() {
-    return wait_count_ == 0;
-  });
 
   /* Reset devices after vCPU created and paused */
   device_manager_->ResetDevices();
@@ -141,8 +134,7 @@ void Machine::Quit() {
   valid_ = false;
 
   /* If paused, threads are waiting to resume */
-  wait_to_resume_.notify_all();
-  io_thread_->Stop();
+  io_thread_->Kick();
   for (auto vcpu: vcpus_) {
     vcpu->Kick();
   }
@@ -221,7 +213,6 @@ void Machine::Resume() {
     MV_LOG("unable to resume a running machine");
     return;
   }
-  MV_ASSERT(wait_count_ == 0);
   paused_ = false;
 
   /* Before running, broadcast messages */
@@ -230,7 +221,7 @@ void Machine::Resume() {
   }
   
   /* Resume threads */
-  wait_to_resume_.notify_all();
+  io_thread_->Kick();
   for (auto vcpu : vcpus_) {
     vcpu->Kick();
   }
@@ -242,39 +233,20 @@ void Machine::Pause() {
   if (!valid_ || paused_)
     return;
 
-  pausing_ = true;
-  paused_ = true;
-  /* Make sure no vCPU thread is running now */
+  /* Make sure no vcpu thread is running now */
   VcpuRunLockGuard guard(vcpus_);
 
-  /* Here all the threads are stopped, broadcast messages */
+  /* Here all vcpu are stopped, broadcast messages */
   for (auto& listener : state_change_listeners_) {
     listener();
   }
 
-  /* Wait for IO thread to stop */
+  /* Wait for iothread to stop */
   io_thread_->FlushDiskImages();
+  IoThreadLockGuard io_guard(io_thread_);
 
-  wait_count_ = io_thread_->running() ? 1 : 0;
-  pausing_ = false;
-  io_thread_->Kick();
-
-  wait_to_pause_condition_.wait(lock, [this]() {
-    return wait_count_ == 0;
-  });
-}
-
-/* vCPU threads and IO threads call this method to sleep */
-void Machine::WaitToResume() {
-  std::unique_lock<std::mutex> lock(mutex_);  
-  MV_ASSERT(wait_count_ > 0);
-  wait_count_--;
-  if (wait_count_ == 0) {
-    wait_to_pause_condition_.notify_all();
-  }
-  wait_to_resume_.wait(lock, [this]() {
-    return !IsPaused();
-  });
+  // Now all threads are paused, set machine state to paused
+  paused_ = true;
 }
 
 /* Main thread call this method to sleep */
