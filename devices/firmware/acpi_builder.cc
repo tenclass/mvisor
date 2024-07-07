@@ -314,9 +314,32 @@ std::string AcpiBuilder::BuildCpuSsdt() {
     ssdt.append("\x00\x00\x00\x00", 4);
     ssdt.append("\x00", 1);
   }
+
+  // PCI 64-bit resource
+  char pr64_var[] = { 0x08,0x5C,0x50,0x52,0x36,0x34,0x00 };
+  if (HasPciBar64()) {
+    pr64_var[6] = 1;
+  }
+  ssdt.append(pr64_var, sizeof(pr64_var));
+
   *(uint32_t*)&ssdt[4] = ssdt.size();
   ssdt[9] = 0; // reset checksum
   loader_.AddAllocateCommand("etc/acpi/cpus", 16, ALLOC_ZONE_HIGH);
   loader_.AddChecksumCommand("etc/acpi/cpus", 9, 0, ssdt.size());
   return ssdt;
+}
+
+bool AcpiBuilder::HasPciBar64() {
+  auto objects = machine_->LookupObjects([](auto obj) {
+    return dynamic_cast<PciDevice*>(obj) != nullptr;
+  });
+  for (auto obj : objects) {
+    auto pci = dynamic_cast<PciDevice*>(obj);
+    for (int i = 0; i < 6; i++) {
+      if (pci->pci_bar(i).special_bits & PCI_BASE_ADDRESS_MEM_TYPE_64) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

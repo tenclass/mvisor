@@ -18,7 +18,7 @@ DefinitionBlock(
 
     // PCI root bus resource template
     Scope(\_SB.PCI0) {
-        Name (_CRS, ResourceTemplate ()  // _CRS: Current Resource Settings
+        Name (CRES, ResourceTemplate ()  // _CRS: Current Resource Settings
         {
             WordBusNumber (ResourceProducer, MinFixed, MaxFixed, PosDecode,
                 0x0000,             // Granularity
@@ -68,6 +68,9 @@ DefinitionBlock(
                 0x00000000,         // Translation Offset
                 0x0EC00000,         // Length
                 ,, , AddressRangeMemory, TypeStatic)
+        })
+
+        Name(CR64, ResourceTemplate() {
             QWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, Cacheable, ReadWrite,
                 0x0000000000000000, // Granularity
                 0x0000380000000000, // Range Minimum
@@ -76,6 +79,16 @@ DefinitionBlock(
                 0x0000000800000000, // Length
                 ,, , AddressRangeMemory, TypeStatic)
         })
+
+        Method(_CRS, 0) {
+            External(PR64, IntObj)
+            If (LEqual(PR64, Zero)) {
+                Return (CRES)
+            }
+            /* add pci64 and return result */
+            ConcatenateResTemplate(CRES, CR64, Local1)
+            Return (Local1)
+        }
     }
 
     // PCI D31:F0 LPC ISA bridge
