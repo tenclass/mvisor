@@ -55,7 +55,7 @@ void VncConnection::Close() {
 void VncConnection::LookupDevices() {
   auto machine = server_->machine();
   for (auto o : machine->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
-    keyboards_.push_back(dynamic_cast<KeyboardInputInterface*>(o));
+    keyboards_.insert(keyboards_.begin(), dynamic_cast<KeyboardInputInterface*>(o));
   }
   for (auto o : machine->LookupObjects([](auto o) { return dynamic_cast<DisplayInterface*>(o); })) {
     display_ = dynamic_cast<DisplayInterface*>(o);
