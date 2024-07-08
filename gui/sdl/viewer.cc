@@ -212,6 +212,17 @@ PointerInputInterface* Viewer::GetActivePointer() {
   return nullptr;
 }
 
+KeyboardInputInterface* Viewer::GetActiveKeyboard() {
+  if (machine_->IsPaused())
+    return nullptr;
+  for (auto keyboard : keyboards_) {
+    if (keyboard->InputAcceptable()) {
+      return keyboard;
+    }
+  }
+  return nullptr;
+}
+
 void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
   if (pcm_playback_error_) {
     return;
@@ -266,7 +277,7 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
 
 void Viewer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
-    keyboard_ = dynamic_cast<KeyboardInputInterface*>(o);
+    keyboards_.push_back(dynamic_cast<KeyboardInputInterface*>(o));
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<DisplayInterface*>(o); })) {
     display_ = dynamic_cast<DisplayInterface*>(o);
@@ -446,6 +457,7 @@ void Viewer::SetupKeyboardShortcuts() {
 
 void Viewer::HandleEvent(const SDL_Event& event) {
   uint8_t transcoded[10] = { 0 };
+  auto keyboard = GetActiveKeyboard();
 
   switch (event.type)
   {
@@ -465,10 +477,12 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     if (event.key.keysym.mod & KMOD_LALT) {
       auto it = keyboard_shortcuts_.find(event.key.keysym.sym);
       if (it != keyboard_shortcuts_.end()) {
-        // release alt key
-        auto qcode = ScancodeFromUsb(SDL_SCANCODE_LALT);
-        QcodeToAtset1(qcode, 0, transcoded);
-        keyboard_->QueueKeyboardEvent(transcoded, 0);
+        if (keyboard) {
+          // release alt key
+          auto qcode = ScancodeFromUsb(SDL_SCANCODE_LALT);
+          QcodeToAtset1(qcode, 0, transcoded);
+          keyboard->QueueKeyboardEvent(transcoded, 0);
+        }
         // run the shortcut in a detached thread
         std::thread(it->second).detach();
         return;
@@ -476,7 +490,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     }
     // fall through
   case SDL_KEYUP:
-    if (keyboard_) {
+    if (keyboard) {
       auto qcode = ScancodeFromUsb(event.key.keysym.scancode);
       if (qcode == 0) {
         break;
@@ -486,7 +500,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
       }
       auto mod = SDL_GetModState();
       uint8_t modifiers = ((mod & KMOD_NUM) ? 2: 0) | ((mod & KMOD_CAPS) ? 4 : 0);
-      keyboard_->QueueKeyboardEvent(transcoded, modifiers);
+      keyboard->QueueKeyboardEvent(transcoded, modifiers);
     }
     break;
   case SDL_MOUSEWHEEL:

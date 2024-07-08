@@ -55,7 +55,7 @@ void VncConnection::Close() {
 void VncConnection::LookupDevices() {
   auto machine = server_->machine();
   for (auto o : machine->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
-    keyboard_ = dynamic_cast<KeyboardInputInterface*>(o);
+    keyboards_.push_back(dynamic_cast<KeyboardInputInterface*>(o));
   }
   for (auto o : machine->LookupObjects([](auto o) { return dynamic_cast<DisplayInterface*>(o); })) {
     display_ = dynamic_cast<DisplayInterface*>(o);
@@ -443,7 +443,8 @@ bool VncConnection::OnKeyEvent() {
   ReadSkip(2); // padding
 
   uint32_t key = ReadUInt32();
-  if (keyboard_) {
+  auto keyboard = GetActiveKeyboard();
+  if (keyboard) {
     auto qcode = ScancodeFromX11(key);
     if (qcode == 0) {
       MV_WARN("Unknown key %d", key);
@@ -457,8 +458,8 @@ bool VncConnection::OnKeyEvent() {
     if (down && qcode == Q_KEY_CODE_CAPS_LOCK) {
       modifiers_ ^= 4;
     }
-    if (keyboard_->InputAcceptable()) {
-      keyboard_->QueueKeyboardEvent(transcoded, modifiers_);
+    if (keyboard->InputAcceptable()) {
+      keyboard->QueueKeyboardEvent(transcoded, modifiers_);
     }
   }
   return true;
@@ -496,6 +497,17 @@ PointerInputInterface* VncConnection::GetActivePointer() {
   for (auto pointer : pointers_) {
     if (pointer->InputAcceptable()) {
       return pointer;
+    }
+  }
+  return nullptr;
+}
+
+KeyboardInputInterface* VncConnection::GetActiveKeyboard() {
+  if (server_->machine()->IsPaused())
+    return nullptr;
+  for (auto keyboard : keyboards_) {
+    if (keyboard->InputAcceptable()) {
+      return keyboard;
     }
   }
   return nullptr;
