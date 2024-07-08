@@ -136,9 +136,10 @@ class IoThreadLockGuard {
   void Pause() {
     std::unique_lock<std::mutex> lock(iothread_->mutex_);
     iothread_->wait_count_++;
-    if (!iothread_->paused_) {
-      iothread_->Kick();
+    if (iothread_->paused_) {
+      return;
     }
+    iothread_->Kick();
     iothread_->wait_for_paused_.wait(lock, [this]() {
       return iothread_->paused_;
     });

@@ -624,6 +624,7 @@ void Vcpu::Process() {
   }
 
 quit:
+  paused_ = true;
   if (machine_->debug_) MV_LOG("%s ended", name_);
 }
 

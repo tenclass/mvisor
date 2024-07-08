@@ -179,6 +179,7 @@ void IoThread::RunLoop() {
     }
   }
 
+  paused_ = true;
   if (machine_->debug()) MV_LOG("mvisor-iothread ended");
 }
 

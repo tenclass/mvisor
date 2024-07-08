@@ -93,7 +93,7 @@ uint8_t I8257Dma::ReadDmaControl(uint controller_index, uint64_t offset) {
   switch (offset)
   {
   default:
-    MV_PANIC("read controller=%x off=%x data=%x",
+    MV_ERROR("read controller=%x off=%x data=%x",
       controller_index, offset, ret);
   }
 

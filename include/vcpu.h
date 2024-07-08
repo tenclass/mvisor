@@ -154,12 +154,14 @@ class VcpuRunLockGuard {
     for (auto vcpu: vcpus_) {
       std::unique_lock<std::mutex> lock(vcpu->mutex_);
       vcpu->wait_count_++;
-      if (!vcpu->paused_) {
-        vcpu->Kick();
-      }
+      vcpu->Kick();
     }
     for (auto vcpu: vcpus_) {
       std::unique_lock<std::mutex> lock(vcpu->mutex_);
+      if (vcpu->paused_) {
+        // Don't wait in case the vCPU is already paused or exited
+        continue;
+      }
       vcpu->wait_for_paused_.wait(lock, [vcpu]() {
         return vcpu->paused_;
       });
