@@ -113,8 +113,20 @@ void Viewer::RenderSurface(const DisplayPartialBitmap* partial) {
     MV_PANIC("unsupported video bpp=%d", bpp_);
   }
 
-  SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(partial->data,
+  SDL_Surface* surface;
+  if (partial->stride > 0) {
+    surface = SDL_CreateRGBSurfaceWithFormatFrom(partial->data,
       partial->width, partial->height, partial->bpp, partial->stride, format);
+  } else {
+    surface = SDL_CreateRGBSurfaceWithFormat(0, partial->width, partial->height, partial->bpp, format);
+    auto src = (uint8_t*)partial->data;
+    auto dst = (uint8_t*)surface->pixels;
+    for (int y = 0; y < partial->height; y++) {
+      memcpy(dst, src, partial->width * partial->bpp / 8);
+      src += partial->stride;
+      dst += surface->pitch;
+    }
+  }
 
   if (partial->bpp == 8) {
     SDL_Color colors[256];

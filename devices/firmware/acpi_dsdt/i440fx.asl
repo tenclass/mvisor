@@ -55,17 +55,10 @@ DefinitionBlock(
                 ,, , AddressRangeMemory, TypeStatic)
             DWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
                 0x00000000,         // Granularity
-                0x80000000,         // Range Minimum
-                0xDFFFFFFF,         // Range Maximum
-                0x00000000,         // Translation Offset
-                0x60000000,         // Length
-                ,, , AddressRangeMemory, TypeStatic)
-            DWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
-                0x00000000,         // Granularity
-                0xF0000000,         // Range Minimum
+                0xE0000000,         // Range Minimum
                 0xFEBFFFFF,         // Range Maximum
                 0x00000000,         // Translation Offset
-                0x0EC00000,         // Length
+                0x1EC00000,         // Length
                 ,, , AddressRangeMemory, TypeStatic)
         })
 
@@ -89,7 +82,28 @@ DefinitionBlock(
             Return (Local1)
         }
     }
-
+    Scope(\_SB.PCI0) {
+        Device(VGA) {
+            Name(_ADR, 0x00020000)
+            OperationRegion(PCIC, PCI_Config, Zero, 0x4)
+            Field(PCIC, DWordAcc, NoLock, Preserve) {
+                VEND, 32
+            }
+            Method(_S1D, 0, NotSerialized) {
+                Return (0x00)
+            }
+            Method(_S2D, 0, NotSerialized) {
+                Return (0x00)
+            }
+            Method(_S3D, 0, NotSerialized) {
+                If (LEqual(VEND, 0x1001b36)) {
+                    Return (0x03)           // QXL
+                } Else {
+                    Return (0x00)
+                }
+            }
+        }
+    }
     // PIIX4 PM
     Scope(\_SB.PCI0) {
         Device(PX13) {

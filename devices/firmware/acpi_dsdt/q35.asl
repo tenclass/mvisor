@@ -56,17 +56,10 @@ DefinitionBlock(
                 ,, , AddressRangeMemory, TypeStatic)
             DWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
                 0x00000000,         // Granularity
-                0x80000000,         // Range Minimum
-                0xDFFFFFFF,         // Range Maximum
-                0x00000000,         // Translation Offset
-                0x60000000,         // Length
-                ,, , AddressRangeMemory, TypeStatic)
-            DWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
-                0x00000000,         // Granularity
-                0xF0000000,         // Range Minimum
+                0xA0000000,         // Range Minimum
                 0xFEBFFFFF,         // Range Maximum
                 0x00000000,         // Translation Offset
-                0x0EC00000,         // Length
+                0x5EC00000,         // Length
                 ,, , AddressRangeMemory, TypeStatic)
         })
 

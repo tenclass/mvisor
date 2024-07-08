@@ -236,17 +236,17 @@ void Machine::Pause() {
   /* Make sure no vcpu thread is running now */
   VcpuRunLockGuard guard(vcpus_);
 
-  /* Here all vcpu are stopped, broadcast messages */
-  for (auto& listener : state_change_listeners_) {
-    listener();
-  }
-
   /* Wait for iothread to stop */
   io_thread_->FlushDiskImages();
   IoThreadLockGuard io_guard(io_thread_);
 
   // Now all threads are paused, set machine state to paused
   paused_ = true;
+
+  /* Here all vcpu are stopped, broadcast messages */
+  for (auto& listener : state_change_listeners_) {
+    listener();
+  }
 }
 
 /* Main thread call this method to sleep */
