@@ -17,7 +17,7 @@ DefinitionBlock(
 
     // PCI root bus resource template
     Scope(\_SB.PCI0) {
-        Name (_CRS, ResourceTemplate ()  // _CRS: Current Resource Settings
+        Name (CRES, ResourceTemplate ()  // _CRS: Current Resource Settings
         {
             WordBusNumber (ResourceProducer, MinFixed, MaxFixed, PosDecode,
                 0x0000,             // Granularity
@@ -55,18 +55,14 @@ DefinitionBlock(
                 ,, , AddressRangeMemory, TypeStatic)
             DWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
                 0x00000000,         // Granularity
-                0x80000000,         // Range Minimum
-                0xDFFFFFFF,         // Range Maximum
-                0x00000000,         // Translation Offset
-                0x60000000,         // Length
-                ,, , AddressRangeMemory, TypeStatic)
-            DWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, NonCacheable, ReadWrite,
-                0x00000000,         // Granularity
-                0xF0000000,         // Range Minimum
+                0xE0000000,         // Range Minimum
                 0xFEBFFFFF,         // Range Maximum
                 0x00000000,         // Translation Offset
-                0x0EC00000,         // Length
+                0x1EC00000,         // Length
                 ,, , AddressRangeMemory, TypeStatic)
+        })
+
+        Name(CR64, ResourceTemplate() {
             QWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, Cacheable, ReadWrite,
                 0x0000000000000000, // Granularity
                 0x0000380000000000, // Range Minimum
@@ -75,8 +71,39 @@ DefinitionBlock(
                 0x0000000800000000, // Length
                 ,, , AddressRangeMemory, TypeStatic)
         })
-    }
 
+        Method(_CRS, 0) {
+            External(PR64, IntObj)
+            If (LEqual(PR64, Zero)) {
+                Return (CRES)
+            }
+            /* add pci64 and return result */
+            ConcatenateResTemplate(CRES, CR64, Local1)
+            Return (Local1)
+        }
+    }
+    Scope(\_SB.PCI0) {
+        Device(VGA) {
+            Name(_ADR, 0x00020000)
+            OperationRegion(PCIC, PCI_Config, Zero, 0x4)
+            Field(PCIC, DWordAcc, NoLock, Preserve) {
+                VEND, 32
+            }
+            Method(_S1D, 0, NotSerialized) {
+                Return (0x00)
+            }
+            Method(_S2D, 0, NotSerialized) {
+                Return (0x00)
+            }
+            Method(_S3D, 0, NotSerialized) {
+                If (LEqual(VEND, 0x1001b36)) {
+                    Return (0x03)           // QXL
+                } Else {
+                    Return (0x00)
+                }
+            }
+        }
+    }
     // PIIX4 PM
     Scope(\_SB.PCI0) {
         Device(PX13) {

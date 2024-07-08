@@ -17,6 +17,7 @@ class AcpiBuilder {
   std::map<std::string, AcpiTableInterface*> tables_;
   AcpiLoader loader_;
   bool IsQ35();
+  bool HasPciBar64();
 
   std::string BuildRsdp();
   std::string BuildRsdt();

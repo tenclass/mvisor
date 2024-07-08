@@ -29,7 +29,7 @@ VgaRender::VgaRender(Device* device, uint8_t* vram_base, uint32_t vram_size) {
   mode_changed_ = false;
 
   // Maximum resolution for VGA graphics
-  vga_display_buffer_.resize(800 * 600 * 4);
+  vga_display_buffer_.resize(1024 * 768 * 4);
 }
 
 VgaRender::~VgaRender() {
@@ -675,7 +675,10 @@ bool VgaRender::GetVgaDisplayUpdate(DisplayUpdate& update) {
 
   if (vga_display_buffer_size_ != size_t(stride_ * height_)) {
     vga_display_buffer_size_ = stride_ * height_;
-    MV_ASSERT(vga_display_buffer_size_ <= vga_display_buffer_.size());
+    if (vga_display_buffer_size_ > vga_display_buffer_.size()) {
+      MV_ERROR("vga display buffer not enough for resolution %dx%d", width_, height_);
+      vga_display_buffer_.resize(vga_display_buffer_size_);
+    }
     redraw_ = true;
   }
   auto buffer = (uint8_t*)vga_display_buffer_.data();

@@ -410,6 +410,7 @@ void PciDevice::SetupPciBar64(uint index, uint64_t size, IoResourceType type) {
   MV_ASSERT(size <= 1ULL << 32);
   SetupPciBar(index, size, type);
   pci_bars_[index].special_bits |= PCI_BASE_ADDRESS_MEM_TYPE_64;
+  pci_header_.bars[index] |= PCI_BASE_ADDRESS_MEM_TYPE_64;
   pci_bars_[index + 1].address_mask = 0xFFFFFFFF;
 }
 

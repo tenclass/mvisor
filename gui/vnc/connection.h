@@ -66,7 +66,7 @@ class VncConnection {
   ClipboardInterface*       clipboard_ = nullptr;
   std::string               clipboard_data_;
   DisplayInterface*         display_ = nullptr;
-  KeyboardInputInterface*   keyboard_ = nullptr;
+  std::vector<KeyboardInputInterface*>  keyboards_;
   std::vector<PointerInputInterface*>   pointers_;
 
   std::list<DisplayModeChangeListener>::iterator  display_mode_listener_;
@@ -104,6 +104,7 @@ class VncConnection {
   void RenderSurface(const DisplayPartialBitmap* partial);
   void RenderCursor(const DisplayMouseCursor* cursor_update);
   PointerInputInterface* GetActivePointer();
+  KeyboardInputInterface* GetActiveKeyboard();
 
  public:
   VncConnection(VncServer* server, int fd);

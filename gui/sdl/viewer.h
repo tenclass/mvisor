@@ -54,6 +54,7 @@ class Viewer {
   void HandleEvent(const SDL_Event& event);
   void SetupKeyboardShortcuts();
   PointerInputInterface* GetActivePointer();
+  KeyboardInputInterface* GetActiveKeyboard();
   void SendPointerEvent();
   void SendResizerEvent();
   void OnPlayback(PlaybackState state, const std::string& data);
@@ -65,7 +66,7 @@ class Viewer {
   std::string             clipboard_data_;
   DisplayInterface*       display_ = nullptr;
   PlaybackInterface*      playback_= nullptr;
-  KeyboardInputInterface* keyboard_ = nullptr;
+  std::vector<KeyboardInputInterface*>  keyboards_;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
   PlaybackFormat          playback_format_;
