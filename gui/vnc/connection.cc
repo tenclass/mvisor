@@ -684,69 +684,66 @@ void VncConnection::OnDisplayUpdate(const DisplayUpdate& update) {
   }
 }
 
-bool VncConnection::SendDesktopSize() {
+void VncConnection::BuildDesktopSize(std::vector<std::string>& updates) {
   if (!IsEncodingSupported(-223)) {
     MV_WARN("DesktopSize pseudo-encoding not supported");
-    return false;
+    return;
   }
-  uint8_t buf[16] = {0};
-  *(uint16_t*)&buf[2] = htons(1);  // number of rectangles
-  *(uint16_t*)&buf[8] = htons(frame_buffer_width_);
-  *(uint16_t*)&buf[10] = htons(frame_buffer_height_);
-  *(uint32_t*)&buf[12] = htonl(-223); // DesktopSize pseudo-encoding
-  send(fd_, buf, sizeof(buf), 0);
-  return true;
+  std::string buf(12, 0);
+  auto ptr = (uint8_t*)buf.data();
+  *(uint16_t*)&ptr[4] = htons(frame_buffer_width_);
+  *(uint16_t*)&ptr[6] = htons(frame_buffer_height_);
+  *(uint32_t*)&ptr[8] = htonl(-223); // DesktopSize pseudo-encoding
+  updates.emplace_back(std::move(buf));
 }
 
-bool VncConnection::SendCursorUpdate() {
+void VncConnection::BuildCursorUpdate(std::vector<std::string>& updates) {
   if (!cursor_buffer_ || !IsEncodingSupported(-314)) {
-    return false;
+    return;
   }
 
   int height = pixman_image_get_height(cursor_buffer_);
   int width = pixman_image_get_width(cursor_buffer_);
-  uint8_t header[20] = {0};
-  *(uint16_t*)&header[2] = htons(1);  // number of rectangles
-  *(uint16_t*)&header[4] = htons(cursor_hotspot_x_);
-  *(uint16_t*)&header[6] = htons(cursor_hotspot_y_);
-  *(uint16_t*)&header[8] = htons(width);
-  *(uint16_t*)&header[10] = htons(height);
-  *(uint32_t*)&header[12] = htonl(-314); // Alpha cursor pseudo-encoding
-  *(uint32_t*)&header[16] = htonl(0); // RAW encoding of cursor
-  send(fd_, header, sizeof(header), 0);
+  int stride = pixman_image_get_stride(cursor_buffer_);
 
-  auto stride = pixman_image_get_stride(cursor_buffer_);
+  std::string buf(16, 0);
+  auto ptr = (uint8_t*)buf.data();
+  *(uint16_t*)&ptr[0] = htons(cursor_hotspot_x_);
+  *(uint16_t*)&ptr[2] = htons(cursor_hotspot_y_);
+  *(uint16_t*)&ptr[4] = htons(width);
+  *(uint16_t*)&ptr[6] = htons(height);
+  *(uint32_t*)&ptr[8] = htonl(-314); // Alpha cursor pseudo-encoding
+  *(uint32_t*)&ptr[12] = htonl(0); // RAW encoding of cursor
+
   auto data = (uint8_t*)pixman_image_get_data(cursor_buffer_);
-  send(fd_, data, height * stride, 0);
-  return true;
+  buf.append((char*)data, height * stride);
+  updates.emplace_back(std::move(buf));
 }
 
-bool VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
+void VncConnection::BuildFrameBufferUpdate(std::vector<std::string>& updates, int x, int y, int width, int height) {
   if (frame_buffer_ == nullptr) {
     // Frame buffer is destroyed if client set pixel format
-    return false;
+    return;
   }
 
   MV_ASSERT(width > 0 && height > 0);
   MV_ASSERT(x + width <= frame_buffer_width_ && y + height <= frame_buffer_height_);
   auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
 
-  uint8_t header[16] = {0};
-  *(uint16_t*)&header[2] = htons(1);  // number of rectangles
-  *(uint16_t*)&header[4] = htons(x);
-  *(uint16_t*)&header[6] = htons(y);
-  *(uint16_t*)&header[8] = htons(width);
-  *(uint16_t*)&header[10] = htons(height);
+  std::string buf;
+  buf.resize(100 + width * height * bytes_per_pixel);
+  auto ptr = (uint8_t*)buf.data();
+  *(uint16_t*)&ptr[0] = htons(x);
+  *(uint16_t*)&ptr[2] = htons(y);
+  *(uint16_t*)&ptr[4] = htons(width);
+  *(uint16_t*)&ptr[6] = htons(height);
   
   if (IsEncodingSupported(6)) {
-    *(uint32_t*)&header[12] = htonl(6); // zlib encoding
-    std::string compressed;
-    compressed.resize(width * height * 4 + 100);
-    auto dst = (uint8_t*)compressed.data();
-    memcpy(dst, header, 16);
-    uint32_t* compressed_size_ptr = (uint32_t*)&dst[16];
-    zstream_.next_out = (Bytef*)&dst[20];
-    zstream_.avail_out = compressed.size() - 20;
+    *(uint32_t*)&ptr[8] = htonl(6); // zlib encoding
+
+    uint32_t* compressed_size_ptr = (uint32_t*)&ptr[12];
+    zstream_.next_out = (Bytef*)&ptr[16];
+    zstream_.avail_out = buf.size() - 16;
 
     // fill raw encoding data
     auto stride = pixman_image_get_stride(frame_buffer_);
@@ -763,23 +760,26 @@ bool VncConnection::SendFrameBufferUpdate(int x, int y, int width, int height) {
     MV_ASSERT(deflate(&zstream_, Z_SYNC_FLUSH) == Z_OK);
 
     // fix compressed size
-    uint32_t compressed_size = compressed.size() - 20 - zstream_.avail_out;
+    uint32_t compressed_size = buf.size() - 16 - zstream_.avail_out;
     *compressed_size_ptr = htonl(compressed_size);
-    send(fd_, compressed.data(), 20 + compressed_size, 0);
+    buf.resize(16 + compressed_size);
   } else {
-    *(uint32_t*)&header[12] = htonl(0); // Raw encoding
-    send(fd_, header, sizeof(header), 0);
+    *(uint32_t*)&ptr[8] = htonl(0); // Raw encoding
 
-    auto stride = pixman_image_get_stride(frame_buffer_);
     auto data = (uint8_t*)pixman_image_get_data(frame_buffer_);
-    auto dst = data + y * stride + x * bytes_per_pixel;
+    auto src_stride = pixman_image_get_stride(frame_buffer_);
+    auto dst_stride = width * bytes_per_pixel;
+    auto src = data + y * src_stride + x * bytes_per_pixel;
+    auto dst = ptr + 12;
     
     for (int i = 0; i < height; i++) {
-      send(fd_, dst, width * bytes_per_pixel, 0);
-      dst += stride;
+      memcpy(dst, src, dst_stride);
+      src += src_stride;
+      dst += dst_stride;
     }
+    buf.resize(12 + height * dst_stride);
   }
-  return true;
+  updates.emplace_back(std::move(buf));
 }
 
 void VncConnection::UpdateLoop() {
@@ -796,24 +796,31 @@ void VncConnection::UpdateLoop() {
       break;
     }
     
-    frame_buffer_update_requested_ = false;
-    bool updated = false;
-    // Send large data to client will block the thread 
-    // until the data is sent, so we should unlock the mutex before sending data
+    std::vector<std::string> updates;
     if (frame_buffer_resize_requested_) {
       frame_buffer_resize_requested_ = false;
-      updated = SendDesktopSize();
-    } else if (cursor_update_requested_) {
-      cursor_update_requested_ = false;
-      updated = SendCursorUpdate();
-    } else if (!dirty_rects_.empty()) {
-      VncRect rect = dirty_rects_.back();
-      dirty_rects_.pop_back();
-      updated = SendFrameBufferUpdate(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+      BuildDesktopSize(updates);
     }
-    // If no update sent, keep the request
-    if (!updated) {
-      frame_buffer_update_requested_ = true;
+    if (cursor_update_requested_) {
+      cursor_update_requested_ = false;
+      BuildCursorUpdate(updates);
+    }
+    while (!dirty_rects_.empty()) {
+      auto rect = dirty_rects_.back();
+      dirty_rects_.pop_back();
+      BuildFrameBufferUpdate(updates, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+    }
+
+    if (!updates.empty()) {
+      frame_buffer_update_requested_ = false;
+
+      // Send updates
+      uint8_t header[4] = {0};
+      *(uint16_t*)&header[2] = htons(updates.size());
+      send(fd_, header, sizeof(header), 0);
+      for (auto& update : updates) {
+        send(fd_, update.data(), update.size(), 0);
+      }
     }
   }
 }

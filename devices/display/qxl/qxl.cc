@@ -548,6 +548,9 @@ void Qxl::ParseControlCommand(uint64_t command, uint32_t argument) {
     FlushCommandsAndResources();
     delete qxl_render_;
     qxl_render_ = new QxlRender(this);
+    primary_surface_.active = false;
+    display_mode_ = kDisplayModeUnknown;
+    NotifyDisplayModeChange();
     break;
   case QXL_IO_FLUSH_SURFACES_ASYNC:
     if (debug_) {

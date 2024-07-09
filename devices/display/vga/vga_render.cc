@@ -584,6 +584,7 @@ void VgaRender::UpdateDisplayMode() {
 
   if (old_w != width_ || old_h != height_ || old_bpp != bpp_) {
     mode_changed_ = true;
+    redraw_ = true;
     if (device_->debug()) {
       MV_LOG("update %s mode %dx%dx%d stride=%d", is_vbe ? "VBE" : "VGA",
         width_, height_, bpp_, stride_);
@@ -622,28 +623,36 @@ bool VgaRender::GetVbeDisplayUpdate(DisplayUpdate& update) {
   partial.width = width_;
   partial.palette = vga_.palette;
 
-  partial.height = 0;
-
-  uint8_t* dst = buffer;
-  for (int y = 0; y < height_; y++) {
-    size_t partial_offset = offset + y * stride_;
-    if (region_->IsDirty(partial_offset, stride_)) {
-      if (partial.height == 0) {
-        partial.y = y;
-        partial.data = dst;
+  if (redraw_) {
+    redraw_ = false;
+    partial.y = 0;
+    partial.height = height_;
+    partial.data = buffer;
+    update.partials.emplace_back(std::move(partial));
+  } else {
+    partial.height = 0;
+    // Compare src & dst line by line, and copy if dirty
+    uint8_t* dst = buffer;
+    for (int y = 0; y < height_; y++) {
+      size_t partial_offset = offset + y * stride_;
+      if (region_->IsDirty(partial_offset, stride_)) {
+        if (partial.height == 0) {
+          partial.y = y;
+          partial.data = dst;
+        }
+        partial.height++;
+      } else {
+        if (partial.height > 0) {
+          update.partials.push_back(partial);
+          partial.height = 0;
+        }
       }
-      partial.height++;
-    } else {
-      if (partial.height > 0) {
-        update.partials.push_back(partial);
-        partial.height = 0;
-      }
+      dst += stride_;
     }
-    dst += stride_;
-  }
-  
-  if (partial.height > 0) {
-    update.partials.push_back(partial);
+    
+    if (partial.height > 0) {
+      update.partials.push_back(partial);
+    }
   }
 
   return !update.partials.empty();

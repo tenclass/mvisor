@@ -77,9 +77,9 @@ class VncConnection {
   void ResetFrameBuffer();
   void SendServerInit();
   void LookupDevices();
-  bool SendDesktopSize();
-  bool SendCursorUpdate();
-  bool SendFrameBufferUpdate(int x, int y, int width, int height);
+  void BuildDesktopSize(std::vector<std::string>& updates);
+  void BuildCursorUpdate(std::vector<std::string>& updates);
+  void BuildFrameBufferUpdate(std::vector<std::string>& updates, int x, int y, int width, int height);
   void AddDirtyRectInternal(int top, int left, int bottom, int right);
   void AddDirtyRect(int top, int left, int bottom, int right);
   void UpdateLoop();
