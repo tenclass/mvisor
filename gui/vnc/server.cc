@@ -97,11 +97,13 @@ void VncServer::MainLoop() {
         } else if (i >= 2) {
           auto conn = GetConnectionByFd(fds[i].fd);
           if (!conn->OnReceive()) {
-            RemoveConnection(conn);
+            conn->Close();
           }
         }
       }
     }
+
+    RemoveClosedConnections();
   }
 }
 
@@ -118,7 +120,7 @@ void VncServer::OnEvent() {
   uint64_t tmp;
   read(event_fd_, &tmp, sizeof(tmp));
   
-  std::list<VoidCallback> tasks_copy;
+  std::vector<VoidCallback> tasks_copy;
   {
     std::unique_lock<std::mutex> lock(mutex_);
     tasks_copy.swap(tasks_);
@@ -148,11 +150,15 @@ VncConnection* VncServer::GetConnectionByFd(int fd) {
   return nullptr;
 }
 
-void VncServer::RemoveConnection(VncConnection* conn) {
-  mutex_.lock();
-  connections_.remove(conn);
-  mutex_.unlock();
-  delete conn;
+void VncServer::RemoveClosedConnections() {
+  for (auto it = connections_.begin(); it != connections_.end();) {
+    if ((*it)->fd() == -1) {
+      delete *it;
+      it = connections_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 void VncServer::SetExclusiveConnnction(VncConnection* conn) {
