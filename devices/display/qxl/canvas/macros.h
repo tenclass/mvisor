@@ -19,7 +19,7 @@
 #ifndef H_SPICE_COMMON_MACROS
 #define H_SPICE_COMMON_MACROS
 
-#include "verify.h"
+#include <assert.h>
 
 #ifdef __GNUC__
 #define SPICE_CONSTRUCTOR_FUNC(func_name) \
@@ -43,7 +43,7 @@
 #error Please implement SPICE_CONSTRUCTOR_FUNC and SPICE_DESTRUCTOR_FUNC for this compiler
 #endif
 
-#define SPICE_VERIFY(cond) verify_expr(cond, (void)1)
+#define SPICE_VERIFY(cond) assert(cond)
 
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
 #define SPICE_UNREACHABLE __builtin_unreachable()
