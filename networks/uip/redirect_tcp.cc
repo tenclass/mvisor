@@ -241,7 +241,7 @@ void RedirectTcpSocket::StartReading() {
     } else {
       packet->data_length = ret;
       OnDataFromHost(packet, TCP_FLAG_ACK | TCP_FLAG_PSH);
-      seq_host_ += packet->data_length;
+      seq_host_ += ret;
       active_time_ = time(nullptr);
     }
   }

@@ -125,11 +125,12 @@ void RedirectUdpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   }
 
   int ret = send(fd_, packet->data, packet->data_length, 0);
-  packet->Release();
   if (ret < 0) {
+    packet->Release();
     return;
   }
   MV_ASSERT(ret == (int)packet->data_length);
+  packet->Release();
   active_time_ = time(nullptr);
 }
 

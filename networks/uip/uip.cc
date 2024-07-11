@@ -436,6 +436,7 @@ void Uip::ParseEthPacket(Ipv4Packet* packet) {
   if (memcmp(eth->h_dest, router_mac_.data, ETH_ALEN) != 0 &&
     memcmp(eth->h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", ETH_ALEN) != 0) {
     // ignore packets to other ethernet addresses
+    packet->Release();
     return;
   }
 

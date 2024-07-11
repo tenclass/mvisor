@@ -285,7 +285,6 @@ void QxlRender::DestroySurface(int surface_id) {
 
   auto& surface = it->second;
   surface.canvas->ops->destroy(surface.canvas);
-  surfaces_.erase(it);
   if (surface.qxl_surface_cmd) {
     qxl_->ReleaseGuestResource(&surface.qxl_surface_cmd->release_info);
   }
@@ -293,6 +292,7 @@ void QxlRender::DestroySurface(int surface_id) {
   if (debug_) {
     MV_LOG("destroy surface id=%d", surface.id);
   }
+  surfaces_.erase(it);
 }
 
 /* Align width to 16 and height to 2 for SSE or AVX */
