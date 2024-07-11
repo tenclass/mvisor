@@ -31,7 +31,13 @@ DiskImage::DiskImage() {
 DiskImage::~DiskImage()
 {
   if (!finalized_) {
-    Finalize();
+    std::unique_lock<std::mutex> lock(worker_mutex_);
+    finalized_ = true;
+    worker_cv_.notify_all();
+  }
+
+  if (worker_thread_.joinable()) {
+    worker_thread_.join();
   }
 }
 
@@ -53,15 +59,6 @@ DiskImage* DiskImage::Create(Device* host, Device* device, std::string path, boo
   image->io_ = device->manager()->io();
   image->worker_thread_ = std::thread(&DiskImage::WorkerProcess, image);
   return image;
-}
-
-void DiskImage::Finalize() {
-  finalized_ = true;
-
-  if (worker_thread_.joinable()) {
-    worker_cv_.notify_all();
-    worker_thread_.join();
-  }
 }
 
 void DiskImage::WorkerProcess() {
