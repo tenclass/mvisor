@@ -2,7 +2,7 @@
 #define _MVISOR_VNC_SERVER_H
 
 #include <mutex>
-#include <list>
+#include <vector>
 
 #include "device_interface.h"
 #include "machine.h"
@@ -21,13 +21,13 @@ class VncServer {
   int         event_fd_ = -1;
   uint16_t    port_ = 0;
   std::mutex  mutex_;
-  std::list<VoidCallback>   tasks_;
-  std::list<VncConnection*> connections_;
+  std::vector<VoidCallback>   tasks_;
+  std::vector<VncConnection*> connections_;
   int         security_type_ = kVncSecruityNone;
   std::string password_;
 
   VncConnection* GetConnectionByFd(int fd);
-  void RemoveConnection(VncConnection* conn);
+  void RemoveClosedConnections();
   void OnEvent();
   void OnAccept();
 

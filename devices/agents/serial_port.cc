@@ -19,6 +19,10 @@ void SerialPort::UnregisterSerialPortListener(std::list<SerialPortListener>::ite
 }
 
 void SerialPort::SendMessage(uint8_t* data, size_t size) {
+  // Lock console device
+  auto console_device = dynamic_cast<Device*>(device_);
+  std::lock_guard<std::recursive_mutex> lock(console_device->mutex());
+
   device_->SendMessage(this, data, size);
 }
 

@@ -48,8 +48,10 @@ VncConnection::~VncConnection() {
 }
 
 void VncConnection::Close() {
+  std::unique_lock<std::mutex> lock(update_mutex_);
   state_ = kVncClosed;
   safe_close(&fd_);
+  update_cv_.notify_all();
 }
 
 void VncConnection::LookupDevices() {

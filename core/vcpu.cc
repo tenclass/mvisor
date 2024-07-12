@@ -645,7 +645,7 @@ void Vcpu::Schedule(VoidCallback callback) {
 
 void Vcpu::ExecuteTasks() {
   while (true) {
-    std::deque<VcpuTask> tasks_copy;
+    std::vector<VcpuTask> tasks_copy;
     {
       std::lock_guard<std::mutex> lock(mutex_);
       if (tasks_.empty()) {

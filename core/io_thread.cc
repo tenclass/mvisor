@@ -150,12 +150,19 @@ void IoThread::RunLoop() {
       }
       
       for (int i = 0; i < nfds; i++) {
-        auto event_it = epoll_events_.find(events[i].data.fd);
-        if (event_it == epoll_events_.end()) {
+        EpollEvent* event = nullptr;
+        {
+          std::lock_guard<std::mutex> lock(mutex_);
+          auto it = epoll_events_.find(events[i].data.fd);
+          if (it != epoll_events_.end()) {
+            event = it->second;
+          }
+        }
+        if (event == nullptr) {
           /* Maybe the fd is deleted just now */
           continue;
         }
-        auto event = event_it->second;
+
         auto start_time = std::chrono::steady_clock::now();
         if (event->device) {
           std::lock_guard<std::recursive_mutex> device_lock(event->device->mutex_);
@@ -242,6 +249,7 @@ IoTimer* IoThread::AddTimer(Device* device, int64_t interval_ns, bool permanent,
 }
 
 void IoThread::RemoveTimer(IoTimer** timer) {
+  std::lock_guard<std::mutex> lock(mutex_);
   (*timer)->removed = true;
   *timer = nullptr;
 }

@@ -139,11 +139,12 @@ void RedirectIcmpSocket::OnPacketFromGuest(Ipv4Packet* packet) {
   };
 
   int ret = sendto(fd_, packet->data, packet->data_length, 0, (sockaddr*)&daddr, sizeof daddr);
-  packet->Release();
   if (ret < 0) {
+    packet->Release();
     return;
   }
   MV_ASSERT(ret == (int)packet->data_length);
+  packet->Release();
   active_time_ = time(nullptr);
 }
 

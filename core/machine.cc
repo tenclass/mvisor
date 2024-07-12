@@ -79,15 +79,15 @@ Machine::Machine(std::string config_path, std::string vm_name, std::string vm_uu
 Machine::~Machine() {
   valid_ = false;
 
-  // Join all vcpu threads and free resources
-  for (auto vcpu: vcpus_) {
-    delete vcpu;
-  }
-
   delete device_manager_;
   delete vfio_manager_;
   delete memory_manager_;
   delete io_thread_;
+
+  // Join all vcpu threads and free resources
+  for (auto vcpu: vcpus_) {
+    delete vcpu;
+  }
 
   // delete objects created by configuration
   for (auto it = objects_.begin(); it != objects_.end(); it++) {

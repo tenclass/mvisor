@@ -159,6 +159,10 @@ class SpiceAgent : public Device, public SerialPort,
   }
 
   void SendMessage(int port, const std::string& message) {
+    // Lock console device
+    auto console_device = dynamic_cast<Device*>(device_);
+    std::lock_guard<std::recursive_mutex> lock(console_device->mutex());
+
     std::string buffer;
     size_t bytes_sent = 0;
     while (bytes_sent < message.size()) {

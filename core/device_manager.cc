@@ -352,15 +352,13 @@ void DeviceManager::SetupCoalescingMmioRing(kvm_coalesced_mmio_ring* ring) {
 }
 
 void DeviceManager::FlushCoalescingMmioBuffer() {
+  std::unique_lock<std::recursive_mutex> lock(mutex_);
   if (!coalesced_mmio_ring_) {
     return;
   }
   if (coalesced_mmio_ring_->first == coalesced_mmio_ring_->last) {
     return;
   }
-
-  /* Is mutex necessary? */
-  std::unique_lock<std::recursive_mutex> lock(mutex_);
 
   uint max_entries = ((PAGE_SIZE - sizeof(struct kvm_coalesced_mmio_ring)) / \
     sizeof(struct kvm_coalesced_mmio));

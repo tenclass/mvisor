@@ -324,6 +324,8 @@ void VgaRender::VgaWritePort(uint64_t port, uint32_t value) {
     break;
   case VGA_PEL_D:
     vga_.palette[vga_.palette_write_index++] = value;
+    // If palette changed, redraw the whole screen
+    redraw_ = true;
     break;
   case VGA_GFX_I:
     vga_.gfx_index = value & 0xF;
@@ -663,6 +665,12 @@ bool VgaRender::GetVgaDisplayUpdate(DisplayUpdate& update) {
   size_t data_size = stride_ * height_;
   if (vga_surface_.size() != data_size) {
     vga_surface_.resize(data_size);
+    vga_display_buffer_size_ = data_size;
+    if (vga_display_buffer_size_ > vga_display_buffer_.size()) {
+      MV_ERROR("vga display buffer not enough for resolution %dx%d", width_, height_);
+      vga_display_buffer_.resize(vga_display_buffer_size_);
+    }
+    redraw_ = true;
   }
   canvas_pixels = (uint8_t*)vga_surface_.data();
 
@@ -682,14 +690,6 @@ bool VgaRender::GetVgaDisplayUpdate(DisplayUpdate& update) {
     DrawGraphic(canvas_pixels);
   }
 
-  if (vga_display_buffer_size_ != size_t(stride_ * height_)) {
-    vga_display_buffer_size_ = stride_ * height_;
-    if (vga_display_buffer_size_ > vga_display_buffer_.size()) {
-      MV_ERROR("vga display buffer not enough for resolution %dx%d", width_, height_);
-      vga_display_buffer_.resize(vga_display_buffer_size_);
-    }
-    redraw_ = true;
-  }
   auto buffer = (uint8_t*)vga_display_buffer_.data();
 
   DisplayPartialBitmap partial;

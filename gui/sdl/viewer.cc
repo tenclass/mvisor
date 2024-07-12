@@ -474,7 +474,7 @@ void Viewer::HandleEvent(const SDL_Event& event) {
   switch (event.type)
   {
   case SDL_USEREVENT: {
-    std::deque<VoidCallback> tasks_copy;
+    std::vector<VoidCallback> tasks_copy;
     {
       std::unique_lock<std::mutex> lock(mutex_);
       tasks_copy.swap(tasks_);

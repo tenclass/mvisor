@@ -21,7 +21,6 @@
 
 #include <linux/kvm.h>
 #include <thread>
-#include <deque>
 #include <functional>
 #include <mutex>
 #include <vector>
@@ -119,7 +118,7 @@ class Vcpu {
   std::condition_variable   wait_to_resume_;
   std::condition_variable   wait_for_paused_;
   VcpuState                 default_state_;
-  std::deque<VcpuTask>      tasks_;
+  std::vector<VcpuTask>     tasks_;
   std::mutex                mutex_;
   std::set<uint32_t>        msr_indices_;
   uint32_t                  hyperv_features_ = 0;

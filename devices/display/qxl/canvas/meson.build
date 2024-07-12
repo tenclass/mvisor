@@ -25,7 +25,6 @@ mvisor_sources += files(
   'ring.h',
   'rop3.c',
   'rop3.h',
-  'verify.h',
   'sw_canvas.c',
   'sw_canvas.h'
 )

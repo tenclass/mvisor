@@ -23,7 +23,7 @@
 #include <alsa/asoundlib.h>
 
 #include <mutex>
-#include <deque>
+#include <vector>
 
 #include "machine.h"
 #include "device_manager.h"
@@ -84,7 +84,7 @@ class Viewer {
   SDL_Cursor* cursor_ = nullptr;
 
   std::mutex mutex_;
-  std::deque<VoidCallback> tasks_;
+  std::vector<VoidCallback> tasks_;
   bool cursor_visible_ = false;
   uint64_t cursor_shape_id_ = 0;
 

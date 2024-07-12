@@ -88,7 +88,6 @@ class DiskImage : public Object {
   std::string filepath_;
 
   virtual void Initialize() = 0;
-  virtual void Finalize();
 
  private:
   /* Worker thread to implemente Async IO */
