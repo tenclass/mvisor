@@ -69,7 +69,7 @@ class VirtioVgpu : public VirtioPci {
   // base address for blob resource mapping
   uint64_t blob_memory_gpa_base_;
   // <virgl_context_id, <virgl_resource_id, MemoryRegion*>>
-  std::map<uint32_t, std::map<uint32_t, const MemoryRegion*>> blob_memory_regions_;
+  std::map<uint32_t, std::map<uint32_t, MemoryRegion*>> blob_memory_regions_;
   
  public:
   VirtioVgpu() {
