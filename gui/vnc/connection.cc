@@ -610,7 +610,7 @@ void VncConnection::RenderCursor(const DisplayMouseCursor* cursor_update) {
       if (cursor_buffer_) {
         pixman_image_unref(cursor_buffer_);
       }
-      cursor_buffer_ = pixman_image_create_bits(PIXMAN_a8b8g8r8, 4, 4, nullptr, 2 * 4);
+      cursor_buffer_ = pixman_image_create_bits(PIXMAN_a8b8g8r8, 4, 4, nullptr, 4 * 4);
       MV_ASSERT(cursor_buffer_);
       cursor_hotspot_x_ = 0;
       cursor_hotspot_y_ = 0;
@@ -700,26 +700,62 @@ void VncConnection::BuildDesktopSize(std::vector<std::string>& updates) {
 }
 
 void VncConnection::BuildCursorUpdate(std::vector<std::string>& updates) {
-  if (!cursor_buffer_ || !IsEncodingSupported(-314)) {
+  if (!cursor_buffer_) {
     return;
   }
 
+  auto data = (uint8_t*)pixman_image_get_data(cursor_buffer_);
   int height = pixman_image_get_height(cursor_buffer_);
   int width = pixman_image_get_width(cursor_buffer_);
   int stride = pixman_image_get_stride(cursor_buffer_);
+  int bytes_per_pixel = 4; // As we have already converted cursor to A8B8G8R8
 
-  std::string buf(16, 0);
-  auto ptr = (uint8_t*)buf.data();
-  *(uint16_t*)&ptr[0] = htons(cursor_hotspot_x_);
-  *(uint16_t*)&ptr[2] = htons(cursor_hotspot_y_);
-  *(uint16_t*)&ptr[4] = htons(width);
-  *(uint16_t*)&ptr[6] = htons(height);
-  *(uint32_t*)&ptr[8] = htonl(-314); // Alpha cursor pseudo-encoding
-  *(uint32_t*)&ptr[12] = htonl(0); // RAW encoding of cursor
+  if (IsEncodingSupported(-314)) { // Alpha cursor pseudo-encoding
+    std::string buf(16, 0);
+    auto ptr = (uint8_t*)buf.data();
+    *(uint16_t*)&ptr[0] = htons(cursor_hotspot_x_);
+    *(uint16_t*)&ptr[2] = htons(cursor_hotspot_y_);
+    *(uint16_t*)&ptr[4] = htons(width);
+    *(uint16_t*)&ptr[6] = htons(height);
+    *(uint32_t*)&ptr[8] = htonl(-314);
+    *(uint32_t*)&ptr[12] = htonl(0); // RAW encoding of cursor
 
-  auto data = (uint8_t*)pixman_image_get_data(cursor_buffer_);
-  buf.append((char*)data, height * stride);
-  updates.emplace_back(std::move(buf));
+    for (int y = 0; y < height; y++) {
+      buf.append((char*)data + y * stride, width * bytes_per_pixel);
+    }
+    updates.emplace_back(std::move(buf));
+    return;
+  }
+
+  if (IsEncodingSupported(-239)) { // Cursor pseudo-encoding
+    std::string buf(12, 0);
+    auto ptr = (uint8_t*)buf.data();
+    *(uint16_t*)&ptr[0] = htons(cursor_hotspot_x_);
+    *(uint16_t*)&ptr[2] = htons(cursor_hotspot_y_);
+    *(uint16_t*)&ptr[4] = htons(width);
+    *(uint16_t*)&ptr[6] = htons(height);
+    *(uint32_t*)&ptr[8] = htonl(-239);
+
+    for (int y = 0; y < height; y++) {
+      buf.append((char*)data + y * stride, width * bytes_per_pixel);
+    }
+
+    // mask data is floor((width + 7) / 8) * height bytes
+    auto mask_stride = (width + 7) / 8;
+    std::string mask(mask_stride * height, 0);
+    for (int y = 0; y < height; y++) {
+      auto src = data + y * stride;
+      auto dst = (uint8_t*)mask.data() + y * mask_stride;
+      for (int x = 0; x < width; x++) {
+        if (src[bytes_per_pixel * x + 3] == 0xFF) {
+          dst[x / 8] |= 1 << (7 - x % 8);
+        }
+      }
+    }
+    buf.append(mask);
+    updates.emplace_back(std::move(buf));
+    return;
+  }
 }
 
 void VncConnection::BuildFrameBufferUpdate(std::vector<std::string>& updates, int x, int y, int width, int height) {
@@ -733,7 +769,7 @@ void VncConnection::BuildFrameBufferUpdate(std::vector<std::string>& updates, in
   auto bytes_per_pixel = pixel_format_.bits_per_pixel / 8;
 
   std::string buf;
-  buf.resize(100 + width * height * bytes_per_pixel);
+  buf.resize(width * height * bytes_per_pixel * 2);
   auto ptr = (uint8_t*)buf.data();
   *(uint16_t*)&ptr[0] = htons(x);
   *(uint16_t*)&ptr[2] = htons(y);
@@ -799,18 +835,19 @@ void VncConnection::UpdateLoop() {
     }
     
     std::vector<std::string> updates;
-    if (frame_buffer_resize_requested_) {
-      frame_buffer_resize_requested_ = false;
-      BuildDesktopSize(updates);
-    }
     if (cursor_update_requested_) {
       cursor_update_requested_ = false;
       BuildCursorUpdate(updates);
     }
-    while (!dirty_rects_.empty()) {
-      auto rect = dirty_rects_.back();
-      dirty_rects_.pop_back();
-      BuildFrameBufferUpdate(updates, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+    if (frame_buffer_resize_requested_) {
+      frame_buffer_resize_requested_ = false;
+      BuildDesktopSize(updates);
+    } else {
+      while (!dirty_rects_.empty()) {
+        auto rect = dirty_rects_.back();
+        dirty_rects_.pop_back();
+        BuildFrameBufferUpdate(updates, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+      }
     }
 
     if (!updates.empty()) {
