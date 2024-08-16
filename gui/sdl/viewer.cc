@@ -281,6 +281,8 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
     auto frames = snd_pcm_writei(pcm_playback_, data.data(), data.size() / playback_format_.channels / 2);
     if (frames < 0 && frames != -EAGAIN) {
       MV_WARN("snd_pcm_writei failed: %s, ret=%d\n", snd_strerror(frames), frames);
+      snd_pcm_close(pcm_playback_);
+      pcm_playback_ = nullptr;
     }
     break;
   }
