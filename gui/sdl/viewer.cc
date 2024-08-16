@@ -485,24 +485,19 @@ void Viewer::HandleEvent(const SDL_Event& event) {
     break;
   }
   case SDL_KEYDOWN:
-    // handle alt + Fx
-    if (event.key.keysym.mod & KMOD_LALT) {
-      auto it = keyboard_shortcuts_.find(event.key.keysym.sym);
-      if (it != keyboard_shortcuts_.end()) {
-        if (keyboard) {
-          // release alt key
-          auto qcode = ScancodeFromUsb(SDL_SCANCODE_LALT);
-          QcodeToAtset1(qcode, 0, transcoded);
-          keyboard->QueueKeyboardEvent(transcoded, 0);
-        }
-        // run the shortcut in a detached thread
-        std::thread(it->second).detach();
-        return;
-      }
-    }
     // fall through
   case SDL_KEYUP:
-    if (keyboard) {
+    // capture all rctrl composite keys
+    if (event.key.keysym.mod & KMOD_RCTRL) {
+      if (event.type == SDL_KEYUP) {
+        auto it = keyboard_shortcuts_.find(event.key.keysym.sym);
+        if (it != keyboard_shortcuts_.end()) {
+          // run the shortcut in a detached thread
+          std::thread(it->second).detach();
+          return;
+        }
+      }
+    } else if (keyboard != nullptr) {
       auto qcode = ScancodeFromUsb(event.key.keysym.scancode);
       if (qcode == 0) {
         break;
