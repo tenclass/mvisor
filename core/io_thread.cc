@@ -77,14 +77,14 @@ void IoThread::Start() {
   StartPolling(nullptr, event_fd_, EPOLLIN, [this](auto ret) {
     MV_UNUSED(ret);
     uint64_t tmp;
-    read(event_fd_, &tmp, sizeof(tmp));
+    MV_ASSERT(read(event_fd_, &tmp, sizeof(tmp)) == sizeof(tmp));
   });
 }
 
 void IoThread::Kick() {
   if (event_fd_ > 0) {
     uint64_t tmp = 1;
-    write(event_fd_, &tmp, sizeof(tmp));
+    MV_ASSERT(write(event_fd_, &tmp, sizeof(tmp)) == sizeof(tmp));
   }
   wait_to_resume_.notify_all();
 }

@@ -69,12 +69,12 @@ bool MigrationFileWriter::WriteProtobuf(std::string tag, const Message& message)
 bool MigrationFileWriter::WriteMemoryPages(std::string tag, void* pages, size_t size) {
   /* Write RAM to sparse file */
   BeginWrite(tag);
-  ftruncate(fd_, size);
+  MV_ASSERT(ftruncate(fd_, size) == 0);
 
   auto ptr = (uint8_t*)pages;
   for (size_t pos = 0; pos < size; pos += PAGE_SIZE) {
     if (!test_zero(ptr, PAGE_SIZE)) {
-      pwrite(fd_, ptr, PAGE_SIZE, pos);
+      MV_ASSERT(pwrite(fd_, ptr, PAGE_SIZE, pos) == PAGE_SIZE);
     }
     ptr += PAGE_SIZE;
   }

@@ -110,7 +110,7 @@ void Qcow2Image::CreateImageWithBackingFile(std::string path, std::string backin
 
   /* Read header */
   Qcow2Header backing_header;
-  fread(&backing_header, sizeof(Qcow2Header), 1, fin);
+  MV_ASSERT(fread(&backing_header, sizeof(Qcow2Header), 1, fin) == 1);
   if (be32toh(backing_header.version) != 3) {
     MV_PANIC("file %s version %u is not supported", backing_path.c_str(), be32toh(backing_header.version));
   }
@@ -123,16 +123,16 @@ void Qcow2Image::CreateImageWithBackingFile(std::string path, std::string backin
   bool wrote_backing_format = false;
   while (true) {
     HeaderExtension extension;
-    fread(&extension, sizeof(extension), 1, fin);
+    MV_ASSERT(fread(&extension, sizeof(extension), 1, fin) == 1);
     if (extension.type == 0)
       break;
-    fwrite(&extension, sizeof(extension), 1, fout);
+    MV_ASSERT(fwrite(&extension, sizeof(extension), 1, fout) == 1);
     uint32_t data_length = be32toh(extension.length);
     if (data_length & 7)
       data_length += 8 - (data_length & 7);
     uint8_t data[data_length];
-    fread(data, data_length, 1, fin);
-    fwrite(data, data_length, 1, fout);
+    MV_ASSERT(fread(data, data_length, 1, fin) == 1);
+    MV_ASSERT(fwrite(data, data_length, 1, fout) == 1);
     if (be32toh(extension.type) == 0xE2792ACA) {
       wrote_backing_format = true;
     }
@@ -163,23 +163,23 @@ void Qcow2Image::CreateImageWithBackingFile(std::string path, std::string backin
   uint8_t buffer[header_length];
   fseek(fin, 0, SEEK_SET);
   fseek(fout, 0, SEEK_SET);
-  fread(buffer, header_length, 1, fin);
+  MV_ASSERT(fread(buffer, header_length, 1, fin) == 1);
   auto header = (Qcow2Header*)buffer;
   header->backing_file_offset = htobe64(pos);
   header->backing_file_size = htobe32(backing_path.length());
-  fwrite(buffer, header_length, 1, fout);
+  MV_ASSERT(fwrite(buffer, header_length, 1, fout) == 1);
 
   /* Seek to refcount table */
   fseek(fout, cluster_size * 1, SEEK_SET);
   uint64_t refcount_table_entry = htobe64(cluster_size * 2);
-  fwrite(&refcount_table_entry, sizeof(refcount_table_entry), 1, fout);
+  MV_ASSERT(fwrite(&refcount_table_entry, sizeof(refcount_table_entry), 1, fout) == 1);
 
   /* Seek to refcount block */
   fseek(fout, cluster_size * 2, SEEK_SET);
   /* We have allocated 4 clusters */
   for (int i = 0; i < 4; i++) {
     uint16_t refcount_block_entry = htobe16(1);
-    fwrite(&refcount_block_entry, sizeof(refcount_block_entry), 1, fout);
+    MV_ASSERT(fwrite(&refcount_block_entry, sizeof(refcount_block_entry), 1, fout) == 1);
   }
 
   /* Seek to L1 table */

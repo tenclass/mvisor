@@ -288,7 +288,7 @@ IoEvent* DeviceManager::RegisterIoEvent(Device* device, IoResourceType type, uin
   io()->StartPolling(device, event->fd, EPOLLIN, [event, this](int events) {
     if (events & EPOLLIN) {
       uint64_t tmp;
-      read(event->fd, &tmp, sizeof(tmp));
+      MV_ASSERT(read(event->fd, &tmp, sizeof(tmp)) == sizeof(tmp));
       if (event->type == kIoEventMmio) {
         HandleMmio(event->address, (uint8_t*)&event->datamatch, event->length, true, true);
       } else if (event->type == kIoEventPio) {

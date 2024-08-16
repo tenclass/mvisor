@@ -93,7 +93,7 @@ void PciDevice::LoadRomFile(const char* path) {
   pci_rom_.data = valloc(pci_rom_.size);
   bzero(pci_rom_.data, pci_rom_.size);
 
-  read(fd, pci_rom_.data, st.st_size);
+  MV_ASSERT(read(fd, pci_rom_.data, st.st_size) == st.st_size);
   safe_close(&fd);
 }
 
