@@ -719,7 +719,7 @@ void VfioPci::ReadPciConfigSpace(uint64_t offset, uint8_t* data, uint32_t length
 void VfioPci::SetMigrationDeviceState(uint32_t device_state) {
   MV_ASSERT(migration_.enabled);
   if (migration_.version == 1) {
-    pwrite(device_fd_, &device_state, sizeof(device_state), migration_.region->offset);
+    MV_ASSERT(pwrite(device_fd_, &device_state, sizeof(device_state), migration_.region->offset) == sizeof(device_state));
   } else {
     uint64_t buf[DIV_ROUND_UP(sizeof(struct vfio_device_feature) +
                               sizeof(struct vfio_device_feature_mig_state),
@@ -761,11 +761,11 @@ bool VfioPci::SaveDeviceStateV1(MigrationWriter* writer) {
     }
 
     uint64_t data_offset = 0;
-    pread(device_fd_, &data_offset, sizeof(data_offset),
-      migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
+    MV_ASSERT(pread(device_fd_, &data_offset, sizeof(data_offset),
+      migration_.region->offset + offsetof(vfio_device_migration_info, data_offset)) == sizeof(data_offset));
     uint64_t data_size = 0;
-    pread(device_fd_, &data_size, sizeof(data_size),
-      migration_.region->offset + offsetof(vfio_device_migration_info, data_size));
+    MV_ASSERT(pread(device_fd_, &data_size, sizeof(data_size),
+      migration_.region->offset + offsetof(vfio_device_migration_info, data_size)) == sizeof(data_size));
     MV_ASSERT(data_offset == area.offset);
     MV_ASSERT(data_size <= area.size);
 
@@ -856,8 +856,8 @@ bool VfioPci::LoadDeviceStateV1(MigrationReader* reader) {
 
   while (true) {
     uint64_t data_offset = 0;
-    pread(device_fd_, &data_offset, sizeof(data_offset),
-      migration_.region->offset + offsetof(vfio_device_migration_info, data_offset));
+    MV_ASSERT(pread(device_fd_, &data_offset, sizeof(data_offset),
+      migration_.region->offset + offsetof(vfio_device_migration_info, data_offset)) == sizeof(data_offset));
     if (data_offset != area.offset) {
       MV_ERROR("failed to read vfio, data_offset=0x%lx area.offset=0x%lx", data_offset, area.offset);
       break;
@@ -871,8 +871,8 @@ bool VfioPci::LoadDeviceStateV1(MigrationReader* reader) {
     }
 
     if (ret > 0) {
-      pwrite(device_fd_, &ret, sizeof(ret),
-        migration_.region->offset + offsetof(vfio_device_migration_info, data_size));
+      MV_ASSERT(pwrite(device_fd_, &ret, sizeof(ret),
+        migration_.region->offset + offsetof(vfio_device_migration_info, data_size)) == sizeof(ret));
     }
     if (ret < (ssize_t)area.size) {
       success = true;
@@ -935,7 +935,7 @@ bool VfioPci::LoadState(MigrationReader* reader) {
   /* Restore the PCI config space to VFIO device */
   auto &config_region = regions_[VFIO_PCI_CONFIG_REGION_INDEX];
   for (uint i = 0; i < pci_config_size(); i += 4) {
-    pwrite(device_fd_, &pci_header_.data[i], 4, config_region.offset + i);
+    MV_ASSERT(pwrite(device_fd_, &pci_header_.data[i], 4, config_region.offset + i) == 4);
   }
 
   /* Update MSI routes */

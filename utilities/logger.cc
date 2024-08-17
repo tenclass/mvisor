@@ -45,6 +45,11 @@ void Log(LogType type, const char* file, int line, const char* function, const c
   char timestr[100];
   sprintf(timestr, "%.3lf", double(delta_us) / 1000);
 
+  // skip ../ in file path
+  while (file && (file[0] == '.' || file[0] == '/')) {
+    file++;
+  }
+
   switch (type) {
     case kLogTypeDebug:
       fprintf(stdout, "[%s] %s:%d %s() debug: %s\n", timestr, file, line, function, message);

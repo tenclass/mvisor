@@ -53,8 +53,8 @@ DhcpServiceUdpSocket::DhcpServiceUdpSocket(Uip* backend, uint32_t sip, uint32_t 
   if (fp) {
     while (!feof(fp)) {
       char line[256], key[256], val[256];
-      fgets(line, sizeof(line), fp);
-      if (memcmp(line, "nameserver ", 11) == 0) {
+      auto ptr = fgets(line, sizeof(line), fp);
+      if (ptr != nullptr && memcmp(ptr, "nameserver ", 11) == 0) {
         if (sscanf(line, "%s %s\n", key, val) != 2)
           continue;
         if (val[0] == '1' && val[1] == '2' && val[2] == '7')

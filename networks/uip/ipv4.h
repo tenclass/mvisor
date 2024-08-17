@@ -53,6 +53,7 @@ class Ipv4Socket {
   virtual void OnGuestBufferAvaialble();
   
   virtual bool active() = 0;
+  inline time_t active_time() { return active_time_; }
 
  protected:
   virtual Ipv4Packet* AllocatePacket(bool urgent);

@@ -39,9 +39,9 @@
 #include "logger.h"
 
 
-#define MAX_OPEN_TCP_SOCKETS    1024
-#define MAX_OPEN_UDP_SOCKETS    1024
-#define MAX_OPEN_ICMP_SOCKETS   128
+#define MAX_OPEN_TCP_SOCKETS    512
+#define MAX_OPEN_UDP_SOCKETS    64
+#define MAX_OPEN_ICMP_SOCKETS   16
 
 
 static std::deque<std::string> Split(std::string input, std::string token) {
@@ -556,7 +556,13 @@ bool Uip::ParseIcmpPacket(Ipv4Packet* packet) {
       return true;
     }
     if (icmp_sockets_.size() >= MAX_OPEN_ICMP_SOCKETS) {
-      return true;
+      // sort by active time and remove the oldest one
+      icmp_sockets_.sort([](IcmpSocket* a, IcmpSocket* b) {
+        return a->active_time() < b->active_time();
+      });
+      auto oldest = icmp_sockets_.front();
+      icmp_sockets_.pop_front();
+      delete oldest;
     }
 
     auto icmp_socket = new RedirectIcmpSocket(this, sip, dip, echo_id);
@@ -596,7 +602,14 @@ bool Uip::ParseTcpPacket(Ipv4Packet* packet) {
       return true;
     }
     if (tcp_sockets_.size() >= MAX_OPEN_TCP_SOCKETS) {
-      return true;
+      MV_WARN("Too many open TCP sockets %lu", tcp_sockets_.size());
+      // sort by active time and remove the oldest one
+      tcp_sockets_.sort([](TcpSocket* a, TcpSocket* b) {
+        return a->active_time() < b->active_time();
+      });
+      auto oldest = tcp_sockets_.front();
+      tcp_sockets_.pop_front();
+      delete oldest;
     }
 
     socket = new RedirectTcpSocket(this, sip, dip, sport, dport);
@@ -662,7 +675,13 @@ bool Uip::ParseUdpPacket(Ipv4Packet* packet) {
   auto socket = LookupUdpSocket(sip, dip, sport, dport);
   if (socket == nullptr) {
     if (udp_sockets_.size() >= MAX_OPEN_UDP_SOCKETS) {
-      return true;
+      // sort by active time and remove the oldest one
+      udp_sockets_.sort([](UdpSocket* a, UdpSocket* b) {
+        return a->active_time() < b->active_time();
+      });
+      auto oldest = udp_sockets_.front();
+      udp_sockets_.pop_front();
+      delete oldest;
     }
 
     // Check if it's UDP broadcast

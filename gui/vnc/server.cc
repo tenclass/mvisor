@@ -51,7 +51,7 @@ void VncServer::Close() {
 
   if (event_fd_ != -1) {
     uint64_t tmp = 1;
-    write(event_fd_, &tmp, sizeof(tmp));
+    MV_ASSERT(write(event_fd_, &tmp, sizeof(tmp)) == sizeof(tmp));
   }
 }
 
@@ -113,12 +113,12 @@ void VncServer::Schedule(VoidCallback callback) {
   mutex_.unlock();
 
   uint64_t tmp = 1;
-  write(event_fd_, &tmp, sizeof(tmp));
+  MV_ASSERT(write(event_fd_, &tmp, sizeof(tmp)) == sizeof(tmp));
 }
 
 void VncServer::OnEvent() {
   uint64_t tmp;
-  read(event_fd_, &tmp, sizeof(tmp));
+  MV_ASSERT(read(event_fd_, &tmp, sizeof(tmp)) == sizeof(tmp));
   
   std::vector<VoidCallback> tasks_copy;
   {
