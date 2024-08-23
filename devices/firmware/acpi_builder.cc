@@ -81,7 +81,7 @@ std::string AcpiBuilder::BuildRsdp() {
   memcpy(rsdp.oem_id, "TENCLS", 6);
 
   loader_.AddAllocateCommand("etc/acpi/rsdp", 16, ALLOC_ZONE_FSEG);
-  loader_.AddAddPointerCommand("etc/acpi/rsdp", "etc/acpi/rsdt", 16, 4);
+  loader_.AddAddPointerCommand("etc/acpi/rsdp", "etc/acpi/rsdt", offsetof(acpi_rdsp_table, rsdt_physical_address), 4);
   loader_.AddChecksumCommand("etc/acpi/rsdp", 8, 0, 20);
   return std::string((char*)&rsdp, sizeof(rsdp));
 }
@@ -166,21 +166,28 @@ std::string AcpiBuilder::BuildFacp() {
   facp.plvl2_lat = 0xFFF; // PLVL2 latency
   facp.plvl3_lat = 0xFFF; // PLVL3 latency
   facp.century = 0x32; // Century support in RTC
-  facp.iapc_boot_arch = 2; // Must be 2 for ACPI 2.0+
+  facp.iapc_boot_arch = 2; // Bit1: 8042 keyboard (port 0x60 0x64) controller is present
   facp.flags =  ACPI_FADT_F_WBINVD | ACPI_FADT_F_PROC_C1 |
                 ACPI_FADT_F_SLP_BUTTON | ACPI_FADT_F_RTC_S4 |
-                ACPI_FADT_F_USE_PLATFORM_CLOCK | ACPI_FADT_F_RESET_REG_SUP;
+                ACPI_FADT_F_RESET_REG_SUP | ACPI_FADT_F_USE_PLATFORM_CLOCK;
   
   acpi_20_generic_address reset_reg = { .address_space_id = 0x1, .bit_width = 8, .address = 0xCF9 };
   facp.reset_reg = reset_reg;
   facp.reset_value = 0xF;
 
-  // Currently we use the version 3.0 of the FADT table
+  // ACPI 2.0 fields
+  facp.x_pm1a_evt_blk = acpi_20_generic_address { .address_space_id = 0x1, .bit_width = 32, .address = pmio->pmio_base() };
+  facp.x_pm1a_cnt_blk = acpi_20_generic_address { .address_space_id = 0x1, .bit_width = 16, .address = pmio->pmio_base() + 4 };
+  facp.x_pm_tmr_blk = acpi_20_generic_address { .address_space_id = 0x1, .bit_width = 32, .address = pmio->pmio_base() + 8 };
+  facp.x_gpe0_blk = acpi_20_generic_address { .address_space_id = 0x1, .bit_width = 128, .address = pmio->pmio_base() + 0x20 };
+
+  // ACPI 2.0 use the version 3.0 of the FADT table
   BuildAcpiTableHeader("FACP", &facp, sizeof(facp), 3);
 
   loader_.AddAllocateCommand("etc/acpi/facp", 16, ALLOC_ZONE_HIGH);
-  loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/facs", 0x24, 4);
-  loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/dsdt", 0x28, 4);
+  loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/facs", offsetof(acpi_fadt_table, firmware_ctrl), 4);
+  loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/dsdt", offsetof(acpi_fadt_table, dsdt), 4);
+  loader_.AddAddPointerCommand("etc/acpi/facp", "etc/acpi/dsdt", offsetof(acpi_fadt_table, x_dsdt), 8);
   loader_.AddChecksumCommand("etc/acpi/facp", 9, 0, sizeof(facp));
   return std::string((char*)&facp, sizeof(facp));
 }
