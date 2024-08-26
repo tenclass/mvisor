@@ -122,8 +122,8 @@ struct acpi_fadt_table
   uint8_t  reset_value;            /* Value to write to reset_reg to reset system */
   uint16_t arm_boot_arch;          /* ARM Boot Architecture Flags */
   uint8_t  fadt_minor_version;     /* FADT Minor Version */
-  uint8_t  x_firmware_ctrl;        /* X_Firmware Control */
-  uint8_t  x_dsdt;                 /* X_DSDT */
+  uint64_t x_firmware_ctrl;        /* X_Firmware Control */
+  uint64_t x_dsdt;                 /* X_DSDT */
   acpi_20_generic_address  x_pm1a_evt_blk;    /* X_PM1a Event Block Address */
   acpi_20_generic_address  x_pm1b_evt_blk;    /* X_PM1b Event Block Address */
   acpi_20_generic_address  x_pm1a_cnt_blk;    /* X_PM1a Control Block Address */
