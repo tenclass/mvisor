@@ -23,6 +23,8 @@
 #include "../keymap.h"
 #include "spice/enums.h"
 #include "spice/vd_agent.h"
+#include "../gtk/mdebugger.h"
+
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   bzero(&pointer_state_, sizeof(pointer_state_));
@@ -446,6 +448,11 @@ void Viewer::SetupKeyboardShortcuts() {
   keyboard_shortcuts_[SDLK_F4] = [this]() {
     MV_LOG("Migration Post");
     MV_ASSERT(machine_->PostSave());
+  };
+
+  keyboard_shortcuts_[SDLK_F8] = [this]() {
+    MV_LOG("MDebugger");
+    MDebugger::getInstance().Run(machine_);
   };
 
   keyboard_shortcuts_[SDLK_F10] = [this]() {
