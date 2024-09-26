@@ -1,6 +1,7 @@
 mvisor_sources += files(
   'mdebugger.cc',
-  'mdebugger.h'
+  'mdebugger.h',
+  'glade.h'
 )
 
 mvisor_deps += [

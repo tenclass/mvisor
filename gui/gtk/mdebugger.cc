@@ -25,12 +25,12 @@
 #include "glade.h"
 
 Machine* MDebugger::machine_ = nullptr;
+GtkLabel* MDebugger::status_ = nullptr;
 gchar* MDebugger::search_text_ = nullptr;
+GtkTextView* MDebugger::memory_text_ = nullptr;
 GtkListStore* MDebugger::process_store_ = nullptr;
 GtkComboBoxText* MDebugger::process_list_ = nullptr;
 GtkEntry* MDebugger::memory_address_input_ = nullptr;
-GtkTextView* MDebugger::memory_text_ = nullptr;
-GtkLabel* MDebugger::status_ = nullptr;
 std::vector<GuestProcess> MDebugger::processes_;
 
 MDebugger::MDebugger() {
@@ -153,9 +153,9 @@ std::string MDebugger::NumberToHexString(uint64_t number) {
   return ss.str();
 }
 
-std::string MDebugger::BytesToHexString(const uint8_t* data, size_t length) {
+std::string MDebugger::BytesToHexString(const uint8_t* data, size_t size) {
   std::ostringstream oss;
-  for (size_t i = 0; i < length; ++i) {
+  for (size_t i = 0; i < size; ++i) {
     oss << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i]);
     if (i % 16 == 15) {
       oss << "\n";
@@ -276,6 +276,11 @@ bool MDebugger::GetGuestProcesses(std::vector<GuestProcess> &processes) {
     if (ioctl(vcpu->fd(), KVM_GET_SREGS, &sregs) < 0)
       MV_PANIC("KVM_GET_REGS failed");
 
+    if ((sregs.cs.base & 3) != 0) {
+      MV_LOG("current vcpu=%d is in usermode", vcpu->vcpu_id());
+      continue;
+    }
+
     auto kpcr = (uint8_t*)GuestVAToHostAddress((uint64_t)sregs.gs.base, sregs.cr3);
     auto kthread_gva = *(uint64_t*)(kpcr + KTHREAD_IN_KPCR_OFFSET);
     if (!kthread_gva) {
@@ -354,7 +359,9 @@ void MDebugger::MemoryRead(GtkWidget* widget, gpointer data) {
     return;
   }
 
+  // read memory from hva
   std::string memory = BytesToHexString((const uint8_t*)hva, size);
+
   auto buffer = gtk_text_view_get_buffer(memory_text_);
   gtk_text_buffer_set_text(buffer, memory.c_str(), memory.size());
 
