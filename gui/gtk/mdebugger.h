@@ -41,7 +41,6 @@ class MDebugger {
   bool running_ = false;
 
   static Machine* machine_;
-  static std::string glade_;
   static GtkLabel* status_;
   static gchar* search_text_;
   static GtkEntry* memory_address_input_;
@@ -51,7 +50,7 @@ class MDebugger {
   static std::vector<GuestProcess> processes_;
 
   static std::string NumberToHexString(uint64_t number);
-  static std::string BytesToHexString(const uint8_t* data, size_t length);
+  static std::string BytesToHexString(const uint8_t* data, size_t size);
   static std::vector<uint8_t> HexStringToBytes(const std::string& hex);
 
   static bool GetGuestProcesses(std::vector<GuestProcess>& processes);
