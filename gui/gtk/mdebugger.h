@@ -49,13 +49,13 @@ class MDebugger {
   static GtkComboBoxText* process_list_;
   static std::vector<GuestProcess> processes_;
 
-  static std::string NumberToHexString(uint64_t number);
-  static std::string BytesToHexString(const uint8_t* data, size_t size);
-  static std::vector<uint8_t> HexStringToBytes(const std::string& hex);
+  static std::string ConvertNumberToHexString(uint64_t number);
+  static std::string ConvertBytesToHexString(const uint8_t* data, size_t size);
+  static std::vector<uint8_t> ConvertHexStringToBytes(const std::string& hex);
 
-  static bool GetGuestProcesses(std::vector<GuestProcess>& processes);
-  static bool GetHvaFromUserInput(void** hva, size_t* size);
-  static void* GuestVAToHostAddress(uint64_t gva, uint64_t cr3);
+  static bool RetrieveGuestProcesses(std::vector<GuestProcess>& processes);
+  static bool GetHostVirtualAddressFromUserInput(void** hva, size_t* size);
+  static void* TranslateGuestVirtualAddressToHost(uint64_t gva, uint64_t cr3);
 
   static void Activate(GtkApplication* app, gpointer user_data);
   static void ProcessViewSearchChanged(GtkSearchEntry* search_entry, gpointer user_data);
@@ -74,7 +74,7 @@ public:
   MDebugger(const MDebugger&) = delete;
   MDebugger& operator=(const MDebugger&) = delete;
 
-  void Run(Machine* machine);
+  void Start(Machine* machine);
 };
 
 #endif

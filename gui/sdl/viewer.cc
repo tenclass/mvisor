@@ -452,7 +452,7 @@ void Viewer::SetupKeyboardShortcuts() {
 
   keyboard_shortcuts_[SDLK_F8] = [this]() {
     MV_LOG("MDebugger");
-    MDebugger::getInstance().Run(machine_);
+    MDebugger::getInstance().Start(machine_);
   };
 
   keyboard_shortcuts_[SDLK_F10] = [this]() {
