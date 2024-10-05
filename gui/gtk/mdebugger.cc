@@ -147,13 +147,13 @@ void MDebugger::Activate(GtkApplication* app, gpointer user_data) {
   g_object_unref(builder);
 }
 
-std::string MDebugger::NumberToHexString(uint64_t number) {
+std::string MDebugger::ConvertNumberToHexString(uint64_t number) {
   std::stringstream ss;
   ss << std::hex << number;
   return ss.str();
 }
 
-std::string MDebugger::BytesToHexString(const uint8_t* data, size_t size) {
+std::string MDebugger::ConvertBytesToHexString(const uint8_t* data, size_t size) {
   std::ostringstream oss;
   for (size_t i = 0; i < size; ++i) {
     oss << std::uppercase << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(data[i]);
@@ -166,7 +166,7 @@ std::string MDebugger::BytesToHexString(const uint8_t* data, size_t size) {
   return oss.str();
 }
 
-std::vector<uint8_t> MDebugger::HexStringToBytes(const std::string& hex) {
+std::vector<uint8_t> MDebugger::ConvertHexStringToBytes(const std::string& hex) {
   std::vector<uint8_t> bytes;
 
   if (hex.empty()) {
@@ -199,7 +199,7 @@ std::vector<uint8_t> MDebugger::HexStringToBytes(const std::string& hex) {
   return bytes;
 }
 
-void* MDebugger::GuestVAToHostAddress(uint64_t gva, uint64_t cr3) {
+void* MDebugger::TranslateGuestVirtualAddressToHost(uint64_t gva, uint64_t cr3) {
   void* hva;
   uint64_t gpa;
 
@@ -267,7 +267,7 @@ void* MDebugger::GuestVAToHostAddress(uint64_t gva, uint64_t cr3) {
   return hva;
 }
 
-bool MDebugger::GetGuestProcesses(std::vector<GuestProcess> &processes) {
+bool MDebugger::RetrieveGuestProcesses(std::vector<GuestProcess> &processes) {
   machine_->Pause();
 
   bool success = false;
@@ -281,15 +281,15 @@ bool MDebugger::GetGuestProcesses(std::vector<GuestProcess> &processes) {
       continue;
     }
 
-    auto kpcr = (uint8_t*)GuestVAToHostAddress((uint64_t)sregs.gs.base, sregs.cr3);
+    auto kpcr = (uint8_t*)TranslateGuestVirtualAddressToHost((uint64_t)sregs.gs.base, sregs.cr3);
     auto kthread_gva = *(uint64_t*)(kpcr + KTHREAD_IN_KPCR_OFFSET);
     if (!kthread_gva) {
       MV_LOG("kthread not exists at vcpu=%d", vcpu->vcpu_id());
       continue;
     }
 
-    auto kthread = (uint8_t*)GuestVAToHostAddress(kthread_gva, sregs.cr3);
-    auto kprocess = (uint8_t*)GuestVAToHostAddress(*(uint64_t*)(kthread + KPROCESS_IN_KTHREAD_OFFSET), sregs.cr3);
+    auto kthread = (uint8_t*)TranslateGuestVirtualAddressToHost(kthread_gva, sregs.cr3);
+    auto kprocess = (uint8_t*)TranslateGuestVirtualAddressToHost(*(uint64_t*)(kthread + KPROCESS_IN_KTHREAD_OFFSET), sregs.cr3);
     auto eprocess = kprocess + EPROCESS_IN_KPROCESS_OFFSET;
 
     auto active_process_links = (_LIST_ENTRY*)(eprocess + ACTIVE_PROCESS_LINK_IN_EPROCESS_OFFSET);
@@ -312,7 +312,7 @@ bool MDebugger::GetGuestProcesses(std::vector<GuestProcess> &processes) {
       // process.name.c_str(), process.cr3);
       processes.emplace_back(std::move(process));
 
-      process_list_entry = (_LIST_ENTRY*)GuestVAToHostAddress((uint64_t)process_list_entry->Flink, sregs.cr3);
+      process_list_entry = (_LIST_ENTRY*)TranslateGuestVirtualAddressToHost((uint64_t)process_list_entry->Flink, sregs.cr3);
     } while (process_list_entry != active_process_links);
 
     success = true;
@@ -324,7 +324,7 @@ bool MDebugger::GetGuestProcesses(std::vector<GuestProcess> &processes) {
   return success;
 }
 
-bool MDebugger::GetHvaFromUserInput(void** hva, size_t* size) {
+bool MDebugger::GetHostVirtualAddressFromUserInput(void** hva, size_t* size) {
   auto index = gtk_combo_box_get_active(GTK_COMBO_BOX(process_list_));
   if (index == -1) {
     gtk_label_set_label(status_, "must select one valid process before reading.");
@@ -340,7 +340,7 @@ bool MDebugger::GetHvaFromUserInput(void** hva, size_t* size) {
   auto& process = processes_[index];
   auto gva = std::stoll(gva_str, nullptr, 16);
   *size = PAGE_SIZE - (gva % PAGE_SIZE);
-  *hva = GuestVAToHostAddress(gva, process.cr3);
+  *hva = TranslateGuestVirtualAddressToHost(gva, process.cr3);
   if (*hva == nullptr) {
     gtk_label_set_label(status_, "get host virtul address failed.");
     return false;
@@ -355,12 +355,12 @@ void MDebugger::MemoryRead(GtkWidget* widget, gpointer data) {
 
   void* hva;
   size_t size;
-  if (!GetHvaFromUserInput(&hva, &size)) {
+  if (!GetHostVirtualAddressFromUserInput(&hva, &size)) {
     return;
   }
 
   // read memory from hva
-  std::string memory = BytesToHexString((const uint8_t*)hva, size);
+  std::string memory = ConvertBytesToHexString((const uint8_t*)hva, size);
 
   auto buffer = gtk_text_view_get_buffer(memory_text_);
   gtk_text_buffer_set_text(buffer, memory.c_str(), memory.size());
@@ -374,7 +374,7 @@ void MDebugger::MemoryWrite(GtkWidget* widget, gpointer data) {
 
   void* hva;
   size_t size;
-  if (!GetHvaFromUserInput(&hva, &size)) {
+  if (!GetHostVirtualAddressFromUserInput(&hva, &size)) {
     return;
   }
 
@@ -387,7 +387,7 @@ void MDebugger::MemoryWrite(GtkWidget* widget, gpointer data) {
   std::string memory_string(memory);
   g_free(memory);
 
-  auto bytes = HexStringToBytes(memory_string);
+  auto bytes = ConvertHexStringToBytes(memory_string);
   if (bytes.empty()) {
     return;
   }
@@ -413,7 +413,7 @@ void MDebugger::ProcessViewRefresh(GtkWidget* widget, gpointer data) {
   gtk_text_buffer_set_text(gtk_text_view_get_buffer(memory_text_), "", -1);
 
   processes_.clear();
-  if (!GetGuestProcesses(processes_)) {
+  if (!RetrieveGuestProcesses(processes_)) {
     gtk_label_set_label(status_, "Get guest process failed for all cpus are idle now. Please try again.");
     return;
   }
@@ -422,7 +422,7 @@ void MDebugger::ProcessViewRefresh(GtkWidget* widget, gpointer data) {
   for (size_t i = 0; i < processes_.size(); i++) {
     auto pid = std::to_string(processes_[i].pid);
     auto ppid = std::to_string(processes_[i].ppid);
-    auto cr3 = "0x" + NumberToHexString((uint64_t)processes_[i].cr3);
+    auto cr3 = "0x" + ConvertNumberToHexString((uint64_t)processes_[i].cr3);
     std::string name;
     if (processes_[i].pid == 0) {
       name = "idle";
@@ -449,7 +449,7 @@ void MDebugger::ProcessViewRefresh(GtkWidget* widget, gpointer data) {
   gtk_label_set_label(status_, "refresh success.");
 }
 
-void MDebugger::Run(Machine* machine) { 
+void MDebugger::Start(Machine* machine) { 
   if (!running_) {
     running_ = true;
     machine_ = machine;
