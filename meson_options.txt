@@ -28,3 +28,9 @@ option('vgpu',
   description: 'Enable VGPU device'
 )
 
+option('mdebugger',
+  type: 'boolean',
+  value: false,
+  description: 'Enable MDebugger tool'
+)
+

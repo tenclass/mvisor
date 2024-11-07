@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include "version.h"
 #include "viewer.h"
 #include <unistd.h>
 #include <chrono>
@@ -23,7 +24,10 @@
 #include "../keymap.h"
 #include "spice/enums.h"
 #include "spice/vd_agent.h"
+
+#ifdef HAS_MDEBUGGER
 #include "../gtk/mdebugger.h"
+#endif
 
 
 Viewer::Viewer(Machine* machine) : machine_(machine) {
@@ -450,10 +454,12 @@ void Viewer::SetupKeyboardShortcuts() {
     MV_ASSERT(machine_->PostSave());
   };
 
+#ifdef HAS_MDEBUGGER
   keyboard_shortcuts_[SDLK_F8] = [this]() {
     MV_LOG("MDebugger");
     MDebugger::getInstance().Start(machine_);
   };
+#endif
 
   keyboard_shortcuts_[SDLK_F10] = [this]() {
       MV_LOG("Print Memory");

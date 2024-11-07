@@ -154,6 +154,7 @@ struct PciBarInfo {
   uint32_t              address;
   uint32_t              address_mask;
   uint32_t              special_bits;
+  uint64_t              size64;
   uint64_t              address64;
   bool                  active;
   void*                 host_memory;

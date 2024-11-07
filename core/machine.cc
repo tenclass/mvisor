@@ -79,8 +79,8 @@ Machine::Machine(std::string config_path, std::string vm_name, std::string vm_uu
 Machine::~Machine() {
   valid_ = false;
 
-  delete device_manager_;
   delete vfio_manager_;
+  delete device_manager_;
   delete memory_manager_;
   delete io_thread_;
 

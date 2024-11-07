@@ -625,7 +625,6 @@ bool MemoryManager::LoadDirtyMemory(MigrationNetworkReader* reader, DirtyMemoryT
 
 /* Used for debugging */
 void MemoryManager::PrintMemoryScope() {
-  std::shared_lock lock(mutex_);
   MV_LOG("%lu memory slots", kvm_slots_.size());
   for (auto it = kvm_slots_.begin(); it != kvm_slots_.end(); it++) {
     MemorySlot* slot = it->second;

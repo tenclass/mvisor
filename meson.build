@@ -1,5 +1,5 @@
 project('mvisor', 'c', 'cpp',
-  version: '2.7.2',
+  version: '2.7.3',
   license: 'GPLv3',
   default_options: [
     'buildtype=debugoptimized',
@@ -87,8 +87,10 @@ configure_file(output: 'version.h',
 
 summary({
   'sdl': get_option('sdl'),
+  'gtk': get_option('gtk'),
   'vgpu': get_option('vgpu'),
-  'sweet-server': get_option('sweet-server')
+  'sweet-server': get_option('sweet-server'),
+  'mdebugger': get_option('mdebugger')
 }, bool_yn: true, section: 'Options')
 
 

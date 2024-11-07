@@ -158,7 +158,6 @@ void VfioManager::DetachDevice(int device_fd) {
       return;
     }
   }
-  MV_ERROR("device fd %d not found", device_fd);
 }
 
 void VfioManager::MapDmaPages(const MemorySlot& slot) {
