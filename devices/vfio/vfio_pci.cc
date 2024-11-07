@@ -516,10 +516,10 @@ bool VfioPci::ActivatePciBar(uint index) {
     MV_ASSERT(!bar.active);
     MV_ASSERT(bar.type == kIoResourceTypeMmio);
     if (region.mmap_areas.empty()) {
-      AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "VFIO BAR RAM", region.mmap);
+      AddIoResource(kIoResourceTypeRam, bar.address64, bar.size64, "VFIO BAR RAM", region.mmap);
     } else {
       /* The MMIO region is overlapped by the mmap areas */
-      AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "VFIO BAR MMIO");
+      AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size64, "VFIO BAR MMIO");
       for (auto &area : region.mmap_areas) {
         AddIoResource(kIoResourceTypeRam, bar.address64 + area.offset, area.size, "VFIO BAR RAM", area.mmap);
       }

@@ -246,7 +246,7 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
 
     uint32_t value = *(uint32_t*)data;
     if ((value & 0xfffffff0) == 0xfffffff0) {
-      value = ~(bar.size - 1);
+      value = ~(bar.size64 - 1);
       pci_header_.bars[bar_index] = (value & bar.address_mask) | bar.special_bits;
       return;
     }
@@ -299,7 +299,7 @@ void PciDevice::UpdatePciBarAddress(uint index, uint32_t address) {
   DeactivatePciBar(op_index);
   
   if (is64_high) {
-    pci_bars_[op_index].address64 = pci_header_.bars[op_index + 1] & PCI_BASE_ADDRESS_MEM_MASK;
+    pci_bars_[op_index].address64 = pci_header_.bars[op_index + 1];
     pci_bars_[op_index].address64 <<= 32;
     pci_bars_[op_index].address64 |= pci_header_.bars[op_index] & PCI_BASE_ADDRESS_MEM_MASK;
   } else {
@@ -387,8 +387,10 @@ void PciDevice::WritePciCommand(uint16_t new_command) {
 /* Call this function in device constructor */
 void PciDevice::SetupPciBar(uint index, uint32_t size, IoResourceType type) {
   auto &bar = pci_bars_[index];
-  MV_ASSERT(bar.size == 0);
+  MV_ASSERT(bar.size == 0 && bar.size64 == 0);
+  
   bar.size = size;
+  bar.size64 = size;
   bar.active = false;
   bar.type = type;
   if (type == kIoResourceTypePio) {
@@ -406,12 +408,23 @@ void PciDevice::SetupPciBar(uint index, uint32_t size, IoResourceType type) {
 
 
 void PciDevice::SetupPciBar64(uint index, uint64_t size, IoResourceType type) {
-  /* TODO: over 4GB memory size */
-  MV_ASSERT(size <= 1ULL << 32);
-  SetupPciBar(index, size, type);
-  pci_bars_[index].special_bits |= PCI_BASE_ADDRESS_MEM_TYPE_64;
-  pci_header_.bars[index] |= PCI_BASE_ADDRESS_MEM_TYPE_64;
+  if (type != kIoResourceTypeMmio) {
+    MV_PANIC("64bit bar only support MMIO");
+    return;
+  }
+
+  auto &bar = pci_bars_[index];
+  MV_ASSERT(bar.size == 0 && bar.size64 == 0);
+
+  bar.size64 = size;
+  bar.active = false;
+  bar.type = type;
+  bar.address_mask = (uint32_t)PCI_BASE_ADDRESS_MEM_MASK;
+  bar.special_bits = PCI_BASE_ADDRESS_MEM_TYPE_64;
+
+  pci_header_.bars[index] |= bar.special_bits;
   pci_bars_[index + 1].address_mask = 0xFFFFFFFF;
+  pci_bars_[index + 1].special_bits = 0;
 }
 
 /* Called when an bar is activate by guest BIOS or OS */
@@ -422,12 +435,12 @@ bool PciDevice::ActivatePciBar(uint index) {
   MV_ASSERT(bar.type);
 
   if (bar.type == kIoResourceTypePio) {
-    bar.resource = AddIoResource(kIoResourceTypePio, bar.address64, bar.size, "PCI BAR IO");
+    bar.resource = AddIoResource(kIoResourceTypePio, bar.address64, bar.size64, "PCI BAR IO");
   } else if (bar.type == kIoResourceTypeMmio) {
-    bar.resource = AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size, "PCI BAR MMIO");
+    bar.resource = AddIoResource(kIoResourceTypeMmio, bar.address64, bar.size64, "PCI BAR MMIO");
   } else if (bar.type == kIoResourceTypeRam) {
     MV_ASSERT(bar.host_memory != nullptr);
-    bar.resource = AddIoResource(kIoResourceTypeRam, bar.address64, bar.size, "PCI BAR RAM", bar.host_memory);
+    bar.resource = AddIoResource(kIoResourceTypeRam, bar.address64, bar.size64, "PCI BAR RAM", bar.host_memory);
   }
   bar.active = true;
   return true;
