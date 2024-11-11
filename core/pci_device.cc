@@ -246,7 +246,16 @@ void PciDevice::WritePciConfigSpace(uint64_t offset, uint8_t* data, uint32_t len
 
     uint32_t value = *(uint32_t*)data;
     if ((value & 0xfffffff0) == 0xfffffff0) {
-      value = ~(bar.size64 - 1);
+      bool is64_high = bar.address_mask == 0xFFFFFFFF;
+      
+      uint32_t bar_size;
+      if (is64_high) {
+        bar_size = (uint32_t)(pci_bars_[bar_index - 1].size64 >> 32);
+      } else {
+        bar_size = (uint32_t)bar.size64;
+      }
+
+      value = ~(bar_size - 1);
       pci_header_.bars[bar_index] = (value & bar.address_mask) | bar.special_bits;
       return;
     }
