@@ -65,8 +65,8 @@ DefinitionBlock(
         Name(CR64, ResourceTemplate() {
             QWordMemory (ResourceProducer, PosDecode, MinFixed, MaxFixed, Cacheable, ReadWrite,
                 0x0000000000000000, // Granularity
-                0x0000380000000000, // Range Minimum
-                0x00003807FFFFFFFF, // Range Maximum
+                0x0000000800000000, // Range Minimum
+                0x0000000FFFFFFFFF, // Range Maximum
                 0x0000000000000000, // Translation Offset
                 0x0000000800000000, // Length
                 ,, , AddressRangeMemory, TypeStatic)
