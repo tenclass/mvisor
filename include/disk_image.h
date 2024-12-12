@@ -23,7 +23,6 @@
 #include <functional>
 #include <thread>
 #include <mutex>
-#include <deque>
 #include <condition_variable>
 
 #include "utilities.h"
@@ -94,7 +93,8 @@ class DiskImage : public Object {
   std::thread               worker_thread_;
   std::mutex                worker_mutex_;
   std::condition_variable   worker_cv_;
-  std::deque<VoidCallback>  worker_queue_;
+  std::vector<VoidCallback> worker_queue_;
+  std::vector<VoidCallback> pending_callbacks_;
   bool                      finalized_ = false;
 
   void WorkerProcess();

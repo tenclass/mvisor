@@ -76,16 +76,14 @@ void DiskImage::WorkerProcess() {
       break;
     }
 
-    auto& callback = worker_queue_.front();
+    std::swap(pending_callbacks_, worker_queue_);
     lock.unlock();
   
-    callback();
-
-    /* Only remove item after job is done.
-     * Remember to lock mutex again when operating on worker_queue_
-     */
-    lock.lock();
-    worker_queue_.pop_front();
+    // Execute all callbacks
+    for (auto& callback : pending_callbacks_) {
+      callback();
+    }
+    pending_callbacks_.clear();
   }
   
   io_->UnregisterDiskImage(this);
