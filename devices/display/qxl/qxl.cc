@@ -45,7 +45,7 @@ Qxl::Qxl() {
   pci_header_.subsys_id = 0x1100;
   
   /* Bar 0: 256MB VRAM */
-  vga_surface_size_ = _MB(16);
+  vga_surface_size_ = _MB(32);
   vram_size_ = _MB(256);
   SetupPciBar(0, vram_size_, kIoResourceTypeRam);
 
