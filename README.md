@@ -113,3 +113,5 @@ Virtio is recommended for Windows guests:
 | HOST GPU  | Status |
 | ------------- | ------------- |
 | Nvidia T4  | Working  |
+| Nvidia GTX 1070 TI  | Working  |
+| Nvidia GTX 3090  | Working  |
