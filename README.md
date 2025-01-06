@@ -109,7 +109,7 @@ Virtio is recommended for Windows guests:
 
 <a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Download Virtio Guest Tools</a>
 
-## Tested Hardware
-| HOST GPU  | Second Header |
+## Tested Host GPU Hardware
+| HOST GPU  | Status |
 | ------------- | ------------- |
 | Nvidia T4  | Working  |
