@@ -526,6 +526,12 @@ class HdaDuplex : public Device, public HdaCodecInterface, public PlaybackInterf
     *interval_ms = STREAM_FRAME_INTERVAL_MS;
   }
 
+  void GetRecordFormat(int* channels, int* frequency) {
+    auto& stream = streams_[1];
+    *channels = stream.nchannels;
+    *frequency = stream.frequency;
+  }
+
   void WriteStreamToSharedBuffer(HdaStream* stream, const std::string& record_data) {
     size_t frame_bytes = stream->bytes_per_frame;
     size_t write_pos = 0;
