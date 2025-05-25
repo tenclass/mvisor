@@ -33,7 +33,7 @@
 Viewer::Viewer(Machine* machine) : machine_(machine) {
   bzero(&pointer_state_, sizeof(pointer_state_));
   LookupDevices();
-  MV_ASSERT(SDL_Init(SDL_INIT_VIDEO) == 0);
+  MV_ASSERT(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) == 0);
 }
 
 Viewer::~Viewer() {
@@ -45,6 +45,17 @@ Viewer::~Viewer() {
   }
   if (playback_) {
     playback_->UnregisterPlaybackListener(playback_listener_);
+  }
+  if (record_) {
+    record_->UnregisterRecordListener(record_listener_);
+    if (audio_device_id_ != 0) {
+      SDL_CloseAudioDevice(audio_device_id_);
+      audio_device_id_ = 0;
+    }
+    if (audio_spec_ != nullptr) {
+      delete audio_spec_;
+      audio_spec_ = nullptr;
+    }
   }
   if (clipboard_) {
     clipboard_->UnregisterClipboardListener(clipboard_listener_);
@@ -218,7 +229,6 @@ void Viewer::Render(const DisplayUpdate& update) {
   }
 }
 
-
 PointerInputInterface* Viewer::GetActivePointer() {
   if (machine_->IsPaused())
     return nullptr;
@@ -295,6 +305,58 @@ void Viewer::OnPlayback(PlaybackState state, const std::string& data) {
   }
 }
 
+void Viewer::OnRecordback(RecordState state) { 
+  switch (state)
+  {
+  case kRecordStart:
+    if (record_) {
+      if (audio_spec_ == nullptr) {
+        record_->GetRecordFormat(&record_format_.channels, &record_format_.frequency);
+        
+        audio_spec_ = new SDL_AudioSpec();
+        audio_spec_->freq = record_format_.frequency;
+        audio_spec_->format = AUDIO_S16LSB;
+        audio_spec_->channels = (Uint8)record_format_.channels;
+        audio_spec_->samples = 1920;
+        audio_spec_->userdata = record_;
+        audio_spec_->callback = [](void* userdata, Uint8* stream, int len) {
+          auto record = static_cast<RecordInterface*>(userdata);
+          record->WriteRecordDataToDevice(std::string((const char*)stream, len));
+        };
+      }
+
+      if (audio_device_id_ != 0) {
+        // Stop the audio device if it's already open
+        SDL_CloseAudioDevice(audio_device_id_);
+        audio_device_id_ = 0;
+      }
+      
+      audio_device_id_ = SDL_OpenAudioDevice(nullptr, 1, audio_spec_, nullptr, 0);
+      if (audio_device_id_ == 0) {
+        MV_PANIC("Failed to open audio device: %s", SDL_GetError());
+        break;
+      }
+
+      // Start the audio device
+      SDL_PauseAudioDevice(audio_device_id_, 0);
+    }
+  break;
+  case kRecordStop:
+    if(record_) {
+      if (audio_device_id_ != 0) {
+        // Stop the audio device
+        SDL_PauseAudioDevice(audio_device_id_, 1);
+        SDL_CloseAudioDevice(audio_device_id_);
+        audio_device_id_ = 0;
+      }
+    }
+    break;
+  default:
+    MV_WARN("Unhandled record state %d", state);
+    break;
+  }
+}
+
 void Viewer::LookupDevices() {
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<KeyboardInputInterface*>(o); })) {
     keyboards_.insert(keyboards_.begin(), dynamic_cast<KeyboardInputInterface*>(o));
@@ -304,6 +366,9 @@ void Viewer::LookupDevices() {
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PlaybackInterface*>(o); })) {
     playback_ = dynamic_cast<PlaybackInterface*>(o);
+  }
+  for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<RecordInterface*>(o); })) {
+    record_ = dynamic_cast<RecordInterface*>(o);
   }
   for (auto o : machine_->LookupObjects([](auto o) { return dynamic_cast<PointerInputInterface*>(o); })) {
     pointers_.push_back(dynamic_cast<PointerInputInterface*>(o));
@@ -344,6 +409,13 @@ void Viewer::LookupDevices() {
     playback_listener_ = playback_->RegisterPlaybackListener([this](PlaybackState state, struct iovec iov) {
       Schedule([this, state, data = std::string((const char*)iov.iov_base, iov.iov_len)] () {
         OnPlayback(state, data);
+      });
+    });
+  }
+  if (record_) {
+    record_listener_ = record_->RegisterRecordListener([this](RecordState state) {
+      Schedule([this, state] () {
+        OnRecordback(state);
       });
     });
   }

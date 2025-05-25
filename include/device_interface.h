@@ -206,6 +206,7 @@ typedef std::function <void(RecordState state)>   RecordListener;
 class RecordInterface {
   public:
   virtual ~RecordInterface() = default;
+  virtual void GetRecordFormat(int* channels, int* frequency) = 0;
   virtual void WriteRecordDataToDevice(const std::string& record_data) = 0;
   virtual std::list<RecordListener>::iterator RegisterRecordListener(RecordListener callback) = 0;
   virtual void UnregisterRecordListener(std::list<RecordListener>::iterator it) = 0;

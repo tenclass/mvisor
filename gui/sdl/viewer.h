@@ -58,6 +58,7 @@ class Viewer {
   void SendPointerEvent();
   void SendResizerEvent();
   void OnPlayback(PlaybackState state, const std::string& data);
+  void OnRecordback(RecordState state);
   void OnClipboardFromGuest(const ClipboardData& clipboard_data);
   void Schedule(VoidCallback callback);
 
@@ -66,15 +67,18 @@ class Viewer {
   std::string             clipboard_data_;
   DisplayInterface*       display_ = nullptr;
   PlaybackInterface*      playback_= nullptr;
+  RecordInterface*        record_ = nullptr;
   std::vector<KeyboardInputInterface*>  keyboards_;
   std::vector<PointerInputInterface*>   pointers_;
   std::vector<DisplayResizeInterface*>  resizers_;
   PlaybackFormat          playback_format_;
+  RecordFormat            record_format_;
 
   std::list<DisplayModeChangeListener>::iterator  display_mode_listener_;
   std::list<DisplayUpdateListener>::iterator      display_update_listener_;
   std::list<ClipboardListener>::iterator          clipboard_listener_;
   std::list<PlaybackListener>::iterator           playback_listener_;
+  std::list<RecordListener>::iterator             record_listener_;
   std::list<SerialPortListener>::iterator         spice_agent_listener_;
 
   SDL_Window* window_ = nullptr;
@@ -82,6 +86,8 @@ class Viewer {
   SDL_Surface* screen_surface_ = nullptr;
   SDL_Palette* palette_ = nullptr;
   SDL_Cursor* cursor_ = nullptr;
+  SDL_AudioDeviceID audio_device_id_ = 0;
+  SDL_AudioSpec* audio_spec_ = nullptr;
 
   std::mutex mutex_;
   std::vector<VoidCallback> tasks_;
