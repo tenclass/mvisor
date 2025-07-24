@@ -108,3 +108,10 @@ An ISO image file is needed to install OS. Edit YAML file to configure image pat
 Virtio is recommended for Windows guests:
 
 <a href="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso">Download Virtio Guest Tools</a>
+
+## Tested Host GPU Hardware
+| HOST GPU  | Status |
+| ------------- | ------------- |
+| Nvidia T4  | Working  |
+| Nvidia GTX 1070 TI  | Working  |
+| Nvidia GTX 3090  | Working  |
