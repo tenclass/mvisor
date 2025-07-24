@@ -92,7 +92,8 @@ void Pmio::AcpiSuspend(uint8_t type) {
     std::thread([this]() {
       manager_->machine()->Pause();
       MV_LOG("machine is power off");
-    }).detach();
+    }).join();
+    manager_->machine()->Quit();
     break;
   case 1: // suspend request
     MV_PANIC("suspend is not supported");
