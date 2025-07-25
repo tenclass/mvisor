@@ -9,6 +9,7 @@ mvisor_sources += files(
   'uart.cc',
   'pvpanic.cc',
   'apple_smc.cc',
+  'ivshmem.cc',
 )
 
 proto_sources += proto_gen.process(
