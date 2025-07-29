@@ -16,7 +16,8 @@ proto_sources += proto_gen.process(
   'cmos.proto',
   'i8257_dma.proto',
   'i82078_fdc.proto',
-  'ps2.proto'
+  'ps2.proto',
+  'ivshmem.proto',
 )
 
 iasl_sources += iasl_gen.process(

@@ -152,6 +152,11 @@ void Qxl::Disconnect() {
   delete qxl_render_;
   qxl_render_ = nullptr;
 
+  if (vram_base_) {
+    munmap(vram_base_, vram_size_);
+    vram_base_ = nullptr;
+  }
+
   PciDevice::Disconnect();
 }
 
