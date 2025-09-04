@@ -24,7 +24,7 @@
 
 class Ivshmem : public PciDevice {
  private:
-  size_t shmem_size_ = 512 * 1024 * 1024;
+  size_t shmem_size_ = 256 * 1024 * 1024;
   void* shmem_base_ = nullptr;
   int shmem_fd_ = -1;
 
@@ -34,6 +34,7 @@ class Ivshmem : public PciDevice {
     pci_header_.device_id = 0x1110;
     pci_header_.revision_id = 1;
     pci_header_.class_code = 0x0500;
+    pci_header_.header_type = PCI_HEADER_TYPE_NORMAL;
 
     SetupPciBar(0, 256, kIoResourceTypeMmio);
     SetupPciBar(2, shmem_size_, kIoResourceTypeRam);
@@ -46,8 +47,8 @@ class Ivshmem : public PciDevice {
     if (has_key("shmem_size")) {
       auto size = std::get<uint64_t>(key_values_["shmem_size"]);
 
-      if (size < 512) {
-        MV_PANIC("shmem_size must be at least 512MB");
+      if (size < 64) {
+        MV_PANIC("shmem_size must be at least 64MB");
         return;
       }
 
@@ -113,26 +114,29 @@ class Ivshmem : public PciDevice {
   }
 
   bool SaveState(MigrationWriter* writer) {
-    IvshmemState state;
-    state.set_shmem((char*)shmem_base_, shmem_size_);
+    if (!has_key("shmem_path")) {
+      IvshmemState state;
+      state.set_shmem((char*)shmem_base_, shmem_size_);
+      writer->WriteProtobuf("ivshmem", state);
+    }
 
-    writer->WriteProtobuf("ivshmem", state);
-    return Device::SaveState(writer);
+    return PciDevice::SaveState(writer);
   }
 
   bool LoadState(MigrationReader* reader) {
-    if (!Device::LoadState(reader)) {
+    if (!PciDevice::LoadState(reader)) {
       return false;
     }
 
-    IvshmemState state;
-    if (!reader->ReadProtobuf("ivshmem", state)) {
-      MV_PANIC("Failed to load ivshmem state");
-      return false;
-    }
+    if (!has_key("shmem_path")) {
+      IvshmemState state;
+      if (!reader->ReadProtobuf("ivshmem", state)) {
+        return false;
+      }
 
-    MV_ASSERT(state.shmem().size() == shmem_size_);
-    memcpy(shmem_base_, state.shmem().data(), shmem_size_);
+      MV_ASSERT(state.shmem().size() == shmem_size_);
+      memcpy(shmem_base_, state.shmem().data(), shmem_size_);
+    }
 
     return true;
   }
