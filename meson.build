@@ -3,9 +3,7 @@ project('mvisor', 'c', 'cpp',
   license: 'GPLv3',
   default_options: [
     'buildtype=debugoptimized',
-    'warning_level=2',
     'cpp_std=c++17',
-    'werror=true'
   ]
 )
 

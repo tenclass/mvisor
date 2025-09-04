@@ -222,7 +222,8 @@ int main(int argc, char* argv[]) {
     }
 
     const char* displayVar = std::getenv("DISPLAY");
-    if (displayVar == nullptr) {
+    const char* waylandVar = std::getenv("WAYLAND_DISPLAY");
+    if (displayVar == nullptr && waylandVar == nullptr) {
       if (vnc_port == 0) {
         vnc_port = 5901;
       }

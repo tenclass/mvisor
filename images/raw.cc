@@ -23,6 +23,10 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <filesystem>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <linux/fs.h>
+
 
 #include "logger.h"
 #include "device_manager.h"
@@ -59,15 +63,17 @@ class RawImage : public DiskImage {
       std::filesystem::copy_file(filepath_, temp, std::filesystem::copy_options::overwrite_existing);
       filepath_ = temp;
     }
-    
     fd_ = open(filepath_.c_str(), oflags);
     if (fd_ < 0)
       MV_PANIC("disk file not found: %s", filepath_.c_str());
-
-    struct stat st;
-    fstat(fd_, &st);
-    block_size_ = 512;
-    total_blocks_ = st.st_size / block_size_;
+    long long size_blockdevice;
+    if(ioctl(fd_,BLKGETSIZE64,&size_blockdevice)!=-1) {
+      total_blocks_ = size_blockdevice / block_size_;
+      block_size_ = 512;
+      total_blocks_ = size_blockdevice / block_size_;
+    } else {
+      MV_PANIC("ioctl failed");
+    }
   }
 
   long HandleIoRequest(const ImageIoRequest& request) {
